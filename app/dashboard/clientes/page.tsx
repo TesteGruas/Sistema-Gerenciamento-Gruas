@@ -33,10 +33,13 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  File,
+  Image
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
+import { apiArquivos } from "@/lib/api-arquivos"
 import { DebugButton } from "@/components/debug-button"
 
 export default function ClientesPage() {
@@ -85,6 +88,12 @@ export default function ClientesPage() {
   const isLoadingObrasRef = useRef(false)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  
+  // Estados para upload de arquivos
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploadingFiles, setUploadingFiles] = useState(false)
+  const [clienteArquivos, setClienteArquivos] = useState<any[]>([])
+  const [loadingArquivos, setLoadingArquivos] = useState(false)
 
   // Verificar autenticação e carregar dados da API - apenas uma vez
   useEffect(() => {
@@ -282,7 +291,7 @@ export default function ClientesPage() {
     setIsDetailsDialogOpen(true)
   }
 
-  const handleEdit = (cliente: Cliente) => {
+  const handleEdit = async (cliente: Cliente) => {
     setSelectedCliente(cliente)
     setClienteFormData({
       nome: cliente.nome,
@@ -301,7 +310,160 @@ export default function ClientesPage() {
       criar_usuario: cliente.usuario_existe || false,
       usuario_senha: ''
     })
+    setSelectedFiles([])
     setIsEditDialogOpen(true)
+    
+    // Carregar arquivos do cliente
+    await carregarArquivosCliente(cliente.id)
+  }
+
+  const carregarArquivosCliente = async (clienteId: number) => {
+    try {
+      setLoadingArquivos(true)
+      const response = await apiArquivos.obterPorEntidade('cliente', clienteId)
+      setClienteArquivos(Array.isArray(response.data) ? response.data : [])
+    } catch (error) {
+      console.error('Erro ao carregar arquivos do cliente:', error)
+      setClienteArquivos([])
+    } finally {
+      setLoadingArquivos(false)
+    }
+  }
+
+  const handleRemoverArquivoCliente = async (arquivoId: number) => {
+    try {
+      await apiArquivos.excluir(arquivoId)
+      
+      // Recarregar lista de arquivos
+      if (selectedCliente) {
+        await carregarArquivosCliente(selectedCliente.id)
+      }
+      
+      toast({
+        title: "Sucesso",
+        description: "Arquivo removido com sucesso!",
+      })
+    } catch (error) {
+      console.error('Erro ao remover arquivo:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao remover arquivo. Verifique os logs do console para mais detalhes.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Função para fazer upload de arquivos após criar/atualizar cliente
+  const uploadClienteFiles = async (clienteId: number) => {
+    if (selectedFiles.length === 0) {
+      console.log('⚠️ Nenhum arquivo selecionado para upload')
+      return
+    }
+
+    try {
+      setUploadingFiles(true)
+      console.log(`📤 Iniciando upload de ${selectedFiles.length} arquivo(s) para cliente ID: ${clienteId}`)
+      
+      const uploadResults = await Promise.allSettled(
+        selectedFiles.map(async (file) => {
+          try {
+            console.log(`📤 Fazendo upload do arquivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
+            const result = await apiArquivos.upload(file, {
+              nome: file.name,
+              descricao: `Arquivo do cliente: ${clienteFormData.nome}`,
+              modulo: 'clientes',
+              entidade_id: clienteId,
+              entidade_tipo: 'cliente',
+              publico: false
+            })
+            console.log(`✅ Upload bem-sucedido: ${file.name}`, result)
+            return { success: true, file, result }
+          } catch (error) {
+            console.error(`❌ Erro ao fazer upload do arquivo ${file.name}:`, error)
+            return { success: false, file, error }
+          }
+        })
+      )
+
+      const sucessos = uploadResults.filter(r => r.status === 'fulfilled' && r.value.success).length
+      const erros = uploadResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length
+      
+      console.log(`📊 Resultado do upload: ${sucessos} sucesso(s), ${erros} erro(s)`)
+      
+      if (sucessos > 0) {
+        toast({
+          title: "Sucesso",
+          description: `${sucessos} arquivo(s) enviado(s) com sucesso!${erros > 0 ? ` ${erros} arquivo(s) falharam.` : ''}`
+        })
+      }
+      
+      if (erros > 0 && sucessos === 0) {
+        toast({
+          title: "Erro",
+          description: "Nenhum arquivo pôde ser enviado. Verifique os logs do console para mais detalhes.",
+          variant: "destructive"
+        })
+      }
+      
+      setSelectedFiles([])
+    } catch (error) {
+      console.error('❌ Erro geral ao fazer upload dos arquivos:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao fazer upload dos arquivos. Verifique os logs do console para mais detalhes.",
+        variant: "destructive"
+      })
+    } finally {
+      setUploadingFiles(false)
+    }
+  }
+
+  // Função para adicionar arquivos
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const validFiles = files.filter(file => {
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          title: "Arquivo muito grande",
+          description: `${file.name} excede o tamanho máximo de 10MB`,
+          variant: "destructive"
+        })
+        return false
+      }
+      return true
+    })
+    
+    setSelectedFiles(prev => [...prev, ...validFiles])
+    
+    // Limpar o input para permitir selecionar o mesmo arquivo novamente
+    if (e.target) {
+      e.target.value = ''
+    }
+  }
+
+  // Função para remover arquivo da lista
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  // Função para formatar tamanho do arquivo
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Função para obter ícone do arquivo
+  const getFileIcon = (file: File) => {
+    const type = file.type
+    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />
+    if (type === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />
+    if (type.includes('word') || type.includes('document')) return <FileText className="h-4 w-4 text-blue-600" />
+    if (type.includes('excel') || type.includes('spreadsheet')) return <FileText className="h-4 w-4 text-green-600" />
+    return <File className="h-4 w-4 text-gray-500" />
   }
 
   const handleCreateCliente = async (e: React.FormEvent) => {
@@ -326,6 +488,26 @@ export default function ClientesPage() {
       
       const response = await clientesApi.criarCliente(dadosFormatados)
       
+      console.log('📦 Resposta da criação do cliente:', response)
+      console.log('📦 ID do cliente criado:', response.data?.id)
+      console.log('📦 Arquivos selecionados:', selectedFiles.length)
+      
+      // Fazer upload dos arquivos se houver
+      if (selectedFiles.length > 0) {
+        const clienteId = response.data?.id
+        if (clienteId) {
+          console.log('📤 Iniciando upload de arquivos para cliente ID:', clienteId)
+          await uploadClienteFiles(clienteId)
+        } else {
+          console.error('❌ ID do cliente não encontrado na resposta:', response)
+          toast({
+            title: "Aviso",
+            description: "Cliente criado, mas não foi possível fazer upload dos arquivos. ID do cliente não encontrado.",
+            variant: "default"
+          })
+        }
+      }
+      
       // Recarregar lista de clientes
       await carregarClientes()
       
@@ -347,6 +529,7 @@ export default function ClientesPage() {
         criar_usuario: true,
         usuario_senha: '' // Não será usado - backend gera senha automaticamente
       })
+      setSelectedFiles([])
       setIsCreateDialogOpen(false)
       
       const message = response.data?.usuario_criado 
@@ -393,10 +576,21 @@ export default function ClientesPage() {
       
       await clientesApi.atualizarCliente(selectedCliente.id, dadosFormatados)
       
+      // Fazer upload dos arquivos se houver
+      if (selectedFiles.length > 0) {
+        await uploadClienteFiles(selectedCliente.id)
+      }
+      
       // Recarregar lista de clientes
       await carregarClientes()
       
+      // Recarregar arquivos do cliente antes de fechar
+      if (selectedCliente) {
+        await carregarArquivosCliente(selectedCliente.id)
+      }
+      
       setIsEditDialogOpen(false)
+      setSelectedFiles([])
       
       toast({
         title: "Informação",
@@ -911,6 +1105,13 @@ export default function ClientesPage() {
             onClose={() => setIsCreateDialogOpen(false)}
             isEdit={false}
             isSubmitting={isSubmitting}
+            selectedFiles={selectedFiles}
+            setSelectedFiles={setSelectedFiles}
+            uploadingFiles={uploadingFiles}
+            handleFileSelect={handleFileSelect}
+            handleRemoveFile={handleRemoveFile}
+            getFileIcon={getFileIcon}
+            formatFileSize={formatFileSize}
           />
         </DialogContent>
       </Dialog>
@@ -928,9 +1129,22 @@ export default function ClientesPage() {
             formData={clienteFormData}
             setFormData={setClienteFormData}
             onSubmit={handleUpdateCliente}
-            onClose={() => setIsEditDialogOpen(false)}
+            onClose={() => {
+              setIsEditDialogOpen(false)
+              setClienteArquivos([])
+            }}
             isEdit={true}
             isSubmitting={isSubmitting}
+            selectedFiles={selectedFiles}
+            setSelectedFiles={setSelectedFiles}
+            uploadingFiles={uploadingFiles}
+            handleFileSelect={handleFileSelect}
+            handleRemoveFile={handleRemoveFile}
+            getFileIcon={getFileIcon}
+            formatFileSize={formatFileSize}
+            clienteArquivos={clienteArquivos}
+            loadingArquivos={loadingArquivos}
+            onRemoverArquivo={handleRemoverArquivoCliente}
           />
         </DialogContent>
       </Dialog>
@@ -998,13 +1212,40 @@ export default function ClientesPage() {
   )
 }
 
-function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmitting }: { 
+function ClienteForm({ 
+  formData, 
+  setFormData, 
+  onSubmit, 
+  onClose, 
+  isEdit, 
+  isSubmitting,
+  selectedFiles,
+  setSelectedFiles,
+  uploadingFiles,
+  handleFileSelect,
+  handleRemoveFile,
+  getFileIcon,
+  formatFileSize,
+  clienteArquivos = [],
+  loadingArquivos = false,
+  onRemoverArquivo
+}: { 
   formData: ClienteFormData; 
   setFormData: (data: ClienteFormData) => void; 
   onSubmit: (e: React.FormEvent) => void; 
   onClose: () => void;
   isEdit: boolean;
   isSubmitting: boolean;
+  selectedFiles: File[];
+  setSelectedFiles: (files: File[]) => void;
+  uploadingFiles: boolean;
+  handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleRemoveFile: (index: number) => void;
+  getFileIcon: (file: File) => React.ReactNode;
+  formatFileSize: (bytes: number) => string;
+  clienteArquivos?: any[];
+  loadingArquivos?: boolean;
+  onRemoverArquivo?: (arquivoId: number) => void;
 }) {
   const preencherDadosDebug = () => {
     setFormData({
@@ -1334,13 +1575,134 @@ function ClienteForm({ formData, setFormData, onSubmit, onClose, isEdit, isSubmi
         )}
       </div>
 
+      {/* Seção de Upload de Arquivos */}
+      <div className="space-y-4 pt-4 border-t">
+        <div>
+          <Label className="text-base font-medium">Arquivos do Cliente</Label>
+          <p className="text-sm text-gray-500 mb-3">
+            Você pode fazer upload de múltiplos arquivos relacionados ao cliente (documentos, contratos, etc.)
+          </p>
+          
+          <div className="space-y-3">
+            {/* Arquivos existentes (apenas na edição) */}
+            {isEdit && clienteArquivos.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Arquivos existentes ({clienteArquivos.length})
+                </Label>
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                  {loadingArquivos ? (
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                      <span className="ml-2 text-sm text-gray-500">Carregando arquivos...</span>
+                    </div>
+                  ) : (
+                    clienteArquivos.map((arquivo) => (
+                      <div
+                        key={arquivo.id}
+                        className="flex items-center justify-between p-2 bg-blue-50 rounded hover:bg-blue-100 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <FileText className="h-4 w-4 text-blue-600" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium truncate">{arquivo.nome_original}</p>
+                            <p className="text-xs text-gray-500">
+                              {formatFileSize(arquivo.tamanho)} • {new Date(arquivo.created_at).toLocaleDateString('pt-BR')}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => window.open(arquivo.caminho, '_blank')}
+                            disabled={isSubmitting || uploadingFiles}
+                            className="h-8 w-8 p-0"
+                            title="Visualizar arquivo"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          {onRemoverArquivo && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => onRemoverArquivo(arquivo.id)}
+                              disabled={isSubmitting || uploadingFiles}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                              title="Remover arquivo"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Input de arquivo */}
+            <div>
+              <Input
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="cursor-pointer"
+                accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
+                disabled={isSubmitting || uploadingFiles}
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Formatos aceitos: PDF, Word, Excel, Imagens, TXT. Tamanho máximo: 10MB por arquivo.
+              </p>
+            </div>
+
+            {/* Lista de arquivos selecionados */}
+            {selectedFiles.length > 0 && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">
+                  Arquivos selecionados para upload ({selectedFiles.length})
+                </Label>
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                  {selectedFiles.map((file, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {getFileIcon(file)}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{file.name}</p>
+                          <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                        </div>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveFile(index)}
+                        disabled={isSubmitting || uploadingFiles}
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      >
+                        <XCircle className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+        <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting || uploadingFiles}>
           Cancelar
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+        <Button type="submit" disabled={isSubmitting || uploadingFiles}>
+          {(isSubmitting || uploadingFiles) && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
           {isEdit ? 'Atualizar' : 'Criar'} Cliente
         </Button>
       </div>
@@ -1356,6 +1718,33 @@ function ClienteDetails({
   getObrasByCliente: (id: number) => Obra[];
 }) {
   const obras = getObrasByCliente(cliente.id)
+  const [arquivos, setArquivos] = useState<any[]>([])
+  const [loadingArquivos, setLoadingArquivos] = useState(false)
+
+  // Carregar arquivos quando o componente é montado
+  useEffect(() => {
+    const carregarArquivos = async () => {
+      try {
+        setLoadingArquivos(true)
+        const response = await apiArquivos.obterPorEntidade('cliente', cliente.id)
+        setArquivos(Array.isArray(response.data) ? response.data : [])
+      } catch (error) {
+        console.error('Erro ao carregar arquivos do cliente:', error)
+        setArquivos([])
+      } finally {
+        setLoadingArquivos(false)
+      }
+    }
+    carregarArquivos()
+  }, [cliente.id])
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
   
   return (
     <div className="space-y-6">
@@ -1496,6 +1885,56 @@ function ClienteDetails({
           ) : (
             <p className="text-sm text-gray-500 text-center py-4">
               Nenhuma obra encontrada para este cliente
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Arquivos do Cliente */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-sm">Arquivos ({arquivos.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loadingArquivos ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+              <span className="ml-2 text-sm text-gray-500">Carregando arquivos...</span>
+            </div>
+          ) : arquivos.length > 0 ? (
+            <div className="space-y-2">
+              {arquivos.map((arquivo) => (
+                <div
+                  key={arquivo.id}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileText className="h-5 w-5 text-blue-600 flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{arquivo.nome_original}</p>
+                      <div className="flex items-center gap-2 text-xs text-gray-500 mt-1">
+                        <span>{formatFileSize(arquivo.tamanho)}</span>
+                        <span>•</span>
+                        <span>{new Date(arquivo.created_at).toLocaleDateString('pt-BR')}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => window.open(arquivo.caminho, '_blank')}
+                    className="flex-shrink-0"
+                    title="Visualizar arquivo"
+                  >
+                    <Eye className="h-4 w-4 mr-1" />
+                    Visualizar
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 text-center py-4">
+              Nenhum arquivo encontrado para este cliente
             </p>
           )}
         </CardContent>

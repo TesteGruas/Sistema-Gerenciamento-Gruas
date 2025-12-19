@@ -24,6 +24,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useDebounce } from "@/hooks/use-debounce"
 import { apiPerfis, apiPermissoes, apiPerfilPermissoes, utilsPermissoes, type Perfil, type Permissao, type PerfilPermissao } from "@/lib/api-permissoes"
 import { apiUsuarios, utilsUsuarios, type Usuario } from "@/lib/api-usuarios"
+import { apiArquivos } from "@/lib/api-arquivos"
 import { CardLoader, ButtonLoader } from "@/components/ui/loader"
 import { 
   Users, 
@@ -48,7 +49,12 @@ import {
   ChevronRight as ChevronRightIcon,
   User,
   Building2,
-  ChevronDown
+  ChevronDown,
+  Upload,
+  File,
+  FileText,
+  Image,
+  XCircle
 } from "lucide-react"
 
 // Tipos para compatibilidade com o frontend
@@ -144,6 +150,11 @@ export default function UsuariosPage() {
     senha: '',
     confirmarSenha: ''
   })
+  
+  // Estados para upload de arquivos
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
+  const [uploadingFiles, setUploadingFiles] = useState(false)
+  const [uploadProgress, setUploadProgress] = useState<Record<string, number>>({})
 
   const availablePermissions = {
     all: "Acesso Total",
@@ -475,6 +486,11 @@ export default function UsuariosPage() {
       
       const novoUsuario = await apiUsuarios.criar(dadosBackend)
       
+      // Fazer upload dos arquivos se houver
+      if (selectedFiles.length > 0) {
+        await uploadUserFiles(novoUsuario.id)
+      }
+      
       // Recarregar lista de usuários
       await carregarUsuarios(currentPage, itemsPerPage)
       
@@ -509,6 +525,8 @@ export default function UsuariosPage() {
       senha: '',
       confirmarSenha: ''
     })
+    setSelectedFiles([])
+    setUploadProgress({})
     setIsEditDialogOpen(true)
   }
 
@@ -562,6 +580,11 @@ export default function UsuariosPage() {
       console.log('🔍 DEBUG: Payload enviado:', dadosBackend)
       
       await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
+      
+      // Fazer upload dos arquivos se houver
+      if (selectedFiles.length > 0) {
+        await uploadUserFiles(parseInt(editingUser.id))
+      }
       
       // Recarregar lista de usuários
       await carregarUsuarios(currentPage, itemsPerPage)
@@ -633,6 +656,110 @@ export default function UsuariosPage() {
       senha: '',
       confirmarSenha: ''
     })
+    setSelectedFiles([])
+    setUploadProgress({})
+  }
+
+  // Função para fazer upload de arquivos após criar/atualizar usuário
+  const uploadUserFiles = async (userId: number) => {
+    if (selectedFiles.length === 0) return
+
+    try {
+      setUploadingFiles(true)
+      const uploadPromises = selectedFiles.map(async (file, index) => {
+        try {
+          setUploadProgress(prev => ({ ...prev, [index]: 0 }))
+          
+          await apiArquivos.upload(file, {
+            nome: file.name,
+            descricao: `Arquivo do usuário: ${userFormData.name}`,
+            modulo: 'usuarios',
+            entidade_id: userId,
+            entidade_tipo: 'usuario',
+            publico: false
+          })
+          
+          setUploadProgress(prev => ({ ...prev, [index]: 100 }))
+          return { success: true, file }
+        } catch (error) {
+          console.error(`Erro ao fazer upload do arquivo ${file.name}:`, error)
+          setUploadProgress(prev => ({ ...prev, [index]: -1 }))
+          return { success: false, file, error }
+        }
+      })
+
+      await Promise.all(uploadPromises)
+      
+      toast({
+        title: "Sucesso",
+        description: `${selectedFiles.length} arquivo(s) enviado(s) com sucesso!`
+      })
+      
+      setSelectedFiles([])
+      setUploadProgress({})
+    } catch (error) {
+      console.error('Erro ao fazer upload dos arquivos:', error)
+      toast({
+        title: "Aviso",
+        description: "Alguns arquivos não puderam ser enviados. Você pode tentar novamente mais tarde.",
+        variant: "default"
+      })
+    } finally {
+      setUploadingFiles(false)
+    }
+  }
+
+  // Função para adicionar arquivos
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || [])
+    const validFiles = files.filter(file => {
+      const maxSize = 10 * 1024 * 1024 // 10MB
+      if (file.size > maxSize) {
+        toast({
+          title: "Arquivo muito grande",
+          description: `${file.name} excede o tamanho máximo de 10MB`,
+          variant: "destructive"
+        })
+        return false
+      }
+      return true
+    })
+    
+    setSelectedFiles(prev => [...prev, ...validFiles])
+    
+    // Limpar o input para permitir selecionar o mesmo arquivo novamente
+    if (e.target) {
+      e.target.value = ''
+    }
+  }
+
+  // Função para remover arquivo da lista
+  const handleRemoveFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
+    setUploadProgress(prev => {
+      const newProgress = { ...prev }
+      delete newProgress[index]
+      return newProgress
+    })
+  }
+
+  // Função para formatar tamanho do arquivo
+  const formatFileSize = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Função para obter ícone do arquivo
+  const getFileIcon = (file: File) => {
+    const type = file.type
+    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />
+    if (type === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />
+    if (type.includes('word') || type.includes('document')) return <FileText className="h-4 w-4 text-blue-600" />
+    if (type.includes('excel') || type.includes('spreadsheet')) return <FileText className="h-4 w-4 text-green-600" />
+    return <File className="h-4 w-4 text-gray-500" />
   }
 
 
@@ -1021,18 +1148,80 @@ export default function UsuariosPage() {
               </TabsContent>
             </Tabs>
 
+            {/* Seção de Upload de Arquivos */}
+            <div className="space-y-4 pt-4 border-t">
+              <div>
+                <Label className="text-base font-medium">Arquivos do Usuário</Label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Você pode fazer upload de múltiplos arquivos relacionados ao usuário (documentos, fotos, etc.)
+                </p>
+                
+                <div className="space-y-3">
+                  {/* Input de arquivo */}
+                  <div>
+                    <Input
+                      type="file"
+                      multiple
+                      onChange={handleFileSelect}
+                      className="cursor-pointer"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
+                      disabled={creating || updating || uploadingFiles}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Formatos aceitos: PDF, Word, Excel, Imagens, TXT. Tamanho máximo: 10MB por arquivo.
+                    </p>
+                  </div>
+
+                  {/* Lista de arquivos selecionados */}
+                  {selectedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        Arquivos selecionados ({selectedFiles.length})
+                      </Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                        {selectedFiles.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {getFileIcon(file)}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{file.name}</p>
+                                <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFile(index)}
+                              disabled={creating || updating || uploadingFiles}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4 border-t">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={() => setIsCreateDialogOpen(false)}
-                disabled={creating}
+                disabled={creating || uploadingFiles}
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={creating}>
-                {creating ? (
-                  <ButtonLoader text="Criando..." />
+              <Button type="submit" disabled={creating || uploadingFiles}>
+                {creating || uploadingFiles ? (
+                  <ButtonLoader text={creating ? "Criando..." : "Enviando arquivos..."} />
                 ) : (
                   'Criar Usuário'
                 )}
@@ -1166,18 +1355,80 @@ export default function UsuariosPage() {
               </TabsContent>
             </Tabs>
 
+            {/* Seção de Upload de Arquivos */}
+            <div className="space-y-4 pt-4 border-t">
+              <div>
+                <Label className="text-base font-medium">Arquivos do Usuário</Label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Você pode fazer upload de múltiplos arquivos relacionados ao usuário (documentos, fotos, etc.)
+                </p>
+                
+                <div className="space-y-3">
+                  {/* Input de arquivo */}
+                  <div>
+                    <Input
+                      type="file"
+                      multiple
+                      onChange={handleFileSelect}
+                      className="cursor-pointer"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
+                      disabled={creating || updating || uploadingFiles}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Formatos aceitos: PDF, Word, Excel, Imagens, TXT. Tamanho máximo: 10MB por arquivo.
+                    </p>
+                  </div>
+
+                  {/* Lista de arquivos selecionados */}
+                  {selectedFiles.length > 0 && (
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">
+                        Arquivos selecionados ({selectedFiles.length})
+                      </Label>
+                      <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3">
+                        {selectedFiles.map((file, index) => (
+                          <div
+                            key={index}
+                            className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
+                          >
+                            <div className="flex items-center gap-2 flex-1 min-w-0">
+                              {getFileIcon(file)}
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium truncate">{file.name}</p>
+                                <p className="text-xs text-gray-500">{formatFileSize(file.size)}</p>
+                              </div>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleRemoveFile(index)}
+                              disabled={creating || updating || uploadingFiles}
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <XCircle className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex justify-end gap-2 pt-4 border-t">
               <Button 
                 type="button" 
                 variant="outline" 
                 onClick={() => setIsEditDialogOpen(false)}
-                disabled={updating}
+                disabled={updating || uploadingFiles}
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={updating}>
-                {updating ? (
-                  <ButtonLoader text="Atualizando..." />
+              <Button type="submit" disabled={updating || uploadingFiles}>
+                {updating || uploadingFiles ? (
+                  <ButtonLoader text={updating ? "Atualizando..." : "Enviando arquivos..."} />
                 ) : (
                   'Atualizar Usuário'
                 )}

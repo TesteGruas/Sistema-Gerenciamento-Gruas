@@ -96,8 +96,10 @@ interface NavigationItemWithPermission extends NavigationItem {
 const baseNavigation: NavigationItemWithPermission[] = [
   // SEÇÃO PRINCIPAL
   { name: "Dashboard", href: "/dashboard", icon: Home, category: "principal", permission: "dashboard:visualizar" },
-  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "principal", permission: "notificacoes:visualizar" },
-  { name: "WhatsApp Aprovações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "principal", permission: "aprovacoes:visualizar" },
+  
+  // SEÇÃO NOTIFICAÇÕES
+  { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "notificacoes", permission: "notificacoes:visualizar" },
+  { name: "WhatsApp Aprovações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "notificacoes", permission: "aprovacoes:visualizar" },
   
   // SEÇÃO OPERACIONAL
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
@@ -172,6 +174,7 @@ function DashboardLayoutContent({
   
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({
     principal: false,
+    notificacoes: false,
     operacional: false,
     rh: false,
     financeiro: false,
@@ -514,6 +517,43 @@ function DashboardLayoutContent({
               </div>
             )}
           </div>
+
+          {/* Seção Notificações - Só exibir se houver itens visíveis */}
+          {navigation.filter(item => item.category === "notificacoes").length > 0 && (
+            <div>
+              <button
+                onClick={() => toggleSection('notificacoes')}
+                className="flex items-center justify-between w-full text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 hover:text-gray-700 transition-colors"
+              >
+                <span>Notificações</span>
+                {collapsedSections.notificacoes ? (
+                  <ChevronRight className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </button>
+              {!collapsedSections.notificacoes && (
+                <div className="space-y-1">
+                  {navigation.filter(item => item.category === "notificacoes").map((item) => {
+                    const isActive = pathname === item.href
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => handleLinkClick(item.href, item.name)}
+                        className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                          isActive ? "bg-blue-100 text-blue-700" : "text-gray-700 hover:bg-gray-100"
+                        }`}
+                      >
+                        <item.icon className="w-5 h-5" />
+                        {item.name}
+                      </Link>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Seção Operacional */}
           <div>

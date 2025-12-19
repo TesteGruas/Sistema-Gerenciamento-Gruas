@@ -111,7 +111,7 @@ const getFileType = (mimetype) => {
  */
 router.post('/upload', authenticateToken, upload.single('arquivo'), async (req, res) => {
   try {
-    const { categoria } = req.body
+    const { categoria, nome, descricao, modulo, entidade_id, entidade_tipo, publico, tags } = req.body
     const file = req.file
 
     if (!file) {
@@ -169,10 +169,50 @@ router.post('/upload', authenticateToken, upload.single('arquivo'), async (req, 
       }
     }
 
+    // Se tiver modulo, entidade_id e entidade_tipo, salvar metadados na tabela arquivos
+    let arquivoRecord = null
+    if (modulo && entidade_id && entidade_tipo) {
+      try {
+        const arquivoData = {
+          nome: nome || file.originalname,
+          nome_original: file.originalname,
+          caminho: arquivoUrl,
+          tamanho: file.size,
+          tipo_mime: file.mimetype,
+          extensao: extension,
+          modulo: modulo,
+          entidade_id: parseInt(entidade_id),
+          entidade_tipo: entidade_tipo,
+          descricao: descricao || null,
+          tags: tags ? (typeof tags === 'string' ? JSON.parse(tags) : tags) : null,
+          publico: publico === 'true' || publico === true,
+          usuario_id: req.user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }
+
+        const { data: savedFile, error: dbError } = await supabaseAdmin
+          .from('arquivos')
+          .insert(arquivoData)
+          .select()
+          .single()
+
+        if (dbError) {
+          console.error('Erro ao salvar metadados do arquivo:', dbError)
+          // Não falhar o upload se não conseguir salvar metadados, apenas logar o erro
+        } else {
+          arquivoRecord = savedFile
+        }
+      } catch (dbError) {
+        console.error('Erro ao salvar metadados do arquivo:', dbError)
+        // Não falhar o upload se não conseguir salvar metadados
+      }
+    }
+
     res.json({
       success: true,
       message: 'Arquivo enviado com sucesso',
-      data: {
+      data: arquivoRecord || {
         caminho: filePath,
         arquivo: arquivoUrl,
         nome_original: file.originalname,
@@ -1304,33 +1344,63 @@ router.delete('/:arquivoId', authenticateToken, async (req, res) => {
   try {
     const { arquivoId } = req.params
 
-    // Buscar informações do arquivo
-    const { data: arquivo, error: arquivoError } = await supabaseAdmin
-      .from('arquivos_obra')
+    // Tentar buscar na tabela genérica 'arquivos' primeiro
+    let arquivo = null
+    let tabelaUsada = null
+    
+    const { data: arquivoGenerico, error: erroGenerico } = await supabaseAdmin
+      .from('arquivos')
       .select('*')
       .eq('id', arquivoId)
       .single()
 
-    if (arquivoError || !arquivo) {
+    if (!erroGenerico && arquivoGenerico) {
+      arquivo = arquivoGenerico
+      tabelaUsada = 'arquivos'
+    } else {
+      // Se não encontrar, tentar na tabela 'arquivos_obra'
+      const { data: arquivoObra, error: erroObra } = await supabaseAdmin
+        .from('arquivos_obra')
+        .select('*')
+        .eq('id', arquivoId)
+        .single()
+
+      if (!erroObra && arquivoObra) {
+        arquivo = arquivoObra
+        tabelaUsada = 'arquivos_obra'
+      }
+    }
+
+    if (!arquivo) {
       return res.status(404).json({
         success: false,
         message: 'Arquivo não encontrado'
       })
     }
 
-    // Remover arquivo do storage
-    const { error: storageError } = await supabaseAdmin.storage
-      .from('arquivos-obras')
-      .remove([arquivo.caminho])
+    // Extrair caminho do arquivo (pode ser URL completa ou caminho relativo)
+    let caminhoArquivo = arquivo.caminho
+    if (caminhoArquivo && caminhoArquivo.includes('/storage/v1/object/public/arquivos-obras/')) {
+      // Extrair apenas o caminho relativo da URL
+      const match = caminhoArquivo.match(/arquivos-obras\/(.+)$/)
+      caminhoArquivo = match ? match[1] : arquivo.caminho
+    }
 
-    if (storageError) {
-      console.error('Erro ao remover arquivo do storage:', storageError)
-      // Continuar mesmo se falhar no storage, pois pode já ter sido removido
+    // Remover arquivo do storage
+    if (caminhoArquivo) {
+      const { error: storageError } = await supabaseAdmin.storage
+        .from('arquivos-obras')
+        .remove([caminhoArquivo])
+
+      if (storageError) {
+        console.error('Erro ao remover arquivo do storage:', storageError)
+        // Continuar mesmo se falhar no storage, pois pode já ter sido removido
+      }
     }
 
     // Remover registro do banco
     const { error: dbError } = await supabaseAdmin
-      .from('arquivos_obra')
+      .from(tabelaUsada)
       .delete()
       .eq('id', arquivoId)
 
@@ -1621,6 +1691,145 @@ router.post('/upload/livro-grua/:livroGruaId', authenticateToken, upload.single(
 
   } catch (error) {
     console.error('Erro no upload de anexo do livro da grua:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/arquivos/por-entidade:
+ *   get:
+ *     summary: Lista arquivos por entidade (tipo e ID)
+ *     tags: [Arquivos]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: entidade_tipo
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Tipo da entidade (ex: cliente, usuario, obra)
+ *       - in: query
+ *         name: entidade_id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da entidade
+ *       - in: query
+ *         name: modulo
+ *         schema:
+ *           type: string
+ *         description: Módulo do sistema (ex: clientes, usuarios, obras)
+ *     responses:
+ *       200:
+ *         description: Lista de arquivos da entidade
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       id:
+ *                         type: integer
+ *                       nome:
+ *                         type: string
+ *                       nome_original:
+ *                         type: string
+ *                       caminho:
+ *                         type: string
+ *                       tamanho:
+ *                         type: integer
+ *                       tipo_mime:
+ *                         type: string
+ *                       extensao:
+ *                         type: string
+ *                       modulo:
+ *                         type: string
+ *                       entidade_id:
+ *                         type: integer
+ *                       entidade_tipo:
+ *                         type: string
+ *                       descricao:
+ *                         type: string
+ *                       tags:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       publico:
+ *                         type: boolean
+ *                       usuario_id:
+ *                         type: integer
+ *                       created_at:
+ *                         type: string
+ *                       updated_at:
+ *                         type: string
+ *       400:
+ *         description: Parâmetros inválidos
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.get('/por-entidade', authenticateToken, async (req, res) => {
+  try {
+    const { entidade_tipo, entidade_id, modulo } = req.query
+
+    if (!entidade_tipo || !entidade_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'entidade_tipo e entidade_id são obrigatórios'
+      })
+    }
+
+    let query = supabaseAdmin
+      .from('arquivos')
+      .select('*')
+      .eq('entidade_tipo', entidade_tipo)
+      .eq('entidade_id', parseInt(entidade_id))
+      .order('created_at', { ascending: false })
+
+    if (modulo) {
+      query = query.eq('modulo', modulo)
+    }
+
+    const { data: arquivos, error } = await query
+
+    if (error) {
+      console.error('Erro ao buscar arquivos:', error)
+      
+      // Mensagem mais clara se a tabela não existir
+      if (error.message && (error.message.includes('Could not find the table') || error.message.includes('does not exist'))) {
+        return res.status(500).json({
+          success: false,
+          message: 'Tabela de arquivos não encontrada. Por favor, execute a migration 20250302_create_arquivos_genericos.sql no Supabase SQL Editor.',
+          error: 'Tabela "arquivos" não existe. Execute a migration para criar a tabela.',
+          migration_file: 'backend-api/database/migrations/20250302_create_arquivos_genericos.sql'
+        })
+      }
+      
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar arquivos',
+        error: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: arquivos || []
+    })
+
+  } catch (error) {
+    console.error('Erro ao listar arquivos por entidade:', error)
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
