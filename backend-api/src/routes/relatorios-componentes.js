@@ -134,6 +134,24 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     // Pipe do documento para a resposta
     doc.pipe(res);
 
+    // Constante para posição inicial após logos 
+    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+    const Y_POS_APOS_LOGOS = 150;
+    
+    // Função auxiliar para adicionar nova página com logos
+    const adicionarNovaPaginaComLogos = () => {
+      doc.addPage();
+      // Adicionar logos imediatamente na nova página criada
+      try {
+        adicionarLogosNaPagina(doc, 40);
+        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+      } catch (error) {
+        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+      }
+      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+      return Y_POS_APOS_LOGOS;
+    };
+
     let yPos = 40;
 
     // ===== LOGOS NO CABEÇALHO =====
@@ -191,10 +209,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     const componentesAlocados = componentes?.filter(c => c.quantidade_em_uso > 0) || [];
     if (componentesAlocados.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        // Adicionar logos na nova página
-        adicionarLogosNaPagina(doc, 40);
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('COMPONENTES ALOCADOS', 40, yPos);
@@ -216,10 +231,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       doc.fontSize(8).font('Helvetica');
       componentesAlocados.forEach(comp => {
         if (yPos > 750) {
-          doc.addPage();
-          // Adicionar logos na nova página
-          adicionarLogosNaPagina(doc, 40);
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
           // Redesenhar cabeçalho
           doc.fontSize(9).font('Helvetica-Bold');
           doc.text('Nome', 40, yPos);
@@ -260,10 +272,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     
     if (componentesRetornados.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        // Adicionar logos na nova página
-        adicionarLogosNaPagina(doc, 40);
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('COMPONENTES RETORNADOS/DANIFICADOS', 40, yPos);
@@ -285,10 +294,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       doc.fontSize(8).font('Helvetica');
       componentesRetornados.forEach(comp => {
         if (yPos > 750) {
-          doc.addPage();
-          // Adicionar logos na nova página
-          adicionarLogosNaPagina(doc, 40);
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
           doc.fontSize(9).font('Helvetica-Bold');
           doc.text('Nome', 40, yPos);
           doc.text('Grua', 150, yPos);
@@ -319,10 +325,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
     // ===== MOVIMENTAÇÕES RECENTES =====
     if (movimentacoes && movimentacoes.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        // Adicionar logos na nova página
-        adicionarLogosNaPagina(doc, 40);
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('MOVIMENTAÇÕES RECENTES (Últimos 30 dias)', 40, yPos);
@@ -343,10 +346,7 @@ router.get('/componentes-estoque/pdf', authenticateToken, requirePermission('obr
       doc.fontSize(8).font('Helvetica');
       movimentacoes.slice(0, 30).forEach(mov => {
         if (yPos > 750) {
-          doc.addPage();
-          // Adicionar logos na nova página
-          adicionarLogosNaPagina(doc, 40);
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
           doc.fontSize(9).font('Helvetica-Bold');
           doc.text('Data', 40, yPos);
           doc.text('Componente', 100, yPos);

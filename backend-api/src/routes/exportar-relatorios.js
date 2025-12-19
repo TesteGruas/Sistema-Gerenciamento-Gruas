@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import XLSX from 'xlsx';
-import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -34,6 +34,24 @@ router.post('/pdf/financeiro', authenticateToken, requirePermission('financeiro:
 
     // Pipe do documento para a resposta
     doc.pipe(res);
+
+    // Constante para posição inicial após logos 
+    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+    const Y_POS_APOS_LOGOS = 150;
+    
+    // Função auxiliar para adicionar nova página com logos
+    const adicionarNovaPaginaComLogos = () => {
+      doc.addPage();
+      // Adicionar logos imediatamente na nova página criada
+      try {
+        adicionarLogosNaPagina(doc, 40);
+        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+      } catch (error) {
+        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+      }
+      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+      return Y_POS_APOS_LOGOS;
+    };
 
     // ===== LOGOS NO CABEÇALHO =====
     let yPos = 50;
@@ -242,8 +260,7 @@ function renderizarFluxoCaixaPDF(doc, dados) {
 
     dados.fluxoCaixa.forEach(item => {
       if (y > 700) {
-        doc.addPage();
-        y = 50;
+        y = adicionarNovaPaginaComLogos();
       }
 
       const periodo = item.mes || item.dia || item.hora || '-';
@@ -334,7 +351,7 @@ function renderizarRentabilidadePDF(doc, dados) {
   if (dados.data && Array.isArray(dados.data)) {
     dados.data.forEach((grua, index) => {
       if (index > 0 && doc.y > 650) {
-        doc.addPage();
+        doc.y = adicionarNovaPaginaComLogos();
       }
 
       doc.fontSize(12).font('Helvetica-Bold');

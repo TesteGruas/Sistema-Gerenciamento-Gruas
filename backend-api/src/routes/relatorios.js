@@ -2096,6 +2096,16 @@ router.get('/performance-gruas/export/pdf', authenticateToken, async (req, res) 
 
     doc.pipe(res);
 
+    // Constante para posição inicial após cabeçalho (padding de 150px do topo em novas páginas)
+    const Y_POS_APOS_CABECALHO = 150;
+    
+    // Função auxiliar para adicionar nova página
+    const adicionarNovaPagina = () => {
+      doc.addPage();
+      // Retornar posição Y para começar o conteúdo (150px do topo)
+      return Y_POS_APOS_CABECALHO;
+    };
+
     // Cabeçalho
     doc.fontSize(20).font('Helvetica-Bold').text('Relatório de Performance de Gruas', 50, 50, { align: 'center' });
     doc.fontSize(12).font('Helvetica').text(`Período: ${value.data_inicio} a ${value.data_fim}`, 50, 80, { align: 'center' });
@@ -2125,8 +2135,7 @@ router.get('/performance-gruas/export/pdf', authenticateToken, async (req, res) 
 
       data.performance_por_grua.forEach((item, index) => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 50;
+          yPos = adicionarNovaPagina();
         }
 
         // O endpoint retorna estrutura complexa

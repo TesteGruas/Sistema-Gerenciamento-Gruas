@@ -22,7 +22,7 @@ import {
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
-import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 
 const router = express.Router();
@@ -6527,6 +6527,23 @@ router.get('/relatorios/exportar', async (req, res) => {
         return y + headerHeight;
       };
 
+      // Constante para posição inicial após logos em landscape (padding de 150px do topo)
+      const Y_POS_APOS_LOGOS = 150;
+      
+      // Função auxiliar para adicionar nova página com logos
+      const adicionarNovaPaginaComLogos = () => {
+        doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
+        // Adicionar logos imediatamente na nova página criada
+        try {
+          adicionarLogosNaPagina(doc, 40);
+          console.log(`[PDF] Logos adicionados imediatamente na nova página (landscape)`);
+        } catch (error) {
+          console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+        }
+        // Retornar posição Y para começar o header da tabela abaixo dos logos
+        return desenharHeaderTabela(Y_POS_APOS_LOGOS);
+      };
+
       // Desenhar header da tabela
       currentY = desenharHeaderTabela(currentY);
 
@@ -6534,8 +6551,7 @@ router.get('/relatorios/exportar', async (req, res) => {
       registros.forEach((registro, index) => {
         // Verificar se precisa de nova página
         if (currentY + rowHeight > doc.page.height - 60) {
-          doc.addPage({ size: 'A4', layout: 'landscape', margin: 40 });
-          currentY = desenharHeaderTabela(60);
+          currentY = adicionarNovaPaginaComLogos();
         }
 
         // Cor de fundo alternada

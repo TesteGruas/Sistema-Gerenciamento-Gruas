@@ -2,7 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
-import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -212,10 +212,30 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // Pipe do documento para a resposta
     doc.pipe(res);
 
+    // Constante para posição inicial após logos 
+    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+    const Y_POS_APOS_LOGOS = 150;
+    
+    // Função auxiliar para adicionar nova página com logos
+    const adicionarNovaPaginaComLogos = () => {
+      doc.addPage();
+      // Adicionar logos imediatamente na nova página criada
+      try {
+        adicionarLogosNaPagina(doc, 40);
+        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+      } catch (error) {
+        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+      }
+      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+      return Y_POS_APOS_LOGOS;
+    };
+
     let yPos = 40;
 
     // ===== LOGOS NO CABEÇALHO =====
     yPos = adicionarLogosNoCabecalho(doc, yPos);
+    // Aumentar espaçamento após os logos para evitar sobreposição
+    yPos += 25;
 
     // ===== CABEÇALHO =====
     doc.fontSize(16).font('Helvetica-Bold').text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
@@ -436,8 +456,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
 
     // Verificar se precisa de nova página
     if (yPos > 700) {
-      doc.addPage();
-      yPos = 40;
+      yPos = adicionarNovaPaginaComLogos();
     }
 
     // ===== ITENS DO ORÇAMENTO =====
@@ -504,8 +523,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       doc.fontSize(9).font('Helvetica');
       todosItens.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         // Garantir que os valores sejam numéricos
@@ -573,8 +591,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       doc.fontSize(9).font('Helvetica');
       valoresFixos.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         doc.text(item.tipo || '-', 40, yPos);
@@ -597,8 +614,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // ===== CUSTOS MENSAIS =====
     if (custosMensais && custosMensais.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('CUSTOS MENSAIS', 40, yPos);
@@ -619,8 +635,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       let totalMensal = 0;
       custosMensais.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         doc.text(item.tipo || '-', 40, yPos);
@@ -651,8 +666,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // Apenas para orçamentos normais (não locação)
     if (!isLocacao && horasExtras && horasExtras.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('TABELA DE HORAS EXTRAS', 40, yPos);
@@ -671,8 +685,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       doc.fontSize(9).font('Helvetica');
       horasExtras.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         const tipoLabel = {
@@ -700,8 +713,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // Apenas para orçamentos normais (não locação)
     if (!isLocacao && servicosAdicionais && servicosAdicionais.length > 0) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fontSize(11).font('Helvetica-Bold').text('SERVIÇOS ADICIONAIS', 40, yPos);
@@ -722,8 +734,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       doc.fontSize(9).font('Helvetica');
       servicosAdicionais.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         doc.text(item.tipo || '-', 40, yPos);
@@ -745,8 +756,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
 
     // Verificar se precisa de nova página para condições gerais
     if (yPos > 700) {
-      doc.addPage();
-      yPos = 40;
+      yPos = adicionarNovaPaginaComLogos();
     }
 
     // ===== CONDIÇÕES COMERCIAIS =====
@@ -761,8 +771,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // ===== CONDIÇÕES DE PAGAMENTO =====
     if (orcamento.condicoes_pagamento) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fontSize(11).font('Helvetica-Bold').text('CONDIÇÕES DE PAGAMENTO', 40, yPos);
       yPos += 15;
@@ -774,8 +783,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // ===== CONDIÇÕES GERAIS =====
     if (orcamento.condicoes_gerais) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fontSize(11).font('Helvetica-Bold').text('CONDIÇÕES GERAIS', 40, yPos);
       yPos += 15;
@@ -787,8 +795,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // ===== LOGÍSTICA =====
     if (orcamento.logistica) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fontSize(11).font('Helvetica-Bold').text('LOGÍSTICA', 40, yPos);
       yPos += 15;
@@ -800,8 +807,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     // ===== GARANTIAS =====
     if (orcamento.garantias) {
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fontSize(11).font('Helvetica-Bold').text('GARANTIAS', 40, yPos);
       yPos += 15;
@@ -812,8 +818,7 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
 
     // ===== ASSINATURAS =====
     if (yPos > 650) {
-      doc.addPage();
-      yPos = 40;
+      yPos = adicionarNovaPaginaComLogos();
     }
     
     doc.fontSize(11).font('Helvetica-Bold').text('ASSINATURAS', 40, yPos);
@@ -832,7 +837,10 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     doc.text(formatarData(orcamento.data_orcamento), 310, yPos);
 
     // ===== LOGOS EM TODAS AS PÁGINAS =====
-    // Adicionar logos no cabeçalho de todas as páginas
+    // Os logos já foram adicionados:
+    // - Na primeira página no início (via adicionarLogosNoCabecalho)
+    // - Nas páginas subsequentes imediatamente após criação (via adicionarNovaPaginaComLogos)
+    // Esta chamada garante que todos os logos estejam presentes em todas as páginas
     adicionarLogosEmTodasAsPaginas(doc);
     
     // ===== RODAPÉ =====
@@ -963,11 +971,30 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     const corPrincipal = '#d93020';
     const corPrincipalRGB = { r: 217, g: 48, b: 32 };
 
+    // Constante para posição inicial após logos 
+    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+    const Y_POS_APOS_LOGOS = 150;
+    
+    // Função auxiliar para adicionar nova página com logos
+    const adicionarNovaPaginaComLogos = () => {
+      doc.addPage();
+      // Adicionar logos imediatamente na nova página criada
+      try {
+        adicionarLogosNaPagina(doc, 40);
+        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+      } catch (error) {
+        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+      }
+      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+      return Y_POS_APOS_LOGOS;
+    };
+
     let yPos = 40;
 
     // ===== CABEÇALHO COM LOGOS =====
     yPos = adicionarLogosNoCabecalho(doc, yPos);
-    yPos += 10;
+    // Aumentar espaçamento após os logos para evitar sobreposição
+    yPos += 25;
 
     // Título com cor
     doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -990,7 +1017,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
        .lineTo(555, yPos)
        .stroke();
     doc.strokeColor('black').lineWidth(1); // Resetar para preto
-    yPos += 15;
+    yPos += 20;
 
     // ===== DADOS DO CLIENTE =====
     doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1125,8 +1152,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
 
     // Verificar se precisa de nova página
     if (yPos > 700) {
-      doc.addPage();
-      yPos = 40;
+      yPos = adicionarNovaPaginaComLogos();
     }
 
     // ===== ITENS DO ORÇAMENTO =====
@@ -1196,8 +1222,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       doc.fontSize(9).font('Helvetica');
       todosItens.forEach(item => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         // Garantir que os valores sejam numéricos
@@ -1247,8 +1272,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (valoresFixos && valoresFixos.length > 0 && !valoresFixosConvertidosEmItens) {
       // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
       if (yPos > 680) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
          .fontSize(11)
@@ -1281,8 +1305,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       doc.fontSize(9).font('Helvetica');
       valoresFixos.forEach(vf => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         const quantidade = parseFloat(vf.quantidade) || 0;
@@ -1338,8 +1361,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (totalGeral > 0) {
       // Verificar se há espaço suficiente
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       // Linha separadora com cor
@@ -1363,8 +1385,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (custosMensais && custosMensais.length > 0) {
       // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
       if (yPos > 680) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
          .fontSize(11)
@@ -1396,8 +1417,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       doc.fontSize(9).font('Helvetica');
       custosMensais.forEach(cm => {
         if (yPos > 750) {
-          doc.addPage();
-          yPos = 40;
+          yPos = adicionarNovaPaginaComLogos();
         }
         
         const valorMensal = parseFloat(cm.valor_mensal) || 0;
@@ -1413,12 +1433,42 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       yPos += 10;
     }
 
+    // ===== CONDIÇÕES COMERCIAIS =====
+    if (orcamento.condicoes_comerciais) {
+      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
+      if (yPos > 720) {
+        yPos = adicionarNovaPaginaComLogos();
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+         .fontSize(11)
+         .font('Helvetica-Bold')
+         .text('CONDIÇÕES COMERCIAIS', 40, yPos);
+      doc.fillColor('black');
+      yPos += 15;
+      
+      doc.fontSize(10).font('Helvetica');
+      const textoCondicoesComerciais = orcamento.condicoes_comerciais || '';
+      const linhas = textoCondicoesComerciais.split('\n');
+      const alturaPorLinha = 12;
+      const alturaEstimada = linhas.length * alturaPorLinha;
+      
+      if (yPos + alturaEstimada > 750) {
+        yPos = adicionarNovaPaginaComLogos();
+      }
+      
+      doc.text(textoCondicoesComerciais, 40, yPos, {
+        width: 515,
+        align: 'left'
+      });
+      yPos += alturaEstimada + 15;
+    }
+
     // ===== CONDIÇÕES DE PAGAMENTO =====
     if (orcamento.condicoes_pagamento) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1435,8 +1485,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoCondicoesPagamento, 40, yPos, {
@@ -1450,8 +1499,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (orcamento.condicoes_gerais) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1468,8 +1516,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoCondicoes, 40, yPos, {
@@ -1483,8 +1530,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (orcamento.logistica) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1501,8 +1547,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoLogistica, 40, yPos, {
@@ -1516,8 +1561,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (orcamento.prazo_entrega) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1534,8 +1578,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoPrazoEntrega, 40, yPos, {
@@ -1549,8 +1592,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (orcamento.garantias) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1567,8 +1609,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoGarantias, 40, yPos, {
@@ -1582,8 +1623,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     if (orcamento.observacoes) {
       // Verificar se há espaço suficiente (precisa de ~50px mínimo)
       if (yPos > 720) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
@@ -1600,8 +1640,7 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       const alturaEstimada = linhas.length * alturaPorLinha;
       
       if (yPos + alturaEstimada > 750) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
       
       doc.text(textoObservacoes, 40, yPos, {
@@ -1615,11 +1654,10 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     // Verificar se há espaço suficiente para as assinaturas (precisa de ~70px)
     // Altura da página A4 é ~792px, margem inferior ~60px, então máximo é ~732px
     if (yPos > 660) {
-      doc.addPage();
-      yPos = 40;
-    }
-    
-    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
+        yPos = adicionarNovaPaginaComLogos();
+      }
+      
+      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
        .fontSize(11)
        .font('Helvetica-Bold')
        .text('ASSINATURAS', 40, yPos);
@@ -1634,8 +1672,31 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     yPos += 20;
 
     // ===== LOGOS EM TODAS AS PÁGINAS =====
-    // Adicionar logos no cabeçalho de todas as páginas
-    adicionarLogosEmTodasAsPaginas(doc);
+    // Os logos já foram adicionados:
+    // - Na primeira página no início (via adicionarLogosNoCabecalho)
+    // - Nas páginas subsequentes imediatamente após criação (via adicionarNovaPaginaComLogos)
+    // Esta seção garante que todos os logos estejam presentes
+    try {
+      // Aguardar um pouco para garantir que todas as páginas estejam no buffer
+      const pageRange = doc.bufferedPageRange();
+      const startPage = pageRange.start || 0;
+      const pageCount = pageRange.count || 0;
+      
+      console.log(`[PDF Logos] Verificando logos em ${pageCount} páginas (start: ${startPage})`);
+      
+      // Adicionar logos em todas as páginas para garantir (pode haver páginas que não foram tratadas)
+      for (let i = startPage; i < startPage + pageCount; i++) {
+        try {
+          doc.switchToPage(i);
+          adicionarLogosNaPagina(doc, 40);
+          console.log(`[PDF Logos] Logos garantidos na página ${i}`);
+        } catch (error) {
+          console.warn(`[PDF Logos] Erro ao adicionar logos na página ${i}:`, error.message);
+        }
+      }
+    } catch (error) {
+      console.error('[PDF Logos] Erro ao verificar logos em todas as páginas:', error.message);
+    }
     
     // ===== RODAPÉ =====
     // Adicionar informações da empresa em todas as páginas

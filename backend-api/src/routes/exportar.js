@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import XLSX from 'xlsx';
-import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -310,6 +310,24 @@ async function exportarPDF(res, dados, tipo, titulo) {
 
   doc.pipe(res);
 
+  // Constante para posição inicial após logos 
+  // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+  const Y_POS_APOS_LOGOS = 150;
+  
+  // Função auxiliar para adicionar nova página com logos
+  const adicionarNovaPaginaComLogos = () => {
+    doc.addPage();
+    // Adicionar logos imediatamente na nova página criada
+    try {
+      adicionarLogosNaPagina(doc, 40);
+      console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+    } catch (error) {
+      console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+    }
+    // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+    return Y_POS_APOS_LOGOS;
+  };
+
   // Adicionar logos no cabeçalho
   let yPos = 50;
   yPos = adicionarLogosNoCabecalho(doc, yPos);
@@ -326,11 +344,11 @@ async function exportarPDF(res, dados, tipo, titulo) {
 
   // Tabela de dados
   if (tipo === 'obras') {
-    renderizarTabelaObrasPDF(doc, dados, yPos);
+    renderizarTabelaObrasPDF(doc, dados, yPos, adicionarNovaPaginaComLogos);
   } else if (tipo === 'gruas') {
-    renderizarTabelaGruasPDF(doc, dados, yPos);
+    renderizarTabelaGruasPDF(doc, dados, yPos, adicionarNovaPaginaComLogos);
   } else {
-    renderizarTabelaGenericaPDF(doc, dados, yPos);
+    renderizarTabelaGenericaPDF(doc, dados, yPos, adicionarNovaPaginaComLogos);
   }
 
   // Adicionar logos em todas as páginas
@@ -371,7 +389,7 @@ async function exportarPDF(res, dados, tipo, titulo) {
 }
 
 // Função para renderizar tabela de obras em PDF com todos os dados
-function renderizarTabelaObrasPDF(doc, dados, yPos) {
+function renderizarTabelaObrasPDF(doc, dados, yPos, adicionarNovaPaginaComLogos) {
   let currentY = yPos;
   const pageHeight = 792; // Altura da página A4 em pontos
   const marginBottom = 80; // Margem inferior (aumentada para rodapé)
@@ -382,8 +400,7 @@ function renderizarTabelaObrasPDF(doc, dados, yPos) {
     // Estimativa: se a próxima obra vai precisar de mais de 250 pontos, adiciona página
     // Mas só adiciona se realmente estiver próximo do limite
     if (currentY > maxY - 250 && index > 0) {
-      doc.addPage();
-      currentY = 50;
+      currentY = adicionarNovaPaginaComLogos();
     }
 
     // Título da obra
@@ -399,8 +416,7 @@ function renderizarTabelaObrasPDF(doc, dados, yPos) {
 
     // Dados principais
     if (currentY > maxY - 100) {
-      doc.addPage();
-      currentY = 50;
+      currentY = adicionarNovaPaginaComLogos();
     }
     doc.font('Helvetica-Bold').text('DADOS PRINCIPAIS:', 50, currentY);
     currentY += 15;
@@ -435,8 +451,7 @@ function renderizarTabelaObrasPDF(doc, dados, yPos) {
     // Dados do cliente
     if (obra.clientes) {
       if (currentY > maxY - 50) {
-        doc.addPage();
-        currentY = 50;
+        currentY = adicionarNovaPaginaComLogos();
       }
       doc.font('Helvetica-Bold').text('CLIENTE:', 50, currentY);
       currentY += 15;
@@ -481,8 +496,7 @@ function renderizarTabelaObrasPDF(doc, dados, yPos) {
         
         // Verificar se precisa de nova página antes de adicionar grua
         if (currentY > maxY - 60) {
-          doc.addPage();
-          currentY = 50;
+          currentY = adicionarNovaPaginaComLogos();
         }
         
         doc.font('Helvetica-Bold').text(`Grua ${idx + 1}:`, 60, currentY);
@@ -528,8 +542,7 @@ function renderizarTabelaObrasPDF(doc, dados, yPos) {
       doc.font('Helvetica');
       funcionarios.forEach((func, idx) => {
         if (currentY > maxY - 20) {
-          doc.addPage();
-          currentY = 50;
+          currentY = adicionarNovaPaginaComLogos();
         }
         doc.text(`${idx + 1}. ${func.funcionario?.nome || 'N/A'} - ${func.funcionario?.cargo || 'N/A'}`, 60, currentY);
         currentY += 15;
@@ -562,7 +575,7 @@ function formatarMoeda(valor) {
 }
 
 // Função para renderizar tabela de gruas em PDF
-function renderizarTabelaGruasPDF(doc, dados, yPos) {
+function renderizarTabelaGruasPDF(doc, dados, yPos, adicionarNovaPaginaComLogos) {
   const headers = ['ID', 'Modelo', 'Fabricante', 'Tipo', 'Status'];
   let currentY = yPos;
 
@@ -580,8 +593,7 @@ function renderizarTabelaGruasPDF(doc, dados, yPos) {
   doc.fontSize(9).font('Helvetica');
   dados.forEach((grua) => {
     if (currentY > 700) {
-      doc.addPage();
-      currentY = 50;
+      currentY = adicionarNovaPaginaComLogos();
     }
 
     doc.text(grua.id?.toString() || '', 50, currentY);
@@ -595,7 +607,7 @@ function renderizarTabelaGruasPDF(doc, dados, yPos) {
 }
 
 // Função genérica para renderizar tabela em PDF
-function renderizarTabelaGenericaPDF(doc, dados, yPos) {
+function renderizarTabelaGenericaPDF(doc, dados, yPos, adicionarNovaPaginaComLogos) {
   if (!dados || dados.length === 0) {
     doc.fontSize(12).text('Nenhum dado disponível', 50, yPos);
     return;
@@ -620,8 +632,7 @@ function renderizarTabelaGenericaPDF(doc, dados, yPos) {
   doc.fontSize(8).font('Helvetica');
   dados.forEach((item) => {
     if (currentY > 700) {
-      doc.addPage();
-      currentY = 50;
+      currentY = adicionarNovaPaginaComLogos();
     }
 
     colunas.forEach((col, index) => {

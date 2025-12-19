@@ -2,7 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
-import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas } from '../utils/pdf-logos.js';
+import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
 
@@ -112,6 +112,24 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
     // Pipe do documento para a resposta
     doc.pipe(res);
 
+    // Constante para posição inicial após logos 
+    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
+    const Y_POS_APOS_LOGOS = 150;
+    
+    // Função auxiliar para adicionar nova página com logos
+    const adicionarNovaPaginaComLogos = () => {
+      doc.addPage();
+      // Adicionar logos imediatamente na nova página criada
+      try {
+        adicionarLogosNaPagina(doc, 40);
+        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
+      } catch (error) {
+        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
+      }
+      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
+      return Y_POS_APOS_LOGOS;
+    };
+
     let yPos = 40;
     let totalAcumulado = 0;
 
@@ -159,8 +177,7 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
     medicoes.forEach((medicao, index) => {
       // Verificar se precisa de nova página
       if (yPos > 700) {
-        doc.addPage();
-        yPos = 40;
+        yPos = adicionarNovaPaginaComLogos();
       }
 
       // Cabeçalho do mês
@@ -185,8 +202,7 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         
         medicao.medicao_custos_mensais.forEach(item => {
           if (yPos > 750) {
-            doc.addPage();
-            yPos = 40;
+            yPos = adicionarNovaPaginaComLogos();
           }
           
           doc.fontSize(8).font('Helvetica');
@@ -203,8 +219,7 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         
         medicao.medicao_horas_extras.forEach(item => {
           if (yPos > 750) {
-            doc.addPage();
-            yPos = 40;
+            yPos = adicionarNovaPaginaComLogos();
           }
           
           doc.fontSize(8).font('Helvetica');
@@ -233,8 +248,7 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         
         medicao.medicao_servicos_adicionais.forEach(item => {
           if (yPos > 750) {
-            doc.addPage();
-            yPos = 40;
+            yPos = adicionarNovaPaginaComLogos();
           }
           
           doc.fontSize(8).font('Helvetica');
@@ -251,8 +265,7 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         
         medicao.medicao_aditivos.forEach(item => {
           if (yPos > 750) {
-            doc.addPage();
-            yPos = 40;
+            yPos = adicionarNovaPaginaComLogos();
           }
           
           doc.fontSize(8).font('Helvetica');

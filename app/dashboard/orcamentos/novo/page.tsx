@@ -262,20 +262,132 @@ export default function NovoOrcamentoPage() {
   const loadOrcamentoForEdit = async (id: string) => {
     setIsLoadingOrcamento(true)
     try {
-      // Usar a API de orçamentos de locação
-      const response = await orcamentosLocacaoApi.get(parseInt(id))
+      let response: any
+      let orcamento: any
+
+      // Se o tipo for 'obra', usar a API de orçamentos de obra
+      if (isObra) {
+        response = await getOrcamento(parseInt(id))
+        if (!response.success || !response.data) {
+          toast({
+            title: "Erro",
+            description: response.message || "Orçamento não encontrado",
+            variant: "destructive"
+          })
+          router.push('/dashboard/orcamentos')
+          return
+        }
+        orcamento = response.data
+        
+        // Mapear dados de orçamento de obra para o formato do formulário
+        const obraNome = orcamento.obras?.nome || orcamento.obra_nome || ''
+        const obraEndereco = orcamento.obras?.endereco || orcamento.obra_endereco || ''
+        const equipamento = orcamento.gruas ? `${orcamento.gruas.name || ''} / ${orcamento.gruas.modelo || ''}` : orcamento.grua_modelo || ''
+        
+        // Buscar valores fixos e custos mensais
+        const valoresFixosData = orcamento.orcamento_valores_fixos || []
+        const custosMensaisData = orcamento.orcamento_custos_mensais || []
+        
+        // Preencher formData com dados de obra
+        setFormData({
+          cliente_id: orcamento.cliente_id?.toString() || '',
+          cliente_nome: orcamento.clientes?.nome || '',
+          obra_nome: obraNome,
+          obra_endereco: obraEndereco,
+          obra_cidade: orcamento.obra_cidade || '',
+          obra_estado: orcamento.obra_estado || '',
+          tipo_obra: orcamento.tipo_obra || '',
+          equipamento: equipamento,
+          altura_inicial: orcamento.altura_inicial?.toString() || '',
+          altura_final: orcamento.grua_altura_final?.toString() || '',
+          comprimento_lanca: orcamento.grua_lanca?.toString() || '',
+          carga_maxima: orcamento.grua_capacidade_1_cabo?.toString() || '',
+          carga_ponta: orcamento.grua_capacidade_2_cabos?.toString() || '',
+          potencia_eletrica: orcamento.grua_potencia ? `${orcamento.grua_potencia} KVA` : '',
+          energia_necessaria: orcamento.grua_voltagem || '',
+          valor_locacao_mensal: custosMensaisData.find((cm: any) => cm.tipo === 'Locação')?.valor_mensal?.toString() || '',
+          valor_operador: custosMensaisData.find((cm: any) => cm.tipo === 'Operador')?.valor_mensal?.toString() || '',
+          valor_sinaleiro: custosMensaisData.find((cm: any) => cm.tipo === 'Sinaleiro')?.valor_mensal?.toString() || '',
+          valor_manutencao: custosMensaisData.find((cm: any) => cm.tipo === 'Manutenção')?.valor_mensal?.toString() || '',
+          prazo_locacao_meses: orcamento.prazo_locacao_meses?.toString() || '',
+          data_inicio_estimada: orcamento.data_inicio_estimada || '',
+          tolerancia_dias: orcamento.tolerancia_dias?.toString() || '15',
+          escopo_incluso: orcamento.escopo_incluso || '',
+          responsabilidades_cliente: orcamento.responsabilidades_cliente || '',
+          condicoes_comerciais: orcamento.condicoes_comerciais || '',
+          condicoes_gerais: orcamento.condicoes_gerais || '',
+          logistica: orcamento.logistica || '',
+          garantias: orcamento.garantias || '',
+          observacoes: orcamento.observacoes || ''
+        })
+        
+        // Preencher valores fixos
+        if (valoresFixosData.length > 0) {
+          setValoresFixos(valoresFixosData.map((vf: any) => ({
+            id: vf.id?.toString(),
+            tipo: vf.tipo || 'Locação',
+            descricao: vf.descricao || '',
+            quantidade: vf.quantidade || 0,
+            valor_unitario: vf.valor_unitario || 0,
+            valor_total: vf.valor_total || 0,
+            observacoes: vf.observacoes || ''
+          })))
+        }
+        
+        // Preencher custos mensais
+        if (custosMensaisData.length > 0) {
+          setCustosMensais(custosMensaisData.map((cm: any, index: number) => ({
+            id: `cm_${cm.id || index + 1}`,
+            tipo: cm.tipo || '',
+            descricao: cm.descricao || '',
+            valor_mensal: cm.valor_mensal || 0,
+            obrigatorio: cm.obrigatorio || false,
+            observacoes: cm.observacoes || ''
+          })))
+        }
+        
+        // Preencher cliente selecionado
+        if (orcamento.cliente_id && orcamento.clientes) {
+          setClienteSelecionado({
+            id: orcamento.cliente_id,
+            name: orcamento.clientes.nome,
+            nome: orcamento.clientes.nome
+          })
+        }
+        
+        setIsEditMode(true)
+        return
+      }
+
+      // Caso contrário, usar a API de orçamentos de locação
+      response = await orcamentosLocacaoApi.get(parseInt(id))
       
       if (!response.success || !response.data) {
+        // Se não encontrou em locação e não há tipo especificado, tentar obra como fallback
+        if (!tipo || tipo === 'locacao') {
+          console.log('Orçamento não encontrado em locação, tentando em obras...')
+          const responseObra = await getOrcamento(parseInt(id))
+          if (responseObra.success && responseObra.data) {
+            // Atualizar URL para incluir tipo=obra e recarregar
+            const newUrl = new URL(window.location.href)
+            newUrl.searchParams.set('tipo', 'obra')
+            window.history.replaceState({}, '', newUrl.toString())
+            // Recarregar com tipo correto (será pego pelo useEffect)
+            window.location.reload()
+            return
+          }
+        }
+        
         toast({
           title: "Erro",
-          description: response.message || "Orçamento não encontrado",
+          description: response.message || "Orçamento não encontrado. Verifique se o ID está correto.",
           variant: "destructive"
         })
         router.push('/dashboard/orcamentos')
         return
       }
 
-      const orcamento = response.data
+      orcamento = response.data
       setIsEditMode(true)
       
       // Mapear dados da API para o formato do formulário

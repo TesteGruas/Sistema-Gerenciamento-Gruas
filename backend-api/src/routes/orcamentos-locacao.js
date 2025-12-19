@@ -376,13 +376,64 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`[GET /orcamentos-locacao/${id}] Buscando orçamento de locação com ID ${id}`);
 
+    // Primeiro, verificar se o orçamento existe
+    const { data: orcamentoExists, error: existsError } = await supabase
+      .from('orcamentos_locacao')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (existsError) {
+      console.log(`[GET /orcamentos-locacao/${id}] Erro ao verificar existência:`, existsError);
+      // Se o erro for PGRST116, significa que não encontrou nenhum registro
+      if (existsError.code === 'PGRST116') {
+        // Verificar se existe na tabela de orçamentos normais (obra)
+        const { data: orcamentoObra } = await supabase
+          .from('orcamentos')
+          .select('id')
+          .eq('id', id)
+          .single();
+        
+        if (orcamentoObra) {
+          console.log(`[GET /orcamentos-locacao/${id}] Orçamento encontrado na tabela 'orcamentos' (obra), não em 'orcamentos_locacao'`);
+          return res.status(404).json({ 
+            success: false, 
+            message: 'Orçamento não encontrado na tabela de locação. Este orçamento está na tabela de obras. Use a API /api/orcamentos/' + id
+          });
+        }
+        
+        return res.status(404).json({ 
+          success: false, 
+          message: 'Orçamento não encontrado' 
+        });
+      }
+      
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Erro ao verificar orçamento',
+        error: existsError.message 
+      });
+    }
+
+    if (!orcamentoExists) {
+      console.log(`[GET /orcamentos-locacao/${id}] Orçamento não encontrado`);
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Orçamento não encontrado' 
+      });
+    }
+
+    console.log(`[GET /orcamentos-locacao/${id}] Orçamento existe, buscando relacionamentos...`);
+
+    // Buscar o orçamento completo com relacionamentos (usando LEFT JOIN ao invés de INNER)
     const { data, error } = await supabase
       .from('orcamentos_locacao')
       .select(`
         *,
-        clientes!inner(nome, cnpj, contato, telefone, email),
-        funcionarios!vendedor_id(nome, telefone, email),
+        clientes:cliente_id(nome, cnpj, contato, telefone, email),
+        funcionarios:vendedor_id(nome, telefone, email),
         orcamento_itens_locacao(*),
         orcamento_valores_fixos_locacao(*),
         orcamento_custos_mensais_locacao(*)
@@ -391,27 +442,22 @@ router.get('/:id', async (req, res) => {
       .single();
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({ 
-          success: false, 
-          message: 'Orçamento não encontrado' 
-        });
-      }
-      console.error('Erro ao buscar orçamento:', error);
+      console.error(`[GET /orcamentos-locacao/${id}] Erro ao buscar orçamento com relacionamentos:`, error);
       return res.status(500).json({ 
         success: false, 
-        message: 'Erro interno do servidor',
+        message: 'Erro ao buscar relacionamentos do orçamento',
         error: error.message 
       });
     }
 
+    console.log(`[GET /orcamentos-locacao/${id}] Orçamento encontrado com sucesso`);
     res.json({
       success: true,
       data
     });
 
   } catch (error) {
-    console.error('Erro na rota de orçamento específico:', error);
+    console.error(`[GET /orcamentos-locacao/${req.params.id}] Erro na rota:`, error);
     res.status(500).json({ 
       success: false, 
       message: 'Erro interno do servidor',
@@ -1212,18 +1258,27 @@ router.put('/:id', async (req, res) => {
     }
 
     // Buscar o orçamento completo com itens, valores fixos e custos mensais
-    const { data: orcamentoCompleto } = await supabase
+    const { data: orcamentoCompleto, error: fetchError } = await supabase
       .from('orcamentos_locacao')
       .select(`
         *,
-        clientes!inner(nome, cnpj),
-        funcionarios!vendedor_id(nome),
+        clientes:cliente_id(nome, cnpj),
+        funcionarios:vendedor_id(nome),
         orcamento_itens_locacao(*),
         orcamento_valores_fixos_locacao(*),
         orcamento_custos_mensais_locacao(*)
       `)
       .eq('id', id)
       .single();
+
+    if (fetchError) {
+      console.error('Erro ao buscar orçamento atualizado:', fetchError);
+      return res.status(500).json({ 
+        success: false, 
+        message: 'Erro ao buscar orçamento atualizado',
+        error: fetchError.message 
+      });
+    }
 
     res.json({
       success: true,

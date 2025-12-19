@@ -456,7 +456,7 @@ export default function OrcamentosPage() {
   }
 
   const handleEdit = (id: string) => {
-    router.push(`/dashboard/orcamentos/novo?id=${id}`)
+    router.push(`/dashboard/orcamentos/novo?id=${id}&tipo=obra`)
   }
 
   const handleCreateObra = (orcamento: Orcamento) => {
@@ -701,7 +701,7 @@ export default function OrcamentosPage() {
   }
 
   const handleEditLocacao = (id: number) => {
-    router.push(`/dashboard/orcamentos/novo?id=${id}`)
+    router.push(`/dashboard/orcamentos/novo?id=${id}&tipo=locacao`)
   }
 
   const getTipoColor = (tipo: string) => {
@@ -784,7 +784,7 @@ export default function OrcamentosPage() {
           )}
         </div>
 
-        <TabsContent value="obra" className="space-y-6 mt-6">
+        <TabsContent value="obra" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
