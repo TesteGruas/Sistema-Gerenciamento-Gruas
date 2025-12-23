@@ -53,13 +53,13 @@ export function getUserLevel(userData: UserData | null): number {
     'gestores': 9,
     'gerente': 8,
     'financeiro': 8,
-    'supervisores': 6,
-    'supervisor': 6,
+    'supervisores': 6, // Supervisores mesclado em Clientes (nível 6)
+    'supervisor': 6, // Supervisores mesclado em Clientes (nível 6)
+    'clientes': 6,
+    'cliente': 6,
     'operários': 4,
     'operarios': 4,
-    'operador': 4,
-    'clientes': 1,
-    'cliente': 1
+    'operador': 4
   }
 
   return roleLevelMap[role] || 0
@@ -79,11 +79,8 @@ export function shouldAccessWeb(userData: UserData | null): boolean {
     return true
   }
 
-  // Cliente (nível 1) → Web (com limitação)
-  if (level === 1) {
-    const role = (userData.role || '').toLowerCase()
-    return role.includes('cliente')
-  }
+  // Cliente (nível 6) → PWA (não web, mas tem acesso a aprovações)
+  // Clientes agora têm nível 6, então não entram aqui
 
   // Demais níveis → PWA
   return false

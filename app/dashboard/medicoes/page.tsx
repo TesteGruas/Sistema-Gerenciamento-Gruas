@@ -794,6 +794,16 @@ export default function MedicoesPage() {
                   total + g.medicoes.reduce((sum, m) => sum + (m.valor_total || 0), 0), 0
                 )
                 
+                // Mapear status da obra para exibição
+                const statusObra = grupo.obra.status || 'ativa'
+                const statusLabel = statusObra === 'ativa' || statusObra === 'em_andamento' 
+                  ? 'Em Andamento' 
+                  : statusObra === 'finalizada' 
+                    ? 'Finalizada' 
+                    : statusObra === 'pausada'
+                      ? 'Pausada'
+                      : statusObra.charAt(0).toUpperCase() + statusObra.slice(1)
+                
                 return (
                   <AccordionItem 
                     key={String(grupo.obra.id)} 
@@ -803,8 +813,8 @@ export default function MedicoesPage() {
                     <Card className="border-0 shadow-none">
                       <CardHeader className="pb-2">
                         <div className="flex items-start gap-4">
-                          <AccordionTrigger className="hover:no-underline py-2 px-4 -mx-4 -mt-4 flex-1">
-                            <div className="flex items-center justify-between w-full">
+                          <h3 className="flex flex-1">
+                            <AccordionTrigger className="hover:no-underline py-2 px-4 -mx-4 -mt-4 flex-1">
                               <div className="flex items-start gap-4 flex-1 min-w-0">
                                 <div className="flex-shrink-0 mt-1">
                                   <div className="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -839,17 +849,15 @@ export default function MedicoesPage() {
                                   </div>
                                 </div>
                               </div>
-                            </div>
-                          </AccordionTrigger>
+                            </AccordionTrigger>
+                          </h3>
                           <div className="flex items-center gap-3 flex-shrink-0 pt-2 pr-4">
-                            {grupo.obra.status && (
-                              <Badge 
-                                variant={grupo.obra.status === 'ativa' ? 'default' : 'outline'} 
-                                className="hidden sm:inline-flex"
-                              >
-                                {grupo.obra.status}
-                              </Badge>
-                            )}
+                            <Badge 
+                              variant={statusObra === 'ativa' || statusObra === 'em_andamento' ? 'default' : 'outline'} 
+                              className="hidden sm:inline-flex"
+                            >
+                              {statusLabel}
+                            </Badge>
                             <Button
                               variant="ghost"
                               size="sm"

@@ -43,3 +43,5 @@ COMMENT ON COLUMN arquivos.tags IS 'Array de tags para categorização';
 COMMENT ON COLUMN arquivos.publico IS 'Se o arquivo é público ou privado';
 COMMENT ON COLUMN arquivos.usuario_id IS 'ID do usuário que fez o upload';
 
+
+

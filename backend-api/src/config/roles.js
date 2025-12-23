@@ -1,19 +1,18 @@
 /**
  * Configuração de Roles e Permissões do Sistema
  * 
- * Sistema simplificado com 5 roles principais e permissões hardcoded.
+ * Sistema simplificado com 4 roles principais e permissões hardcoded.
  * As permissões seguem o formato: "modulo:acao"
  * 
  * Níveis hierárquicos:
  * - Admin (10): Acesso total
  * - Gestores (9): Acesso gerencial completo
- * - Supervisores (6): Operações e supervisão
+ * - Clientes (6): Cliente com supervisão - Visualização de obras, documentos e supervisão das horas dos funcionários
  * - Operários (4): Operação diária via APP
- * - Clientes (1): Acesso limitado
  */
 
 // ========================================
-// DEFINIÇÃO DOS 5 ROLES PRINCIPAIS
+// DEFINIÇÃO DOS 4 ROLES PRINCIPAIS
 // ========================================
 
 export const ROLES = {
@@ -119,94 +118,8 @@ export const ROLES = {
     ]
   },
   
-  SUPERVISORES: {
-    id: 3,
-    nome: 'Supervisores',
-    nivel: 6,
-    descricao: 'Supervisão operacional - Gruas, Obras, Clientes, Contratos, Funcionários, Documentos, Livro Grua, Estoque',
-    permissoes: [
-      // Gruas
-      'gruas:visualizar',
-      'gruas:criar',
-      'gruas:editar',
-      'gruas:excluir',
-      'gruas:gerenciar',
-      'gruas:relatorios',
-      
-      // Obras
-      'obras:visualizar',
-      'obras:criar',
-      'obras:editar',
-      'obras:excluir',
-      'obras:gerenciar',
-      'obras:relatorios',
-      
-      // Clientes
-      'clientes:visualizar',
-      'clientes:criar',
-      'clientes:editar',
-      'clientes:excluir',
-      'clientes:gerenciar',
-      
-      // Contratos
-      'contratos:visualizar',
-      'contratos:criar',
-      'contratos:editar',
-      'contratos:excluir',
-      'contratos:gerenciar',
-      
-      // Funcionários
-      'funcionarios:visualizar',
-      'funcionarios:criar',
-      'funcionarios:editar',
-      'funcionarios:excluir',
-      'funcionarios:gerenciar',
-      
-      // NÃO TEM ACESSO A PONTO ELETRÔNICO
-      // - ponto:*
-      // - ponto_eletronico:*
-      
-      // Documentos
-      'documentos:visualizar',
-      'documentos:criar',
-      'documentos:editar',
-      'documentos:excluir',
-      'documentos:gerenciar',
-      'documentos:assinatura',
-      'assinatura_digital:visualizar',
-      'assinatura_digital:gerenciar',
-      
-      // Livro de Gruas
-      'livros_gruas:visualizar',
-      'livros_gruas:criar',
-      'livros_gruas:editar',
-      'livros_gruas:gerenciar',
-      
-      // Estoque
-      'estoque:visualizar',
-      'estoque:criar',
-      'estoque:editar',
-      'estoque:excluir',
-      'estoque:gerenciar',
-      'estoque:movimentacoes',
-      'estoque:relatorios',
-      
-      // Justificativas (Ponto)
-      'justificativas:visualizar',
-      'justificativas:aprovar',
-      'justificativas:gerenciar',
-      
-      // Notificações
-      'notificacoes:visualizar',
-      'notificacoes:gerenciar',
-      
-      // Dashboard (acesso básico)
-      'dashboard:visualizar'
-    ]
-  },
-  
   OPERARIOS: {
-    id: 4,
+    id: 3,
     nome: 'Operários',
     nivel: 4,
     descricao: 'Operação diária via APP - Ponto, Documentos e Livro de Grua. Acesso contextual a obras onde está alocado.',
@@ -239,21 +152,41 @@ export const ROLES = {
   },
   
   CLIENTES: {
-    id: 5,
+    id: 4,
     nome: 'Clientes',
-    nivel: 1,
-    descricao: 'Acesso limitado - Visualização e assinatura de documentos',
+    nivel: 6,
+    descricao: 'Cliente com supervisão - Visualização de obras, documentos e supervisão das horas dos funcionários atrelados às gruas',
     permissoes: [
-      // Documentos (apenas visualização e assinatura)
-      'documentos:visualizar',
-      'documentos:assinatura',
-      'assinatura_digital:visualizar',
+      // Dashboard
+      'dashboard:visualizar',
       
-      // Obras (apenas visualizar próprias obras)
+      // Obras (visualizar próprias obras)
       'obras:visualizar',
       
-      // Notificações (próprias)
-      'notificacoes:visualizar'
+      // Gruas (visualizar gruas relacionadas às obras)
+      'gruas:visualizar',
+      
+      // Ponto Eletrônico (supervisão das horas dos funcionários atrelados às gruas)
+      'ponto:visualizar',
+      'ponto:aprovacoes',
+      'ponto_eletronico:visualizar',
+      'ponto_eletronico:aprovacoes',
+      
+      // Documentos (visualização e assinatura)
+      'documentos:visualizar',
+      'documentos:gerenciar',
+      'documentos:assinatura',
+      'assinatura_digital:visualizar',
+      'assinatura_digital:gerenciar',
+      
+      // Justificativas (aprovar justificativas dos funcionários)
+      'justificativas:visualizar',
+      'justificativas:aprovar',
+      'justificativas:gerenciar',
+      
+      // Notificações
+      'notificacoes:visualizar',
+      'notificacoes:gerenciar'
     ]
   },
   
@@ -317,7 +250,6 @@ export const ROLES = {
 export const ROLES_PERMISSIONS = {
   'Admin': ROLES.ADMIN.permissoes,
   'Gestores': ROLES.GESTORES.permissoes,
-  'Supervisores': ROLES.SUPERVISORES.permissoes,
   'Operários': ROLES.OPERARIOS.permissoes,
   'Clientes': ROLES.CLIENTES.permissoes,
   'Financeiro': ROLES.FINANCEIRO.permissoes
@@ -331,9 +263,8 @@ export const ROLES_LEVELS = {
   'Admin': 10,
   'Gestores': 9,
   'Financeiro': 8,
-  'Supervisores': 6,
-  'Operários': 4,
-  'Clientes': 1
+  'Clientes': 6,
+  'Operários': 4
 }
 
 // ========================================
@@ -344,9 +275,8 @@ export const ROLES_LIST = [
   ROLES.ADMIN,
   ROLES.GESTORES,
   ROLES.FINANCEIRO,
-  ROLES.SUPERVISORES,
-  ROLES.OPERARIOS,
-  ROLES.CLIENTES
+  ROLES.CLIENTES,
+  ROLES.OPERARIOS
 ]
 
 // ========================================
@@ -428,24 +358,22 @@ export const ADMIN_ONLY_PERMISSIONS = [
 export const PWA_PERMISSIONS = {
   'Admin': ['*'],
   'Gestores': ['*'],
-  'Supervisores': [
+  'Clientes': [
     'ponto:visualizar',
-    'ponto:registrar',
     'ponto:aprovacoes',
+    'ponto_eletronico:visualizar',
+    'ponto_eletronico:aprovacoes',
     'documentos:visualizar',
     'documentos:gerenciar',
     'documentos:assinatura',
     'gruas:visualizar',
-    'notificacoes:visualizar'
+    'obras:visualizar',
+    'notificacoes:visualizar',
+    'notificacoes:gerenciar'
   ],
   'Operários': [
     'ponto:visualizar',
     'ponto:registrar',
-    'documentos:visualizar',
-    'documentos:assinatura',
-    'notificacoes:visualizar'
-  ],
-  'Clientes': [
     'documentos:visualizar',
     'documentos:assinatura',
     'notificacoes:visualizar'
@@ -463,13 +391,13 @@ export const ROLE_NAME_MAPPING = {
   // Nomes novos (passam direto)
   'Admin': 'Admin',
   'Gestores': 'Gestores',
-  'Supervisores': 'Supervisores',
   'Operários': 'Operários',
   'Clientes': 'Clientes',
-  // Nomes antigos → novos
+  // Nomes antigos → novos (Supervisores agora é Clientes)
   'Administrador': 'Admin',
   'Gerente': 'Gestores',
-  'Supervisor': 'Supervisores',
+  'Supervisores': 'Clientes', // Supervisores mesclado em Clientes
+  'Supervisor': 'Clientes', // Supervisores mesclado em Clientes
   'Operador': 'Operários',
   'Operario': 'Operários',
   'Cliente': 'Clientes',
@@ -477,7 +405,8 @@ export const ROLE_NAME_MAPPING = {
   // Lowercase variants
   'admin': 'Admin',
   'gestores': 'Gestores',
-  'supervisores': 'Supervisores',
+  'supervisores': 'Clientes', // Supervisores mesclado em Clientes
+  'supervisor': 'Clientes', // Supervisores mesclado em Clientes
   'operarios': 'Operários',
   'operários': 'Operários',
   'clientes': 'Clientes',

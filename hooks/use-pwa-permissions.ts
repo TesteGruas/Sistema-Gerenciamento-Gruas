@@ -163,9 +163,8 @@ export const usePWAPermissions = () => {
 
   const isAdmin = () => userRole === 'Admin'
   const isManager = () => userRole === 'Gestores'
-  const isSupervisor = () => userRole === 'Supervisores'
+  const isClient = () => userRole === 'Clientes' // Clientes agora incluem supervisão
   const isOperator = () => userRole === 'Operários'
-  const isClient = () => userRole === 'Clientes'
 
   // ========================================
   // VERIFICAÇÕES DE FUNCIONALIDADES
@@ -290,9 +289,8 @@ export const usePWAPermissions = () => {
     // Verificações por role
     isAdmin,
     isManager,
-    isSupervisor,
+    isClient, // Clientes agora incluem supervisão
     isOperator,
-    isClient,
 
     // Verificações de funcionalidades
     canRegisterPonto,

@@ -58,13 +58,6 @@ const nextConfig = {
   },
 
   // ==================================
-  // 🔧 TURBOPACK CONFIGURATION (Next.js 16+)
-  // ==================================
-  turbopack: {
-    // Configuração vazia para usar webpack customizado
-  },
-
-  // ==================================
   // 🔧 WEBPACK CUSTOMIZATION
   // ==================================
   webpack: (config, { dev, isServer }) => {

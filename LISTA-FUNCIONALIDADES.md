@@ -497,3 +497,5 @@ Aplicativo mobile otimizado para funcionários e clientes
 **Versão do Sistema:** 1.0.0
 
 
+
+

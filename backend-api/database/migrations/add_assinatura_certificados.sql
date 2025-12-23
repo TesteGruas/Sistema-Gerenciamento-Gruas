@@ -16,3 +16,5 @@ COMMENT ON COLUMN certificados_colaboradores.assinado_em IS 'Data e hora da assi
 
 
 
+
+

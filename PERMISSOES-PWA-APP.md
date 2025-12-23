@@ -2,7 +2,7 @@
 
 ## 📱 Visão Geral
 
-O sistema de permissões do PWA/App é baseado em **5 roles principais** com permissões específicas para o aplicativo móvel.
+O sistema de permissões do PWA/App é baseado em **4 roles principais** com permissões específicas para o aplicativo móvel.
 
 ## 🎯 Roles e Níveis de Acesso
 
@@ -16,24 +16,27 @@ O sistema de permissões do PWA/App é baseado em **5 roles principais** com per
 - Pode acessar todos os módulos do PWA
 - Gerenciamento de equipes e aprovações
 
-### 3. **Supervisores** (Nível 6)
-- ✅ `ponto:visualizar` - Visualizar ponto
-- ✅ `ponto:registrar` - Registrar ponto
-- ✅ `ponto:aprovacoes` - Aprovar horas extras
+### 3. **Clientes** (Nível 6)
+- ✅ `ponto:visualizar` - Visualizar ponto dos funcionários
+- ✅ `ponto:aprovacoes` - Aprovar horas extras dos funcionários atrelados às gruas
+- ✅ `ponto_eletronico:visualizar` - Visualizar ponto eletrônico
+- ✅ `ponto_eletronico:aprovacoes` - Aprovar ponto eletrônico
 - ✅ `documentos:visualizar` - Visualizar documentos
 - ✅ `documentos:gerenciar` - Gerenciar documentos
 - ✅ `documentos:assinatura` - Assinar documentos
-- ✅ `gruas:visualizar` - Visualizar gruas
+- ✅ `gruas:visualizar` - Visualizar gruas relacionadas às obras
+- ✅ `obras:visualizar` - Visualizar próprias obras
 - ✅ `notificacoes:visualizar` - Visualizar notificações
+- ✅ `notificacoes:gerenciar` - Gerenciar notificações
+- ✅ `justificativas:visualizar` - Visualizar justificativas
+- ✅ `justificativas:aprovar` - Aprovar justificativas dos funcionários
+- ✅ `justificativas:gerenciar` - Gerenciar justificativas
+
+**Nota:** Clientes agora têm permissões de supervisão, podendo aprovar horas dos funcionários atrelados às gruas de suas obras.
 
 ### 4. **Operários** (Nível 4)
-- ✅ `ponto:visualizar` - Visualizar ponto
-- ✅ `ponto:registrar` - Registrar ponto
-- ✅ `documentos:visualizar` - Visualizar documentos
-- ✅ `documentos:assinatura` - Assinar documentos
-- ✅ `notificacoes:visualizar` - Visualizar notificações
-
-### 5. **Clientes** (Nível 1)
+- ✅ `ponto:visualizar` - Visualizar próprio ponto
+- ✅ `ponto:registrar` - Registrar próprio ponto
 - ✅ `documentos:visualizar` - Visualizar documentos
 - ✅ `documentos:assinatura` - Assinar documentos
 - ✅ `notificacoes:visualizar` - Visualizar notificações
@@ -44,11 +47,12 @@ O menu do PWA é filtrado automaticamente baseado nas permissões do usuário:
 
 | Item do Menu | Permissão Necessária | Roles com Acesso |
 |-------------|---------------------|------------------|
-| **Ponto Eletrônico** | `ponto:visualizar` ou `ponto_eletronico:visualizar` | Admin, Gestores, Supervisores, Operários |
+| **Ponto Eletrônico** | `ponto:visualizar` ou `ponto_eletronico:visualizar` | Admin, Gestores, Clientes, Operários |
 | **Documentos** | `documentos:visualizar` | Todos |
-| **Aprovações** | `ponto:aprovacoes` ou `ponto_eletronico:aprovacoes` | Admin, Gestores, Supervisores |
-| **Gruas** | `gruas:visualizar` | Admin, Gestores, Supervisores |
-| **Espelho de Ponto** | `ponto:visualizar` ou `ponto_eletronico:visualizar` | Admin, Gestores, Supervisores, Operários |
+| **Aprovações** | `ponto:aprovacoes` ou `ponto_eletronico:aprovacoes` | Admin, Gestores, Clientes |
+| **Gruas** | `gruas:visualizar` | Admin, Gestores, Clientes |
+| **Obras** | `obras:visualizar` | Admin, Gestores, Clientes |
+| **Espelho de Ponto** | `ponto:visualizar` ou `ponto_eletronico:visualizar` | Admin, Gestores, Clientes, Operários |
 | **Perfil** | `*` (todos) | Todos |
 | **Configurações** | `*` (todos) | Todos |
 | **Notificações** | `notificacoes:visualizar` | Todos |
@@ -111,10 +115,9 @@ menuItems.map(item => (
 
 ### Sistema Web (Dashboard)
 - **Níveis 8+**: Admin (10), Financeiro (8), Gestores (9)
-- **Cliente (nível 1)**: Acesso limitado ao web
 
 ### App PWA
-- **Níveis 7 ou menos** (exceto Cliente): Supervisores (6), Operários (4)
+- **Níveis 7 ou menos**: Clientes (6), Operários (4)
 - **Todos os roles** podem acessar o PWA, mas com permissões diferentes
 
 ## 📝 Exemplo de Uso
@@ -206,9 +209,9 @@ Verificações de permissão em componentes e rotas
 ## 🎯 Regras Importantes
 
 1. **Admin e Gestores** têm acesso total (`*`)
-2. **Supervisores** podem aprovar horas extras
-3. **Operários** podem apenas registrar e visualizar próprio ponto
-4. **Clientes** têm acesso limitado a documentos
+2. **Clientes** podem aprovar horas extras dos funcionários atrelados às gruas de suas obras
+3. **Clientes** podem visualizar obras, documentos e gruas relacionadas
+4. **Operários** podem apenas registrar e visualizar próprio ponto
 5. **Todos** têm acesso ao próprio perfil e configurações
 
 ## 🔄 Atualização de Permissões
@@ -223,14 +226,15 @@ Para atualizar permissões PWA:
 ## 📱 Páginas Iniciais por Role
 
 - **Admin/Gestores**: `/pwa` (dashboard)
-- **Supervisores**: `/pwa/aprovacoes`
+- **Clientes**: `/pwa/aprovacoes` (supervisão das horas dos funcionários)
 - **Operários**: `/pwa/ponto`
-- **Clientes**: `/pwa/documentos`
 
 ## ⚠️ Notas Importantes
 
 - As permissões são **hardcoded** no código (não vêm do banco)
-- O sistema usa **nomes de roles normalizados** (ex: "Supervisores" não "Supervisor")
+- O sistema usa **nomes de roles normalizados** (ex: "Clientes" não "Cliente")
+- **Supervisores** foi mesclado em **Clientes** - usuários com role "Supervisores" são automaticamente mapeados para "Clientes"
 - Permissões são verificadas tanto no **frontend** quanto no **backend**
 - O menu é **automaticamente filtrado** baseado nas permissões
+- **Clientes** agora têm nível 6 (antes era 1) e podem supervisionar horas dos funcionários
 

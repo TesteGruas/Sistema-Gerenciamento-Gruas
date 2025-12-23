@@ -17,3 +17,5 @@ COMMENT ON COLUMN compras.tipo_arquivo IS 'Tipo do arquivo: pdf, imagem, documen
 
 
 
+
+
