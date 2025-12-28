@@ -161,6 +161,8 @@ const devOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://127.0.0.1:3001',
+  'http://72.60.60.118:3000', // Servidor de produção - frontend
+  'http://72.60.60.118:3001', // Servidor de produção - backend (para testes)
 ]
 
 // Origens permitidas em produção (apenas via variável de ambiente)
@@ -169,11 +171,14 @@ const prodOrigins = process.env.ALLOWED_ORIGINS
   : []
 
 // Origens finais baseadas no ambiente
+// Em produção, sempre incluir FRONTEND_URL e origem do servidor
 const allowedOrigins = isProduction 
-  ? prodOrigins.length > 0 
-    ? prodOrigins 
-    : [FRONTEND_URL] // Fallback para FRONTEND_URL se ALLOWED_ORIGINS não estiver definido
-  : [...devOrigins, ...prodOrigins].filter(Boolean)
+  ? [
+      ...prodOrigins,
+      FRONTEND_URL,
+      'http://72.60.60.118:3000', // Sempre permitir frontend do servidor
+    ].filter((origin, index, self) => self.indexOf(origin) === index) // Remover duplicatas
+  : [...devOrigins, ...prodOrigins].filter((origin, index, self) => self.indexOf(origin) === index) // Remover duplicatas
 
 // CORS restrito com validação de origem
 app.use((req, res, next) => {
