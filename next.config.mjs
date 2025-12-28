@@ -159,10 +159,28 @@ const nextConfig = {
   // ==================================
   async rewrites() {
     // Usar variável de ambiente ou fallback para localhost em desenvolvimento
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 
-                   (process.env.NODE_ENV === 'production' 
-                     ? 'http://72.60.60.118:3001' 
-                     : 'http://localhost:3001');
+    // IMPORTANTE: Em produção no servidor, sempre usar porta 3001
+    let apiUrl = process.env.NEXT_PUBLIC_API_URL;
+    
+    // Se não estiver definida, usar fallback baseado no ambiente
+    if (!apiUrl) {
+      if (process.env.NODE_ENV === 'production') {
+        // Em produção, sempre usar o IP do servidor com porta 3001
+        apiUrl = 'http://72.60.60.118:3001';
+      } else {
+        apiUrl = 'http://localhost:3001';
+      }
+    }
+    
+    // Remover /api do final se existir (o rewrite já adiciona)
+    if (apiUrl.endsWith('/api')) {
+      apiUrl = apiUrl.replace(/\/api$/, '');
+    }
+    
+    // Log para debug (apenas em desenvolvimento)
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[Next.js Rewrite] API URL configurada:', apiUrl);
+    }
     
     return [
       {

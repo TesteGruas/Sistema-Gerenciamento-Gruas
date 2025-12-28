@@ -119,16 +119,9 @@ function PWALoginPageContent(): JSX.Element {
     setIsLoading(true)
 
     try {
-      // Construir URL da API
-      // Se NEXT_PUBLIC_API_URL já inclui /api, usar diretamente, senão adicionar /api
-      let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      
-      // Remover /api do final se existir para evitar duplicação
-      if (apiUrl.endsWith('/api')) {
-        apiUrl = apiUrl.replace(/\/api$/, '')
-      }
-      
-      const loginUrl = `${apiUrl}/api/auth/login`
+      // Usar o rewrite do Next.js (que redireciona /api/* para o backend correto)
+      // Isso garante que sempre use a porta 3001 configurada no next.config.mjs
+      const loginUrl = '/api/auth/login'
       
       console.log('[PWA Login] Tentando login em:', loginUrl)
       console.log('[PWA Login] Dados:', { email: formData.usuario })
@@ -332,7 +325,9 @@ function PWALoginPageContent(): JSX.Element {
         error.message?.includes('ERR_CONNECTION_REFUSED') ||
         error.message?.includes('ERR_NETWORK_CHANGED')
       )) {
-        let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        // Usar URL do backend configurada (porta 3001)
+        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+        let apiUrl = backendUrl
         if (apiUrl.endsWith('/api')) {
           apiUrl = apiUrl.replace(/\/api$/, '')
         }
@@ -348,8 +343,8 @@ function PWALoginPageContent(): JSX.Element {
         console.error('[PWA Login] Erro de conexão:', {
           message: error.message,
           apiUrl: apiUrl,
-          loginUrl: `${apiUrl}/api/auth/login`,
-          suggestion: 'Verifique se o backend está rodando e acessível'
+          loginUrl: '/api/auth/login',
+          suggestion: 'Verifique se o backend está rodando na porta 3001 e acessível'
         })
       } else {
         showAuthError(error)
