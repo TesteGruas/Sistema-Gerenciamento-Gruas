@@ -5,8 +5,19 @@ import { authInterceptor } from './auth-interceptor'
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
 
 // Criar instância do axios
+// IMPORTANTE: No cliente, usar URL relativa para aproveitar o rewrite do Next.js
+// No servidor (SSR), usar URL absoluta
+const getBaseURL = () => {
+  if (typeof window !== 'undefined') {
+    // Cliente: usar URL relativa para aproveitar o rewrite do Next.js
+    return '/api'
+  }
+  // Servidor: usar URL absoluta
+  return `${API_BASE_URL}/api`
+}
+
 const api = axios.create({
-  baseURL: `${API_BASE_URL}/api`,
+  baseURL: getBaseURL(),
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
@@ -236,10 +247,20 @@ api.interceptors.response.use(
 export default api
 export { api }
 
-// Função para construir URLs completas
+// Função para construir URLs
+// IMPORTANTE: No cliente (browser), usa URL relativa para aproveitar o rewrite do Next.js
+// No servidor, usa URL absoluta
 export const buildApiUrl = (endpoint: string): string => {
   // Remove barra inicial se existir para evitar dupla barra
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint.slice(1) : endpoint
+  
+  // Se estiver no cliente (browser), usar URL relativa para aproveitar o rewrite do Next.js
+  // O rewrite em next.config.mjs redireciona /api/* para o backend correto (porta 3001)
+  if (typeof window !== 'undefined') {
+    return `/api/${cleanEndpoint}`
+  }
+  
+  // No servidor (SSR), usar URL absoluta
   return `${API_BASE_URL}/api/${cleanEndpoint}`
 }
 

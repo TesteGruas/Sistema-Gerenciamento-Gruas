@@ -78,8 +78,8 @@ export default function GerenciarFuncionariosPage() {
   const carregarFuncionarios = async () => {
     setLoading(true)
     try {
-      // Simular busca de funcionários (em produção, usar API real)
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/api/funcionarios`, {
+      // Usar URL relativa para aproveitar o rewrite do Next.js
+      const response = await fetch(`/api/funcionarios`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
           'Content-Type': 'application/json'

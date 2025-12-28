@@ -158,14 +158,15 @@ const nextConfig = {
   // 🔀 REWRITES (Proxy da API)
   // ==================================
   async rewrites() {
-    // Usar variável de ambiente ou fallback para localhost em desenvolvimento
-    // IMPORTANTE: Em produção no servidor, sempre usar porta 3001
+    // IMPORTANTE: Em produção no servidor, SEMPRE usar porta 3001
+    // O rewrite redireciona /api/* para o backend na porta 3001
+    
     let apiUrl = process.env.NEXT_PUBLIC_API_URL;
     
     // Se não estiver definida, usar fallback baseado no ambiente
     if (!apiUrl) {
       if (process.env.NODE_ENV === 'production') {
-        // Em produção, sempre usar o IP do servidor com porta 3001
+        // Em produção, SEMPRE usar o IP do servidor com porta 3001
         apiUrl = 'http://72.60.60.118:3001';
       } else {
         apiUrl = 'http://localhost:3001';
@@ -177,9 +178,18 @@ const nextConfig = {
       apiUrl = apiUrl.replace(/\/api$/, '');
     }
     
-    // Log para debug (apenas em desenvolvimento)
+    // GARANTIR que está usando porta 3001 em produção
+    // Se por algum motivo estiver usando porta 3000, forçar 3001
+    if (process.env.NODE_ENV === 'production' && apiUrl.includes(':3000')) {
+      apiUrl = apiUrl.replace(':3000', ':3001');
+      console.warn('[Next.js Rewrite] ⚠️ Porta 3000 detectada, corrigindo para 3001');
+    }
+    
+    // Log para debug
     if (process.env.NODE_ENV !== 'production') {
       console.log('[Next.js Rewrite] API URL configurada:', apiUrl);
+    } else {
+      console.log('[Next.js Rewrite] API URL (produção):', apiUrl);
     }
     
     return [

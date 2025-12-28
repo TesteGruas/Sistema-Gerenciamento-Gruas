@@ -178,14 +178,14 @@ export default function PWAHoleritesPage() {
           
           // Tentar buscar diretamente usando o endpoint de funcionários
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
             console.log('[HOLERITES] Tentando buscar funcionário diretamente na API...')
             
             // Tentar buscar por email ou nome
+            // Usar URL relativa para aproveitar o rewrite do Next.js
             const searchParam = user.email || user.nome || ''
             if (searchParam) {
               const response = await fetch(
-                `${apiUrl}/api/funcionarios?search=${encodeURIComponent(searchParam)}&limit=50`,
+                `/api/funcionarios?search=${encodeURIComponent(searchParam)}&limit=50`,
                 {
                   headers: {
                     'Authorization': `Bearer ${token}`,
@@ -477,7 +477,6 @@ export default function PWAHoleritesPage() {
       }
       
       // Método antigo (URL direta) - usado como fallback ou quando não quer assinatura
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       let arquivoUrl = ''
@@ -487,9 +486,10 @@ export default function PWAHoleritesPage() {
         arquivoUrl = holerite.arquivo
       } else {
         // Tentar obter URL assinada do Supabase
+        // Usar URL relativa para aproveitar o rewrite do Next.js
         try {
           const urlResponse = await fetch(
-            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
+            `/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,
@@ -541,7 +541,6 @@ export default function PWAHoleritesPage() {
     // Obter URL assinada do arquivo
     if (holerite.arquivo) {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         // Se já for uma URL completa (http/https), usar diretamente
@@ -550,9 +549,10 @@ export default function PWAHoleritesPage() {
           setCarregandoUrlArquivo(false)
         } else {
           // Tentar obter URL assinada do Supabase
+          // Usar URL relativa para aproveitar o rewrite do Next.js
           try {
             const urlResponse = await fetch(
-              `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
+              `/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo)}`,
               {
                 headers: {
                   'Authorization': `Bearer ${token}`,

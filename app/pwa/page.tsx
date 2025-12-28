@@ -587,10 +587,10 @@ export default function PWAMainPage() {
           console.warn('[PWA Ponto] Erro ao buscar ID via getFuncionarioIdWithFallback:', error)
           // Se falhar, tentar buscar na API
           console.warn('[PWA Ponto] Tentando buscar funcionário na API...')
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          // Usar URL relativa para aproveitar o rewrite do Next.js
           try {
             const response = await fetch(
-              `${apiUrl}/api/funcionarios?search=${encodeURIComponent(user.email || user.nome || '')}&limit=10`,
+              `/api/funcionarios?search=${encodeURIComponent(user.email || user.nome || '')}&limit=10`,
               {
                 headers: {
                   'Authorization': `Bearer ${token}`,

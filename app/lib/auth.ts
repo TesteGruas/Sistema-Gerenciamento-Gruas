@@ -2,7 +2,24 @@
 
 // Utilitários de autenticação
 export class AuthService {
-  private static readonly API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+  // No cliente, usar URL relativa para aproveitar o rewrite do Next.js
+  // No servidor (SSR), usar URL absoluta
+  private static getApiUrl(endpoint: string): string {
+    // Garantir que o endpoint comece com /
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`
+    
+    if (typeof window !== 'undefined') {
+      // Cliente: usar URL relativa com /api para aproveitar o rewrite do Next.js
+      return `/api${cleanEndpoint}`
+    }
+    // Servidor: usar URL absoluta
+    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+    // Remover /api do final se existir
+    const baseUrl = API_BASE_URL.endsWith('/api') 
+      ? API_BASE_URL.replace(/\/api$/, '') 
+      : API_BASE_URL
+    return `${baseUrl}/api${cleanEndpoint}`
+  }
 
   // Obter token do localStorage
   static getToken(): string | null {
@@ -25,7 +42,7 @@ export class AuthService {
   // Fazer login e obter token
   static async login(email: string, password: string): Promise<string> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/api/auth/login`, {
+      const response = await fetch(this.getApiUrl('/auth/login'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -55,7 +72,7 @@ export class AuthService {
         throw new Error('Token não encontrado')
       }
 
-      const response = await fetch(`${this.API_BASE_URL}/api/auth/me`, {
+      const response = await fetch(this.getApiUrl('/auth/me'), {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -134,7 +151,7 @@ export class AuthService {
         throw new Error('Token não encontrado')
       }
 
-      const response = await fetch(`${this.API_BASE_URL}/api/auth/me`, {
+      const response = await fetch(this.getApiUrl('/auth/me'), {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
