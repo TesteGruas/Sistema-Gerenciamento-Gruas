@@ -121,3 +121,4 @@ ls -la node_modules/@supabase/storage-js/ 2>/dev/null || echo "Pacote não encon
 
 Se você está tentando acessar arquivos internos do `@supabase/storage-js` para algum propósito específico (como debug ou modificação), isso não é recomendado. Esses arquivos são internos e podem mudar a qualquer momento. Use sempre a API pública do pacote.
 
+

@@ -20,3 +20,4 @@ COMMENT ON COLUMN impostos_financeiros.tipo IS 'Tipo de imposto (pode ser padrã
 
 
 
+

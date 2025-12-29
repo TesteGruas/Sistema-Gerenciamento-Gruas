@@ -390,3 +390,4 @@ chkrootkit
 **Documento criado em:** 24/12/2025  
 **Próxima revisão recomendada:** Após correção dos problemas críticos de segurança
 
+
