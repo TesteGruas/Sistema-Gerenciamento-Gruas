@@ -17,11 +17,7 @@ import {
   ChevronUp,
   Loader2
 } from 'lucide-react'
-import { 
-  apiAprovacoesHorasExtras,
-  RegistroPontoAprovacao
-} from '@/lib/api-aprovacoes-horas-extras'
-import { apiRegistrosPonto } from '@/lib/api-ponto-eletronico'
+import { apiRegistrosPonto, type RegistroPonto } from '@/lib/api-ponto-eletronico'
 import { useCurrentUser } from '@/hooks/use-current-user'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { toast } from 'sonner'
@@ -56,34 +52,32 @@ function PWAAprovacaoAssinaturaPageContent() {
   const [assinatura, setAssinatura] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAprovacao, setLoadingAprovacao] = useState(true);
-  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<RegistroPontoAprovacao | null>(null);
+  const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<RegistroPonto | null>(null);
   const [showDetalhes, setShowDetalhes] = useState(false);
 
-  // Carregar aprovação selecionada
+  // Carregar registro selecionado
   useEffect(() => {
     const carregarAprovacao = async () => {
       if (!registroId || !user?.id) {
-        toast.error('ID da aprovação não encontrado');
+        toast.error('ID do registro não encontrado');
         router.push('/pwa/aprovacoes');
         return;
       }
 
       setLoadingAprovacao(true);
       try {
-        const { data } = await apiRegistrosPonto.listar({
-          funcionario_id: user.funcionario_id || user.id,
-          limit: 100
-        });
+        // Buscar registro diretamente pelo ID
+        const registro = await apiRegistrosPonto.obter(registroId);
         
-        const registro = data.find((r: any) => r.id === registroId);
-        if (!registro || !registro.horas_extras || registro.horas_extras <= 0) {
-          toast.error('Aprovação não encontrada ou sem horas extras');
+        if (!registro) {
+          toast.error('Registro não encontrado');
           router.push('/pwa/aprovacoes');
           return;
         }
 
-        if (registro.status !== 'Pendente Aprovação') {
-          toast.error('Esta aprovação já foi processada');
+        // Verificar se já foi assinado
+        if (registro.aprovado_por && registro.data_aprovacao) {
+          toast.error('Este registro já foi assinado');
           router.push('/pwa/aprovacoes');
           return;
         }
@@ -115,16 +109,20 @@ function PWAAprovacaoAssinaturaPageContent() {
     setIsLoading(true);
     
     try {
-      const { message } = await apiAprovacoesHorasExtras.aprovarComAssinatura(
+      // Obter ID do funcionário (supervisor) logado
+      const funcionarioId = user.funcionario_id || user.id;
+      
+      // Usar endpoint de assinatura que funciona para TODOS os registros (com ou sem horas extras)
+      const { message } = await apiRegistrosPonto.assinar(
         aprovacaoSelecionada.id,
         {
-          gestor_id: user.id,
+          supervisor_id: funcionarioId,
           assinatura_digital: assinatura,
-          observacoes_aprovacao: undefined
+          observacoes: undefined
         }
       );
 
-      toast.success(message || 'Horas extras aprovadas com sucesso!');
+      toast.success(message || 'Registro assinado com sucesso!');
       
       // Redirecionar após sucesso
       setTimeout(() => {
@@ -132,8 +130,8 @@ function PWAAprovacaoAssinaturaPageContent() {
       }, 1500);
       
     } catch (error: any) {
-      console.error('Erro ao aprovar horas extras:', error);
-      const errorMessage = error.response?.data?.message || 'Erro ao aprovar horas extras. Tente novamente.';
+      console.error('Erro ao assinar registro:', error);
+      const errorMessage = error.response?.data?.message || 'Erro ao assinar registro. Tente novamente.';
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -169,7 +167,7 @@ function PWAAprovacaoAssinaturaPageContent() {
     );
   }
 
-  const isVencida = new Date(aprovacaoSelecionada.data_limite) < new Date();
+  // Não há prazo de vencimento para assinatura de registros normais
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -181,7 +179,7 @@ function PWAAprovacaoAssinaturaPageContent() {
           </Button>
           <h1 className="text-xl font-bold text-gray-900">Assinatura Digital</h1>
         </div>
-        <p className="text-sm text-gray-600">Aprove as horas extras com sua assinatura digital</p>
+        <p className="text-sm text-gray-600">Assine o registro de ponto com sua assinatura digital</p>
       </div>
 
       <div className="px-2 py-1 space-y-2">
@@ -190,8 +188,8 @@ function PWAAprovacaoAssinaturaPageContent() {
           <CardHeader className="pb-1 px-3 pt-3">
             <CardTitle className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-orange-600" />
-                <span className="text-base">Aprovação de Horas Extras</span>
+                <Clock className="w-4 h-4 text-blue-600" />
+                <span className="text-base">Assinatura de Registro de Ponto</span>
               </div>
               <Button
                 variant="ghost"
@@ -215,13 +213,13 @@ function PWAAprovacaoAssinaturaPageContent() {
                   <User className="w-4 h-4 text-blue-600" />
                 </div>
                 <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{aprovacaoSelecionada.funcionario.nome}</h3>
-                  <p className="text-xs text-gray-600">{aprovacaoSelecionada.funcionario.cargo}</p>
+                  <h3 className="font-semibold text-gray-900 text-sm">{aprovacaoSelecionada.funcionario?.nome || 'Funcionário'}</h3>
+                  <p className="text-xs text-gray-600">{aprovacaoSelecionada.funcionario?.cargo || 'Cargo'}</p>
                 </div>
               </div>
               <div className="text-right">
-                <p className="text-xs text-gray-600">Horas Extras</p>
-                <p className="text-lg font-bold text-orange-600">{aprovacaoSelecionada.horas_extras}h</p>
+                <p className="text-xs text-gray-600">Horas Trabalhadas</p>
+                <p className="text-lg font-bold text-blue-600">{aprovacaoSelecionada.horas_trabalhadas || 0}h</p>
               </div>
             </div>
 
@@ -230,29 +228,21 @@ function PWAAprovacaoAssinaturaPageContent() {
               <div className="flex items-center gap-1">
                 <Calendar className="w-3 h-3 text-gray-500" />
                 <span className="text-gray-600">Data:</span>
-                <span className="font-medium">{formatarData(aprovacaoSelecionada.data_trabalho)}</span>
+                <span className="font-medium">{formatarData(aprovacaoSelecionada.data)}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Clock className="w-3 h-3 text-gray-500" />
                 <span className="text-gray-600">Período:</span>
-                <span className="font-medium">{aprovacaoSelecionada.registro.entrada} - {aprovacaoSelecionada.registro.saida}</span>
+                <span className="font-medium">{aprovacaoSelecionada.entrada || '-'} - {aprovacaoSelecionada.saida || '-'}</span>
               </div>
             </div>
 
             {/* Status */}
-            <div className={`rounded-lg p-2 ${
-              isVencida 
-                ? 'bg-red-50 border border-red-200' 
-                : 'bg-orange-50 border border-orange-200'
-            }`}>
+            <div className="rounded-lg p-2 bg-blue-50 border border-blue-200">
               <div className="flex items-center gap-1">
-                <AlertTriangle className={`w-3 h-3 ${
-                  isVencida ? 'text-red-600' : 'text-orange-600'
-                }`} />
-                <span className={`text-xs font-medium ${
-                  isVencida ? 'text-red-800' : 'text-orange-800'
-                }`}>
-                  {isVencida ? 'Prazo Expirado' : 'Aguardando Aprovação'}
+                <Clock className="w-3 h-3 text-blue-600" />
+                <span className="text-xs font-medium text-blue-800">
+                  Aguardando Assinatura
                 </span>
               </div>
             </div>
@@ -264,10 +254,6 @@ function PWAAprovacaoAssinaturaPageContent() {
                 <div className="bg-gray-50 rounded-lg p-2">
                   <h4 className="font-medium text-gray-700 mb-1 text-xs">Informações do Funcionário</h4>
                   <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-gray-600">Obra:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.funcionario.obra}</p>
-                    </div>
                     <div>
                       <span className="text-gray-600">ID:</span>
                       <p className="font-medium">{aprovacaoSelecionada.funcionario_id}</p>
@@ -281,29 +267,31 @@ function PWAAprovacaoAssinaturaPageContent() {
                   <div className="grid grid-cols-2 gap-2 text-xs">
                     <div>
                       <span className="text-gray-600">Entrada:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.registro.entrada}</p>
+                      <p className="font-medium">{aprovacaoSelecionada.entrada || '-'}</p>
                     </div>
                     <div>
                       <span className="text-gray-600">Saída:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.registro.saida}</p>
+                      <p className="font-medium">{aprovacaoSelecionada.saida || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Saída Almoço:</span>
+                      <p className="font-medium">{aprovacaoSelecionada.saida_almoco || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Volta Almoço:</span>
+                      <p className="font-medium">{aprovacaoSelecionada.volta_almoco || '-'}</p>
                     </div>
                     <div>
                       <span className="text-gray-600">Total Trabalhado:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.registro.horas_trabalhadas}h</p>
+                      <p className="font-medium">{aprovacaoSelecionada.horas_trabalhadas || 0}h</p>
                     </div>
-                    <div>
-                      <span className="text-gray-600">Horas Extras:</span>
-                      <p className="font-bold text-orange-600">{aprovacaoSelecionada.horas_extras}h</p>
-                    </div>
+                    {aprovacaoSelecionada.horas_extras && aprovacaoSelecionada.horas_extras > 0 && (
+                      <div>
+                        <span className="text-gray-600">Horas Extras:</span>
+                        <p className="font-bold text-orange-600">{aprovacaoSelecionada.horas_extras}h</p>
+                      </div>
+                    )}
                   </div>
-                </div>
-
-                {/* Prazo detalhado */}
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                  <h4 className="font-medium text-blue-800 mb-1 text-xs">Prazo de Aprovação</h4>
-                  <p className="text-xs text-blue-700">
-                    Prazo limite: {formatarDataHora(aprovacaoSelecionada.data_limite)}
-                  </p>
                 </div>
               </div>
             )}
@@ -320,9 +308,9 @@ function PWAAprovacaoAssinaturaPageContent() {
           </CardHeader>
           <CardContent className="px-3 pb-3 space-y-2">
             {/* Instruções */}
-            <div className="bg-green-50 border border-green-200 rounded-lg p-2">
-              <p className="text-xs text-green-800 font-medium">
-                📝 Assine digitalmente para aprovar as horas extras
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
+              <p className="text-xs text-blue-800 font-medium">
+                📝 Assine digitalmente o registro de ponto do funcionário
               </p>
             </div>
 
@@ -359,8 +347,8 @@ function PWAAprovacaoAssinaturaPageContent() {
           </CardContent>
         </Card>
 
-        {/* Botão de Aprovação - Mobile */}
-        {aprovacaoSelecionada.status === 'pendente' && !isVencida && (
+        {/* Botão de Assinatura - Mobile */}
+        {(!aprovacaoSelecionada.aprovado_por || !aprovacaoSelecionada.data_aprovacao) && (
           <div className="sticky bottom-4 bg-white border-t border-gray-200 p-4 -mx-4">
             <Button
               onClick={handleAprovar}
@@ -375,7 +363,7 @@ function PWAAprovacaoAssinaturaPageContent() {
               ) : (
                 <div className="flex items-center gap-2">
                   <Check className="w-6 h-6" />
-                  Aprovar Horas Extras
+                  Assinar Registro
                 </div>
               )}
             </Button>
@@ -390,7 +378,7 @@ function PWAAprovacaoAssinaturaPageContent() {
               <div>
                 <h4 className="font-semibold text-blue-800 text-sm">Informações</h4>
                 <p className="text-blue-700 text-xs">
-                  Sua assinatura digital é obrigatória para confirmar a aprovação das horas extras.
+                  Sua assinatura digital é obrigatória para confirmar a assinatura do registro de ponto.
                 </p>
               </div>
             </div>

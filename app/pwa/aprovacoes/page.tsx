@@ -21,12 +21,8 @@ import {
   CheckSquare,
   Loader2
 } from 'lucide-react'
-import { 
-  apiAprovacoesHorasExtras,
-  RegistroPontoAprovacao
-} from '@/lib/api-aprovacoes-horas-extras'
 import { useCurrentUser } from '@/hooks/use-current-user'
-import { apiRegistrosPonto } from '@/lib/api-ponto-eletronico'
+import { apiRegistrosPonto, type RegistroPonto } from '@/lib/api-ponto-eletronico'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
@@ -90,13 +86,13 @@ interface AprovacaoDisplay {
   data_limite?: string;
 }
 
-function converterParaDisplay(registro: RegistroPontoAprovacao): AprovacaoDisplay {
+function converterParaDisplay(registro: RegistroPonto): AprovacaoDisplay {
   return {
-    id: registro.id,
+    id: registro.id?.toString() || '',
     funcionario_id: registro.funcionario_id,
     data_trabalho: registro.data,
-    horas_extras: registro.horas_extras,
-    status: registro.status,
+    horas_extras: registro.horas_extras || 0,
+    status: registro.aprovado_por ? 'Aprovado' : (registro.status || 'Pendente Aprovação'),
     registro: {
       entrada: registro.entrada || '08:00',
       saida: registro.saida || '17:00',
@@ -113,7 +109,7 @@ function converterParaDisplay(registro: RegistroPontoAprovacao): AprovacaoDispla
     } : undefined,
     observacoes: registro.observacoes,
     data_aprovacao: registro.data_aprovacao,
-    data_limite: registro.created_at ? new Date(new Date(registro.created_at).getTime() + 7 * 24 * 60 * 60 * 1000).toISOString() : undefined
+    data_limite: undefined // Não há prazo limite para assinatura de registros normais
   };
 }
 
@@ -126,29 +122,31 @@ export default function PWAAprovacoesPage() {
   const [showDetalhes, setShowDetalhes] = useState(false);
   const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<AprovacaoDisplay | null>(null);
 
-  // Carregar aprovações do funcionário logado
+  // Carregar TODOS os registros do dia pendentes de assinatura (não apenas com horas extras)
   useEffect(() => {
     const carregarAprovacoes = async () => {
       if (loadingUser || !user?.funcionario_id) return;
       
       setLoading(true);
       try {
-        // Buscar registros com horas extras do funcionário atual
+        // Buscar registros do dia atual que ainda não foram assinados
+        const hoje = new Date().toISOString().split('T')[0];
         const { data } = await apiRegistrosPonto.listar({
-          funcionario_id: user.funcionario_id,
-          status: 'Pendente Aprovação',
-          limit: 100
+          data_inicio: hoje,
+          data_fim: hoje,
+          limit: 1000 // Aumentar limite para pegar todos os registros do dia
         });
         
-        // Converter para formato de display
+        // Filtrar apenas registros que ainda não foram assinados (sem aprovado_por)
+        // Removido o filtro de horas_extras > 0 para incluir TODOS os registros
         const aprovacoesConvertidas = data
-          .filter(r => r.horas_extras && r.horas_extras > 0)
+          .filter(r => !r.aprovado_por || !r.data_aprovacao) // Não foi assinado ainda
           .map(converterParaDisplay);
         
         setAprovacoes(aprovacoesConvertidas);
       } catch (error: any) {
         console.error('Erro ao carregar aprovações:', error);
-        toast.error('Erro ao carregar aprovações de horas extras');
+        toast.error('Erro ao carregar registros pendentes de assinatura');
       } finally {
         setLoading(false);
       }
@@ -168,18 +166,23 @@ export default function PWAAprovacoesPage() {
     try {
       if (!user?.funcionario_id) return;
       
+      // Buscar registros do dia atual que ainda não foram assinados
+      const hoje = new Date().toISOString().split('T')[0];
       const { data } = await apiRegistrosPonto.listar({
-        funcionario_id: user.funcionario_id,
-        limit: 100
+        data_inicio: hoje,
+        data_fim: hoje,
+        limit: 1000
       });
       
+      // Filtrar apenas registros que ainda não foram assinados (sem aprovado_por)
+      // Removido o filtro de horas_extras > 0 para incluir TODOS os registros
       const aprovacoesConvertidas = data
-        .filter(r => r.horas_extras && r.horas_extras > 0)
+        .filter(r => !r.aprovado_por || !r.data_aprovacao) // Não foi assinado ainda
         .map(converterParaDisplay);
       
       setAprovacoes(aprovacoesConvertidas);
     } catch (error: any) {
-      toast.error('Erro ao atualizar aprovações');
+      toast.error('Erro ao atualizar registros');
     } finally {
       setLoading(false);
     }
@@ -274,9 +277,9 @@ export default function PWAAprovacoesPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-900">Minhas Aprovações</h1>
+          <h1 className="text-xl font-bold text-gray-900">Assinar Registros de Ponto</h1>
         </div>
-        <p className="text-sm text-gray-600">Acompanhe o status das suas horas extras</p>
+        <p className="text-sm text-gray-600">Assine todos os registros de ponto do dia dos funcionários</p>
       </div>
 
       {/* Botão de Aprovação em Massa - Posição Fixa */}
@@ -297,12 +300,12 @@ export default function PWAAprovacoesPage() {
           <CardContent className="p-4">
             <div className="grid grid-cols-2 gap-4 text-center">
               <div>
-                <p className="text-2xl font-bold text-orange-600">{aprovacoes.reduce((acc, a) => acc + a.horas_extras, 0).toFixed(1)}h</p>
-                <p className="text-sm text-gray-600">Horas Extras</p>
+                <p className="text-2xl font-bold text-blue-600">{pendentes.length}</p>
+                <p className="text-sm text-gray-600">Pendentes de Assinatura</p>
               </div>
               <div>
-                <p className="text-2xl font-bold text-blue-600">{aprovacoes.length}</p>
-                <p className="text-sm text-gray-600">Total de Solicitações</p>
+                <p className="text-2xl font-bold text-green-600">{aprovadas.length}</p>
+                <p className="text-sm text-gray-600">Já Assinados</p>
               </div>
             </div>
           </CardContent>
@@ -348,7 +351,7 @@ export default function PWAAprovacoesPage() {
                     Nenhuma aprovação
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    Você ainda não possui horas extras para aprovação.
+                    Não há registros de ponto pendentes de assinatura hoje.
                   </p>
                 </CardContent>
               </Card>
@@ -407,10 +410,10 @@ export default function PWAAprovacoesPage() {
                 <CardContent className="p-6 text-center">
                   <Clock className="w-10 h-10 text-gray-400 mx-auto mb-3" />
                   <h3 className="font-semibold text-gray-900 mb-1">
-                    Nenhuma aprovação pendente
+                    Nenhum registro pendente
                   </h3>
                   <p className="text-gray-600 text-sm">
-                    Não há horas extras aguardando aprovação.
+                    Todos os registros do dia já foram assinados.
                   </p>
                 </CardContent>
               </Card>
