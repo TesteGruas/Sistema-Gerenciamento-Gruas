@@ -2372,44 +2372,70 @@ router.get('/dashboard/evolucao-mensal', async (req, res) => {
     const hoje = new Date()
     const evolucaoMensal = []
 
+    // Preparar todas as datas dos meses
+    const mesesData = []
     for (let i = meses - 1; i >= 0; i--) {
       const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1)
-      const mesInicio = new Date(data.getFullYear(), data.getMonth(), 1)
       const mesFim = new Date(data.getFullYear(), data.getMonth() + 1, 0)
-
-      const mesInicioStr = mesInicio.toISOString().split('T')[0]
       const mesFimStr = mesFim.toISOString().split('T')[0]
       const mesAno = data.toLocaleDateString('pt-BR', { month: 'short', year: 'numeric' })
+      
+      mesesData.push({
+        data,
+        mesFimStr,
+        mesAno
+      })
+    }
 
-      // Contar obras criadas até este mês
-      const { data: obras, error: obrasError } = await supabaseAdmin
-        .from('obras')
-        .select('id', { count: 'exact' })
-        .lte('created_at', mesFimStr)
+    // Processar todos os meses em paralelo
+    const resultados = await Promise.all(
+      mesesData.map(async ({ data, mesFimStr, mesAno }) => {
+        // Executar as 3 queries em paralelo para cada mês
+        const [obrasResult, clientesResult, gruasResult] = await Promise.all([
+          supabaseAdmin
+            .from('obras')
+            .select('*', { count: 'exact', head: true })
+            .lte('created_at', mesFimStr),
+          supabaseAdmin
+            .from('clientes')
+            .select('*', { count: 'exact', head: true })
+            .lte('created_at', mesFimStr),
+          supabaseAdmin
+            .from('gruas')
+            .select('*', { count: 'exact', head: true })
+            .lte('created_at', mesFimStr)
+        ])
 
-      // Contar clientes criados até este mês
-      const { data: clientes, error: clientesError } = await supabaseAdmin
-        .from('clientes')
-        .select('id', { count: 'exact' })
-        .lte('created_at', mesFimStr)
-
-      // Contar gruas criadas até este mês
-      const { data: gruas, error: gruasError } = await supabaseAdmin
-        .from('gruas')
-        .select('id', { count: 'exact' })
-        .lte('created_at', mesFimStr)
-
-      if (!obrasError && !clientesError && !gruasError) {
-        evolucaoMensal.push({
+        return {
           mes: mesAno,
           mes_numero: data.getMonth() + 1,
           ano: data.getFullYear(),
-          obras: obras?.length || 0,
-          clientes: clientes?.length || 0,
-          gruas: gruas?.length || 0
+          obras: obrasResult.count || 0,
+          clientes: clientesResult.count || 0,
+          gruas: gruasResult.count || 0,
+          errors: {
+            obras: obrasResult.error,
+            clientes: clientesResult.error,
+            gruas: gruasResult.error
+          }
+        }
+      })
+    )
+
+    // Filtrar resultados com erros e construir resposta
+    resultados.forEach(resultado => {
+      const hasErrors = Object.values(resultado.errors).some(err => err !== null)
+      if (!hasErrors) {
+        evolucaoMensal.push({
+          mes: resultado.mes,
+          mes_numero: resultado.mes_numero,
+          ano: resultado.ano,
+          obras: resultado.obras,
+          clientes: resultado.clientes,
+          gruas: resultado.gruas
         })
       }
-    }
+    })
 
     res.json({
       success: true,
