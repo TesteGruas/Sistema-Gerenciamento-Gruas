@@ -2055,10 +2055,11 @@ export default function PontoPage() {
       </div>
 
       <Tabs defaultValue="registros">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
           <TabsTrigger value="justificativas">Justificativas</TabsTrigger>
+          <TabsTrigger value="trabalho-corrido">Trabalho Corrido</TabsTrigger>
           <TabsTrigger value="relatorio">Relatório Mensal</TabsTrigger>
           <TabsTrigger value="historico">Espelho de Ponto</TabsTrigger>
         </TabsList>
@@ -2238,6 +2239,16 @@ export default function PontoPage() {
                           {(() => {
                             const tipoDia = (registro as any).tipo_dia || 'normal'
                             const isFeriado = (registro as any).is_feriado || false
+                            const isFacultativo = (registro as any).is_facultativo || false
+                            
+                            // Se for facultativo, mostrar como Facultativo
+                            if (isFacultativo) {
+                              return (
+                                <Badge className="bg-pink-100 text-pink-800">
+                                  Facultativo
+                                </Badge>
+                              )
+                            }
                             
                             const tipoDiaMap: Record<string, { label: string; color: string }> = {
                               'normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
@@ -3194,6 +3205,35 @@ export default function PontoPage() {
                     )}
                   </CardContent>
                 </Card>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="trabalho-corrido">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                Confirmação de Trabalho Corrido
+              </CardTitle>
+              <CardDescription>
+                Confirme ou rejeite registros de trabalho corrido (sem pausa para almoço)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="mb-4">
+                <Button
+                  onClick={() => window.open('/dashboard/ponto/trabalho-corrido', '_blank')}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <Clock className="w-4 h-4 mr-2" />
+                  Abrir Página de Trabalho Corrido
+                </Button>
+                <p className="text-sm text-muted-foreground mt-2 text-center">
+                  Clique para abrir a página completa de confirmação de trabalho corrido
+                </p>
               </div>
             </CardContent>
           </Card>

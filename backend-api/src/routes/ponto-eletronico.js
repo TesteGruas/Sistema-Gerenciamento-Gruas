@@ -24,6 +24,7 @@ import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-ex
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
+import { processarRespostaAlmoco } from '../services/almoco-automatico-service.js';
 
 const router = express.Router();
 
@@ -1541,7 +1542,8 @@ router.post('/registros', async (req, res) => {
       tipo_dia,
       is_feriado,
       feriado_tipo,
-      observacoes_feriado
+      observacoes_feriado,
+      is_facultativo
     } = req.body;
 
     // Validações
@@ -1965,14 +1967,15 @@ router.post('/registros', async (req, res) => {
       
       const estadoFuncionario = obraFuncionario?.estado || null;
 
-      // Verificar se é feriado
-      if (isFeriadoFinal && feriado_tipo) {
-        // Buscar feriado na tabela
+      // Verificar se é feriado (não facultativo)
+      if (isFeriadoFinal && feriado_tipo && !is_facultativo) {
+        // Buscar feriado na tabela (apenas não facultativos)
         let queryFeriado = supabaseAdmin
           .from('feriados_nacionais')
-          .select('id, tipo')
+          .select('id, tipo, is_facultativo')
           .eq('data', data)
-          .eq('ativo', true);
+          .eq('ativo', true)
+          .or('is_facultativo.is.null,is_facultativo.eq.false');
         
         if (feriado_tipo === 'nacional') {
           queryFeriado = queryFeriado.eq('tipo', 'nacional').is('estado', null);
@@ -1999,13 +2002,14 @@ router.post('/registros', async (req, res) => {
         } else if (diaSemana === 6) {
           tipoDiaFinal = 'sabado';
         } else {
-          // Verificar se é feriado nacional automaticamente
+          // Verificar se é feriado nacional automaticamente (não facultativo)
           const { data: feriadoNacional } = await supabaseAdmin
             .from('feriados_nacionais')
-            .select('id')
+            .select('id, is_facultativo')
             .eq('data', data)
             .eq('tipo', 'nacional')
             .eq('ativo', true)
+            .or('is_facultativo.is.null,is_facultativo.eq.false')
             .single();
           
           if (feriadoNacional) {
@@ -2040,7 +2044,8 @@ router.post('/registros', async (req, res) => {
       localizacao,
       tipo_dia: tipoDiaFinal,
       feriado_id: feriadoId,
-      is_feriado: isFeriadoFinal,
+      is_feriado: isFeriadoFinal && !is_facultativo, // Só é feriado se não for facultativo
+      is_facultativo: is_facultativo || false,
       observacoes_feriado: observacoes_feriado || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -6370,9 +6375,28 @@ router.get('/relatorios/exportar', async (req, res) => {
 
     if (tipo === 'csv') {
       // Gerar CSV
+      // Função auxiliar para formatar tipo de dia
+      const formatarTipoDia = (tipoDia, isFacultativo) => {
+        if (isFacultativo) {
+          return 'Facultativo'
+        }
+        
+        const tipoDiaMap = {
+          'normal': 'Normal',
+          'sabado': 'Sábado',
+          'domingo': 'Domingo',
+          'feriado_nacional': 'Feriado Nacional',
+          'feriado_estadual': 'Feriado Estadual',
+          'feriado_local': 'Feriado Local'
+        }
+        
+        return tipoDiaMap[tipoDia || 'normal'] || 'Normal'
+      }
+
       const headers = [
         'ID',
         'Data',
+        'Tipo Dia',
         'Funcionário',
         'Cargo',
         'Turno',
@@ -6398,6 +6422,7 @@ router.get('/relatorios/exportar', async (req, res) => {
         return [
           r.id || '',
           r.data || '',
+          formatarTipoDia(r.tipo_dia, r.is_facultativo),
           nomeFuncionario,
           cargoFuncionario,
           turnoFuncionario,
@@ -6496,15 +6521,33 @@ router.get('/relatorios/exportar', async (req, res) => {
       const margemEsq = 40;
       const larguraUtil = doc.page.width - 80;
       
-      // Larguras proporcionais das colunas
-      const colWidths = [55, 80, 50, 40, 40, 40, 40, 45, 45, 65, 80];
+      // Função auxiliar para formatar tipo de dia
+      const formatarTipoDiaPDF = (tipoDia, isFacultativo) => {
+        if (isFacultativo) {
+          return 'Facultativo'
+        }
+        
+        const tipoDiaMap = {
+          'normal': 'Normal',
+          'sabado': 'Sábado',
+          'domingo': 'Domingo',
+          'feriado_nacional': 'F.Nac',
+          'feriado_estadual': 'F.Est',
+          'feriado_local': 'F.Loc'
+        }
+        
+        return tipoDiaMap[tipoDia || 'normal'] || 'Normal'
+      }
+
+      // Larguras proporcionais das colunas (adicionada coluna Tipo Dia)
+      const colWidths = [50, 50, 80, 50, 40, 40, 40, 40, 45, 45, 65, 80];
       const totalWidth = colWidths.reduce((a, b) => a + b, 0);
       
       const rowHeight = 25;
       const headerHeight = 30;
       
       // Headers da tabela
-      const headers = ['Data', 'Funcionário', 'Cargo', 'Entrada', 'Almoço', 'Volta', 'Saída', 'H.Trab', 'H.Ext', 'Status', 'Obs'];
+      const headers = ['Data', 'Tipo Dia', 'Funcionário', 'Cargo', 'Entrada', 'Almoço', 'Volta', 'Saída', 'H.Trab', 'H.Ext', 'Status', 'Obs'];
 
       // Função para desenhar header da tabela
       const desenharHeaderTabela = (y) => {
@@ -6567,6 +6610,7 @@ router.get('/relatorios/exportar', async (req, res) => {
 
         const valores = [
           formatarData(registro.data),
+          formatarTipoDiaPDF(registro.tipo_dia, registro.is_facultativo),
           nomeFuncionario.length > 14 ? nomeFuncionario.substring(0, 14) : nomeFuncionario,
           cargoFuncionario.length > 10 ? cargoFuncionario.substring(0, 10) : cargoFuncionario,
           formatarHora(registro.entrada),
@@ -6642,6 +6686,373 @@ router.get('/relatorios/exportar', async (req, res) => {
 
   } catch (error) {
     console.error('Erro na rota de exportação:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/webhook-almoco:
+ *   post:
+ *     summary: Webhook para receber respostas de almoço via WhatsApp
+ *     tags: [Ponto Eletrônico]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - telefone
+ *               - mensagem
+ *             properties:
+ *               telefone:
+ *                 type: string
+ *                 description: Número de telefone do remetente
+ *               mensagem:
+ *                 type: string
+ *                 description: Mensagem recebida (deve conter "PAUSA" ou "CORRIDO")
+ *               registro_ponto_id:
+ *                 type: string
+ *                 description: ID do registro de ponto (opcional)
+ *     responses:
+ *       200:
+ *         description: Resposta processada com sucesso
+ *       400:
+ *         description: Dados inválidos ou resposta não reconhecida
+ *       500:
+ *         description: Erro interno do servidor
+ */
+router.post('/webhook-almoco', async (req, res) => {
+  try {
+    const { telefone, mensagem, registro_ponto_id } = req.body;
+
+    // Validações
+    if (!telefone || !mensagem) {
+      return res.status(400).json({
+        success: false,
+        message: 'Telefone e mensagem são obrigatórios'
+      });
+    }
+
+    console.log('[webhook-almoco] 📥 Recebida resposta de almoço:', {
+      telefone,
+      mensagem: mensagem.substring(0, 50),
+      registro_ponto_id
+    });
+
+    // Processar resposta
+    const resultado = await processarRespostaAlmoco(telefone, mensagem, registro_ponto_id);
+
+    if (!resultado.sucesso) {
+      return res.status(400).json({
+        success: false,
+        message: resultado.erro || 'Erro ao processar resposta'
+      });
+    }
+
+    // Enviar mensagem de confirmação via WhatsApp
+    const mensagemConfirmacao = resultado.resposta === 'pausa'
+      ? '✅ *Almoço confirmado!*\n\nSeu horário de almoço será registrado automaticamente às 12:00.\n\nBom almoço! 🍽️'
+      : '✅ *Trabalho corrido confirmado!*\n\nSeu encarregado será notificado para confirmar ao final do dia.\n\nBom trabalho! 💪';
+
+    // Enviar confirmação de forma assíncrona (não bloqueia a resposta)
+    (async () => {
+      try {
+        const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
+        await enviarMensagemWebhook(
+          telefone,
+          mensagemConfirmacao,
+          null,
+          {
+            tipo: 'confirmacao_almoco',
+            registro_ponto_id: resultado.registro_ponto_id
+          }
+        );
+      } catch (error) {
+        console.error('[webhook-almoco] ❌ Erro ao enviar confirmação:', error);
+      }
+    })();
+
+    res.json({
+      success: true,
+      message: 'Resposta processada com sucesso',
+      data: {
+        resposta: resultado.resposta,
+        registro_ponto_id: resultado.registro_ponto_id
+      }
+    });
+
+  } catch (error) {
+    console.error('[webhook-almoco] ❌ Erro ao processar webhook:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/trabalho-corrido/pendentes:
+ *   get:
+ *     summary: Lista registros com trabalho corrido pendentes de confirmação
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data para filtrar (formato YYYY-MM-DD)
+ *       - in: query
+ *         name: obra_id
+ *         schema:
+ *           type: integer
+ *         description: ID da obra para filtrar
+ *     responses:
+ *       200:
+ *         description: Lista de registros pendentes
+ */
+router.get('/trabalho-corrido/pendentes', authenticateToken, async (req, res) => {
+  try {
+    const { data, obra_id } = req.query;
+    const hoje = data || new Date().toISOString().split('T')[0];
+
+    // Buscar registros com trabalho corrido não confirmado
+    let query = supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        id,
+        funcionario_id,
+        data,
+        entrada,
+        saida_almoco,
+        volta_almoco,
+        saida,
+        horas_trabalhadas,
+        horas_extras,
+        trabalho_corrido,
+        trabalho_corrido_confirmado,
+        trabalho_corrido_confirmado_por,
+        trabalho_corrido_confirmado_em,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(
+          id,
+          nome,
+          cargo,
+          obra_atual_id,
+          obra:obras!funcionarios_obra_atual_id_fkey(
+            id,
+            nome
+          )
+        )
+      `)
+      .eq('data', hoje)
+      .eq('trabalho_corrido', true)
+      .eq('trabalho_corrido_confirmado', false)
+      .order('entrada', { ascending: true });
+
+    // Filtrar por obra se fornecido
+    if (obra_id) {
+      query = query.eq('funcionario.obra_atual_id', obra_id);
+    }
+
+    const { data: registros, error } = await query;
+
+    if (error) {
+      console.error('[trabalho-corrido] ❌ Erro ao buscar registros:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar registros pendentes'
+      });
+    }
+
+    res.json({
+      success: true,
+      data: registros || [],
+      total: registros?.length || 0
+    });
+
+  } catch (error) {
+    console.error('[trabalho-corrido] ❌ Erro:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor'
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/trabalho-corrido/confirmar:
+ *   post:
+ *     summary: Confirma ou rejeita trabalho corrido
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - registro_ponto_id
+ *               - confirmado
+ *             properties:
+ *               registro_ponto_id:
+ *                 type: string
+ *                 description: ID do registro de ponto
+ *               confirmado:
+ *                 type: boolean
+ *                 description: true para confirmar, false para rejeitar
+ *               observacoes:
+ *                 type: string
+ *                 description: Observações sobre a confirmação
+ *     responses:
+ *       200:
+ *         description: Trabalho corrido confirmado/rejeitado com sucesso
+ */
+router.post('/trabalho-corrido/confirmar', authenticateToken, async (req, res) => {
+  try {
+    const { registro_ponto_id, confirmado, observacoes } = req.body;
+    const usuarioId = req.user?.id;
+
+    // Validações
+    if (!registro_ponto_id || typeof confirmado !== 'boolean') {
+      return res.status(400).json({
+        success: false,
+        message: 'registro_ponto_id e confirmado são obrigatórios'
+      });
+    }
+
+    // Buscar registro de ponto
+    const { data: registro, error: registroError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id, funcionario_id, data, trabalho_corrido')
+      .eq('id', registro_ponto_id)
+      .single();
+
+    if (registroError || !registro) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registro de ponto não encontrado'
+      });
+    }
+
+    if (!registro.trabalho_corrido) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este registro não está marcado como trabalho corrido'
+      });
+    }
+
+    // Buscar funcionário do usuário (encarregado)
+    const { data: funcionarioEncarregado, error: funcError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id')
+      .eq('usuario_id', usuarioId)
+      .single();
+
+    if (funcError || !funcionarioEncarregado) {
+      return res.status(403).json({
+        success: false,
+        message: 'Usuário não vinculado a um funcionário (encarregado)'
+      });
+    }
+
+    const agora = new Date().toISOString();
+
+    // Atualizar registro
+    const dadosAtualizacao = {
+      trabalho_corrido_confirmado: confirmado,
+      trabalho_corrido_confirmado_por: confirmado ? funcionarioEncarregado.id : null,
+      trabalho_corrido_confirmado_em: confirmado ? agora : null,
+      updated_at: agora
+    };
+
+    const { error: updateError } = await supabaseAdmin
+      .from('registros_ponto')
+      .update(dadosAtualizacao)
+      .eq('id', registro_ponto_id);
+
+    if (updateError) {
+      console.error('[trabalho-corrido] ❌ Erro ao atualizar:', updateError);
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao confirmar trabalho corrido'
+      });
+    }
+
+    // Registrar na tabela de confirmações
+    if (confirmado) {
+      const { error: confirmError } = await supabaseAdmin
+        .from('confirmacoes_trabalho_corrido')
+        .upsert({
+          registro_ponto_id: registro_ponto_id,
+          funcionario_id: registro.funcionario_id,
+          encarregado_id: funcionarioEncarregado.id,
+          data: registro.data,
+          confirmado: true,
+          observacoes: observacoes || null,
+          confirmado_em: agora,
+          updated_at: agora
+        }, {
+          onConflict: 'registro_ponto_id'
+        });
+
+      if (confirmError) {
+        console.error('[trabalho-corrido] ❌ Erro ao registrar confirmação:', confirmError);
+      }
+
+      // Recalcular horas extras se confirmado
+      const { calcularHorasExtras } = await import('../utils/ponto-eletronico.js');
+      const registroCompleto = await supabaseAdmin
+        .from('registros_ponto')
+        .select('entrada, saida, tipo_dia, horas_trabalhadas, saida_almoco, volta_almoco')
+        .eq('id', registro_ponto_id)
+        .single();
+
+      if (registroCompleto.data) {
+        const horasExtras = calcularHorasExtras(
+          registroCompleto.data.entrada,
+          registroCompleto.data.saida,
+          registroCompleto.data.tipo_dia || 'normal',
+          registroCompleto.data.horas_trabalhadas,
+          registroCompleto.data.saida_almoco,
+          registroCompleto.data.volta_almoco
+        );
+
+        // Adicionar 1 hora extra para trabalho corrido confirmado
+        const horasExtrasFinais = (horasExtras || 0) + 1;
+
+        await supabaseAdmin
+          .from('registros_ponto')
+          .update({ horas_extras: horasExtrasFinais })
+          .eq('id', registro_ponto_id);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: confirmado 
+        ? 'Trabalho corrido confirmado com sucesso' 
+        : 'Trabalho corrido rejeitado',
+      data: {
+        registro_ponto_id,
+        confirmado,
+        confirmado_em: confirmado ? agora : null
+      }
+    });
+
+  } catch (error) {
+    console.error('[trabalho-corrido] ❌ Erro:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor'

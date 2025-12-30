@@ -34,6 +34,7 @@ export interface RegistroPonto {
   // Novos campos de tipo de dia e feriado
   tipo_dia?: 'normal' | 'sabado' | 'domingo' | 'feriado_nacional' | 'feriado_estadual' | 'feriado_local';
   is_feriado?: boolean;
+  is_facultativo?: boolean;
   feriado_id?: number;
   observacoes_feriado?: string;
 }
@@ -49,6 +50,12 @@ export interface RegistroPontoPayload {
   justificativa_alteracao?: string;
   observacoes?: string;
   status?: string;
+  // Campos de feriado e tipo de dia
+  tipo_dia?: 'normal' | 'sabado' | 'domingo' | 'feriado_nacional' | 'feriado_estadual' | 'feriado_local';
+  is_feriado?: boolean;
+  is_facultativo?: boolean;
+  feriado_tipo?: 'nacional' | 'estadual' | 'local';
+  observacoes_feriado?: string;
 }
 
 export interface Justificativa {
@@ -292,6 +299,24 @@ export const apiRegistrosPonto = {
     };
   }> {
     const response = await api.get('ponto-eletronico/registros/estatisticas', { params });
+    return response.data;
+  },
+
+  // Trabalho Corrido
+  async listarTrabalhoCorridoPendentes(params?: {
+    data?: string;
+    obra_id?: number | string;
+  }): Promise<{ data: RegistroPonto[]; total: number }> {
+    const response = await api.get('ponto-eletronico/trabalho-corrido/pendentes', { params });
+    return response.data;
+  },
+
+  async confirmarTrabalhoCorrido(payload: {
+    registro_ponto_id: string | number;
+    confirmado: boolean;
+    observacoes?: string;
+  }): Promise<{ success: boolean; message: string; data: any }> {
+    const response = await api.post('ponto-eletronico/trabalho-corrido/confirmar', payload);
     return response.data;
   }
 };

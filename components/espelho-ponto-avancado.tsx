@@ -293,9 +293,28 @@ export function EspelhoPontoAvancado({ trigger }: EspelhoPontoAvancadoProps) {
       doc.text(`Período: ${dataInicio} a ${dataFim}`, 14, yPos)
       yPos += 6
 
+      // Função auxiliar para formatar tipo de dia
+      const formatarTipoDia = (tipoDia?: string, isFacultativo?: boolean): string => {
+        if (isFacultativo) {
+          return 'Facultativo'
+        }
+        
+        const tipoDiaMap: Record<string, string> = {
+          'normal': 'Normal',
+          'sabado': 'Sábado',
+          'domingo': 'Domingo',
+          'feriado_nacional': 'Feriado Nacional',
+          'feriado_estadual': 'Feriado Estadual',
+          'feriado_local': 'Feriado Local'
+        }
+        
+        return tipoDiaMap[tipoDia || 'normal'] || 'Normal'
+      }
+
       // Dados da tabela
       const tableData = registros.map(registro => [
         new Date(registro.data).toLocaleDateString('pt-BR'),
+        formatarTipoDia((registro as any).tipo_dia, (registro as any).is_facultativo),
         registro.entrada || '-',
         registro.saida_almoco || '-',
         registro.volta_almoco || '-',
@@ -306,7 +325,7 @@ export function EspelhoPontoAvancado({ trigger }: EspelhoPontoAvancadoProps) {
       ])
 
       autoTable(doc, {
-        head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras', 'Status']],
+        head: [['Data', 'Tipo Dia', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras', 'Status']],
         body: tableData,
         startY: yPos,
         styles: { fontSize: 8 },

@@ -1,6 +1,8 @@
 import cron from 'node-cron';
 import { cancelarAprovacoesVencidas } from './cancelar-aprovacoes-vencidas.js';
 import { enviarLembretesAprovacoes } from './enviar-lembretes-aprovacoes.js';
+import { iniciarJobNotificacoesAlmoco } from './enviar-notificacoes-almoco.js';
+import { iniciarJobAlmocoAutomatico } from './registrar-almoco-automatico.js';
 
 /**
  * Inicializa os jobs automáticos do sistema
@@ -38,9 +40,19 @@ function inicializarScheduler() {
     timezone: 'America/Sao_Paulo'
   });
 
+  // Job 3: Enviar notificações de almoço
+  // Executa diariamente às 11h50
+  iniciarJobNotificacoesAlmoco();
+
+  // Job 4: Registrar almoço automático
+  // Executa diariamente às 12h00
+  iniciarJobAlmocoAutomatico();
+
   console.log('[scheduler] ✓ Jobs agendados com sucesso:');
   console.log('  - Cancelar aprovações vencidas: diariamente às 00:00');
   console.log('  - Enviar lembretes: diariamente às 09:00');
+  console.log('  - Notificações de almoço: diariamente às 11:50');
+  console.log('  - Registrar almoço automático: diariamente às 12:00');
 
   return {
     jobCancelar,

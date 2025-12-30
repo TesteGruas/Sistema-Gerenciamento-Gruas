@@ -49,6 +49,8 @@ interface EspelhoData {
     horas_trabalhadas?: number
     horas_extras?: number
     status: string
+    tipo_dia?: string
+    is_facultativo?: boolean
   }>
   total_dias_trabalhados: number
   total_horas_trabalhadas: number
@@ -214,7 +216,9 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
                 saida: r.saida || undefined,
                 horas_trabalhadas: r.horas_trabalhadas || 0,
                 horas_extras: r.horas_extras || 0,
-                status: r.status || 'completo'
+                status: r.status || 'completo',
+                tipo_dia: r.tipo_dia || 'normal',
+                is_facultativo: r.is_facultativo || false
               })),
               total_dias_trabalhados: resumo.total_dias_trabalhados || registros.length,
               total_horas_trabalhadas: resumo.total_horas_trabalhadas || 0,
@@ -352,6 +356,24 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
     }
   }
 
+  // Função auxiliar para formatar tipo de dia
+  const formatarTipoDia = (tipoDia?: string, isFacultativo?: boolean): string => {
+    if (isFacultativo) {
+      return 'Facultativo'
+    }
+    
+    const tipoDiaMap: Record<string, string> = {
+      'normal': 'Normal',
+      'sabado': 'Sábado',
+      'domingo': 'Domingo',
+      'feriado_nacional': 'Feriado Nacional',
+      'feriado_estadual': 'Feriado Estadual',
+      'feriado_local': 'Feriado Local'
+    }
+    
+    return tipoDiaMap[tipoDia || 'normal'] || 'Normal'
+  }
+
   const gerarPDFLocal = async () => {
     try {
       const { jsPDF } = await import('jspdf')
@@ -376,6 +398,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       // Dados da tabela
       const tableData = espelhoData?.registros.map(registro => [
         new Date(registro.data).toLocaleDateString('pt-BR'),
+        formatarTipoDia(registro.tipo_dia, registro.is_facultativo),
         registro.entrada || '-',
         registro.saida_almoco || '-',
         registro.volta_almoco || '-',
@@ -385,7 +408,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       ]) || []
 
       autoTable(doc, {
-        head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras']],
+        head: [['Data', 'Tipo Dia', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras']],
         body: tableData,
         startY: yPos,
         styles: { fontSize: 8 },
@@ -732,6 +755,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Data</TableHead>
+                      <TableHead>Tipo Dia</TableHead>
                       <TableHead>Entrada</TableHead>
                       <TableHead>Saída Almoço</TableHead>
                       <TableHead>Volta Almoço</TableHead>
@@ -742,20 +766,37 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {espelhoData.registros.map((registro, index) => (
-                      <TableRow key={index}>
-                        <TableCell>{new Date(registro.data).toLocaleDateString('pt-BR')}</TableCell>
-                        <TableCell>{registro.entrada || '-'}</TableCell>
-                        <TableCell>{registro.saida_almoco || '-'}</TableCell>
-                        <TableCell>{registro.volta_almoco || '-'}</TableCell>
-                        <TableCell>{registro.saida || '-'}</TableCell>
-                        <TableCell>{registro.horas_trabalhadas?.toFixed(2) || '0.00'}h</TableCell>
-                        <TableCell className="text-green-600 font-medium">
-                          {registro.horas_extras?.toFixed(2) || '0.00'}h
-                        </TableCell>
-                        <TableCell>{getStatusBadge(registro.status)}</TableCell>
-                      </TableRow>
-                    ))}
+                    {espelhoData.registros.map((registro, index) => {
+                      const tipoDia = formatarTipoDia(registro.tipo_dia, registro.is_facultativo)
+                      const tipoDiaMap: Record<string, { label: string; color: string }> = {
+                        'Normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
+                        'Sábado': { label: 'Sábado', color: 'bg-blue-100 text-blue-800' },
+                        'Domingo': { label: 'Domingo', color: 'bg-purple-100 text-purple-800' },
+                        'Feriado Nacional': { label: 'Feriado Nacional', color: 'bg-red-100 text-red-800' },
+                        'Feriado Estadual': { label: 'Feriado Estadual', color: 'bg-orange-100 text-orange-800' },
+                        'Feriado Local': { label: 'Feriado Local', color: 'bg-yellow-100 text-yellow-800' },
+                        'Facultativo': { label: 'Facultativo', color: 'bg-pink-100 text-pink-800' }
+                      }
+                      const tipo = tipoDiaMap[tipoDia] || tipoDiaMap['Normal']
+                      
+                      return (
+                        <TableRow key={index}>
+                          <TableCell>{new Date(registro.data).toLocaleDateString('pt-BR')}</TableCell>
+                          <TableCell>
+                            <Badge className={tipo.color}>{tipo.label}</Badge>
+                          </TableCell>
+                          <TableCell>{registro.entrada || '-'}</TableCell>
+                          <TableCell>{registro.saida_almoco || '-'}</TableCell>
+                          <TableCell>{registro.volta_almoco || '-'}</TableCell>
+                          <TableCell>{registro.saida || '-'}</TableCell>
+                          <TableCell>{registro.horas_trabalhadas?.toFixed(2) || '0.00'}h</TableCell>
+                          <TableCell className="text-green-600 font-medium">
+                            {registro.horas_extras?.toFixed(2) || '0.00'}h
+                          </TableCell>
+                          <TableCell>{getStatusBadge(registro.status)}</TableCell>
+                        </TableRow>
+                      )
+                    })}
                   </TableBody>
                 </Table>
               </div>

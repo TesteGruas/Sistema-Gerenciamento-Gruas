@@ -62,6 +62,7 @@ export default function PWAPontoPage() {
   const [showFeriadoDialog, setShowFeriadoDialog] = useState(false)
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
+  const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -407,6 +408,7 @@ export default function PWAPontoPage() {
       // Adicionar informações de feriado se for entrada
       if (tipo === 'entrada' && isFeriado !== null) {
         dadosRegistro.is_feriado = isFeriado
+        dadosRegistro.is_facultativo = isFacultativo
         if (isFeriado && tipoFeriado) {
           dadosRegistro.feriado_tipo = tipoFeriado
         }
@@ -984,6 +986,26 @@ export default function PWAPontoPage() {
                     Local
                   </Button>
                 </div>
+                
+                {tipoFeriado && (
+                  <div className="space-y-2 pt-2 border-t">
+                    <p className="text-xs text-muted-foreground">
+                      <strong>Importante:</strong> Dia facultativo NÃO é feriado oficial.
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="isFacultativo"
+                        checked={isFacultativo}
+                        onChange={(e) => setIsFacultativo(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300"
+                      />
+                      <label htmlFor="isFacultativo" className="text-sm font-medium cursor-pointer">
+                        É um dia facultativo?
+                      </label>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -993,6 +1015,7 @@ export default function PWAPontoPage() {
                   setShowFeriadoDialog(false)
                   setIsFeriado(null)
                   setTipoFeriado(null)
+                  setIsFacultativo(false)
                   setTipoRegistroConfirmacao(null)
                 }}
                 variant="outline"

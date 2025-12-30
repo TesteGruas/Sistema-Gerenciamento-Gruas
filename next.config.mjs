@@ -115,6 +115,13 @@ const nextConfig = {
   },
 
   // ==================================
+  // ⚡ TURBOPACK CONFIGURATION
+  // ==================================
+  // Configuração do Turbopack (padrão no Next.js 16)
+  // A configuração webpack acima será usada quando --webpack for explicitamente passado
+  turbopack: {},
+
+  // ==================================
   // 🚀 EXPERIMENTAL FEATURES
   // ==================================
   experimental: {

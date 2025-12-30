@@ -72,3 +72,4 @@ ON CONFLICT (codigo) DO NOTHING;
 
 
 
+
