@@ -33,6 +33,7 @@ export default function WhatsAppAprovacoesPage() {
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
   const syncTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const initialLoadDoneRef = useRef(false)
   
   // Função para carregar instância WhatsApp - definida antes dos useEffect
   const carregarInstanciaWhatsApp = useCallback(async () => {
@@ -129,18 +130,22 @@ export default function WhatsAppAprovacoesPage() {
   // Carregar instância ao montar componente (única do sistema) - apenas uma vez
   // IMPORTANTE: Este useEffect deve ser chamado ANTES de qualquer return condicional
   useEffect(() => {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
     // Só carregar se for admin e tiver usuário
-    if ((!user || !isAdmin()) || dadosIniciaisCarregados || loadingRef.current) {
+    if (!user || !isAdmin() || loadingRef.current) {
       return
     }
     
+    initialLoadDoneRef.current = true
     loadingRef.current = true
     console.log('[WhatsApp] Carregando instância do sistema')
     carregarInstanciaWhatsApp().finally(() => {
       setDadosIniciaisCarregados(true)
       loadingRef.current = false
     })
-  }, [dadosIniciaisCarregados, user, isAdmin, carregarInstanciaWhatsApp])
+  }, [user, isAdmin, carregarInstanciaWhatsApp])
 
   // Polling para status de conexão (otimizado para evitar múltiplas chamadas)
   // IMPORTANTE: Este useEffect deve ser chamado ANTES de qualquer return condicional

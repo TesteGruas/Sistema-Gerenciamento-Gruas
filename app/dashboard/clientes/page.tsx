@@ -88,6 +88,11 @@ export default function ClientesPage() {
   const isLoadingObrasRef = useRef(false)
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevPageRef = useRef(pagination.page)
+  const prevLimitRef = useRef(pagination.limit)
+  const prevSearchRef = useRef(searchTerm)
+  const prevStatusRef = useRef(statusFilter)
   
   // Estados para upload de arquivos
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
@@ -107,7 +112,11 @@ export default function ClientesPage() {
       return
     }
     
-    if (!dadosIniciaisCarregados && !isLoadingObrasRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!isLoadingObrasRef.current && !isLoadingRef.current) {
+      initialLoadDoneRef.current = true
       console.log('⏳ [Preload] Iniciando carregamento da página de clientes...')
       const pageStartTime = performance.now()
       
@@ -124,7 +133,7 @@ export default function ClientesPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [])
 
   // Verificar query param para abrir dialog de criação
   useEffect(() => {
@@ -159,7 +168,25 @@ export default function ClientesPage() {
   // NOTA: Este useEffect só roda APÓS dadosIniciaisCarregados ser true
   // O carregamento inicial é feito no useEffect anterior
   useEffect(() => {
+    // Não executar se ainda não carregou os dados iniciais
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos parâmetros (não apenas no primeiro render)
+    const pageChanged = prevPageRef.current !== pagination.page
+    const limitChanged = prevLimitRef.current !== pagination.limit
+    const searchChanged = prevSearchRef.current !== searchTerm
+    const statusChanged = prevStatusRef.current !== statusFilter
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!pageChanged && !limitChanged && !searchChanged && !statusChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevPageRef.current = pagination.page
+    prevLimitRef.current = pagination.limit
+    prevSearchRef.current = searchTerm
+    prevStatusRef.current = statusFilter
     
     const timer = setTimeout(() => {
       // Executar busca ou carregamento

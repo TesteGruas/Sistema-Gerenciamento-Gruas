@@ -104,10 +104,16 @@ export default function EstoquePage() {
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
   const movimentacoesLoadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevFiltrosRef = useRef(JSON.stringify(filtros))
 
   // Carregar dados iniciais - apenas uma vez
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!loadingRef.current) {
+      initialLoadDoneRef.current = true
       loadingRef.current = true
       carregarDados().finally(() => {
         setDadosIniciaisCarregados(true)
@@ -115,11 +121,23 @@ export default function EstoquePage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [])
 
   // Recarregar quando filtros mudarem (com debounce)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos filtros (não apenas no primeiro render)
+    const filtrosString = JSON.stringify(filtros)
+    const filtrosChanged = prevFiltrosRef.current !== filtrosString
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!filtrosChanged) {
+      return
+    }
+    
+    // Atualizar ref
+    prevFiltrosRef.current = filtrosString
     
     const timer = setTimeout(() => {
       if (!loadingRef.current) {

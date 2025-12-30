@@ -155,6 +155,9 @@ export default function ObrasPage() {
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevPageRef = useRef(currentPage)
+  const prevItemsPerPageRef = useRef(itemsPerPage)
 
   // Carregar obras do backend com paginação
   const carregarObras = async () => {
@@ -474,7 +477,9 @@ export default function ObrasPage() {
   useEffect(() => {
     const init = async () => {
       const isAuth = await ensureAuthenticated()
-      if (isAuth && !dadosIniciaisCarregados && !loadingRef.current) {
+      // Evitar carregamento duplo - só carregar uma vez
+      if (isAuth && !initialLoadDoneRef.current && !loadingRef.current) {
+        initialLoadDoneRef.current = true
         loadingRef.current = true
         carregarObras().finally(() => {
           setDadosIniciaisCarregados(true)
@@ -484,12 +489,25 @@ export default function ObrasPage() {
     }
     init()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [])
 
   // Recarregar obras quando página ou itens por página mudarem (com debounce)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
     if (currentPage <= 0 || itemsPerPage <= 0) return
+    
+    // Verificar se houve mudança real nos parâmetros (não apenas no primeiro render)
+    const pageChanged = prevPageRef.current !== currentPage
+    const itemsPerPageChanged = prevItemsPerPageRef.current !== itemsPerPage
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!pageChanged && !itemsPerPageChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevPageRef.current = currentPage
+    prevItemsPerPageRef.current = itemsPerPage
     
     const timer = setTimeout(() => {
       if (!loadingRef.current) {

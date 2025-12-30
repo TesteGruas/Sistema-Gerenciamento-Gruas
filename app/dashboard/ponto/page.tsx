@@ -242,6 +242,11 @@ export default function PontoPage() {
   // Flag para controlar se já carregou dados iniciais
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevFiltroDataRef = useRef(filtroData)
+  const prevDebouncedSearchTermRef = useRef(debouncedSearchTerm)
+  const prevCurrentPageRef = useRef(currentPage)
+  const prevPageSizeRef = useRef(pageSize)
   // Estado para controlar loading da tabela durante busca/filtros
   const [loadingTabela, setLoadingTabela] = useState(false)
 
@@ -304,14 +309,19 @@ export default function PontoPage() {
 
   // Carregar dados iniciais apenas uma vez
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!loadingRef.current) {
+      initialLoadDoneRef.current = true
       loadingRef.current = true
       carregarDados().finally(() => {
         setDadosIniciaisCarregados(true)
         loadingRef.current = false
       })
     }
-  }, [dadosIniciaisCarregados])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Resetar página quando termo de busca debounced mudar
   useEffect(() => {
@@ -331,6 +341,23 @@ export default function PontoPage() {
     if (isJustificativaOpen || isModalDetalhesOpen || isEditarOpen || isAprovacaoOpen || isModalAprovacaoOpen) {
       return
     }
+    
+    // Verificar se houve mudança real nos parâmetros (não apenas no primeiro render)
+    const filtroDataChanged = prevFiltroDataRef.current !== filtroData
+    const searchChanged = prevDebouncedSearchTermRef.current !== debouncedSearchTerm
+    const pageChanged = prevCurrentPageRef.current !== currentPage
+    const pageSizeChanged = prevPageSizeRef.current !== pageSize
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!filtroDataChanged && !searchChanged && !pageChanged && !pageSizeChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevFiltroDataRef.current = filtroData
+    prevDebouncedSearchTermRef.current = debouncedSearchTerm
+    prevCurrentPageRef.current = currentPage
+    prevPageSizeRef.current = pageSize
     
     // Usar debouncedSearchTerm que já tem debounce aplicado pelo hook
     if (!loadingRef.current) {

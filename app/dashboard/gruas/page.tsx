@@ -155,6 +155,12 @@ export default function GruasPage() {
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevSelectedStatusRef = useRef(selectedStatus)
+  const prevSelectedTipoRef = useRef(selectedTipo)
+  const prevCurrentPageRef = useRef(currentPage)
+  const prevItemsPerPageRef = useRef(itemsPerPage)
+  const prevSearchTermRef = useRef(searchTerm)
   const { loading: creating, startLoading: startCreating, stopLoading: stopCreating, setLoading: setCreating } = useLoading()
   const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating, setLoading: setUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
@@ -247,7 +253,11 @@ export default function GruasPage() {
   
   // Carregar gruas quando o componente montar - apenas uma vez
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!loadingRef.current) {
+      initialLoadDoneRef.current = true
       loadingRef.current = true
       carregarGruas().finally(() => {
         setDadosIniciaisCarregados(true)
@@ -255,11 +265,28 @@ export default function GruasPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [])
 
   // Carregar gruas quando filtros mudarem (com debounce)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos parâmetros (não apenas no primeiro render)
+    const statusChanged = prevSelectedStatusRef.current !== selectedStatus
+    const tipoChanged = prevSelectedTipoRef.current !== selectedTipo
+    const pageChanged = prevCurrentPageRef.current !== currentPage
+    const itemsPerPageChanged = prevItemsPerPageRef.current !== itemsPerPage
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!statusChanged && !tipoChanged && !pageChanged && !itemsPerPageChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevSelectedStatusRef.current = selectedStatus
+    prevSelectedTipoRef.current = selectedTipo
+    prevCurrentPageRef.current = currentPage
+    prevItemsPerPageRef.current = itemsPerPage
     
     const timer = setTimeout(() => {
       if (!loadingRef.current) {
@@ -277,6 +304,17 @@ export default function GruasPage() {
   // Debounce para pesquisa (otimizado)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real no termo de busca (não apenas no primeiro render)
+    const searchChanged = prevSearchTermRef.current !== searchTerm
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!searchChanged) {
+      return
+    }
+    
+    // Atualizar ref
+    prevSearchTermRef.current = searchTerm
     
     const timeoutId = setTimeout(() => {
       if (searchTerm !== undefined && !loadingRef.current) {

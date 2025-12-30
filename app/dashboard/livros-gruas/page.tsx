@@ -77,6 +77,10 @@ export default function LivrosGruasPage() {
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRelacoesRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevFilterObraRef = useRef(filterObra)
+  const prevFilterStatusRef = useRef(filterStatus)
 
   // Carregar relações grua-obra
   const carregarRelacoes = async (page: number = currentPage, limit: number = itemsPerPage) => {
@@ -193,20 +197,38 @@ export default function LivrosGruasPage() {
 
   // Carregar dados na inicialização - apenas uma vez
   useEffect(() => {
-    if (userLoading || loadingRelacoesRef.current || dadosIniciaisCarregados) return
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    if (userLoading || loadingRelacoesRef.current) return
     if (!user) return
     
+    initialLoadDoneRef.current = true
     loadingRelacoesRef.current = true
     carregarRelacoes(1, itemsPerPage).finally(() => {
       setDadosIniciaisCarregados(true)
       loadingRelacoesRef.current = false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, userLoading, isAdmin, dadosIniciaisCarregados])
+  }, [user, userLoading, isAdmin])
   
   // Recarregar quando filtros mudarem (com debounce)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos filtros (não apenas no primeiro render)
+    const searchChanged = prevSearchTermRef.current !== searchTerm
+    const obraChanged = prevFilterObraRef.current !== filterObra
+    const statusChanged = prevFilterStatusRef.current !== filterStatus
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!searchChanged && !obraChanged && !statusChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevSearchTermRef.current = searchTerm
+    prevFilterObraRef.current = filterObra
+    prevFilterStatusRef.current = filterStatus
     
     const timer = setTimeout(() => {
       if (!loadingRelacoesRef.current) {

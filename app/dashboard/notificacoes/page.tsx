@@ -151,6 +151,11 @@ export default function NotificacoesPage() {
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevBuscaRef = useRef(busca)
+  const prevFiltroTipoRef = useRef(filtroTipo)
+  const prevFiltroTipoNotificacaoRef = useRef(filtroTipoNotificacao)
+  const prevLimiteRef = useRef(limite)
 
   // Carregar notificações com paginação e filtros
   const carregarNotificacoes = async (novaPagina?: number, novoLimite?: number) => {
@@ -188,7 +193,11 @@ export default function NotificacoesPage() {
 
   // Carregar dados iniciais apenas uma vez (otimizado para carregar mais rápido)
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!loadingRef.current) {
+      initialLoadDoneRef.current = true
       console.log('⏳ [Preload] Iniciando carregamento da página de notificações...')
       const pageStartTime = performance.now()
       
@@ -201,12 +210,29 @@ export default function NotificacoesPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [])
 
   // Recarregar quando filtros mudarem (com debounce)
   useEffect(() => {
     // Só recarregar se os dados iniciais já foram carregados
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos filtros (não apenas no primeiro render)
+    const buscaChanged = prevBuscaRef.current !== busca
+    const tipoChanged = prevFiltroTipoRef.current !== filtroTipo
+    const tipoNotificacaoChanged = prevFiltroTipoNotificacaoRef.current !== filtroTipoNotificacao
+    const limiteChanged = prevLimiteRef.current !== limite
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!buscaChanged && !tipoChanged && !tipoNotificacaoChanged && !limiteChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevBuscaRef.current = busca
+    prevFiltroTipoRef.current = filtroTipo
+    prevFiltroTipoNotificacaoRef.current = filtroTipoNotificacao
+    prevLimiteRef.current = limite
     
     // Debounce para evitar múltiplas chamadas rápidas
     const timer = setTimeout(() => {

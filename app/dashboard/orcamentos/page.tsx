@@ -127,6 +127,10 @@ export default function OrcamentosPage() {
   const [dadosLocacaoCarregados, setDadosLocacaoCarregados] = useState(false)
   const loadingRef = useRef(false)
   const loadingLocacaoRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const initialLocacaoLoadDoneRef = useRef(false)
+  const prevFiltroStatusRef = useRef(filtroStatus)
+  const prevCurrentPageObraRef = useRef(currentPageObra)
 
   // Função para formatar data
   const formatarData = (data: string | undefined | null): string => {
@@ -161,7 +165,11 @@ export default function OrcamentosPage() {
   }
 
   useEffect(() => {
-    if (!dadosIniciaisCarregados && activeTab === 'obra') {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (activeTab === 'obra' && !loadingRef.current) {
+      initialLoadDoneRef.current = true
       loadingRef.current = true
       loadOrcamentos().finally(() => {
         setDadosIniciaisCarregados(true)
@@ -169,22 +177,34 @@ export default function OrcamentosPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosIniciaisCarregados])
+  }, [activeTab])
 
   useEffect(() => {
-    if (filtroStatus !== "todos") {
+    if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real no filtro
+    const filtroChanged = prevFiltroStatusRef.current !== filtroStatus
+    
+    if (filtroChanged && filtroStatus !== "todos") {
+      prevFiltroStatusRef.current = filtroStatus
       setCurrentPageObra(1) // Resetar para primeira página ao mudar filtro
       loadOrcamentos()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroStatus])
+  }, [filtroStatus, dadosIniciaisCarregados])
 
   useEffect(() => {
-    if (dadosIniciaisCarregados && activeTab === 'obra') {
+    if (!dadosIniciaisCarregados || activeTab !== 'obra') return
+    
+    // Verificar se houve mudança real na página
+    const pageChanged = prevCurrentPageObraRef.current !== currentPageObra
+    
+    if (pageChanged) {
+      prevCurrentPageObraRef.current = currentPageObra
       loadOrcamentos()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPageObra])
+  }, [currentPageObra, dadosIniciaisCarregados, activeTab])
 
   useEffect(() => {
     if (!dadosLocacaoCarregados && activeTab === 'locacao') {

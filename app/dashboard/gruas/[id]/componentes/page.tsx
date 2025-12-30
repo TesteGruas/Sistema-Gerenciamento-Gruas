@@ -142,10 +142,18 @@ export default function ComponentesGruaPage() {
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
+  const initialLoadDoneRef = useRef(false)
+  const prevSearchTermRef = useRef(searchTerm)
+  const prevFilterStatusRef = useRef(filterStatus)
+  const prevFilterTipoRef = useRef(filterTipo)
 
   // Carregar dados - apenas uma vez
   useEffect(() => {
-    if (!dadosIniciaisCarregados && !loadingRef.current) {
+    // Evitar carregamento duplo - só carregar uma vez
+    if (initialLoadDoneRef.current) return
+    
+    if (!loadingRef.current) {
+      initialLoadDoneRef.current = true
       loadingRef.current = true
       carregarDados().finally(() => {
         setDadosIniciaisCarregados(true)
@@ -153,11 +161,26 @@ export default function ComponentesGruaPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gruaId, dadosIniciaisCarregados])
+  }, [gruaId])
 
   // Recarregar dados quando filtros mudarem (com debounce)
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
+    
+    // Verificar se houve mudança real nos filtros (não apenas no primeiro render)
+    const searchChanged = prevSearchTermRef.current !== searchTerm
+    const statusChanged = prevFilterStatusRef.current !== filterStatus
+    const tipoChanged = prevFilterTipoRef.current !== filterTipo
+    
+    // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
+    if (!searchChanged && !statusChanged && !tipoChanged) {
+      return
+    }
+    
+    // Atualizar refs
+    prevSearchTermRef.current = searchTerm
+    prevFilterStatusRef.current = filterStatus
+    prevFilterTipoRef.current = filterTipo
     
     const timer = setTimeout(() => {
       if (!loadingRef.current) {
