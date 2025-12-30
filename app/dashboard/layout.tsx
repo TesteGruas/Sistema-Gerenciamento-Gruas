@@ -367,6 +367,11 @@ function DashboardLayoutContent({
   // Função para lidar com clique em links da sidebar
   // Não interfere na navegação - apenas adiciona feedback visual
   const handleLinkClick = (href: string, itemName: string) => {
+    // Fechar sidebar no mobile ao clicar em um item
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setSidebarOpen(false)
+    }
+    
     if (pathname !== href) {
       // Limpar timer anterior se existir
       if (navigationTimerRef.current) {
