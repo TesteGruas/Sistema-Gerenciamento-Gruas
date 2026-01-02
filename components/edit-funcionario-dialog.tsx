@@ -120,12 +120,12 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
     // Converte o salário de centavos para reais (API espera em reais)
     const salarioNumerico = form.salary ? parseFloat(form.salary) / 100 : 0
     
-    // Formatar cargo com iniciais maiúsculas
-    const cargoFormatado = form.role ? formatarCargo(form.role) : ''
-    
+    // O cargo já está no formato correto:
+    // - Se veio do backend, já está formatado como está no banco
+    // - Se foi selecionado da lista, já está formatado como está no banco
     await onSubmit({
       nome: form.name,
-      cargo: cargoFormatado,
+      cargo: form.role, // Enviar cargo exatamente como está (já formatado corretamente)
       telefone: form.phone,
       email: form.email,
       cpf: form.cpf,

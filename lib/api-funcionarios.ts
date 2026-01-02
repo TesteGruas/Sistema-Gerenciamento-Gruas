@@ -37,7 +37,7 @@ export interface FuncionarioBackend {
 
 export interface FuncionarioCreateData {
   nome: string
-  cargo: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
+  cargo: string // Aceita qualquer string - o backend valida se o cargo existe no banco
   telefone?: string
   email?: string
   cpf?: string
@@ -55,7 +55,7 @@ export interface FuncionarioCreateData {
 
 export interface FuncionarioUpdateData {
   nome?: string
-  cargo?: 'Operador' | 'Sinaleiro' | 'Técnico Manutenção' | 'Supervisor' | 'Mecânico' | 'Engenheiro' | 'Chefe de Obras'
+  cargo?: string // Aceita qualquer string - o backend valida se o cargo existe no banco
   telefone?: string
   email?: string
   cpf?: string
