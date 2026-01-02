@@ -99,7 +99,7 @@ Este projeto é proprietário e confidencial.
 
 ---
 
-**Versão**: 1.0.0  
-**Última atualização**: 2025  
+**Versão**: 1.2.0  
+**Última atualização**: 02/01/2026  
 **Status**: ✅ Em desenvolvimento ativo
 

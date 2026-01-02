@@ -40,9 +40,12 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   let nomeResponse: Response | null = null
   
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
-                   process.env.NEXT_PUBLIC_API_URL || 
-                   'http://localhost:3001'
+    let apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
+                 process.env.NEXT_PUBLIC_API_URL || 
+                 'http://localhost:3001'
+    
+    // Remover /api do final se existir para evitar duplicação
+    apiUrl = apiUrl.replace(/\/api\/?$/, '')
     
     // Tentar buscar por email primeiro (mais preciso)
     if (user.email) {

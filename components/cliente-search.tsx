@@ -14,13 +14,15 @@ interface ClienteSearchProps {
   selectedCliente?: any
   placeholder?: string
   className?: string
+  disabled?: boolean
 }
 
 export function ClienteSearch({ 
   onClienteSelect, 
   selectedCliente, 
   placeholder = "Buscar cliente por nome ou CNPJ...",
-  className = ""
+  className = "",
+  disabled = false
 }: ClienteSearchProps) {
   const [searchTerm, setSearchTerm] = useState("")
   const [clientes, setClientes] = useState<any[]>([])
@@ -117,12 +119,12 @@ export function ClienteSearch({
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10 pr-10"
-          disabled={!!selectedCliente}
+          disabled={disabled || !!selectedCliente}
         />
         {loading && (
           <InlineLoader size="sm" />
         )}
-        {selectedCliente && (
+        {selectedCliente && !disabled && (
           <Button
             type="button"
             variant="ghost"

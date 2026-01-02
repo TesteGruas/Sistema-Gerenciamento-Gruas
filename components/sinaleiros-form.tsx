@@ -320,11 +320,11 @@ export function SinaleirosForm({
   const canEdit = !readOnly && (clientePodeEditar || true)
 
   if (!sinaleiros || sinaleiros.length === 0) {
-    return <div className="space-y-6">Carregando sinaleiros...</div>
+    return <div className="space-y-4">Carregando sinaleiros...</div>
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {sinaleiros.map((sinaleiro, index) => (
         <div key={sinaleiro.id} className="space-y-4">
           {/* Cabeçalho do sinaleiro */}

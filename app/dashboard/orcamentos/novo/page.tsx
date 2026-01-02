@@ -34,6 +34,7 @@ import ClienteSearch from "@/components/cliente-search"
 import { DebugButton } from "@/components/debug-button"
 import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
 import { orcamentosLocacaoApi } from "@/lib/api-orcamentos-locacao"
 import { createOrcamento, updateOrcamento, getOrcamento } from "@/lib/api-orcamentos"
@@ -164,6 +165,7 @@ export default function NovoOrcamentoPage() {
   })
 
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
+  const [semCliente, setSemCliente] = useState(false)
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(null)
   const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
   const [isCreatingCliente, setIsCreatingCliente] = useState(false)
@@ -525,7 +527,7 @@ export default function NovoOrcamentoPage() {
           if (!formData.obra_nome) camposFaltando.push('Nome da Obra')
           if (!formData.tipo_obra) camposFaltando.push('Tipo de Obra')
           if (!formData.equipamento && !gruaSelecionada) camposFaltando.push('Equipamento Ofertado')
-          if (!clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
+          if (!semCliente && !clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
           
           if (camposFaltando.length > 0) {
             toast({
@@ -541,7 +543,7 @@ export default function NovoOrcamentoPage() {
           const camposFaltando = []
           if (!formData.obra_nome) camposFaltando.push('Nome da Obra')
           if (!formData.equipamento && !gruaSelecionada) camposFaltando.push('Equipamento Ofertado')
-          if (!clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
+          if (!semCliente && !clienteSelecionado && !formData.cliente_id) camposFaltando.push('Cliente')
           
           if (camposFaltando.length > 0) {
             toast({
@@ -554,8 +556,8 @@ export default function NovoOrcamentoPage() {
           }
         }
       } else {
-        // Para rascunho, apenas cliente é obrigatório
-        if (!clienteSelecionado && !formData.cliente_id) {
+        // Para rascunho, apenas cliente é obrigatório (se não for orçamento sem cliente)
+        if (!semCliente && !clienteSelecionado && !formData.cliente_id) {
           toast({
             title: "Erro",
             description: "Selecione um cliente para salvar o rascunho",
@@ -577,8 +579,8 @@ export default function NovoOrcamentoPage() {
       }
 
       // Preparar dados para a API
-      const clienteId = clienteSelecionado?.id || formData.cliente_id
-      if (!clienteId) {
+      const clienteId = semCliente ? null : (clienteSelecionado?.id || formData.cliente_id)
+      if (!semCliente && !clienteId) {
         toast({
           title: "Erro",
           description: "Cliente é obrigatório",
@@ -682,7 +684,7 @@ export default function NovoOrcamentoPage() {
         const gruaVoltagem = formData.energia_necessaria || gruaSelecionada?.voltagem || ''
         
         const orcamentoData = {
-          cliente_id: parseInt(clienteId.toString()),
+          cliente_id: clienteId ? parseInt(clienteId.toString()) : null,
           data_orcamento: hoje.toISOString().split('T')[0],
           data_validade: formData.data_inicio_estimada 
             ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
@@ -780,7 +782,7 @@ export default function NovoOrcamentoPage() {
         
         const orcamentoData = {
           numero,
-          cliente_id: parseInt(clienteId.toString()),
+          cliente_id: clienteId ? parseInt(clienteId.toString()) : null,
           data_orcamento: hoje.toISOString().split('T')[0],
           data_validade: formData.data_inicio_estimada 
             ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
@@ -1187,12 +1189,13 @@ export default function NovoOrcamentoPage() {
             </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label>Cliente *</Label>
+                  <Label>Cliente {!semCliente && '*'}</Label>
                   <div className="flex gap-2">
                     <div className="flex-1">
                       <ClienteSearch
                         onClienteSelect={handleClienteSelect}
                         selectedCliente={clienteSelecionado}
+                        disabled={semCliente}
                       />
                     </div>
                     <Button
@@ -1202,9 +1205,26 @@ export default function NovoOrcamentoPage() {
                       onClick={() => setIsClienteModalOpen(true)}
                       className="flex-shrink-0"
                       title="Adicionar novo cliente"
+                      disabled={semCliente}
                     >
                       <Plus className="w-4 h-4" />
                     </Button>
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <Checkbox
+                      id="semCliente"
+                      checked={semCliente}
+                      onCheckedChange={(checked) => {
+                        setSemCliente(checked === true)
+                        if (checked === true) {
+                          setClienteSelecionado(null)
+                          setFormData({ ...formData, cliente_id: '', cliente_nome: '' })
+                        }
+                      }}
+                    />
+                    <Label htmlFor="semCliente" className="text-sm font-normal cursor-pointer">
+                      Orçamento sem cliente
+                    </Label>
                   </div>
                 </div>
 

@@ -797,7 +797,7 @@ function DashboardLayoutContent({
                 Versão: 1.2.0
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                30/12/2025
+                02/01/2026
               </div>
             </div>
           </div>

@@ -2,7 +2,14 @@ import axios from 'axios'
 import { authInterceptor } from './auth-interceptor'
 
 // Configuração da API
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+// Normalizar a base URL removendo /api do final se existir para evitar duplicação
+const getApiBaseUrl = () => {
+  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+  // Remover /api do final se existir para evitar duplicação
+  return baseUrl.replace(/\/api\/?$/, '')
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 // Criar instância do axios
 // IMPORTANTE: No cliente, usar URL relativa para aproveitar o rewrite do Next.js

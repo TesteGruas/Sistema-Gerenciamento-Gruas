@@ -1,8 +1,8 @@
 # 📋 RESUMO COMPLETO - FUNCIONALIDADES E COMO TESTAR
 
 **Sistema de Gerenciamento de Gruas**  
-**Versão:** 1.0.0  
-**Data:** 2025-03-02  
+**Versão:** 1.2.0  
+**Data:** 02/01/2026  
 **Status:** ✅ 95% Funcional
 
 ---
@@ -782,6 +782,6 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ---
 
-**Última atualização:** 2025-03-02  
-**Versão do Sistema:** 1.0.0
+**Última atualização:** 02/01/2026  
+**Versão do Sistema:** 1.2.0
 

@@ -69,7 +69,10 @@ export default function ValidarObraPage() {
           
           // Tentar buscar diretamente pela API usando o ID do usuário ou email
           try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+            let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+            
+            // Remover /api do final se existir para evitar duplicação
+            apiUrl = apiUrl.replace(/\/api\/?$/, '')
             
             // Primeiro, tentar buscar pelo email
             if (parsedUser.email) {

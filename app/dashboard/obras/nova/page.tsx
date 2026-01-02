@@ -1025,7 +1025,7 @@ export default function NovaObraPage() {
           </TabsList>
 
           {/* Aba: Dados da Obra */}
-          <TabsContent value="obra" className="space-y-4">
+          <TabsContent value="obra" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1179,7 +1179,6 @@ export default function NovaObraPage() {
                     onChange={(e) => setObraFormData({ ...obraFormData, description: e.target.value })}
                     placeholder="Descrição detalhada da obra..."
                     rows={3}
-                    disabled
                   />
                 </div>
 
@@ -1233,7 +1232,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Documentos */}
-          <TabsContent value="documentos" className="space-y-4">
+          <TabsContent value="documentos" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1322,7 +1321,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Responsável Técnico */}
-          <TabsContent value="responsavel-tecnico" className="space-y-4">
+          <TabsContent value="responsavel-tecnico" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1350,7 +1349,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Sinaleiros */}
-          <TabsContent value="sinaleiros" className="space-y-4">
+          <TabsContent value="sinaleiros" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -1378,7 +1377,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Gruas */}
-          <TabsContent value="grua" className="space-y-4">
+          <TabsContent value="grua" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2115,7 +2114,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Funcionários */}
-          <TabsContent value="funcionarios" className="space-y-4">
+          <TabsContent value="funcionarios" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2226,7 +2225,7 @@ export default function NovaObraPage() {
           </TabsContent>
 
           {/* Aba: Custos Mensais */}
-          <TabsContent value="custos" className="space-y-4">
+          <TabsContent value="custos" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
