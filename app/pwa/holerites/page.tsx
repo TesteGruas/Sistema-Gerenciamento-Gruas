@@ -28,7 +28,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
-import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { getFuncionarioId, getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { CardLoader } from "@/components/ui/loader"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { useRouter } from "next/navigation"
@@ -147,82 +147,86 @@ export default function PWAHoleritesPage() {
         email: user.email
       })
       
-      // Tentar múltiplas formas de obter o funcionario_id
-      if (user.funcionario_id && !isNaN(Number(user.funcionario_id))) {
-        funcionarioId = Number(user.funcionario_id)
-        console.log('[HOLERITES] ID do funcionário encontrado no user.funcionario_id:', funcionarioId)
-      } else if (user.profile?.funcionario_id && !isNaN(Number(user.profile.funcionario_id))) {
-        funcionarioId = Number(user.profile.funcionario_id)
-        console.log('[HOLERITES] ID do funcionário encontrado no user.profile.funcionario_id:', funcionarioId)
-      } else if (user.user_metadata?.funcionario_id && !isNaN(Number(user.user_metadata.funcionario_id))) {
-        funcionarioId = Number(user.user_metadata.funcionario_id)
-        console.log('[HOLERITES] ID do funcionário encontrado no user.user_metadata.funcionario_id:', funcionarioId)
-      } else if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 100) {
-        // Se user.id for numérico e parecer ser um ID de funcionário (maior que 100)
-        funcionarioId = Number(user.id)
-        console.log('[HOLERITES] Usando user.id como funcionario_id:', funcionarioId)
-      }
-      
-      // Se ainda não encontrou, tentar buscar na API
-      if (!funcionarioId) {
-        try {
-          console.log('[HOLERITES] Buscando ID do funcionário na API...')
-          funcionarioId = await getFuncionarioIdWithFallback(
-            user, 
-            token, 
-            'ID do funcionário não encontrado'
-          )
-          console.log('[HOLERITES] ID do funcionário encontrado na API:', funcionarioId)
-        } catch (funcionarioError: any) {
-          console.error('[HOLERITES] Erro ao buscar ID do funcionário na API:', funcionarioError)
-          
-          // Tentar buscar diretamente usando o endpoint de funcionários
+      // Usar a função getFuncionarioId que verifica se o funcionário existe na API
+      // Esta função prioriza user.id quando funcionario_id do metadata não existe na API
+      try {
+        console.log('[HOLERITES] Buscando ID do funcionário usando getFuncionarioId...')
+        funcionarioId = await getFuncionarioId(user, token)
+        
+        // Se não encontrou, tentar usar user.id como fallback
+        if (!funcionarioId && user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+          funcionarioId = Number(user.id)
+          console.log('[HOLERITES] Usando user.id como fallback:', funcionarioId)
+        }
+        
+        // Se ainda não encontrou, tentar buscar na API com fallback
+        if (!funcionarioId) {
           try {
-            console.log('[HOLERITES] Tentando buscar funcionário diretamente na API...')
+            console.log('[HOLERITES] Tentando buscar ID do funcionário na API com fallback...')
+            funcionarioId = await getFuncionarioIdWithFallback(
+              user, 
+              token, 
+              'ID do funcionário não encontrado'
+            )
+            console.log('[HOLERITES] ID do funcionário encontrado na API:', funcionarioId)
+          } catch (funcionarioError: any) {
+            console.error('[HOLERITES] Erro ao buscar ID do funcionário na API:', funcionarioError)
             
-            // Tentar buscar por email ou nome
-            // Usar URL relativa para aproveitar o rewrite do Next.js
-            const searchParam = user.email || user.nome || ''
-            if (searchParam) {
-              const response = await fetch(
-                `/api/funcionarios?search=${encodeURIComponent(searchParam)}&limit=50`,
-                {
-                  headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Content-Type': 'application/json'
-                  }
-                }
-              )
+            // Tentar buscar diretamente usando o endpoint de funcionários
+            try {
+              console.log('[HOLERITES] Tentando buscar funcionário diretamente na API...')
               
-              if (response.ok) {
-                const data = await response.json()
-                const funcionarios = data.data || []
-                console.log('[HOLERITES] Funcionários encontrados:', funcionarios.length)
-                
-                // Procurar funcionário que corresponde ao usuário
-                const funcionario = funcionarios.find((f: any) => 
-                  f.usuario?.id === user.id || 
-                  f.usuario?.email === user.email ||
-                  f.email === user.email ||
-                  (f.usuario && Array.isArray(f.usuario) && f.usuario.some((u: any) => u.id === user.id))
+              // Tentar buscar por email ou nome
+              // Usar URL relativa para aproveitar o rewrite do Next.js
+              const searchParam = user.email || user.nome || ''
+              if (searchParam) {
+                const response = await fetch(
+                  `/api/funcionarios?search=${encodeURIComponent(searchParam)}&limit=50`,
+                  {
+                    headers: {
+                      'Authorization': `Bearer ${token}`,
+                      'Content-Type': 'application/json'
+                    }
+                  }
                 )
                 
-                if (funcionario && funcionario.id && !isNaN(Number(funcionario.id))) {
-                  funcionarioId = Number(funcionario.id)
-                  console.log('[HOLERITES] ID do funcionário encontrado na busca direta:', funcionarioId)
+                if (response.ok) {
+                  const data = await response.json()
+                  const funcionarios = data.data || []
+                  console.log('[HOLERITES] Funcionários encontrados:', funcionarios.length)
+                  
+                  // Procurar funcionário que corresponde ao usuário
+                  const funcionario = funcionarios.find((f: any) => 
+                    f.usuario?.id === user.id || 
+                    f.usuario?.email === user.email ||
+                    f.email === user.email ||
+                    (f.usuario && Array.isArray(f.usuario) && f.usuario.some((u: any) => u.id === user.id))
+                  )
+                  
+                  if (funcionario && funcionario.id && !isNaN(Number(funcionario.id))) {
+                    funcionarioId = Number(funcionario.id)
+                    console.log('[HOLERITES] ID do funcionário encontrado na busca direta:', funcionarioId)
+                  }
                 }
               }
+            } catch (directSearchError) {
+              console.error('[HOLERITES] Erro na busca direta:', directSearchError)
             }
-          } catch (directSearchError) {
-            console.error('[HOLERITES] Erro na busca direta:', directSearchError)
-          }
-          
-          if (!funcionarioId) {
-            if (funcionarioError?.response?.status === 403 || funcionarioError?.status === 403) {
-              throw new Error('Você não tem permissão para acessar holerites')
+            
+            if (!funcionarioId) {
+              if (funcionarioError?.response?.status === 403 || funcionarioError?.status === 403) {
+                throw new Error('Você não tem permissão para acessar holerites')
+              }
+              throw new Error(funcionarioError.message || 'ID do funcionário não encontrado')
             }
-            throw new Error(funcionarioError.message || 'ID do funcionário não encontrado')
           }
+        }
+      } catch (error: any) {
+        console.error('[HOLERITES] Erro geral ao buscar ID do funcionário:', error)
+        // Se ainda não encontrou e user.id é válido, usar como último recurso
+        if (!funcionarioId && user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+          funcionarioId = Number(user.id)
+          console.log('[HOLERITES] Usando user.id como último recurso:', funcionarioId)
         }
       }
 
@@ -721,11 +725,17 @@ export default function PWAHoleritesPage() {
           {loading ? (
             <CardLoader />
           ) : holerites.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-              <p className="text-lg font-medium mb-2">Nenhum holerite disponível</p>
-              <p className="text-sm">Seus holerites aparecerão aqui quando estiverem disponíveis.</p>
-            </div>
+            <Card className="w-full">
+              <CardContent className="py-12">
+                <div className="text-center text-gray-500">
+                  <FileText className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                  <p className="text-xl font-semibold mb-2 text-gray-700">Nenhum holerite cadastrado</p>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">
+                    Você ainda não possui holerites cadastrados. Seus holerites aparecerão aqui quando estiverem disponíveis.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
           ) : (
             <div className="w-full">
               <Table>

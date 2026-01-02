@@ -61,12 +61,15 @@ export default function PWAMainPage() {
   const pwaUserData = usePWAUser()
   
   // Hook de permissões para obter role do usuário e verificar permissões
-  const { userRole, isSupervisor, canApproveHoras, isClient: isClientRole } = usePWAPermissions()
+  const { userRole, canApproveHoras, isClient: isClientRole } = usePWAPermissions()
   
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
   const [roleFromUserData, setRoleFromUserData] = useState<string | null>(null)
-  // Validação de obra ativa removida - não é mais necessária
+  
+  // Estado para verificar se funcionário tem obra ativa
+  const [temObraAtiva, setTemObraAtiva] = useState<boolean | null>(null)
+  const [loadingObra, setLoadingObra] = useState(true)
   
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -146,6 +149,50 @@ export default function PWAMainPage() {
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // Verificar se funcionário tem obra ativa
+  useEffect(() => {
+    const verificarObraAtiva = async () => {
+      if (typeof window === 'undefined') return
+      
+      try {
+        // Verificar se é funcionário (não cliente)
+        const userDataStr = localStorage.getItem('user_data')
+        if (!userDataStr) {
+          setLoadingObra(false)
+          return
+        }
+
+        const userData = JSON.parse(userDataStr)
+        const funcionarioId = userData?.user_metadata?.funcionario_id || 
+                              userData?.profile?.funcionario_id || 
+                              userData?.funcionario_id
+
+        // Se não é funcionário (é cliente), não precisa verificar obra
+        if (!funcionarioId) {
+          setTemObraAtiva(true) // Clientes sempre podem ver
+          setLoadingObra(false)
+          return
+        }
+
+        // Buscar alocações ativas do funcionário
+        const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
+        
+        if (alocacoes.success && alocacoes.data && alocacoes.data.length > 0) {
+          setTemObraAtiva(true)
+        } else {
+          setTemObraAtiva(false)
+        }
+      } catch (error) {
+        console.error('Erro ao verificar obra ativa:', error)
+        setTemObraAtiva(false) // Em caso de erro, considerar sem obra
+      } finally {
+        setLoadingObra(false)
+      }
+    }
+
+    verificarObraAtiva()
+  }, [pwaUserData.user])
 
   // Autenticação é gerenciada pelo PWAAuthGuard no layout
 
@@ -826,6 +873,11 @@ export default function PWAMainPage() {
                   return null
                 }
                 
+                // Se não tiver obra ativa, não mostrar
+                if (temObraAtiva === false) {
+                  return null
+                }
+                
                 // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
                 let cargoFromMetadata: string | null = null
                 try {
@@ -913,8 +965,13 @@ export default function PWAMainPage() {
             </p>
           </div>
 
-          {/* Mini stats - Ocultar para clientes */}
+          {/* Mini stats - Ocultar para clientes e funcionários sem obra ativa */}
           {(() => {
+            // Se não tiver obra ativa, não renderizar o bloco
+            if (temObraAtiva === false) {
+              return null
+            }
+            
             // Verificar se é cliente
             const isClient = (() => {
               if (isClientRole()) return true
@@ -955,7 +1012,7 @@ export default function PWAMainPage() {
             
             return (
               <div className={`grid gap-2 mt-6 ${isSupervisorCheck ? 'grid-cols-3' : 'grid-cols-3'}`}>
-                {!isSupervisorCheck && (
+                {!isSupervisorCheck && temObraAtiva !== false && (
                   <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
                     <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
                     <p className="text-sm font-bold">
@@ -987,8 +1044,13 @@ export default function PWAMainPage() {
         </div>
       </div>
 
-      {/* Status Rápido - Ocultar para clientes */}
+      {/* Status Rápido - Ocultar para clientes e funcionários sem obra ativa */}
       {(() => {
+        // Se não tiver obra ativa, não renderizar o bloco
+        if (temObraAtiva === false) {
+          return null
+        }
+        
         // Verificar se é cliente
         const isClient = (() => {
           if (isClientRole()) return true
@@ -1090,6 +1152,19 @@ export default function PWAMainPage() {
               // Filtrar ações que devem ser ocultadas para clientes
               if (action.hideForClient && isClient) {
                 return false
+              }
+              
+              // Filtrar ações que requerem obra ativa (Ponto, Espelho, Obras)
+              if (action.requiresObra || action.title === "Ponto" || action.title === "Espelho" || action.title === "Obras") {
+                // Se não tem obra ativa, ocultar
+                if (temObraAtiva === false) {
+                  return false
+                }
+                
+                // Se ainda está carregando, não mostrar ainda
+                if (loadingObra) {
+                  return false
+                }
               }
               
               // Filtrar Ponto e Espelho - apenas Operários e Sinaleiros podem bater ponto
@@ -1200,11 +1275,6 @@ export default function PWAMainPage() {
                 
                 // Verificar se tem permissão de aprovar horas (mais confiável)
                 if (canApproveHoras()) {
-                  return true
-                }
-                
-                // Verificar via hook isSupervisor
-                if (isSupervisor()) {
                   return true
                 }
                 

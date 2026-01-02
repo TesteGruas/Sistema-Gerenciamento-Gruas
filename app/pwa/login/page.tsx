@@ -204,8 +204,15 @@ function PWALoginPageContent(): JSX.Element {
         
         // Salvar dados do usuário - incluir profile.funcionario_id e user_metadata.funcionario_id no user_data
         if (data.data.user) {
+          // PRIORIDADE: Usar profile.id (ID numérico) ao invés de user.id (UUID)
+          // O profile.id é o ID correto da tabela usuarios (119)
+          // O user.id é o UUID do Supabase Auth e não deve ser usado como funcionario_id
+          const profileId = data.data.profile?.id || null
+          
           const userData = {
             ...data.data.user,
+            // SOBRESCREVER user.id com profile.id se profile.id existir (ID numérico correto)
+            ...(profileId && { id: profileId }),
             // Incluir funcionario_id do profile se existir
             ...(data.data.profile?.funcionario_id && { funcionario_id: data.data.profile.funcionario_id }),
             // Incluir funcionario_id do user_metadata se existir (Supabase Auth)
@@ -217,7 +224,7 @@ function PWALoginPageContent(): JSX.Element {
             ...(data.data.profile && { profile: data.data.profile })
           }
           localStorage.setItem('user_data', JSON.stringify(userData))
-          console.log('[PWA Login] user_data salvo com funcionario_id:', userData.funcionario_id || userData.user_metadata?.funcionario_id)
+          console.log('[PWA Login] user_data salvo com id:', userData.id, 'funcionario_id:', userData.funcionario_id || userData.user_metadata?.funcionario_id)
         }
         
         // Salvar dados adicionais se existirem

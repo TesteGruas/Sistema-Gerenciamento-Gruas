@@ -40,79 +40,25 @@ export default function ValidarObraPage() {
         const parsedUser = JSON.parse(userData)
         console.log('[ValidarObra] parsedUser completo:', parsedUser)
 
-        // Tentar obter funcionario_id - priorizar ID direto
+        // Usar a função getFuncionarioId que verifica se o funcionário existe na API
+        // Esta função prioriza user.id quando funcionario_id do metadata não existe na API
         let funcId: number | null = null
-
-        // 1. Tentar diretamente do user_data.funcionario_id
-        if (parsedUser.funcionario_id && !isNaN(Number(parsedUser.funcionario_id))) {
-          funcId = Number(parsedUser.funcionario_id)
-          console.log('[ValidarObra] ✅ funcionario_id encontrado no user_data:', funcId)
-        } 
-        // 2. Tentar do user_metadata.funcionario_id (Supabase Auth)
-        else if (parsedUser.user_metadata?.funcionario_id && !isNaN(Number(parsedUser.user_metadata.funcionario_id))) {
-          funcId = Number(parsedUser.user_metadata.funcionario_id)
-          console.log('[ValidarObra] ✅ funcionario_id encontrado no user_metadata:', funcId)
-        }
-        // 3. Tentar do profile.funcionario_id
-        else if (parsedUser.profile?.funcionario_id && !isNaN(Number(parsedUser.profile.funcionario_id))) {
-          funcId = Number(parsedUser.profile.funcionario_id)
-          console.log('[ValidarObra] ✅ funcionario_id encontrado no profile:', funcId)
-        }
-        // 4. Buscar via API usando email ou ID do usuário
-        else {
-          console.log('[ValidarObra] 🔍 Buscando funcionario_id via API...')
-          console.log('[ValidarObra] Dados para busca:', {
-            email: parsedUser.email,
-            userId: parsedUser.id,
-            nome: parsedUser.nome
-          })
+        
+        try {
+          console.log('[ValidarObra] 🔍 Buscando funcionario_id usando getFuncionarioId...')
+          funcId = await getFuncionarioId(parsedUser, token)
           
-          // Tentar buscar diretamente pela API usando o ID do usuário ou email
-          try {
-            let apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-            
-            // Remover /api do final se existir para evitar duplicação
-            apiUrl = apiUrl.replace(/\/api\/?$/, '')
-            
-            // Primeiro, tentar buscar pelo email
-            if (parsedUser.email) {
-              const searchUrl = `${apiUrl}/api/funcionarios?search=${encodeURIComponent(parsedUser.email)}&limit=20`
-              console.log('[ValidarObra] 🔍 Buscando em:', searchUrl)
-              
-              const response = await fetch(searchUrl, {
-                headers: {
-                  'Authorization': `Bearer ${token}`,
-                  'Content-Type': 'application/json'
-                }
-              })
-              
-              if (response.ok) {
-                const data = await response.json()
-                const funcionarios = data.data || []
-                console.log('[ValidarObra] 📦 Funcionários encontrados:', funcionarios.length)
-                
-                // Procurar funcionário que corresponde ao usuário
-                const funcionario = funcionarios.find((f: any) => 
-                  f.usuario?.id === parsedUser.id || 
-                  f.usuario?.email === parsedUser.email ||
-                  f.email === parsedUser.email
-                )
-                
-                if (funcionario && funcionario.id) {
-                  funcId = typeof funcionario.id === 'number' ? funcionario.id : parseInt(funcionario.id)
-                  console.log('[ValidarObra] ✅ funcionario_id encontrado via busca direta:', funcId)
-                }
-              }
-            }
-            
-            // Se ainda não encontrou, usar a função utilitária
-            if (!funcId) {
-              funcId = await getFuncionarioId(parsedUser, token)
-              console.log('[ValidarObra] funcionario_id obtido via função utilitária:', funcId)
-            }
-          } catch (apiError) {
-            console.error('[ValidarObra] Erro na busca direta, tentando função utilitária:', apiError)
-            funcId = await getFuncionarioId(parsedUser, token)
+          // Se não encontrou, tentar usar user.id como fallback
+          if (!funcId && parsedUser.id && !isNaN(Number(parsedUser.id)) && Number(parsedUser.id) > 0) {
+            funcId = Number(parsedUser.id)
+            console.log('[ValidarObra] ✅ Usando user.id como fallback:', funcId)
+          }
+        } catch (funcionarioError) {
+          console.error('[ValidarObra] Erro ao buscar funcionario_id:', funcionarioError)
+          // Se der erro, tentar usar user.id como fallback
+          if (parsedUser.id && !isNaN(Number(parsedUser.id)) && Number(parsedUser.id) > 0) {
+            funcId = Number(parsedUser.id)
+            console.log('[ValidarObra] ✅ Usando user.id como fallback após erro:', funcId)
           }
         }
 

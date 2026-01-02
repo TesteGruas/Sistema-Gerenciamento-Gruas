@@ -174,12 +174,24 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
       if (errorData.error) {
         (error as any).error = errorData.error;
       }
+      // Adicionar status ao erro para tratamento específico
+      (error as any).response = { status: response.status };
+      (error as any).status = response.status;
+      
+      // Para 404, não logar erro (é esperado quando funcionário não existe)
+      if (response.status !== 404) {
+        console.error('API request error:', error);
+      }
+      
       throw error;
     }
     
     return await response.json();
-  } catch (error) {
-    console.error('API request error:', error);
+  } catch (error: any) {
+    // Não logar erro 404 (é esperado quando funcionário não existe)
+    if (error?.status !== 404 && error?.response?.status !== 404) {
+      console.error('API request error:', error);
+    }
     throw error;
   }
 }

@@ -8,6 +8,7 @@ export interface UserData {
   email?: string
   nome?: string
   profile?: {
+    id?: number
     funcionario_id?: number
   }
   funcionario_id?: number
@@ -20,19 +21,108 @@ export interface UserData {
  * Buscar ID numérico do funcionário
  */
 export async function getFuncionarioId(user: UserData, token: string): Promise<number | null> {
-  // Primeiro, tentar usar IDs já disponíveis
-  let funcionarioId = user.profile?.funcionario_id || 
-                      user.funcionario_id || 
-                      user.user_metadata?.funcionario_id
+  console.log('[getFuncionarioId] Iniciando busca de ID:', {
+    userId: user.id,
+    profileId: user.profile?.id,
+    funcionarioIdFromProfile: user.profile?.funcionario_id,
+    funcionarioIdDirect: user.funcionario_id,
+    funcionarioIdFromMetadata: user.user_metadata?.funcionario_id
+  })
   
-  // Verificar se é um ID numérico válido
-  if (funcionarioId && !isNaN(Number(funcionarioId)) && Number(funcionarioId) > 0) {
-    return Number(funcionarioId)
+  // PRIORIDADE MÁXIMA: Usar funcionario_id da tabela usuarios (profile.funcionario_id ou user.funcionario_id)
+  // Este é o vínculo correto entre usuarios e funcionarios
+  const funcionarioIdFromTable = user.profile?.funcionario_id || user.funcionario_id
+  
+  if (funcionarioIdFromTable && !isNaN(Number(funcionarioIdFromTable)) && Number(funcionarioIdFromTable) > 0) {
+    // Verificar se o funcionário existe na API antes de retornar
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
+                     process.env.NEXT_PUBLIC_API_URL || 
+                     'http://localhost:3001'
+      const cleanApiUrl = apiUrl.replace(/\/api\/?$/, '')
+      
+      const checkResponse = await fetch(
+        `${cleanApiUrl}/api/funcionarios/${funcionarioIdFromTable}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      // Se o funcionário existe na API, usar o funcionario_id da tabela
+      if (checkResponse.ok) {
+        console.log(`[getFuncionarioId] ✅ PRIORIDADE MÁXIMA: Funcionário ${funcionarioIdFromTable} encontrado na API (da tabela usuarios), usando este ID`)
+        return Number(funcionarioIdFromTable)
+      }
+      
+      // Se não existe (404), tentar funcionario_id do metadata
+      if (checkResponse.status === 404) {
+        console.log(`[getFuncionarioId] ⚠️ Funcionário ${funcionarioIdFromTable} NÃO encontrado na API (404), tentando funcionario_id do metadata`)
+        // Continuar para tentar funcionario_id do metadata
+      }
+    } catch (checkError) {
+      // Em caso de erro na verificação, tentar funcionario_id do metadata
+      console.warn('[getFuncionarioId] Erro ao verificar funcionário da tabela, tentando funcionario_id do metadata:', checkError)
+    }
   }
   
-  // Se o user.id for numérico e parecer ser um ID de funcionário, usar como fallback
-  if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 100) {
-    return Number(user.id)
+  // PRIORIDADE 2: Usar funcionario_id do metadata se não encontrou na tabela
+  // O funcionario_id do metadata pode estar desatualizado, mas é melhor que nada
+  const funcionarioIdFromMetadata = user.user_metadata?.funcionario_id
+  
+  if (funcionarioIdFromMetadata && !isNaN(Number(funcionarioIdFromMetadata)) && Number(funcionarioIdFromMetadata) > 0) {
+    // Verificar se o funcionário existe na API antes de retornar
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
+                     process.env.NEXT_PUBLIC_API_URL || 
+                     'http://localhost:3001'
+      const cleanApiUrl = apiUrl.replace(/\/api\/?$/, '')
+      
+      const checkResponse = await fetch(
+        `${cleanApiUrl}/api/funcionarios/${funcionarioIdFromMetadata}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      )
+      
+      // Se o funcionário existe na API, usar o funcionario_id do metadata
+      if (checkResponse.ok) {
+        console.log(`[getFuncionarioId] ✅ PRIORIDADE 2: Funcionário ${funcionarioIdFromMetadata} encontrado na API (do metadata), usando este ID`)
+        return Number(funcionarioIdFromMetadata)
+      }
+      
+      // Se não existe (404), usar user.id como fallback
+      if (checkResponse.status === 404) {
+        console.log(`[getFuncionarioId] ⚠️ Funcionário ${funcionarioIdFromMetadata} NÃO encontrado na API (404), usando user.id como fallback`)
+        // Continuar para usar user.id como fallback
+      }
+    } catch (checkError) {
+      // Em caso de erro na verificação, tentar usar user.id como fallback
+      console.warn('[getFuncionarioId] Erro ao verificar funcionário do metadata, tentando user.id como fallback:', checkError)
+    }
+  }
+  
+  // PRIORIDADE 3: Se user.id for numérico e válido, usar como fallback
+  // O user.id (119) é o ID da tabela usuarios, mas pode ser usado como fallback
+  // se o funcionario_id não existir ou não for encontrado na API
+  if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+    const userId = Number(user.id)
+    console.log(`[getFuncionarioId] ✅ PRIORIDADE 3: Usando user.id (${userId}) como fallback`)
+    return userId
+  }
+  
+  // PRIORIDADE 2: Tentar usar funcionario_id do metadata se user.id não for válido
+  const funcionarioId = user.profile?.funcionario_id || 
+                        user.funcionario_id || 
+                        user.user_metadata?.funcionario_id
+  
+  if (funcionarioId && !isNaN(Number(funcionarioId)) && Number(funcionarioId) > 0) {
+    return Number(funcionarioId)
   }
   
   // Se não encontrar ID numérico, tentar buscar na API

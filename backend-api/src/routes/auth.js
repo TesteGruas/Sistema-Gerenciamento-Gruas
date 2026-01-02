@@ -466,11 +466,12 @@ router.post('/logout', authenticateToken, async (req, res) => {
 router.get('/me', authenticateToken, async (req, res) => {
   try {
     // Buscar perfil completo do usuário
-    const { data: profile, error } = await supabase
+    // Usar .maybeSingle() ao invés de .single() para evitar erro quando não há resultado
+    let { data: profile, error } = await supabaseAdmin
       .from('usuarios')
       .select('*')
       .eq('email', req.user.email)
-      .single()
+      .maybeSingle()
 
     if (error) {
       return res.status(404).json({
@@ -479,12 +480,53 @@ router.get('/me', authenticateToken, async (req, res) => {
       })
     }
 
+    // Se o usuário não existe na tabela, criar automaticamente a partir dos dados do Auth
+    if (!profile) {
+      console.log(`📝 Criando registro na tabela usuarios para: ${req.user.email}`)
+      
+      const userMetadata = req.user.user_metadata || {}
+      const nome = userMetadata.nome || req.user.email.split('@')[0] || 'Usuário'
+      
+      // Extrair informações adicionais do metadata se disponíveis
+      const cpf = userMetadata.cpf || null
+      const telefone = userMetadata.telefone || null
+      const cargo = userMetadata.cargo || null
+      
+      // Criar usuário na tabela usuarios usando supabaseAdmin
+      const { data: novoProfile, error: createError } = await supabaseAdmin
+        .from('usuarios')
+        .insert({
+          email: req.user.email,
+          nome: nome,
+          cpf: cpf,
+          telefone: telefone,
+          cargo: cargo,
+          status: 'Ativo',
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single()
+
+      if (createError) {
+        console.error('❌ Erro ao criar usuário na tabela:', createError)
+        return res.status(500).json({
+          error: 'Erro ao criar perfil',
+          message: createError.message
+        })
+      }
+
+      profile = novoProfile
+      console.log(`✅ Usuário criado com sucesso na tabela: ${req.user.email} (ID: ${profile.id})`)
+    }
+
     // Buscar perfil e permissões do usuário
     let perfilData = null
     let permissoes = []
 
     if (profile) {
       // Buscar o perfil do usuário
+      // Usar .maybeSingle() ao invés de .single() para evitar erro quando não há resultado
       const { data: perfilUsuario, error: perfilError } = await supabase
         .from('usuario_perfis')
         .select(`
@@ -499,7 +541,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         `)
         .eq('usuario_id', profile.id)
         .eq('status', 'Ativa')
-        .single()
+        .maybeSingle()
 
       if (perfilUsuario && !perfilError) {
         perfilData = {

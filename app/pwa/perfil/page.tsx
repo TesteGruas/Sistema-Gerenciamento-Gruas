@@ -50,7 +50,7 @@ import { useToast } from "@/hooks/use-toast"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { funcionariosApi } from "@/lib/api-funcionarios"
-import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { getFuncionarioId, getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
@@ -257,6 +257,13 @@ function PWAPerfilPageContent() {
         return
       }
 
+      // Aguardar até que user.id esteja disponível
+      if (!user.id) {
+        console.log('[PERFIL] Aguardando user.id estar disponível...')
+        setLoadingFuncionario(false)
+        return
+      }
+
       try {
         setLoadingFuncionario(true)
         const token = localStorage.getItem('access_token')
@@ -265,35 +272,115 @@ function PWAPerfilPageContent() {
           return
         }
 
+        // PRIORIDADE MÁXIMA: Usar funcionario_id da tabela usuarios (profile.funcionario_id ou user.funcionario_id)
+        // Este é o vínculo correto entre usuarios e funcionarios (129)
         let funcionarioId: number | null = null
         
-        try {
-          funcionarioId = await getFuncionarioIdWithFallback(
-            user,
-            token,
-            'ID do funcionário não encontrado'
-          )
-        } catch (idError) {
-          // Se não encontrar o ID, não é um erro crítico - apenas logar e continuar
-          console.warn('ID do funcionário não encontrado, usando dados do localStorage:', idError)
-          setLoadingFuncionario(false)
-          return
+        // Tentar obter funcionario_id da tabela usuarios primeiro
+        const funcionarioIdFromTable = user?.profile?.funcionario_id || user?.funcionario_id
+        
+        if (funcionarioIdFromTable && !isNaN(Number(funcionarioIdFromTable)) && Number(funcionarioIdFromTable) > 0) {
+          // Verificar se o funcionário existe na API antes de usar
+          try {
+            const response = await funcionariosApi.obterFuncionario(Number(funcionarioIdFromTable))
+            if (response.success && response.data) {
+              funcionarioId = Number(funcionarioIdFromTable)
+              console.log(`[PERFIL] ✅ PRIORIDADE MÁXIMA: Funcionário ${funcionarioId} encontrado na API (da tabela usuarios), usando este ID`)
+            } else {
+              console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromTable} não encontrado na API, tentando funcionario_id do metadata`)
+              // Continuar para tentar funcionario_id do metadata
+            }
+          } catch (apiError: any) {
+            if (apiError?.response?.status === 404 || apiError?.status === 404) {
+              console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromTable} não encontrado na API (404), tentando funcionario_id do metadata`)
+              // Continuar para tentar funcionario_id do metadata
+            } else {
+              console.warn('[PERFIL] Erro ao verificar funcionário da tabela:', apiError)
+              // Continuar para tentar funcionario_id do metadata
+            }
+          }
+        }
+        
+        // PRIORIDADE 2: Se funcionario_id da tabela não foi encontrado, tentar funcionario_id do metadata
+        if (!funcionarioId) {
+          const funcionarioIdFromMetadata = user?.user_metadata?.funcionario_id
+          
+          if (funcionarioIdFromMetadata && !isNaN(Number(funcionarioIdFromMetadata)) && Number(funcionarioIdFromMetadata) > 0) {
+            try {
+              const response = await funcionariosApi.obterFuncionario(Number(funcionarioIdFromMetadata))
+              if (response.success && response.data) {
+                funcionarioId = Number(funcionarioIdFromMetadata)
+                console.log(`[PERFIL] ✅ PRIORIDADE 2: Funcionário ${funcionarioId} encontrado na API (do metadata), usando este ID`)
+              } else {
+                console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromMetadata} não encontrado na API, usando user.id como fallback`)
+                // Continuar para usar user.id como fallback
+              }
+            } catch (apiError: any) {
+              if (apiError?.response?.status === 404 || apiError?.status === 404) {
+                console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromMetadata} não encontrado na API (404), usando user.id como fallback`)
+                // Continuar para usar user.id como fallback
+              } else {
+                console.warn('[PERFIL] Erro ao verificar funcionário do metadata:', apiError)
+                // Continuar para usar user.id como fallback
+              }
+            }
+          }
+        }
+        
+        // PRIORIDADE 3: Se funcionario_id não foi encontrado, usar user.id como fallback
+        if (!funcionarioId && user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+          funcionarioId = Number(user.id)
+          console.log(`[PERFIL] ✅ PRIORIDADE 3: Usando user.id (${funcionarioId}) como fallback`)
+        }
+        
+        // Se ainda não encontrou, tentar buscar via getFuncionarioId
+        if (!funcionarioId) {
+          try {
+            console.log('[PERFIL] Tentando buscar via getFuncionarioId...')
+            funcionarioId = await getFuncionarioId(user, token)
+            
+            if (!funcionarioId) {
+              console.warn('[PERFIL] ID do funcionário não encontrado, usando dados do localStorage')
+              setLoadingFuncionario(false)
+              return
+            }
+          } catch (idError) {
+            console.warn('[PERFIL] Erro ao buscar funcionario_id:', idError)
+            setLoadingFuncionario(false)
+            return
+          }
         }
 
         if (funcionarioId) {
+          console.log(`[PERFIL] Definindo funcionarioId: ${funcionarioId} (user.id: ${user?.id}, user_metadata.funcionario_id: ${user?.user_metadata?.funcionario_id})`)
           setFuncionarioId(funcionarioId)
+          
+          // Verificar se o funcionarioId é diferente do user.id e logar aviso
+          if (funcionarioId !== Number(user.id)) {
+            console.warn(`[PERFIL] ⚠️ ATENÇÃO: funcionarioId (${funcionarioId}) é diferente de user.id (${user.id})`)
+          }
+          
           try {
+            console.log(`[PERFIL] Chamando API: /api/funcionarios/${funcionarioId}`)
             const response = await funcionariosApi.obterFuncionario(funcionarioId)
             if (response.success && response.data) {
               setFuncionarioCompleto(response.data)
               // Atualizar userData com dados da API
               setUserData({
                 telefone: response.data.telefone || '',
-                email: response.data.email || user.email || ''
+                email: response.data.email || user?.email || ''
               })
             }
-          } catch (apiError) {
-            console.warn('Erro ao buscar dados do funcionário da API, usando dados do localStorage:', apiError)
+          } catch (apiError: any) {
+            // Se for 404, o funcionário não existe - não é erro crítico
+            // Silenciar o erro 404 para não poluir o console
+            if (apiError?.response?.status === 404 || apiError?.status === 404 || apiError?.message?.includes('404') || apiError?.message?.includes('não existe')) {
+              // Funcionário não encontrado - usar apenas dados do localStorage
+              // Não logar erro para não poluir o console
+              console.log(`[PERFIL] Funcionário ${funcionarioId} não encontrado na API (404), usando dados do localStorage`)
+            } else {
+              console.warn('Erro ao buscar dados do funcionário da API, usando dados do localStorage:', apiError)
+            }
             // Não é um erro crítico - continuar com dados do localStorage
           }
         }
@@ -434,15 +521,32 @@ function PWAPerfilPageContent() {
   }
 
   const carregarBeneficios = async () => {
-    if (!funcionarioId) return
+    if (!funcionarioId) {
+      console.log('[PERFIL] carregarBeneficios: funcionarioId não definido, não carregando')
+      setLoadingBeneficios(false)
+      setBeneficios([])
+      return
+    }
+    console.log(`[PERFIL] carregarBeneficios: Carregando benefícios para funcionarioId ${funcionarioId}`)
     setLoadingBeneficios(true)
     try {
       const response = await getFuncionarioBeneficios({ funcionario_id: funcionarioId })
+      console.log(`[PERFIL] carregarBeneficios: Resposta recebida:`, response)
       if (response.success && response.data) {
         setBeneficios(response.data)
+        console.log(`[PERFIL] carregarBeneficios: ${response.data.length} benefícios carregados`)
+      } else {
+        console.log('[PERFIL] carregarBeneficios: Nenhum benefício retornado')
+        setBeneficios([])
       }
-    } catch (error) {
-      console.error('Erro ao carregar benefícios:', error)
+    } catch (error: any) {
+      // Se for 404, não logar erro (funcionário não existe)
+      if (error?.status !== 404 && error?.response?.status !== 404) {
+        console.error('[PERFIL] carregarBeneficios: Erro ao carregar benefícios:', error)
+      } else {
+        console.log('[PERFIL] carregarBeneficios: Funcionário não encontrado (404)')
+      }
+      setBeneficios([])
     } finally {
       setLoadingBeneficios(false)
     }
@@ -612,9 +716,46 @@ function PWAPerfilPageContent() {
     }
   }
 
+  // Garantir que funcionarioId use o funcionario_id da tabela usuarios quando disponível
+  // NÃO sobrescrever se já estiver definido corretamente
+  useEffect(() => {
+    // Priorizar funcionario_id da tabela usuarios (profile.funcionario_id ou user.funcionario_id)
+    const funcionarioIdFromTable = user?.profile?.funcionario_id || user?.funcionario_id
+    
+    if (funcionarioIdFromTable && !isNaN(Number(funcionarioIdFromTable)) && Number(funcionarioIdFromTable) > 0) {
+      const tableFuncionarioId = Number(funcionarioIdFromTable)
+      // Se funcionarioId não está definido ou é diferente do da tabela, atualizar
+      if (!funcionarioId || funcionarioId !== tableFuncionarioId) {
+        console.log(`[PERFIL] Definindo funcionarioId como funcionario_id da tabela usuarios (${tableFuncionarioId})`)
+        setFuncionarioId(tableFuncionarioId)
+      }
+    } else if (!funcionarioId && user?.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+      // Apenas usar user.id como fallback se não houver funcionario_id na tabela
+      const userId = Number(user.id)
+      console.log(`[PERFIL] Definindo funcionarioId como user.id (${userId}) - fallback`)
+      setFuncionarioId(userId)
+    }
+  }, [user?.profile?.funcionario_id, user?.funcionario_id, user?.id, funcionarioId])
+
   // Carregar dados quando a tab for ativada
   useEffect(() => {
-    if (!funcionarioId) return
+    // Se não tiver funcionarioId, apenas limpar estados e não carregar nada
+    if (!funcionarioId) {
+      if (activeTab === 'salarios') {
+        setSalarios([])
+        setLoadingSalarios(false)
+      } else if (activeTab === 'beneficios') {
+        setBeneficios([])
+        setLoadingBeneficios(false)
+      } else if (activeTab === 'certificados') {
+        setCertificados([])
+        setLoadingCertificados(false)
+      } else if (activeTab === 'documentos-admissionais') {
+        setDocumentosAdmissionais([])
+        setLoadingDocumentosAdmissionais(false)
+      }
+      return
+    }
     
     if (activeTab === 'salarios') {
       carregarSalarios()
@@ -774,9 +915,9 @@ function PWAPerfilPageContent() {
   }
 
   return (
-    <div className="space-y-4 min-h-screen" style={{ backgroundColor: '#75180a' }}>
+    <div className="space-y-4 pb-24">
       {/* Header */}
-      <div>
+      <div className="bg-[#75180a] rounded-xl p-4 -mx-4 -mt-4 mb-4">
         <h1 className="text-2xl font-bold text-white">Meu Perfil</h1>
         <p className="text-gray-200">Gerencie suas informações pessoais</p>
       </div>
@@ -788,7 +929,7 @@ function PWAPerfilPageContent() {
             {/* Foto de Perfil */}
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold">
-                {user.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
+                {user?.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
               </div>
               <button 
                 className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700"
@@ -801,10 +942,10 @@ function PWAPerfilPageContent() {
             {/* Informações */}
             <div className="flex-1 text-center sm:text-left">
               <h2 className="text-2xl font-bold text-gray-900">
-                {funcionarioCompleto?.nome || user.nome || 'Usuário'}
+                {funcionarioCompleto?.nome || user?.nome || 'Usuário'}
               </h2>
               <p className="text-gray-600 mb-2">
-                {funcionarioCompleto?.cargo || user.cargo || 'Sem cargo'}
+                {funcionarioCompleto?.cargo || user?.cargo || 'Sem cargo'}
               </p>
               <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
                 <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
@@ -812,7 +953,7 @@ function PWAPerfilPageContent() {
                   Ativo
                 </Badge>
                 <Badge variant="outline">
-                  ID: {user.id}
+                  ID: {user?.id || 'N/A'}
                 </Badge>
               </div>
             </div>
@@ -857,7 +998,7 @@ function PWAPerfilPageContent() {
                   />
                 ) : (
                   <p className="mt-1 text-gray-900">
-                    {funcionarioCompleto?.email || userData.email || user.email || 'Não informado'}
+                    {funcionarioCompleto?.email || userData.email || user?.email || 'Não informado'}
                   </p>
                 )}
               </div>
@@ -888,7 +1029,7 @@ function PWAPerfilPageContent() {
                   Cargo
                 </Label>
                 <p className="mt-1 text-gray-900">
-                  {funcionarioCompleto?.cargo || user.cargo || 'Não informado'}
+                  {funcionarioCompleto?.cargo || user?.cargo || 'Não informado'}
                 </p>
               </div>
 
@@ -1396,10 +1537,17 @@ function PWAPerfilPageContent() {
                   <span className="ml-2 text-gray-600">Carregando benefícios...</span>
                 </div>
               ) : beneficios.length === 0 ? (
-                <div className="text-center py-8">
-                  <Gift className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-600">Nenhum benefício encontrado</p>
-                </div>
+                <Card className="w-full">
+                  <CardContent className="py-12">
+                    <div className="text-center text-gray-500">
+                      <Gift className="w-16 h-16 mx-auto mb-4 text-gray-400" />
+                      <p className="text-xl font-semibold mb-2 text-gray-700">Nenhum benefício cadastrado</p>
+                      <p className="text-sm text-gray-500 max-w-md mx-auto">
+                        Você ainda não possui benefícios cadastrados. Seus benefícios aparecerão aqui quando estiverem disponíveis.
+                      </p>
+                    </div>
+                  </CardContent>
+                </Card>
               ) : (
                 <div className="space-y-3">
                   {beneficios.map((beneficio) => (

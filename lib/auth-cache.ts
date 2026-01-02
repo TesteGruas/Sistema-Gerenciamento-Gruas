@@ -91,8 +91,20 @@ class AuthCache {
       const data = await response.json();
       console.log('🔐 Dados carregados do backend:', data);
 
+      // PRIORIDADE: Usar profile.id (ID numérico) ao invés de user.id (UUID)
+      // O profile.id é o ID correto da tabela usuarios (119)
+      // O user.id é o UUID do Supabase Auth e não deve ser usado como funcionario_id
+      const profileId = data.data?.profile?.id || null
+      const userData = data.data?.user || data.data?.profile
+      
+      // Atualizar user.id com profile.id se profile.id existir
+      if (profileId && userData) {
+        userData.id = profileId
+        console.log(`🔐 Atualizando user.id de UUID para profile.id (${profileId})`)
+      }
+
       const authData: AuthCacheData = {
-        user: data.data?.user || data.data?.profile,
+        user: userData,
         perfil: data.data?.perfil || null,
         permissoes: data.data?.permissoes || [],
         timestamp: Date.now(),
@@ -103,6 +115,24 @@ class AuthCache {
       localStorage.setItem('user_profile', JSON.stringify(authData.user));
       localStorage.setItem('user_perfil', JSON.stringify(authData.perfil));
       localStorage.setItem('user_permissoes', JSON.stringify(authData.permissoes));
+      
+      // Atualizar user_data principal com o ID correto
+      if (userData) {
+        const currentUserData = localStorage.getItem('user_data')
+        if (currentUserData) {
+          try {
+            const parsedUserData = JSON.parse(currentUserData)
+            // Atualizar o ID com profile.id se disponível
+            if (profileId) {
+              parsedUserData.id = profileId
+              localStorage.setItem('user_data', JSON.stringify(parsedUserData))
+              console.log(`🔐 user_data atualizado com profile.id (${profileId})`)
+            }
+          } catch (e) {
+            console.warn('Erro ao atualizar user_data:', e)
+          }
+        }
+      }
       
       // Converter permissões para formato string e salvar
       const permissionStrings = authData.permissoes.map((p: any) => p.nome);

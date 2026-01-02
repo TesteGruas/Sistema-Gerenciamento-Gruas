@@ -848,18 +848,19 @@ router.get('/:id', async (req, res) => {
         )
       `)
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Funcionário não encontrado',
-          message: 'O funcionário com o ID especificado não existe'
-        })
-      }
       return res.status(500).json({
         error: 'Erro ao buscar funcionário',
         message: error.message
+      })
+    }
+
+    if (!data) {
+      return res.status(404).json({
+        error: 'Funcionário não encontrado',
+        message: 'O funcionário com o ID especificado não existe'
       })
     }
 

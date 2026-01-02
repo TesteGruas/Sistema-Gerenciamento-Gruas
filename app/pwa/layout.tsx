@@ -59,7 +59,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const [isClient, setIsClient] = useState(false)
   const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0)
   const [previousPathname, setPreviousPathname] = useState<string | null>(null)
-  const [temObraAtiva] = useState<boolean>(true) // Sempre true - validação removida
+  const [temObraAtiva, setTemObraAtiva] = useState<boolean | null>(null)
+  const [loadingObra, setLoadingObra] = useState(true)
   
   // Hook de sessão persistente
   const {
@@ -94,6 +95,50 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       setIsClient(true)
     }
   }, [])
+
+  // Verificar se funcionário tem obra ativa
+  useEffect(() => {
+    const verificarObraAtiva = async () => {
+      if (typeof window === 'undefined') return
+      
+      try {
+        // Verificar se é funcionário (não cliente)
+        const userDataStr = localStorage.getItem('user_data')
+        if (!userDataStr) {
+          setLoadingObra(false)
+          return
+        }
+
+        const userData = JSON.parse(userDataStr)
+        const funcionarioId = userData?.user_metadata?.funcionario_id || 
+                              userData?.profile?.funcionario_id || 
+                              userData?.funcionario_id
+
+        // Se não é funcionário (é cliente), não precisa verificar obra
+        if (!funcionarioId) {
+          setTemObraAtiva(true) // Clientes sempre podem ver
+          setLoadingObra(false)
+          return
+        }
+
+        // Buscar alocações ativas do funcionário
+        const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
+        
+        if (alocacoes.success && alocacoes.data && alocacoes.data.length > 0) {
+          setTemObraAtiva(true)
+        } else {
+          setTemObraAtiva(false)
+        }
+      } catch (error) {
+        console.error('Erro ao verificar obra ativa:', error)
+        setTemObraAtiva(false) // Em caso de erro, considerar sem obra
+      } finally {
+        setLoadingObra(false)
+      }
+    }
+
+    verificarObraAtiva()
+  }, [user])
   
   // Detectar mudanças de rota e ocultar loading quando a página carregar
   useEffect(() => {
@@ -535,22 +580,26 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     // Perfil - SEMPRE presente
     perfilItem
   ] : [
-    // Ponto - sempre disponível (não supervisor)
-    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-      name: 'Ponto',
-      href: '/pwa/ponto',
-      icon: Clock,
-      label: 'Ponto',
-      description: 'Registrar ponto'
-    },
-    // Espelho (não supervisor)
-    allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
-      name: 'Espelho',
-      href: '/pwa/espelho-ponto',
-      icon: FileText,
-      label: 'Espelho',
-      description: 'Ver espelho de ponto'
-    },
+    // Ponto - apenas se tiver obra ativa (não supervisor)
+    ...(temObraAtiva === true ? [
+      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+        name: 'Ponto',
+        href: '/pwa/ponto',
+        icon: Clock,
+        label: 'Ponto',
+        description: 'Registrar ponto'
+      }
+    ] : []),
+    // Espelho - apenas se tiver obra ativa (não supervisor)
+    ...(temObraAtiva === true ? [
+      allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
+        name: 'Espelho',
+        href: '/pwa/espelho-ponto',
+        icon: FileText,
+        label: 'Espelho',
+        description: 'Ver espelho de ponto'
+      }
+    ] : []),
     // Home (no meio)
     {
       name: 'Home',
@@ -890,7 +939,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
             {/* Bottom Navigation */}
             <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
-              <div className={`grid h-16 relative ${filteredNavigationItems.length === 4 ? 'grid-cols-4' : 'grid-cols-5'} place-items-center`}>
+              <div className={`flex h-16 relative items-center ${filteredNavigationItems.length <= 3 ? 'justify-center gap-16' : filteredNavigationItems.length === 4 ? 'justify-around gap-4' : 'justify-around gap-2'}`}>
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems
                     .filter(item => item && item.icon) // Filtrar itens sem ícone
@@ -904,7 +953,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                         <button
                           key={item.name || item.href || index}
                           onClick={() => handleNavigation(item.href)}
-                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible w-full h-full ${
+                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible px-6 py-2 ${
                             isActive 
                               ? "text-[#871b0b]" 
                               : "text-gray-500 active:bg-gray-100"
@@ -927,7 +976,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                       )
                     })
                 ) : (
-                  <div className="col-span-5 flex items-center justify-center text-gray-500 text-sm">
+                  <div className="flex items-center justify-center text-gray-500 text-sm">
                     Carregando navegação...
                   </div>
                 )}
