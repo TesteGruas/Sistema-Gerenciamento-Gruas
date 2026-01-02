@@ -1118,6 +1118,7 @@ export default function AlugueisIntegradoPage() {
                         <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Funcionário</th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Valor Mensal</th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Vencimento</th>
+                        <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Contrato</th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         <th className="px-6 py-4 text-left text-xs font-medium text-gray-500 uppercase">Ações</th>
                       </tr>
@@ -1150,6 +1151,43 @@ export default function AlugueisIntegradoPage() {
                             <p className="text-xs text-gray-500">
                               {aluguel.contrato.dataInicio ? new Date(aluguel.contrato.dataInicio).toLocaleDateString('pt-BR') : '-'}
                             </p>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="space-y-1">
+                              {aluguel.data_inicio_contrato && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Início:</p>
+                                  <p className="text-sm font-medium">
+                                    {new Date(aluguel.data_inicio_contrato).toLocaleDateString('pt-BR')}
+                                  </p>
+                                </div>
+                              )}
+                              {aluguel.data_aniversario_contrato && (
+                                <div>
+                                  <p className="text-xs text-gray-500">Aniversário (1 ano):</p>
+                                  <p className="text-sm font-medium">
+                                    {new Date(aluguel.data_aniversario_contrato).toLocaleDateString('pt-BR')}
+                                  </p>
+                                </div>
+                              )}
+                              {aluguel.dias_ate_aniversario !== null && aluguel.dias_ate_aniversario !== undefined && (
+                                <div className="flex items-center gap-2">
+                                  <p className="text-xs text-gray-500">Dias restantes:</p>
+                                  <p className={`text-sm font-semibold ${
+                                    aluguel.dias_ate_aniversario <= 30 && aluguel.dias_ate_aniversario >= 0 
+                                      ? 'text-orange-600' 
+                                      : 'text-gray-700'
+                                  }`}>
+                                    {aluguel.dias_ate_aniversario} dias
+                                  </p>
+                                  {aluguel.proximo_aniversario && (
+                                    <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                                      Próximo
+                                    </Badge>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <Badge className={getStatusColor(aluguel.status)}>

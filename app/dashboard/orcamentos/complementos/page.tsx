@@ -61,7 +61,7 @@ export default function OrcamentoComplementosPage() {
     tem_grua_nossa: false,
     obra_id: '',
     obra_nome: '',
-    tipo_transacao: 'locacao' as 'locacao' | 'venda',
+    tipo_transacao: 'venda' as 'locacao' | 'venda',
     valor_frete: 0,
     observacoes: ''
   })
@@ -286,10 +286,12 @@ export default function OrcamentoComplementosPage() {
           return
         }
 
-        if (formData.tem_grua_nossa && !obraSelecionada) {
+        // Para orçamentos de venda, não é obrigatório ter grua/obra
+        // Apenas validar obra se for locação E tiver grua nossa
+        if (formData.tem_grua_nossa && formData.tipo_transacao === 'locacao' && !obraSelecionada) {
           toast({
             title: "Erro",
-            description: "Selecione uma obra quando tiver grua nossa",
+            description: "Selecione uma obra quando for locação com grua nossa",
             variant: "destructive"
           })
           setIsSaving(false)
@@ -484,7 +486,7 @@ export default function OrcamentoComplementosPage() {
               </div>
 
               <div>
-                <Label>Tem Grua Nossa?</Label>
+                <Label>Tem Grua Nossa? {formData.tipo_transacao === 'venda' ? '(Opcional)' : ''}</Label>
                 <Select
                   value={formData.tem_grua_nossa ? 'sim' : 'nao'}
                   onValueChange={(value) => {
@@ -508,34 +510,42 @@ export default function OrcamentoComplementosPage() {
                     <SelectItem value="nao">Não</SelectItem>
                   </SelectContent>
                 </Select>
+                {formData.tipo_transacao === 'venda' && (
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Para orçamentos de venda, não é necessário vincular a uma grua
+                  </p>
+                )}
+              </div>
+
+              <div>
+                <Label>Tipo de Transação *</Label>
+                <Select
+                  value={formData.tipo_transacao}
+                  onValueChange={(value) => setFormData({ ...formData, tipo_transacao: value as 'locacao' | 'venda' })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="locacao">Locação</SelectItem>
+                    <SelectItem value="venda">Venda</SelectItem>
+                  </SelectContent>
+                </Select>
               </div>
 
               {formData.tem_grua_nossa && (
                 <div>
-                  <Label>Selecione a Obra *</Label>
+                  <Label>Selecione a Obra {formData.tipo_transacao === 'locacao' ? '*' : '(Opcional)'}</Label>
                   <ObraSearch
                     onObraSelect={handleObraSelect}
                     selectedObra={obraSelecionada}
                     placeholder="Buscar obra..."
                   />
-                </div>
-              )}
-
-              {!formData.tem_grua_nossa && (
-                <div>
-                  <Label>Tipo de Transação *</Label>
-                  <Select
-                    value={formData.tipo_transacao}
-                    onValueChange={(value) => setFormData({ ...formData, tipo_transacao: value as 'locacao' | 'venda' })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="locacao">Locação</SelectItem>
-                      <SelectItem value="venda">Venda</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {formData.tipo_transacao === 'venda' && (
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Para orçamentos de venda, a obra é opcional
+                    </p>
+                  )}
                 </div>
               )}
             </CardContent>
@@ -812,6 +822,7 @@ export default function OrcamentoComplementosPage() {
     </div>
   )
 }
+
 
 
 

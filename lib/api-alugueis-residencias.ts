@@ -146,7 +146,12 @@ function transformarAluguelBackendParaFrontend(aluguelBackend: any): AluguelResi
     status: aluguelBackend.status,
     observacoes: aluguelBackend.observacoes || undefined,
     createdAt: aluguelBackend.created_at,
-    updatedAt: aluguelBackend.updated_at
+    updatedAt: aluguelBackend.updated_at,
+    // Campos de aniversário do contrato
+    data_inicio_contrato: aluguelBackend.data_inicio_contrato || aluguelBackend.data_inicio,
+    data_aniversario_contrato: aluguelBackend.data_aniversario_contrato || undefined,
+    dias_ate_aniversario: aluguelBackend.dias_ate_aniversario !== undefined ? aluguelBackend.dias_ate_aniversario : null,
+    proximo_aniversario: aluguelBackend.proximo_aniversario || false
   }
 }
 

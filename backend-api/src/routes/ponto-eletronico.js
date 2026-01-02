@@ -6637,6 +6637,70 @@ router.get('/relatorios/exportar', async (req, res) => {
         currentY += rowHeight;
       });
 
+      // Adicionar seção de resumo e informações para fechamento de folha
+      if (currentY + 150 > doc.page.height - 60) {
+        currentY = adicionarNovaPaginaComLogos();
+      } else {
+        currentY += 20;
+      }
+
+      // Título da seção de resumo
+      doc.fontSize(12).font('Helvetica-Bold').fillColor('#000000');
+      doc.text('INFORMAÇÕES PARA FECHAMENTO DE FOLHA', margemEsq, currentY);
+      currentY += 20;
+
+      // Explicação sobre tipos de dia
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e3a8a');
+      doc.text('TIPOS DE DIA E CÁLCULOS:', margemEsq, currentY);
+      currentY += 15;
+
+      doc.fontSize(8).font('Helvetica').fillColor('#000000');
+      const informacoes = [
+        '• Dia Normal (Seg-Qui): Jornada padrão 07:00-17:00 (10h). Horas após 17:00 = horas extras sem acréscimo.',
+        '• Dia Normal (Sexta): Jornada padrão 07:00-16:00 (9h). Horas após 16:00 = horas extras sem acréscimo.',
+        '• Sábado: Toda hora trabalhada é extra com acréscimo de 60% (conforme legislação trabalhista).',
+        '• Domingo: Toda hora trabalhada é extra com acréscimo de 100% (conforme legislação trabalhista).',
+        '• Feriado Nacional: Toda hora trabalhada é extra com acréscimo de 100% (conforme legislação trabalhista).',
+        '• Feriado Estadual: Toda hora trabalhada é extra com acréscimo de 100% (conforme legislação trabalhista).',
+        '• Feriado Local: Toda hora trabalhada é extra com acréscimo de 100% (conforme legislação trabalhista).',
+        '• Dia Facultativo: NÃO é feriado oficial. Calculado como dia normal. Não possui acréscimo adicional.'
+      ];
+
+      informacoes.forEach(info => {
+        if (currentY + 15 > doc.page.height - 60) {
+          currentY = adicionarNovaPaginaComLogos();
+        }
+        doc.text(info, margemEsq + 10, currentY, { width: larguraUtil - 20 });
+        currentY += 12;
+      });
+
+      currentY += 10;
+
+      // Resumo de horas extras por tipo
+      doc.fontSize(9).font('Helvetica-Bold').fillColor('#1e3a8a');
+      doc.text('RESUMO DE HORAS EXTRAS POR TIPO DE DIA:', margemEsq, currentY);
+      currentY += 15;
+
+      // Calcular resumo por tipo de dia
+      const resumoPorTipo = {};
+      registros.forEach(r => {
+        const tipo = formatarTipoDiaPDF(r.tipo_dia, r.is_facultativo);
+        if (!resumoPorTipo[tipo]) {
+          resumoPorTipo[tipo] = { horas: 0, registros: 0 };
+        }
+        resumoPorTipo[tipo].horas += (r.horas_extras || 0);
+        resumoPorTipo[tipo].registros += 1;
+      });
+
+      doc.fontSize(8).font('Helvetica').fillColor('#000000');
+      Object.entries(resumoPorTipo).forEach(([tipo, dados]) => {
+        if (currentY + 15 > doc.page.height - 60) {
+          currentY = adicionarNovaPaginaComLogos();
+        }
+        doc.text(`${tipo}: ${dados.horas.toFixed(2)}h extras em ${dados.registros} registro(s)`, margemEsq + 10, currentY);
+        currentY += 12;
+      });
+
       // ===== LOGOS EM TODAS AS PÁGINAS =====
       // Adicionar logos no cabeçalho de todas as páginas
       adicionarLogosEmTodasAsPaginas(doc);

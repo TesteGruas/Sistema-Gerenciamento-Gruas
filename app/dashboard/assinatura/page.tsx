@@ -125,6 +125,62 @@ export default function AssinaturaPage() {
     }
   }
 
+  // Função para exportar resumo de assinaturas em CSV
+  const exportarResumoAssinaturasCSV = () => {
+    if (!resumoAssinaturas || !resumoAssinaturas.assinaturas || resumoAssinaturas.assinaturas.length === 0) {
+      toast({
+        title: "Nenhum dado",
+        description: "Não há assinaturas para exportar",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // Cabeçalho CSV
+      const headers = ['Data', 'Documento', 'Tipo', 'Obra']
+      const rows = resumoAssinaturas.assinaturas.map((assinatura: any) => [
+        new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR'),
+        assinatura.documento?.nome || 'Documento não encontrado',
+        assinatura.documento?.tipo || '-',
+        assinatura.documento?.obra?.nome || '-'
+      ])
+
+      // Criar conteúdo CSV
+      const csvContent = [
+        `Resumo de Assinaturas - ${mesResumoAssinaturas}/${anoResumoAssinaturas}`,
+        `Total de Assinaturas: ${resumoAssinaturas.total_assinaturas}`,
+        `Período: ${new Date(resumoAssinaturas.periodo.data_inicio).toLocaleDateString('pt-BR')} a ${new Date(resumoAssinaturas.periodo.data_fim).toLocaleDateString('pt-BR')}`,
+        '',
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ].join('\n')
+
+      // Criar blob e download
+      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `resumo_assinaturas_${mesResumoAssinaturas}_${anoResumoAssinaturas}.csv`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Exportado com sucesso",
+        description: "O arquivo CSV foi baixado",
+      })
+    } catch (error) {
+      console.error('Erro ao exportar CSV:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível exportar o arquivo CSV",
+        variant: "destructive"
+      })
+    }
+  }
+
   // Função para verificar se o usuário pode ver o documento
   const canViewDocument = (doc: any) => {
     if (!currentUser) {
@@ -499,10 +555,18 @@ export default function AssinaturaPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <Button onClick={carregarResumoAssinaturas} variant="outline" size="sm" disabled={loadingResumoAssinaturas}>
-                <Calendar className="w-4 h-4 mr-2" />
-                {loadingResumoAssinaturas ? "Carregando..." : "Carregar Resumo"}
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={carregarResumoAssinaturas} variant="outline" size="sm" disabled={loadingResumoAssinaturas}>
+                  <Calendar className="w-4 h-4 mr-2" />
+                  {loadingResumoAssinaturas ? "Carregando..." : "Carregar Resumo"}
+                </Button>
+                {resumoAssinaturas && resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 && (
+                  <Button onClick={exportarResumoAssinaturasCSV} variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-2" />
+                    Exportar CSV
+                  </Button>
+                )}
+              </div>
             </div>
           </CardHeader>
           <CardContent>
