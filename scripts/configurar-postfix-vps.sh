@@ -199,3 +199,4 @@ echo -e "${YELLOW}⚠️  Lembre-se: Esta configuração pode resultar em emails
 echo -e "${YELLOW}   Considere usar serviços de email transacional para produção.${NC}"
 echo ""
 
+

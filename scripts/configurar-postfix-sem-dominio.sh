@@ -152,3 +152,4 @@ echo -e "${YELLOW}💡 RECOMENDAÇÃO: Use Mailtrap para desenvolvimento!${NC}"
 echo -e "${YELLOW}   É gratuito e muito mais confiável.${NC}"
 echo ""
 
+

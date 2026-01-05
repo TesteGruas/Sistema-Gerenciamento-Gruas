@@ -1,7 +1,22 @@
 import express from 'express'
 import Joi from 'joi'
+import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { sendWelcomeEmail } from '../services/email.service.js'
+
+// Função auxiliar para gerar senha segura aleatória
+function generateSecurePassword(length = 12) {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
+  let password = ''
+  const randomBytes = crypto.randomBytes(length)
+  
+  for (let i = 0; i < length; i++) {
+    password += chars[randomBytes[i] % chars.length]
+  }
+  
+  return password
+}
 
 const router = express.Router()
 
@@ -1162,6 +1177,111 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('🔍 DEBUG - Tipo de sinaleiros:', typeof value.sinaleiros)
     console.log('🔍 DEBUG - Sinaleiros é array?', Array.isArray(value.sinaleiros))
     console.log('🔍 DEBUG - Quantidade de sinaleiros:', value.sinaleiros?.length || 0)
+
+    // Vincular automaticamente o cliente como supervisor da obra
+    try {
+      console.log('👤 Processando vinculação automática do cliente como supervisor...')
+      
+      // Buscar cliente completo com contato_usuario_id
+      const { data: clienteCompleto, error: clienteCompletoError } = await supabaseAdmin
+        .from('clientes')
+        .select('id, nome, contato_usuario_id')
+        .eq('id', value.cliente_id)
+        .single()
+
+      if (!clienteCompletoError && clienteCompleto && clienteCompleto.contato_usuario_id) {
+        console.log('✅ Cliente encontrado com contato_usuario_id:', clienteCompleto.contato_usuario_id)
+        
+        // Buscar usuário vinculado ao cliente
+        const { data: usuario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, nome, email, funcionario_id')
+          .eq('id', clienteCompleto.contato_usuario_id)
+          .single()
+
+        if (!usuarioError && usuario) {
+          console.log('✅ Usuário encontrado:', usuario.email)
+          
+          let funcionarioId = usuario.funcionario_id
+
+          // Se o usuário não tem funcionário vinculado, criar um funcionário para ele
+          if (!funcionarioId) {
+            console.log('🔧 Usuário não tem funcionário vinculado. Criando funcionário...')
+            
+            // Criar funcionário vinculado ao usuário do cliente
+            const { data: novoFuncionario, error: funcionarioError } = await supabaseAdmin
+              .from('funcionarios')
+              .insert({
+                nome: usuario.nome || clienteCompleto.nome,
+                email: usuario.email,
+                cpf: null, // Cliente pode não ter CPF
+                status: 'Ativo',
+                cargo: 'Supervisor',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single()
+
+            if (funcionarioError) {
+              console.error('❌ Erro ao criar funcionário para cliente:', funcionarioError)
+            } else {
+              console.log('✅ Funcionário criado para cliente:', novoFuncionario.id)
+              funcionarioId = novoFuncionario.id
+
+              // Atualizar usuário com funcionario_id
+              await supabaseAdmin
+                .from('usuarios')
+                .update({ funcionario_id: funcionarioId })
+                .eq('id', usuario.id)
+            }
+          }
+
+          // Vincular funcionário à obra como supervisor
+          if (funcionarioId) {
+            // Verificar se já não está vinculado
+            const { data: jaVinculado } = await supabaseAdmin
+              .from('funcionarios_obras')
+              .select('id')
+              .eq('funcionario_id', funcionarioId)
+              .eq('obra_id', data.id)
+              .eq('status', 'ativo')
+              .single()
+
+            if (!jaVinculado) {
+              const { data: supervisorVinculado, error: supervisorError } = await supabaseAdmin
+                .from('funcionarios_obras')
+                .insert({
+                  funcionario_id: funcionarioId,
+                  obra_id: data.id,
+                  data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
+                  status: 'ativo',
+                  horas_trabalhadas: 0,
+                  is_supervisor: true,
+                  observacoes: `Cliente ${clienteCompleto.nome} vinculado automaticamente como supervisor da obra`
+                })
+                .select()
+                .single()
+
+              if (supervisorError) {
+                console.error('❌ Erro ao vincular cliente como supervisor:', supervisorError)
+              } else {
+                console.log('✅ Cliente vinculado como supervisor com sucesso:', supervisorVinculado.id)
+              }
+            } else {
+              console.log('ℹ️ Cliente já está vinculado como supervisor')
+            }
+          }
+        } else {
+          console.log('⚠️ Usuário não encontrado para contato_usuario_id:', clienteCompleto.contato_usuario_id)
+        }
+      } else {
+        console.log('ℹ️ Cliente não tem contato_usuario_id ou não foi encontrado')
+      }
+    } catch (error) {
+      console.error('❌ Erro ao processar vinculação automática do cliente como supervisor:', error)
+      // Não falhar a criação da obra por causa disso
+    }
 
     // Processar responsável técnico se fornecido
     if (value.responsavel_tecnico && (value.responsavel_tecnico.funcionario_id || (value.responsavel_tecnico.nome && value.responsavel_tecnico.cpf_cnpj))) {
@@ -2414,6 +2534,523 @@ router.get('/alertas/fim-proximo', authenticateToken, async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar obras com fim próximo:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * POST /api/obras/:id/supervisores
+ * Adicionar supervisor terceirizado à obra
+ */
+const supervisorTerceirizadoSchema = Joi.object({
+  nome: Joi.string().min(2).required(),
+  email: Joi.string().email().required(),
+  telefone: Joi.string().allow('', null).optional(),
+  observacoes: Joi.string().allow('', null).optional(),
+  data_inicio: Joi.date().optional()
+})
+
+router.post('/:id/supervisores', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { error, value } = supervisorTerceirizadoSchema.validate(req.body)
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        message: error.details[0].message
+      })
+    }
+
+    // Verificar se obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome')
+      .eq('id', id)
+      .single()
+
+    if (obraError || !obra) {
+      return res.status(404).json({
+        success: false,
+        error: 'Obra não encontrada',
+        message: 'A obra especificada não existe'
+      })
+    }
+
+    // Verificar se email já existe na tabela usuarios
+    const { data: usuarioExistente, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email, funcionario_id')
+      .eq('email', value.email)
+      .maybeSingle()
+
+    // Se existe na tabela, verificar se está vinculado a alguma obra ativa como supervisor
+    if (usuarioExistente) {
+      if (usuarioExistente.funcionario_id) {
+        const { data: vinculacoesAtivas } = await supabaseAdmin
+          .from('funcionarios_obras')
+          .select('id, obra_id, is_supervisor, status')
+          .eq('funcionario_id', usuarioExistente.funcionario_id)
+          .eq('is_supervisor', true)
+          .eq('status', 'ativo')
+          .limit(1)
+
+        if (vinculacoesAtivas && vinculacoesAtivas.length > 0) {
+          return res.status(409).json({
+            success: false,
+            error: 'Email já cadastrado',
+            message: 'Já existe um supervisor cadastrado com este email vinculado a uma obra ativa'
+          })
+        }
+        
+        // Se existe mas não está vinculado como supervisor ativo, permitir reutilização
+        // Remover registros antigos para permitir criar novo
+        console.log(`⚠️ Email ${value.email} existe mas não está vinculado como supervisor ativo. Limpando registros antigos...`)
+        
+        // Remover vinculações antigas (se houver)
+        await supabaseAdmin
+          .from('funcionarios_obras')
+          .delete()
+          .eq('funcionario_id', usuarioExistente.funcionario_id)
+          .eq('is_supervisor', true)
+        
+        // Remover funcionário antigo
+        await supabaseAdmin
+          .from('funcionarios')
+          .delete()
+          .eq('id', usuarioExistente.funcionario_id)
+      }
+      
+      // Remover usuário da tabela (seja com ou sem funcionario_id)
+      await supabaseAdmin
+        .from('usuarios')
+        .delete()
+        .eq('id', usuarioExistente.id)
+      
+      console.log(`✅ Registros antigos removidos para permitir reutilização do email`)
+    }
+
+    // Verificar se email já existe no Supabase Auth (pode existir mesmo se não estiver na tabela usuarios)
+    const { data: authUsers, error: listUsersError } = await supabaseAdmin.auth.admin.listUsers()
+    if (!listUsersError && authUsers && authUsers.users) {
+      const userExists = authUsers.users.find(u => u.email?.toLowerCase() === value.email.toLowerCase())
+      if (userExists) {
+        // Se existe no Auth mas não na tabela (ou foi removido acima), deletar do Auth para permitir reutilização
+        console.log(`⚠️ Email ${value.email} existe no Auth. Removendo do Auth para permitir reutilização...`)
+        await supabaseAdmin.auth.admin.deleteUser(userExists.id)
+        console.log(`✅ Usuário removido do Auth: ${userExists.id}`)
+      }
+    }
+
+    // Gerar senha temporária
+    const senhaTemporaria = generateSecurePassword()
+
+    // 1. Criar usuário no Supabase Auth
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email: value.email,
+      password: senhaTemporaria,
+      email_confirm: true,
+      user_metadata: {
+        nome: value.nome,
+        tipo: 'supervisor_terceirizado'
+      }
+    })
+
+    if (authError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao criar usuário no sistema de autenticação',
+        message: authError.message
+      })
+    }
+
+    // 2. Criar usuário na tabela usuarios
+    const usuarioData = {
+      nome: value.nome,
+      email: value.email,
+      telefone: value.telefone || null,
+      status: 'Ativo',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    const { data: novoUsuario, error: novoUsuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .insert(usuarioData)
+      .select()
+      .single()
+
+    if (novoUsuarioError) {
+      // Se falhou ao criar na tabela, remover do Auth
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao criar usuário',
+        message: novoUsuarioError.message
+      })
+    }
+
+    // 3. Criar funcionário vinculado ao usuário (necessário para funcionarios_obras)
+    const { data: novoFuncionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .insert({
+        nome: value.nome,
+        email: value.email,
+        telefone: value.telefone || null,
+        cpf: null, // Supervisor terceirizado pode não ter CPF
+        status: 'Ativo',
+        cargo: 'Supervisor',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (funcionarioError) {
+      // Se falhou ao criar funcionário, remover usuário e auth
+      await supabaseAdmin.from('usuarios').delete().eq('id', novoUsuario.id)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao criar funcionário',
+        message: funcionarioError.message
+      })
+    }
+
+    // 4. Atualizar usuário com funcionario_id
+    await supabaseAdmin
+      .from('usuarios')
+      .update({ funcionario_id: novoFuncionario.id })
+      .eq('id', novoUsuario.id)
+
+    // 5. Atribuir perfil de Cliente ao usuário (supervisor terceirizado é como cliente)
+    const { error: perfilError } = await supabaseAdmin
+      .from('usuario_perfis')
+      .insert({
+        usuario_id: novoUsuario.id,
+        perfil_id: 6, // ID do perfil "Cliente"
+        status: 'Ativa',
+        data_atribuicao: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+
+    if (perfilError) {
+      console.error('Erro ao atribuir perfil ao usuário:', perfilError)
+      // Não falhar a criação por causa disso
+    }
+
+    // 6. Vincular funcionário à obra como supervisor
+    const funcionarioObraData = {
+      funcionario_id: novoFuncionario.id,
+      obra_id: parseInt(id),
+      data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
+      status: 'ativo',
+      horas_trabalhadas: 0,
+      is_supervisor: true,
+      observacoes: value.observacoes || `Supervisor terceirizado ${value.nome} vinculado à obra ${obra.nome}`
+    }
+
+    const { data: funcionarioObra, error: funcionarioObraError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .insert(funcionarioObraData)
+      .select()
+      .single()
+
+    if (funcionarioObraError) {
+      // Se falhou ao vincular, remover funcionário, usuário e auth
+      await supabaseAdmin.from('funcionarios').delete().eq('id', novoFuncionario.id)
+      await supabaseAdmin.from('usuarios').delete().eq('id', novoUsuario.id)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao vincular supervisor à obra',
+        message: funcionarioObraError.message
+      })
+    }
+
+    // 7. Enviar email com credenciais (de forma assíncrona, não bloqueia a resposta)
+    sendWelcomeEmail({
+      nome: value.nome,
+      email: value.email,
+      senha_temporaria: senhaTemporaria
+    }).then(() => {
+      console.log(`✅ Email de boas-vindas enviado para supervisor terceirizado: ${value.email}`)
+    }).catch((emailError) => {
+      console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+      // Não falhar a criação se o email falhar
+    })
+
+    res.status(201).json({
+      success: true,
+      data: {
+        funcionario_obra: funcionarioObra,
+        usuario: novoUsuario,
+        funcionario: novoFuncionario
+      },
+      message: 'Supervisor terceirizado adicionado com sucesso. Email com credenciais será enviado em breve.'
+    })
+  } catch (error) {
+    console.error('Erro ao adicionar supervisor terceirizado:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * PUT /api/obras/:obra_id/supervisores/:id
+ * Atualizar supervisor terceirizado
+ */
+const atualizarSupervisorSchema = Joi.object({
+  nome: Joi.string().min(2).optional(),
+  email: Joi.string().email().optional(),
+  telefone: Joi.string().allow('', null).optional(),
+  observacoes: Joi.string().allow('', null).optional(),
+  data_inicio: Joi.date().optional(),
+  data_fim: Joi.date().allow(null).optional(),
+  reenviar_senha: Joi.boolean().optional()
+})
+
+router.put('/:obra_id/supervisores/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { obra_id, id } = req.params
+    const { error, value } = atualizarSupervisorSchema.validate(req.body)
+
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        message: error.details[0].message
+      })
+    }
+
+    // Buscar funcionario_obra
+    const { data: funcionarioObra, error: funcionarioObraError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select('*, funcionarios(id, nome, email, telefone), obras(id, nome)')
+      .eq('id', id)
+      .eq('obra_id', obra_id)
+      .eq('is_supervisor', true)
+      .single()
+
+    if (funcionarioObraError || !funcionarioObra) {
+      return res.status(404).json({
+        success: false,
+        error: 'Supervisor não encontrado',
+        message: 'O supervisor especificado não existe ou não está vinculado a esta obra'
+      })
+    }
+
+    const funcionario = funcionarioObra.funcionarios
+    if (!funcionario) {
+      return res.status(404).json({
+        success: false,
+        error: 'Funcionário não encontrado'
+      })
+    }
+
+    // Buscar usuário vinculado
+    const { data: usuario } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email')
+      .eq('email', funcionario.email)
+      .maybeSingle()
+
+    // Atualizar funcionario_obra
+    const funcionarioObraUpdate = {}
+    if (value.data_inicio !== undefined) funcionarioObraUpdate.data_inicio = value.data_inicio
+    if (value.data_fim !== undefined) funcionarioObraUpdate.data_fim = value.data_fim
+    if (value.observacoes !== undefined) funcionarioObraUpdate.observacoes = value.observacoes
+
+    if (Object.keys(funcionarioObraUpdate).length > 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .update(funcionarioObraUpdate)
+        .eq('id', id)
+
+      if (updateError) throw updateError
+    }
+
+    // Atualizar funcionário
+    const funcionarioUpdate = {}
+    if (value.nome) funcionarioUpdate.nome = value.nome
+    if (value.email) funcionarioUpdate.email = value.email
+    if (value.telefone !== undefined) funcionarioUpdate.telefone = value.telefone || null
+
+    if (Object.keys(funcionarioUpdate).length > 0) {
+      const { error: funcionarioUpdateError } = await supabaseAdmin
+        .from('funcionarios')
+        .update(funcionarioUpdate)
+        .eq('id', funcionario.id)
+
+      if (funcionarioUpdateError) throw funcionarioUpdateError
+    }
+
+    // Atualizar usuário
+    if (usuario) {
+      const usuarioUpdate = {}
+      if (value.nome) usuarioUpdate.nome = value.nome
+      if (value.email) usuarioUpdate.email = value.email
+      if (value.telefone !== undefined) usuarioUpdate.telefone = value.telefone || null
+
+      if (Object.keys(usuarioUpdate).length > 0) {
+        await supabaseAdmin
+          .from('usuarios')
+          .update(usuarioUpdate)
+          .eq('id', usuario.id)
+      }
+
+      // Atualizar email no Auth se mudou
+      if (value.email && value.email !== funcionario.email) {
+        // Buscar usuário no Auth
+        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+        const authUser = users.find(u => u.email === funcionario.email)
+        
+        if (authUser) {
+          await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+            email: value.email
+          })
+        }
+      }
+
+      // Reenviar senha se solicitado
+      if (value.reenviar_senha) {
+        const senhaTemporaria = generateSecurePassword()
+        
+        // Buscar usuário no Auth
+        const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
+        const emailParaBuscar = value.email || funcionario.email
+        const authUser = users.find(u => u.email === emailParaBuscar)
+        
+        if (authUser) {
+          // Atualizar senha no Auth
+          await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+            password: senhaTemporaria
+          })
+
+          // Enviar email com nova senha (assíncrono)
+          sendWelcomeEmail({
+            nome: value.nome || funcionario.nome,
+            email: emailParaBuscar,
+            senha_temporaria: senhaTemporaria
+          }).then(() => {
+            console.log(`✅ Email com nova senha enviado para: ${emailParaBuscar}`)
+          }).catch((emailError) => {
+            console.error('❌ Erro ao enviar email:', emailError)
+          })
+        }
+      }
+    }
+
+    // Buscar dados atualizados
+    const { data: funcionarioObraAtualizado } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select(`
+        *,
+        funcionarios(id, nome, cargo, email, telefone),
+        obras(id, nome)
+      `)
+      .eq('id', id)
+      .single()
+
+    res.json({
+      success: true,
+      data: {
+        funcionario_obra: funcionarioObraAtualizado,
+        funcionario: funcionarioObraAtualizado?.funcionarios,
+        usuario: usuario
+      },
+      message: value.reenviar_senha 
+        ? 'Supervisor atualizado com sucesso. Nova senha será enviada por email em breve.'
+        : 'Supervisor atualizado com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar supervisor:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/obras/:obra_id/supervisores/:id
+ * Obter dados completos de um supervisor terceirizado
+ */
+router.get('/:obra_id/supervisores/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { obra_id, id } = req.params
+
+    // Buscar funcionario_obra com relacionamentos
+    const { data: funcionarioObra, error: funcionarioObraError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select(`
+        *,
+        funcionarios(
+          id,
+          nome,
+          cargo,
+          email,
+          telefone,
+          cpf,
+          status
+        ),
+        obras(
+          id,
+          nome
+        )
+      `)
+      .eq('id', id)
+      .eq('obra_id', obra_id)
+      .eq('is_supervisor', true)
+      .single()
+
+    if (funcionarioObraError) {
+      if (funcionarioObraError.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: 'Supervisor não encontrado',
+          message: 'O supervisor especificado não existe ou não está vinculado a esta obra'
+        })
+      }
+      throw funcionarioObraError
+    }
+
+    // Buscar usuário vinculado
+    let usuario = null
+    if (funcionarioObra.funcionarios) {
+      const { data: usuarioData } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, nome, email, telefone, status')
+        .eq('email', funcionarioObra.funcionarios.email)
+        .maybeSingle()
+      
+      usuario = usuarioData
+    }
+
+    res.json({
+      success: true,
+      data: {
+        funcionario_obra: funcionarioObra,
+        funcionario: funcionarioObra.funcionarios,
+        usuario: usuario,
+        obra: funcionarioObra.obras
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao buscar supervisor:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
   }
 })
 

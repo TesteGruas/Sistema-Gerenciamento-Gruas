@@ -103,6 +103,39 @@ class AuthCache {
         console.log(`🔐 Atualizando user.id de UUID para profile.id (${profileId})`)
       }
 
+      // Atualizar userData com role e level do endpoint
+      if (userData && data.data?.role) {
+        userData.role = data.data.role
+      }
+      if (userData && data.data?.level !== undefined) {
+        userData.level = data.data.level
+      }
+
+      // Atualizar userData com funcionario_id do profile se existir
+      const funcionarioId = data.data?.profile?.funcionario_id || null
+      if (funcionarioId && userData) {
+        userData.funcionario_id = funcionarioId
+        // Garantir que user_metadata também tenha o funcionario_id se existir
+        if (userData.user_metadata) {
+          userData.user_metadata.funcionario_id = funcionarioId
+        } else if (data.data?.user?.user_metadata) {
+          userData.user_metadata = {
+            ...data.data.user.user_metadata,
+            funcionario_id: funcionarioId
+          }
+        } else {
+          userData.user_metadata = {
+            funcionario_id: funcionarioId
+          }
+        }
+        console.log(`🔐 Atualizando funcionario_id: ${funcionarioId}`)
+      }
+      
+      // Garantir que profile esteja no userData
+      if (data.data?.profile && userData) {
+        userData.profile = data.data.profile
+      }
+
       const authData: AuthCacheData = {
         user: userData,
         perfil: data.data?.perfil || null,
@@ -116,7 +149,15 @@ class AuthCache {
       localStorage.setItem('user_perfil', JSON.stringify(authData.perfil));
       localStorage.setItem('user_permissoes', JSON.stringify(authData.permissoes));
       
-      // Atualizar user_data principal com o ID correto
+      // Salvar role e level separadamente
+      if (data.data?.role) {
+        localStorage.setItem('user_role', data.data.role);
+      }
+      if (data.data?.level !== undefined && data.data?.level !== null) {
+        localStorage.setItem('user_level', String(data.data.level));
+      }
+      
+      // Atualizar user_data principal com o ID, role, level e funcionario_id corretos
       if (userData) {
         const currentUserData = localStorage.getItem('user_data')
         if (currentUserData) {
@@ -125,12 +166,57 @@ class AuthCache {
             // Atualizar o ID com profile.id se disponível
             if (profileId) {
               parsedUserData.id = profileId
-              localStorage.setItem('user_data', JSON.stringify(parsedUserData))
-              console.log(`🔐 user_data atualizado com profile.id (${profileId})`)
             }
+            // Atualizar role se disponível
+            if (data.data?.role) {
+              parsedUserData.role = data.data.role
+              // Garantir que user_metadata também tenha o role se existir
+              if (parsedUserData.user_metadata) {
+                parsedUserData.user_metadata.role = data.data.role
+              } else {
+                parsedUserData.user_metadata = { role: data.data.role }
+              }
+            }
+            // Atualizar level se disponível
+            if (data.data?.level !== undefined && data.data?.level !== null) {
+              parsedUserData.level = data.data.level
+            }
+            // Atualizar funcionario_id se disponível
+            if (funcionarioId) {
+              parsedUserData.funcionario_id = funcionarioId
+              if (parsedUserData.user_metadata) {
+                parsedUserData.user_metadata.funcionario_id = funcionarioId
+              } else {
+                parsedUserData.user_metadata = { funcionario_id: funcionarioId }
+              }
+            }
+            // Atualizar profile se disponível
+            if (data.data?.profile) {
+              parsedUserData.profile = data.data.profile
+            }
+            localStorage.setItem('user_data', JSON.stringify(parsedUserData))
+            console.log(`🔐 user_data atualizado: id=${profileId}, role=${data.data?.role}, level=${data.data?.level}, funcionario_id=${funcionarioId}`)
           } catch (e) {
             console.warn('Erro ao atualizar user_data:', e)
           }
+        } else {
+          // Se não existe user_data, criar um básico
+          const newUserData = {
+            id: profileId || userData.id,
+            email: userData.email || '',
+            role: data.data?.role || null,
+            level: data.data?.level || null,
+            funcionario_id: funcionarioId || null,
+            user_metadata: {
+              ...(funcionarioId && { funcionario_id: funcionarioId }),
+              ...(data.data?.role && { role: data.data.role }),
+              ...(data.data?.user?.user_metadata || {})
+            },
+            profile: data.data?.profile || null,
+            ...userData
+          }
+          localStorage.setItem('user_data', JSON.stringify(newUserData))
+          console.log(`🔐 user_data criado: id=${newUserData.id}, role=${newUserData.role}, funcionario_id=${newUserData.funcionario_id}`)
         }
       }
       

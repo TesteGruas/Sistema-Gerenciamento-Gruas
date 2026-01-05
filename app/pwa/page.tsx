@@ -61,7 +61,7 @@ export default function PWAMainPage() {
   const pwaUserData = usePWAUser()
   
   // Hook de permissões para obter role do usuário e verificar permissões
-  const { userRole, canApproveHoras, isClient: isClientRole } = usePWAPermissions()
+  const { userRole, canApproveHoras, isClient: isClientRole, hasPermission, canAccessModule } = usePWAPermissions()
   
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
@@ -164,9 +164,11 @@ export default function PWAMainPage() {
         }
 
         const userData = JSON.parse(userDataStr)
-        const funcionarioId = userData?.user_metadata?.funcionario_id || 
-                              userData?.profile?.funcionario_id || 
-                              userData?.funcionario_id
+        // PRIORIDADE: profile.funcionario_id primeiro (mais confiável)
+        // Depois funcionario_id direto, depois user_metadata.funcionario_id
+        const funcionarioId = userData?.profile?.funcionario_id || 
+                              userData?.funcionario_id ||
+                              userData?.user_metadata?.funcionario_id
 
         // Se não é funcionário (é cliente), não precisa verificar obra
         if (!funcionarioId) {
@@ -1154,9 +1156,11 @@ export default function PWAMainPage() {
                 return false
               }
               
-              // Filtrar ações que requerem obra ativa (Ponto, Espelho, Obras)
-              if (action.requiresObra || action.title === "Ponto" || action.title === "Espelho" || action.title === "Obras") {
-                // Se não tem obra ativa, ocultar
+              // Filtrar ações que requerem obra ativa (Ponto, Espelho)
+              // NOTA: "Obras" NÃO deve ser filtrada por temObraAtiva porque o usuário precisa
+              // ver suas obras mesmo que não esteja alocado em nenhuma no momento
+              if (action.requiresObra || action.title === "Ponto" || action.title === "Espelho") {
+                // Se não tem obra ativa, ocultar Ponto e Espelho
                 if (temObraAtiva === false) {
                   return false
                 }
@@ -1164,6 +1168,26 @@ export default function PWAMainPage() {
                 // Se ainda está carregando, não mostrar ainda
                 if (loadingObra) {
                   return false
+                }
+              }
+              
+              // "Obras" deve ser mostrada baseado apenas em permissões, não em temObraAtiva
+              if (action.title === "Obras") {
+                // Verificar permissão usando o hook
+                try {
+                  const podeVerObras = hasPermission('obras:visualizar') || canAccessModule('obras')
+                  if (!podeVerObras) {
+                    return false
+                  }
+                  // Se tem permissão, mostrar independente de temObraAtiva
+                  return true
+                } catch (e) {
+                  // Em caso de erro, verificar por role como fallback
+                  const roleLower = (userRole || '').toLowerCase()
+                  const podeVerObras = roleLower.includes('operador') || 
+                                      roleLower.includes('operário') || 
+                                      roleLower.includes('operario')
+                  return podeVerObras
                 }
               }
               

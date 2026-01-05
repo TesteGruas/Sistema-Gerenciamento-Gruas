@@ -582,6 +582,48 @@ export const obrasApi = {
     return apiRequest(url, {
       method: 'POST',
     })
+  },
+
+  // Adicionar supervisor terceirizado à obra
+  async adicionarSupervisorTerceirizado(obraId: number, data: {
+    nome: string
+    email: string
+    telefone?: string
+    observacoes?: string
+    data_inicio?: string
+  }): Promise<{ 
+    success: boolean
+    data: any
+    message?: string
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores`)
+    return apiRequest(url, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    })
+  },
+
+  // Obter dados completos de um supervisor terceirizado
+  async obterSupervisor(obraId: number, supervisorId: number): Promise<{ success: boolean; data: any; error?: string }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores/${supervisorId}`)
+    return apiRequest(url)
+  },
+
+  // Atualizar supervisor terceirizado
+  async atualizarSupervisor(obraId: number, supervisorId: number, data: {
+    nome?: string;
+    email?: string;
+    telefone?: string;
+    observacoes?: string;
+    data_inicio?: string;
+    data_fim?: string;
+    reenviar_senha?: boolean;
+  }): Promise<{ success: boolean; data: any; message?: string }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores/${supervisorId}`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
   }
 }
 

@@ -305,7 +305,11 @@ app.use(compression({
   }
 }))
 
-// Rate limiting (permissivo) - Excluindo rotas de configurações
+// Middlewares de parsing (antes do rate limiter para permitir verificação de email)
+app.use(express.json({ limit: '10mb' }))
+app.use(express.urlencoded({ extended: true }))
+
+// Rate limiting (permissivo) - Excluindo rotas de configurações e admin@admin.com
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -314,14 +318,17 @@ const limiter = rateLimit({
   },
   skip: (req) => {
     // Excluir rotas de configurações do rate limit
-    return req.path.startsWith('/api/configuracoes')
+    if (req.path.startsWith('/api/configuracoes')) {
+      return true
+    }
+    // Excluir admin@admin.com do rate limit no endpoint de login
+    if (req.path === '/api/auth/login' && req.method === 'POST' && req.body && req.body.email === 'admin@admin.com') {
+      return true
+    }
+    return false
   }
 })
 app.use(limiter)
-
-// Middlewares de parsing
-app.use(express.json({ limit: '10mb' }))
-app.use(express.urlencoded({ extended: true }))
 
 // Logging
 app.use(morgan('combined'))

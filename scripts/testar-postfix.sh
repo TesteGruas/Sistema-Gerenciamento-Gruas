@@ -155,3 +155,4 @@ echo ""
 echo -e "${YELLOW}⚠️  Lembre-se de configurar SPF no DNS para evitar spam!${NC}"
 echo ""
 
+

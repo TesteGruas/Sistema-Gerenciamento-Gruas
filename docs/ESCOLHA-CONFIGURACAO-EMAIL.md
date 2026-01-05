@@ -132,3 +132,4 @@ Responda estas perguntas:
 2. **Com domínio?** → Use SendGrid ou siga guia Postfix
 3. **Dúvidas?** → Consulte os guias específicos acima
 
+

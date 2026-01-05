@@ -2,7 +2,7 @@
 
 **Sistema de Gerenciamento de Gruas**  
 **Versão:** 1.2.0  
-**Data:** 02/01/2026  
+**Data:** 05/01/2026  
 **Status:** ✅ 95% Funcional
 
 ---
@@ -782,6 +782,6 @@ NEXT_PUBLIC_API_URL=http://localhost:3001
 
 ---
 
-**Última atualização:** 02/01/2026  
+**Última atualização:** 05/01/2026  
 **Versão do Sistema:** 1.2.0
 

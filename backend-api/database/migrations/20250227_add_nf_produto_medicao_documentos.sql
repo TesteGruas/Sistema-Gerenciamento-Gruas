@@ -24,3 +24,4 @@ COMMENT ON COLUMN medicao_documentos.tipo_documento IS 'Tipo de documento: nf_se
 
 
 
+

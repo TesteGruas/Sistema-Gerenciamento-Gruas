@@ -264,3 +264,4 @@ echo "⚠️  Configure no sistema: localhost:25"
 
 **💡 Dica**: Compre um domínio barato (ex: .com.br por ~R$ 30/ano) e configure corretamente. Vale muito a pena para produção!
 
+

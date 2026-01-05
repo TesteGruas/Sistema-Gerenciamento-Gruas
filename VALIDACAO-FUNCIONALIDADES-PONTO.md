@@ -234,3 +234,4 @@ COMMENT ON COLUMN registros_ponto.trabalho_corrido_confirmado_em IS 'Data/hora d
 **Documento gerado em:** 2025-03-02  
 **Baseado em:** Análise do código-fonte e documentação do projeto
 
+
