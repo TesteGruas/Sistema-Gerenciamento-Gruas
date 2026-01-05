@@ -127,6 +127,20 @@ function ObraDetailsPageContent() {
   const [errorSinaleiros, setErrorSinaleiros] = useState<string | null>(null)
   const [documentosSinaleiros, setDocumentosSinaleiros] = useState<Record<string, DocumentoSinaleiroBackend[]>>({})
   
+  // Estados para modais de atrelar sinaleiros
+  const [isModalFuncionarioOpen, setIsModalFuncionarioOpen] = useState(false)
+  const [isModalTerceirizadoOpen, setIsModalTerceirizadoOpen] = useState(false)
+  const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null)
+  const [tipoSinaleiroFuncionario, setTipoSinaleiroFuncionario] = useState<'principal' | 'reserva'>('principal')
+  const [tipoSinaleiroTerceirizado, setTipoSinaleiroTerceirizado] = useState<'principal' | 'reserva'>('principal')
+  const [dadosTerceirizado, setDadosTerceirizado] = useState({
+    nome: '',
+    rg_cpf: '',
+    telefone: '',
+    email: ''
+  })
+  const [salvandoSinaleiro, setSalvandoSinaleiro] = useState(false)
+  
   // Estados para devolução de componentes
   const [componentesDevolucao, setComponentesDevolucao] = useState<Array<ComponenteGrua & { grua_nome?: string }>>([])
   const [loadingComponentesDevolucao, setLoadingComponentesDevolucao] = useState(false)
@@ -389,6 +403,131 @@ function ObraDetailsPageContent() {
       sinaleirosCarregadosRef.current = true // Marcar como carregado mesmo em caso de erro
     } finally {
       setLoadingSinaleiros(false)
+    }
+  }
+
+  // Função para atrelar funcionário como sinaleiro
+  const handleAtrelarFuncionarioSinaleiro = async () => {
+    if (!funcionarioSelecionado || !obraId) {
+      toast({
+        title: "Erro",
+        description: "Selecione um funcionário para atrelar como sinaleiro",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setSalvandoSinaleiro(true)
+    try {
+      // Buscar dados completos do funcionário para obter CPF/RG
+      let funcionario: any = null
+      try {
+        const funcionarioCompleto = await funcionariosApi.obterFuncionario(parseInt(funcionarioSelecionado.id))
+        if (funcionarioCompleto.success && funcionarioCompleto.data) {
+          funcionario = funcionarioCompleto.data
+        }
+      } catch (error) {
+        console.warn('Erro ao buscar dados completos do funcionário, usando dados da seleção:', error)
+      }
+
+      // Usar dados do funcionário completo ou da seleção
+      const nome = funcionario?.nome || funcionarioSelecionado.name || ''
+      const rgCpf = funcionario?.cpf || funcionario?.rg || funcionarioSelecionado.cpf || funcionarioSelecionado.rg || ''
+
+      if (!rgCpf) {
+        toast({
+          title: "Erro",
+          description: "O funcionário selecionado não possui CPF/RG cadastrado. Por favor, cadastre o CPF/RG do funcionário antes de atrelá-lo como sinaleiro.",
+          variant: "destructive"
+        })
+        setSalvandoSinaleiro(false)
+        return
+      }
+
+      // Criar sinaleiro a partir do funcionário
+      const sinaleiroData = {
+        nome: nome,
+        rg_cpf: rgCpf,
+        telefone: funcionario?.telefone || funcionarioSelecionado.phone || '',
+        email: funcionario?.email || funcionarioSelecionado.email || '',
+        tipo: tipoSinaleiroFuncionario
+      }
+
+      const response = await sinaleirosApi.criarOuAtualizar(parseInt(obraId), [sinaleiroData])
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Funcionário atrelado como sinaleiro com sucesso!"
+        })
+        setIsModalFuncionarioOpen(false)
+        setFuncionarioSelecionado(null)
+        await carregarSinaleiros()
+      } else {
+        throw new Error("Erro ao criar sinaleiro")
+      }
+    } catch (error: any) {
+      console.error('Erro ao atrelar funcionário como sinaleiro:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atrelar funcionário como sinaleiro",
+        variant: "destructive"
+      })
+    } finally {
+      setSalvandoSinaleiro(false)
+    }
+  }
+
+  // Função para atrelar terceirizado como sinaleiro
+  const handleAtrelarTerceirizadoSinaleiro = async () => {
+    if (!obraId) return
+
+    if (!dadosTerceirizado.nome || !dadosTerceirizado.rg_cpf) {
+      toast({
+        title: "Erro",
+        description: "Preencha pelo menos o nome e RG/CPF do terceirizado",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setSalvandoSinaleiro(true)
+    try {
+      const sinaleiroData = {
+        nome: dadosTerceirizado.nome,
+        rg_cpf: dadosTerceirizado.rg_cpf,
+        telefone: dadosTerceirizado.telefone || '',
+        email: dadosTerceirizado.email || '',
+        tipo: tipoSinaleiroTerceirizado
+      }
+
+      const response = await sinaleirosApi.criarOuAtualizar(parseInt(obraId), [sinaleiroData])
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Terceirizado atrelado como sinaleiro com sucesso!"
+        })
+        setIsModalTerceirizadoOpen(false)
+        setDadosTerceirizado({
+          nome: '',
+          rg_cpf: '',
+          telefone: '',
+          email: ''
+        })
+        await carregarSinaleiros()
+      } else {
+        throw new Error("Erro ao criar sinaleiro")
+      }
+    } catch (error: any) {
+      console.error('Erro ao atrelar terceirizado como sinaleiro:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao atrelar terceirizado como sinaleiro",
+        variant: "destructive"
+      })
+    } finally {
+      setSalvandoSinaleiro(false)
     }
   }
 
@@ -4187,13 +4326,190 @@ useEffect(() => {
         <TabsContent value="sinaleiros" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5 text-purple-600" />
-                Sinaleiros da Obra
-              </CardTitle>
-              <CardDescription>
-                Sinaleiros cadastrados para esta obra
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Users className="w-5 h-5 text-purple-600" />
+                    Sinaleiros da Obra
+                  </CardTitle>
+                  <CardDescription>
+                    Sinaleiros cadastrados para esta obra
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Dialog open={isModalFuncionarioOpen} onOpenChange={setIsModalFuncionarioOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Atrelar Funcionário
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Atrelar Funcionário como Sinaleiro</DialogTitle>
+                        <DialogDescription>
+                          Selecione um funcionário para atrelar como sinaleiro nesta obra
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div>
+                          <Label>Buscar Funcionário</Label>
+                          <FuncionarioSearch
+                            onFuncionarioSelect={(funcionario) => {
+                              setFuncionarioSelecionado(funcionario)
+                            }}
+                            selectedFuncionario={funcionarioSelecionado}
+                            placeholder="Digite o nome ou cargo do funcionário..."
+                            onlyActive={true}
+                            allowedRoles={['Sinaleiro', 'Operador', 'Supervisor']}
+                          />
+                        </div>
+                        {funcionarioSelecionado && (
+                          <div>
+                            <Label>Tipo de Sinaleiro</Label>
+                            <Select
+                              value={tipoSinaleiroFuncionario}
+                              onValueChange={(value: 'principal' | 'reserva') => setTipoSinaleiroFuncionario(value)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="principal">Principal</SelectItem>
+                                <SelectItem value="reserva">Reserva</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        )}
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsModalFuncionarioOpen(false)
+                            setFuncionarioSelecionado(null)
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          onClick={handleAtrelarFuncionarioSinaleiro}
+                          disabled={!funcionarioSelecionado || salvandoSinaleiro}
+                        >
+                          {salvandoSinaleiro ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Salvando...
+                            </>
+                          ) : (
+                            'Atrelar'
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={isModalTerceirizadoOpen} onOpenChange={setIsModalTerceirizadoOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Plus className="w-4 h-4 mr-2" />
+                        Atrelar Terceirizado
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Atrelar Terceirizado como Sinaleiro</DialogTitle>
+                        <DialogDescription>
+                          Cadastre um terceirizado (supervisor ou outro) como sinaleiro nesta obra
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-4 py-4">
+                        <div>
+                          <Label htmlFor="nome-terceirizado">Nome *</Label>
+                          <Input
+                            id="nome-terceirizado"
+                            value={dadosTerceirizado.nome}
+                            onChange={(e) => setDadosTerceirizado({ ...dadosTerceirizado, nome: e.target.value })}
+                            placeholder="Nome completo"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="rg-cpf-terceirizado">RG/CPF *</Label>
+                          <Input
+                            id="rg-cpf-terceirizado"
+                            value={dadosTerceirizado.rg_cpf}
+                            onChange={(e) => setDadosTerceirizado({ ...dadosTerceirizado, rg_cpf: e.target.value })}
+                            placeholder="RG ou CPF"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="telefone-terceirizado">Telefone</Label>
+                          <Input
+                            id="telefone-terceirizado"
+                            value={dadosTerceirizado.telefone}
+                            onChange={(e) => setDadosTerceirizado({ ...dadosTerceirizado, telefone: e.target.value })}
+                            placeholder="(00) 00000-0000"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="email-terceirizado">Email</Label>
+                          <Input
+                            id="email-terceirizado"
+                            type="email"
+                            value={dadosTerceirizado.email}
+                            onChange={(e) => setDadosTerceirizado({ ...dadosTerceirizado, email: e.target.value })}
+                            placeholder="email@exemplo.com"
+                          />
+                        </div>
+                        <div>
+                          <Label>Tipo de Sinaleiro</Label>
+                          <Select
+                            value={tipoSinaleiroTerceirizado}
+                            onValueChange={(value: 'principal' | 'reserva') => setTipoSinaleiroTerceirizado(value)}
+                          >
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="principal">Principal</SelectItem>
+                              <SelectItem value="reserva">Reserva</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <DialogFooter>
+                        <Button
+                          variant="outline"
+                          onClick={() => {
+                            setIsModalTerceirizadoOpen(false)
+                            setDadosTerceirizado({
+                              nome: '',
+                              rg_cpf: '',
+                              telefone: '',
+                              email: ''
+                            })
+                          }}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          onClick={handleAtrelarTerceirizadoSinaleiro}
+                          disabled={!dadosTerceirizado.nome || !dadosTerceirizado.rg_cpf || salvandoSinaleiro}
+                        >
+                          {salvandoSinaleiro ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                              Salvando...
+                            </>
+                          ) : (
+                            'Atrelar'
+                          )}
+                        </Button>
+                      </DialogFooter>
+                    </DialogContent>
+                  </Dialog>
+                </div>
+              </div>
             </CardHeader>
             <CardContent>
               {loadingSinaleiros ? (
@@ -4766,6 +5082,14 @@ useEffect(() => {
                 </div>
                 <div className="flex gap-2">
                   <Button
+                    variant="default"
+                    onClick={() => setIsCriarMedicaoOpen(true)}
+                    disabled={loadingMedicoes || !obra?.id}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Nova Medição
+                  </Button>
+                  <Button
                     variant="outline"
                     onClick={carregarMedicoesMensais}
                     disabled={loadingMedicoes}
@@ -4790,12 +5114,20 @@ useEffect(() => {
               ) : medicoesMensais.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">
                   <Calculator className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                  <p>Nenhuma medição mensal encontrada</p>
-                  <p className="text-sm">
+                  <p className="text-lg font-medium mb-2">Nenhuma medição mensal encontrada</p>
+                  <p className="text-sm mb-4">
                     {orcamentosObra.length > 0 
                       ? "As medições dos orçamentos vinculados aparecerão aqui"
                       : "Você pode criar medições mensais mesmo sem orçamentos vinculados"}
                   </p>
+                  <Button
+                    variant="default"
+                    onClick={() => setIsCriarMedicaoOpen(true)}
+                    disabled={!obra?.id}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Primeira Medição
+                  </Button>
                 </div>
               ) : (
                 <div className="space-y-4">
