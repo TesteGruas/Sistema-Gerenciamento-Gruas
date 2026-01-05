@@ -153,3 +153,4 @@ echo -e "${YELLOW}   É gratuito e muito mais confiável.${NC}"
 echo ""
 
 
+

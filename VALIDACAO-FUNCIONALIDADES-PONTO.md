@@ -235,3 +235,4 @@ COMMENT ON COLUMN registros_ponto.trabalho_corrido_confirmado_em IS 'Data/hora d
 **Baseado em:** Análise do código-fonte e documentação do projeto
 
 
+
