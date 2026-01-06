@@ -580,26 +580,22 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     // Perfil - SEMPRE presente
     perfilItem
   ] : [
-    // Ponto - apenas se tiver obra ativa (não supervisor)
-    ...(temObraAtiva === true ? [
-      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-        name: 'Ponto',
-        href: '/pwa/ponto',
-        icon: Clock,
-        label: 'Ponto',
-        description: 'Registrar ponto'
-      }
-    ] : []),
-    // Espelho - apenas se tiver obra ativa (não supervisor)
-    ...(temObraAtiva === true ? [
-      allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
-        name: 'Espelho',
-        href: '/pwa/espelho-ponto',
-        icon: FileText,
-        label: 'Espelho',
-        description: 'Ver espelho de ponto'
-      }
-    ] : []),
+    // Ponto - sempre exibir para funcionários (mesmo sem obra ativa)
+    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+      name: 'Ponto',
+      href: '/pwa/ponto',
+      icon: Clock,
+      label: 'Ponto',
+      description: 'Registrar ponto'
+    },
+    // Espelho - sempre exibir para funcionários (mesmo sem obra ativa)
+    allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
+      name: 'Espelho',
+      href: '/pwa/espelho-ponto',
+      icon: FileText,
+      label: 'Espelho',
+      description: 'Ver espelho de ponto'
+    },
     // Home (no meio)
     {
       name: 'Home',

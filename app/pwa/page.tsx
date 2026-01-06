@@ -37,6 +37,7 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
+import { funcionariosApi } from "@/lib/api-funcionarios"
 import { obterLocalizacaoAtual } from "@/lib/geolocation-validator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 
@@ -164,11 +165,53 @@ export default function PWAMainPage() {
         }
 
         const userData = JSON.parse(userDataStr)
+        
+        // PRIORIDADE 1: Verificar se já temos dados do funcionário com obra_atual ou funcionarios_obras
+        // Isso evita chamadas desnecessárias à API
+        if (pwaUserData.user) {
+          const funcionarioCompleto = pwaUserData.user
+          
+          // Verificar se tem obra_atual
+          if (funcionarioCompleto.obra_atual && funcionarioCompleto.obra_atual.id) {
+            console.log('[PWA] Obra ativa encontrada em obra_atual:', funcionarioCompleto.obra_atual.id)
+            setTemObraAtiva(true)
+            setLoadingObra(false)
+            return
+          }
+          
+          // Verificar se tem funcionarios_obras com status ativo
+          if (funcionarioCompleto.funcionarios_obras && Array.isArray(funcionarioCompleto.funcionarios_obras)) {
+            const temObraAtiva = funcionarioCompleto.funcionarios_obras.some(
+              (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
+            )
+            if (temObraAtiva) {
+              console.log('[PWA] Obra ativa encontrada em funcionarios_obras')
+              setTemObraAtiva(true)
+              setLoadingObra(false)
+              return
+            }
+          }
+          
+          // Verificar se tem historico_obras com status ativo
+          if (funcionarioCompleto.historico_obras && Array.isArray(funcionarioCompleto.historico_obras)) {
+            const temObraAtiva = funcionarioCompleto.historico_obras.some(
+              (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
+            )
+            if (temObraAtiva) {
+              console.log('[PWA] Obra ativa encontrada em historico_obras')
+              setTemObraAtiva(true)
+              setLoadingObra(false)
+              return
+            }
+          }
+        }
+        
         // PRIORIDADE: profile.funcionario_id primeiro (mais confiável)
         // Depois funcionario_id direto, depois user_metadata.funcionario_id
-        const funcionarioId = userData?.profile?.funcionario_id || 
+        let funcionarioId = userData?.profile?.funcionario_id || 
                               userData?.funcionario_id ||
-                              userData?.user_metadata?.funcionario_id
+                              userData?.user_metadata?.funcionario_id ||
+                              pwaUserData.user?.id
 
         // Se não é funcionário (é cliente), não precisa verificar obra
         if (!funcionarioId) {
@@ -177,12 +220,48 @@ export default function PWAMainPage() {
           return
         }
 
-        // Buscar alocações ativas do funcionário
+        // Tentar buscar dados completos do funcionário via API primeiro
+        try {
+          console.log('[PWA] Tentando buscar dados completos do funcionário via API:', funcionarioId)
+          const response = await funcionariosApi.obterFuncionario(Number(funcionarioId))
+          
+          if (response.success && response.data) {
+            const funcCompleto = response.data as any
+            
+            // Verificar obra_atual
+            if (funcCompleto.obra_atual && funcCompleto.obra_atual.id) {
+              console.log('[PWA] Obra ativa encontrada via API em obra_atual:', funcCompleto.obra_atual.id)
+              setTemObraAtiva(true)
+              setLoadingObra(false)
+              return
+            }
+            
+            // Verificar funcionarios_obras
+            if (funcCompleto.funcionarios_obras && Array.isArray(funcCompleto.funcionarios_obras)) {
+              const temObraAtiva = funcCompleto.funcionarios_obras.some(
+                (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
+              )
+              if (temObraAtiva) {
+                console.log('[PWA] Obra ativa encontrada via API em funcionarios_obras')
+                setTemObraAtiva(true)
+                setLoadingObra(false)
+                return
+              }
+            }
+          }
+        } catch (apiError) {
+          console.warn('[PWA] Erro ao buscar dados completos do funcionário via API, tentando alocações diretamente:', apiError)
+        }
+
+        // Se não encontrou, buscar alocações ativas do funcionário via API
+        console.log('[PWA] Buscando alocações ativas via API para funcionário:', funcionarioId)
         const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
         
         if (alocacoes.success && alocacoes.data && alocacoes.data.length > 0) {
+          console.log('[PWA] Alocações ativas encontradas via API:', alocacoes.data.length)
           setTemObraAtiva(true)
         } else {
+          console.log('[PWA] Nenhuma alocação ativa encontrada via API')
           setTemObraAtiva(false)
         }
       } catch (error) {
@@ -1076,7 +1155,7 @@ export default function PWAMainPage() {
         }
         
         return (
-          <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-3'}`}>
+          <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-2'}`}>
             {!isSupervisorUser && (
               <>
                 <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">

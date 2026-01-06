@@ -1449,6 +1449,23 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             console.error('❌ Erro ao inserir grua na tabela grua_obra:', gruaObraError)
           } else {
             console.log('✅ Grua inserida na tabela grua_obra:', gruaObraResult)
+            
+            // Atualizar status da grua para 'em_obra'
+            const { error: updateGruaError } = await supabaseAdmin
+              .from('gruas')
+              .update({
+                status: 'em_obra',
+                current_obra_id: data.id,
+                current_obra_name: data.nome,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', grua.grua_id)
+            
+            if (updateGruaError) {
+              console.error('❌ Erro ao atualizar status da grua:', updateGruaError)
+            } else {
+              console.log('✅ Status da grua atualizado para "em_obra"')
+            }
           }
         }
         
@@ -1490,6 +1507,23 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
           console.error('❌ Erro ao inserir na tabela grua_obra:', gruaObraError)
         } else {
           console.log('✅ Registro inserido na tabela grua_obra:', gruaObraResult)
+          
+          // Atualizar status da grua para 'em_obra'
+          const { error: updateGruaError } = await supabaseAdmin
+            .from('gruas')
+            .update({
+              status: 'em_obra',
+              current_obra_id: data.id,
+              current_obra_name: data.nome,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', value.grua_id)
+          
+          if (updateGruaError) {
+            console.error('❌ Erro ao atualizar status da grua:', updateGruaError)
+          } else {
+            console.log('✅ Status da grua atualizado para "em_obra"')
+          }
         }
         
       } catch (gruaError) {

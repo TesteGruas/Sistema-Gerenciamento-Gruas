@@ -198,7 +198,7 @@ router.post('/grua-obra', async (req, res) => {
     // Verificar se obra existe
     const { data: obra } = await supabaseAdmin
       .from('obras')
-      .select('id')
+      .select('id, nome')
       .eq('id', value.obra_id)
       .single()
 
@@ -241,6 +241,24 @@ router.post('/grua-obra', async (req, res) => {
         error: 'Erro ao criar relacionamento',
         message: createError.message
       })
+    }
+
+    // Atualizar status da grua para 'em_obra' se o relacionamento estiver ativo
+    if (value.status === 'Ativa') {
+      const { error: updateGruaError } = await supabaseAdmin
+        .from('gruas')
+        .update({
+          status: 'em_obra',
+          current_obra_id: value.obra_id,
+          current_obra_name: obra.nome,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', value.grua_id)
+
+      if (updateGruaError) {
+        console.error('Erro ao atualizar status da grua:', updateGruaError)
+        // Não falhar a operação, apenas logar o erro
+      }
     }
 
     res.status(201).json({
@@ -726,6 +744,20 @@ router.put('/grua-obra/:id', async (req, res) => {
     const { id } = req.params
     const updateData = req.body
 
+    // Buscar relacionamento atual para pegar grua_id
+    const { data: relacionamentoAtual, error: erroBuscar } = await supabaseAdmin
+      .from('grua_obra')
+      .select('grua_id, obra_id')
+      .eq('id', id)
+      .single()
+
+    if (erroBuscar || !relacionamentoAtual) {
+      return res.status(404).json({
+        error: 'Relacionamento não encontrado',
+        message: 'O relacionamento especificado não existe'
+      })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('grua_obra')
       .update({
@@ -751,6 +783,45 @@ router.put('/grua-obra/:id', async (req, res) => {
         error: 'Erro ao atualizar relacionamento',
         message: error.message
       })
+    }
+
+    // Atualizar status da grua se o status do relacionamento foi alterado
+    if (updateData.status !== undefined) {
+      let novoStatusGrua = 'em_obra'
+      let currentObraId = relacionamentoAtual.obra_id
+      let currentObraName = null
+
+      if (updateData.status === 'Concluída') {
+        novoStatusGrua = 'disponivel'
+        currentObraId = null
+        currentObraName = null
+      } else if (updateData.status === 'Ativa') {
+        // Buscar nome da obra
+        const { data: obraData } = await supabaseAdmin
+          .from('obras')
+          .select('nome')
+          .eq('id', relacionamentoAtual.obra_id)
+          .single()
+        
+        if (obraData) {
+          currentObraName = obraData.nome
+        }
+      }
+
+      const { error: updateGruaError } = await supabaseAdmin
+        .from('gruas')
+        .update({
+          status: novoStatusGrua,
+          current_obra_id: currentObraId,
+          current_obra_name: currentObraName,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', relacionamentoAtual.grua_id)
+
+      if (updateGruaError) {
+        console.error('Erro ao atualizar status da grua:', updateGruaError)
+        // Não falhar a operação, apenas logar o erro
+      }
     }
 
     res.json({
