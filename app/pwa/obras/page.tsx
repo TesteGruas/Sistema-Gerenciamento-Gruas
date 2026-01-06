@@ -21,6 +21,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { obrasApi, Obra } from "@/lib/api-obras"
+import { clientesApi } from "@/lib/api-clientes"
 
 export default function PWAObrasPage() {
   const router = useRouter()
@@ -81,16 +82,57 @@ export default function PWAObrasPage() {
         return
       }
 
-      // Buscar obras do usuário
+      // Verificar se é cliente (não funcionário)
+      const userDataStr = localStorage.getItem('user_data')
+      if (!userDataStr) {
+        toast({
+          title: "Erro",
+          description: "Usuário não autenticado",
+          variant: "destructive"
+        })
+        setIsLoading(false)
+        return
+      }
+
+      const userData = JSON.parse(userDataStr)
+      const userId = userData?.user?.id || userData?.id
+
+      if (!userId) {
+        toast({
+          title: "Erro",
+          description: "ID do usuário não encontrado",
+          variant: "destructive"
+        })
+        setIsLoading(false)
+        return
+      }
+
+      // Buscar cliente pelo usuario_id
+      const clienteResponse = await clientesApi.buscarPorUsuarioId(userId)
+      
+      if (!clienteResponse.success || !clienteResponse.data) {
+        // Se não for cliente, pode ser funcionário - buscar obras do funcionário
+        // Por enquanto, retornar vazio se não for cliente
+        setObras([])
+        setIsLoading(false)
+        return
+      }
+
+      const cliente = clienteResponse.data
+
+      // Buscar apenas obras do cliente logado
       const response = await obrasApi.listarObras({ 
+        cliente_id: cliente.id,
         limit: 100,
         status: 'Em Andamento' // Filtrar apenas obras em andamento
       })
       
       if (response.success) {
-        setObras(response.data)
+        // Filtrar apenas obras do cliente (garantia extra)
+        const obrasDoCliente = response.data.filter(obra => obra.cliente_id === cliente.id)
+        setObras(obrasDoCliente)
         // Salvar no cache
-        localStorage.setItem('cached_obras', JSON.stringify(response.data))
+        localStorage.setItem('cached_obras', JSON.stringify(obrasDoCliente))
       }
 
     } catch (error: any) {
