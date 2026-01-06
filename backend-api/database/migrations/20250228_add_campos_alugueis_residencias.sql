@@ -34,3 +34,4 @@ COMMENT ON COLUMN alugueis_residencias.contrato_arquivo IS 'URL ou caminho do ar
 
 
 
+

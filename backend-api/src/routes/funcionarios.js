@@ -189,6 +189,10 @@ router.get('/', authenticateToken, async (req, res) => {
         )
       `, { count: 'exact' })
 
+    // Excluir supervisores (são terceirizados do cliente, não funcionários)
+    query = query.neq('cargo', 'Supervisor')
+    query = query.eq('eh_supervisor', false)
+
     // Aplicar filtros
     if (req.query.status) {
       query = query.eq('status', req.query.status)
@@ -369,32 +373,38 @@ router.get('/', authenticateToken, async (req, res) => {
           }
         
           // Converter usuários para formato de funcionário
-          usuariosSemFuncionario = usuariosData.map(usuario => {
-            const perfil = usuario.usuario_perfis?.[0]?.perfis
-            return {
-              id: usuario.id,
-              nome: usuario.nome,
-              email: usuario.email,
-              telefone: usuario.telefone,
-              cpf: usuario.cpf,
-              status: usuario.status,
-              cargo: usuario.cargo || null, // Usar cargo do usuário se existir
-              turno: usuario.turno || null,
-              data_admissao: usuario.data_admissao || null,
-              salario: usuario.salario || null,
-              funcionario_id: null,
-              usuario_existe: true,
-              usuario_criado: true,
-              perfil_usuario: perfil ? {
-                id: perfil.id,
-                nome: perfil.nome,
-                nivel_acesso: perfil.nivel_acesso
-              } : null,
-              funcionarios_obras: [],
-              obra_atual: null,
-              obras_vinculadas: []
-            }
-          })
+          // Excluir supervisores (são terceirizados do cliente, não funcionários)
+          usuariosSemFuncionario = usuariosData
+            .filter(usuario => {
+              const cargo = usuario.cargo || null
+              return cargo !== 'Supervisor'
+            })
+            .map(usuario => {
+              const perfil = usuario.usuario_perfis?.[0]?.perfis
+              return {
+                id: usuario.id,
+                nome: usuario.nome,
+                email: usuario.email,
+                telefone: usuario.telefone,
+                cpf: usuario.cpf,
+                status: usuario.status,
+                cargo: usuario.cargo || null, // Usar cargo do usuário se existir
+                turno: usuario.turno || null,
+                data_admissao: usuario.data_admissao || null,
+                salario: usuario.salario || null,
+                funcionario_id: null,
+                usuario_existe: true,
+                usuario_criado: true,
+                perfil_usuario: perfil ? {
+                  id: perfil.id,
+                  nome: perfil.nome,
+                  nivel_acesso: perfil.nivel_acesso
+                } : null,
+                funcionarios_obras: [],
+                obra_atual: null,
+                obras_vinculadas: []
+              }
+            })
         } else {
           console.log('[DEBUG] Nenhum usuário sem funcionario_id encontrado')
         }
@@ -571,6 +581,10 @@ router.get('/buscar', async (req, res) => {
       .select('id, nome, cargo, status')
       .or(`nome.ilike.%${q}%,cargo.ilike.%${q}%`)
       .limit(20)
+
+    // Excluir supervisores (são terceirizados do cliente, não funcionários)
+    query = query.neq('cargo', 'Supervisor')
+    query = query.eq('eh_supervisor', false)
 
     // Aplicar filtros adicionais
     if (cargo) {

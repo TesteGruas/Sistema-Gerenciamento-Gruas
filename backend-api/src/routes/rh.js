@@ -88,6 +88,10 @@ router.get('/funcionarios', authenticateToken, requirePermission('rh:visualizar'
         obra_atual:obras(id, nome, status, cliente:clientes(nome))
       `, { count: 'exact' })
 
+    // Excluir supervisores (são terceirizados do cliente, não funcionários)
+    query = query.neq('cargo', 'Supervisor')
+    query = query.eq('eh_supervisor', false)
+
     // Aplicar filtros
     if (status) {
       query = query.eq('status', status)

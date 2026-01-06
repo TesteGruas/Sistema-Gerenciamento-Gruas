@@ -19,3 +19,4 @@ COMMENT ON COLUMN impostos_financeiros.nome_arquivo IS 'Nome original do arquivo
 
 
 
+

@@ -25,3 +25,4 @@ COMMENT ON COLUMN vendas.tipo_arquivo IS 'Tipo do arquivo: pdf, imagem, document
 
 
 
+
