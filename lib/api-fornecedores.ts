@@ -67,12 +67,26 @@ export const fornecedoresApi = {
   },
 
   async create(fornecedor: FornecedorCreate): Promise<Fornecedor> {
-    const response = await api.post('/fornecedores', fornecedor);
+    // Normalizar status para evitar variações ('Ativo', espaços, etc.)
+    const payload: FornecedorCreate = {
+      ...fornecedor,
+      ...(fornecedor.status
+        ? { status: fornecedor.status.toLowerCase().trim() as 'ativo' | 'inativo' }
+        : {})
+    }
+    const response = await api.post('/fornecedores', payload);
     return response.data.data;
   },
 
   async update(id: string, fornecedor: FornecedorUpdate): Promise<Fornecedor> {
-    const response = await api.put(`/fornecedores/${id}`, fornecedor);
+    // Normalizar status se presente
+    const payload: FornecedorUpdate = {
+      ...fornecedor,
+      ...(fornecedor.status
+        ? { status: (fornecedor.status as string).toLowerCase().trim() as 'ativo' | 'inativo' }
+        : {})
+    }
+    const response = await api.put(`/fornecedores/${id}`, payload);
     return response.data.data;
   },
 

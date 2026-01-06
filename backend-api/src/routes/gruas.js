@@ -245,14 +245,14 @@ const gruaSchema = Joi.object({
     'any.required': 'Tipo de base é obrigatório'
   }),
   capacidade_1_cabo: Joi.number().min(0).required().messages({
-    'number.base': 'Capacidade com 1 cabo deve ser um número',
-    'number.min': 'Capacidade com 1 cabo não pode ser negativa',
-    'any.required': 'Capacidade com 1 cabo é obrigatória'
+    'number.base': 'Capacidade com 2 cabos (mínima) deve ser um número',
+    'number.min': 'Capacidade com 2 cabos (mínima) não pode ser negativa',
+    'any.required': 'Capacidade com 2 cabos (mínima) é obrigatória'
   }),
   capacidade_2_cabos: Joi.number().min(0).required().messages({
-    'number.base': 'Capacidade com 2 cabos deve ser um número',
-    'number.min': 'Capacidade com 2 cabos não pode ser negativa',
-    'any.required': 'Capacidade com 2 cabos é obrigatória'
+    'number.base': 'Capacidade com 4 cabos (máxima) deve ser um número',
+    'number.min': 'Capacidade com 4 cabos (máxima) não pode ser negativa',
+    'any.required': 'Capacidade com 4 cabos (máxima) é obrigatória'
   }),
   potencia_instalada: Joi.number().min(0).required().messages({
     'number.base': 'Potência instalada deve ser um número',
@@ -332,14 +332,14 @@ const gruaInputSchema = Joi.object({
     'any.required': 'Tipo de base é obrigatório'
   }),
   capacidade_1_cabo: Joi.number().min(0).required().messages({
-    'number.base': 'Capacidade com 1 cabo deve ser um número',
-    'number.min': 'Capacidade com 1 cabo não pode ser negativa',
-    'any.required': 'Capacidade com 1 cabo é obrigatória'
+    'number.base': 'Capacidade com 2 cabos (mínima) deve ser um número',
+    'number.min': 'Capacidade com 2 cabos (mínima) não pode ser negativa',
+    'any.required': 'Capacidade com 2 cabos (mínima) é obrigatória'
   }),
   capacidade_2_cabos: Joi.number().min(0).required().messages({
-    'number.base': 'Capacidade com 2 cabos deve ser um número',
-    'number.min': 'Capacidade com 2 cabos não pode ser negativa',
-    'any.required': 'Capacidade com 2 cabos é obrigatória'
+    'number.base': 'Capacidade com 4 cabos (máxima) deve ser um número',
+    'number.min': 'Capacidade com 4 cabos (máxima) não pode ser negativa',
+    'any.required': 'Capacidade com 4 cabos (máxima) é obrigatória'
   }),
   potencia_instalada: Joi.number().min(0).required().messages({
     'number.base': 'Potência instalada deve ser um número',
@@ -844,23 +844,33 @@ router.get('/:id', async (req, res) => {
     let grua = null
     
     // Estratégia 1: Tentar buscar diretamente por ID (pode ser numérico ou alfanumérico)
+    // Limpar o ID de espaços em branco antes de buscar
+    const idLimpo = id.trim()
+    
+    console.log(`[DEBUG] Buscando grua por ID limpo: "${idLimpo}" (original: "${id}")`)
+    
     let { data: gruaPorId, error: errorPorId } = await supabaseAdmin
       .from('gruas')
       .select('*')
-      .eq('id', id)
+      .eq('id', idLimpo)
       .maybeSingle()
+    
+    console.log(`[DEBUG] Resultado busca por ID - gruaPorId:`, gruaPorId ? `Encontrada (ID: ${gruaPorId.id}, name: ${gruaPorId.name})` : 'null')
+    console.log(`[DEBUG] Resultado busca por ID - errorPorId:`, errorPorId)
+    
+    if (errorPorId) {
+      console.error(`[DEBUG] Erro ao buscar grua por ID:`, errorPorId)
+    }
     
     if (gruaPorId && !errorPorId) {
       console.log(`[DEBUG] Grua encontrada por ID: ${gruaPorId.name || gruaPorId.id} (ID: ${gruaPorId.id})`)
       grua = gruaPorId
     } else {
       // Se não encontrou por ID, tentar buscar por 'name' (fallback)
-      console.log(`[DEBUG] Grua não encontrada por ID, tentando buscar por 'name': "${id}"`)
+      console.log(`[DEBUG] Grua não encontrada por ID, tentando buscar por 'name': "${idLimpo}"`)
       // Buscar por código/nome alfanumérico - tentar múltiplas estratégias
-      console.log(`[DEBUG] Buscando grua por código: "${id}"`)
+      console.log(`[DEBUG] Buscando grua por código: "${idLimpo}"`)
       
-      // Limpar o ID de espaços em branco
-      const idLimpo = id.trim()
       const idLimpoUpper = idLimpo.toUpperCase()
       
       // Estratégia 1: Buscar todas as gruas e filtrar manualmente (mais confiável)
@@ -1278,20 +1288,36 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Determinar se é um ID numérico/UUID ou um código/nome alfanumérico
-    const isNumericOrUUID = !isNaN(Number(id)) || id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
+    // IMPORTANTE: O campo 'id' pode ser alfanumérico (ex: "G0001")
+    // Sempre tentar buscar por 'id' primeiro, independente de ser numérico ou não
+    console.log(`[DEBUG PUT] Buscando grua por ID para atualização: "${id}"`)
     
-    // Primeiro, buscar a grua para obter o ID real se necessário
-    let gruaId = id
-    if (!isNumericOrUUID) {
-      // Limpar o ID de espaços em branco
-      const idLimpo = id.trim()
+    // Limpar o ID de espaços em branco antes de buscar
+    const idLimpo = id.trim()
+    
+    // Primeiro, buscar a grua para obter o ID real
+    let gruaId = null
+    let gruaExistente = null
+    
+    // Estratégia 1: Tentar buscar diretamente por ID (pode ser numérico ou alfanumérico)
+    let { data: gruaPorId, error: errorPorId } = await supabaseAdmin
+      .from('gruas')
+      .select('id')
+      .eq('id', idLimpo)
+      .maybeSingle()
+    
+    console.log(`[DEBUG PUT] Resultado busca por ID - gruaPorId:`, gruaPorId ? `Encontrada (ID: ${gruaPorId.id})` : 'null')
+    console.log(`[DEBUG PUT] Resultado busca por ID - errorPorId:`, errorPorId)
+    
+    if (gruaPorId && !errorPorId) {
+      console.log(`[DEBUG PUT] Grua encontrada por ID: ${gruaPorId.id}`)
+      gruaExistente = gruaPorId
+      gruaId = gruaPorId.id
+    } else {
+      // Se não encontrou por ID, tentar buscar por 'name' (fallback)
+      console.log(`[DEBUG PUT] Grua não encontrada por ID, tentando buscar por 'name': "${idLimpo}"`)
       
-      // Buscar por código/nome alfanumérico no campo 'name'
-      // Tentar múltiplas estratégias de busca
-      let gruaExistente = null
-      
-      // Estratégia 1: Busca exata case-insensitive
+      // Estratégia 2: Busca exata case-insensitive
       let { data: gruaExata, error: errorExata } = await supabaseAdmin
         .from('gruas')
         .select('id')
@@ -1300,9 +1326,11 @@ router.put('/:id', async (req, res) => {
         .maybeSingle()
       
       if (gruaExata && !errorExata) {
+        console.log(`[DEBUG PUT] Grua encontrada por name (ilike): ${gruaExata.id}`)
         gruaExistente = gruaExata
+        gruaId = gruaExata.id
       } else {
-        // Estratégia 2: Busca parcial case-insensitive
+        // Estratégia 3: Busca parcial case-insensitive
         let { data: gruaParcial, error: errorParcial } = await supabaseAdmin
           .from('gruas')
           .select('id')
@@ -1311,9 +1339,11 @@ router.put('/:id', async (req, res) => {
           .maybeSingle()
         
         if (gruaParcial && !errorParcial) {
+          console.log(`[DEBUG PUT] Grua encontrada por name (parcial): ${gruaParcial.id}`)
           gruaExistente = gruaParcial
+          gruaId = gruaParcial.id
         } else {
-          // Estratégia 3: Busca exata case-sensitive
+          // Estratégia 4: Busca exata case-sensitive
           let { data: gruaCaseSensitive, error: errorCaseSensitive } = await supabaseAdmin
             .from('gruas')
             .select('id')
@@ -1322,18 +1352,29 @@ router.put('/:id', async (req, res) => {
             .maybeSingle()
           
           if (gruaCaseSensitive && !errorCaseSensitive) {
+            console.log(`[DEBUG PUT] Grua encontrada por name (case-sensitive): ${gruaCaseSensitive.id}`)
             gruaExistente = gruaCaseSensitive
+            gruaId = gruaCaseSensitive.id
           }
         }
       }
       
       if (!gruaExistente) {
+        console.log(`[DEBUG PUT] Grua não encontrada por ID nem por name para: "${idLimpo}"`)
         return res.status(404).json({
           error: 'Grua não encontrada',
           message: `A grua com o código "${id}" não foi encontrada. Verifique se o código está correto.`
         })
       }
-      gruaId = gruaExistente.id
+    }
+
+    // Verificação de segurança: garantir que gruaId foi definido
+    if (!gruaId) {
+      console.error(`[DEBUG PUT] Erro: gruaId não foi definido para: "${idLimpo}"`)
+      return res.status(404).json({
+        error: 'Grua não encontrada',
+        message: `A grua com o código "${id}" não foi encontrada. Verifique se o código está correto.`
+      })
     }
 
     // Validar dados

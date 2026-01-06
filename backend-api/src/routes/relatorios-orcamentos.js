@@ -238,7 +238,21 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
     yPos += 25;
 
     // ===== CABEÇALHO =====
-    doc.fontSize(16).font('Helvetica-Bold').text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
+    // Determinar o título baseado no tipo de orçamento
+    // Para locação de grua: "ORÇAMENTO DE LOCAÇÃO DE GRUA"
+    // Para complementos (venda ou locação): "ORÇAMENTO"
+    let tituloOrcamento = 'ORÇAMENTO';
+    if (isLocacao && orcamento.tipo_orcamento === 'locacao_grua') {
+      tituloOrcamento = 'ORÇAMENTO DE LOCAÇÃO DE GRUA';
+    } else if (!isLocacao && orcamento.grua_id) {
+      // Orçamento normal com grua_id - verificar se é locação
+      // Por padrão, se tem grua_id e não é de locação, é complemento
+      // Mas se for especificamente de locação de grua, usar o título completo
+      // Por enquanto, vamos considerar que orçamentos normais com grua_id são de complementos
+      tituloOrcamento = 'ORÇAMENTO';
+    }
+    
+    doc.fontSize(16).font('Helvetica-Bold').text(tituloOrcamento, 40, yPos, { align: 'center' });
     yPos += 25;
     
     // Usar o número correto do orçamento
@@ -413,9 +427,9 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
         yPos += 12;
         doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia}` : '-'}`, 40, yPos);
         yPos += 12;
-        doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+        doc.text(`Capacidade 2 cabos (mínima): ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
         yPos += 12;
-        doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+        doc.text(`Capacidade 4 cabos (máxima): ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
         yPos += 12;
         doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
         yPos += 12;
@@ -444,9 +458,9 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
         yPos += 12;
         doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia} KVA` : '-'}`, 40, yPos);
         yPos += 12;
-        doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+        doc.text(`Capacidade 2 cabos (mínima): ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
         yPos += 12;
-        doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+        doc.text(`Capacidade 4 cabos (máxima): ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
         yPos += 12;
         doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
         yPos += 12;
@@ -997,10 +1011,18 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
     yPos += 25;
 
     // Título com cor
+    // Determinar o título baseado no tipo de orçamento
+    // Para locação de grua: "ORÇAMENTO DE LOCAÇÃO DE GRUA"
+    // Para complementos (venda ou locação): "ORÇAMENTO"
+    let tituloOrcamento = 'ORÇAMENTO';
+    if (orcamento.tipo_orcamento === 'locacao_grua') {
+      tituloOrcamento = 'ORÇAMENTO DE LOCAÇÃO DE GRUA';
+    }
+    
     doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
        .fontSize(18)
        .font('Helvetica-Bold')
-       .text('ORÇAMENTO DE LOCAÇÃO DE GRUA', 40, yPos, { align: 'center' });
+       .text(tituloOrcamento, 40, yPos, { align: 'center' });
     yPos += 25;
     
     const numeroOrcamento = orcamento.numero || `LOC-${id}`;
@@ -1141,9 +1163,9 @@ router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('
       yPos += 12;
       doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia}` : '-'}`, 40, yPos);
       yPos += 12;
-      doc.text(`Capacidade 1 cabo: ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
+      doc.text(`Capacidade 2 cabos (mínima): ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
       yPos += 12;
-      doc.text(`Capacidade 2 cabos: ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
+      doc.text(`Capacidade 4 cabos (máxima): ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
       yPos += 12;
       doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
       yPos += 12;

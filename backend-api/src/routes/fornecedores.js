@@ -17,7 +17,16 @@ const fornecedorSchema = Joi.object({
   estado: Joi.string().length(2).optional(),
   cep: Joi.string().pattern(/^\d{5}-\d{3}$/).optional(),
   categoria: Joi.string().max(100).optional(),
-  status: Joi.string().valid('ativo', 'inativo').default('ativo'),
+  status: Joi.string()
+    .valid('ativo', 'inativo', 'Ativo', 'Inativo', 'ATIVO', 'INATIVO')
+    .custom((value, helpers) => {
+      // Normalizar para minúsculas
+      if (value) {
+        return value.toLowerCase().trim();
+      }
+      return 'ativo';
+    })
+    .default('ativo'),
   observacoes: Joi.string().max(1000).optional()
 });
 
@@ -146,11 +155,94 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       });
     }
 
-    const { data, error: insertError } = await supabaseAdmin
-      .from('fornecedores')
-      .insert(value)
-      .select()
-      .single();
+    // Normalizar status para garantir que seja válido
+    let dataToInsert = { ...value };
+    
+    // Sempre normalizar o status, mesmo se vier do Joi
+    if (dataToInsert.status !== undefined && dataToInsert.status !== null) {
+      // Converter para string, minúsculas e remover espaços
+      dataToInsert.status = String(dataToInsert.status).toLowerCase().trim();
+    }
+    
+    // Se status não for válido ou estiver vazio, usar 'ativo' como padrão
+    if (!dataToInsert.status || dataToInsert.status === '' || 
+        (dataToInsert.status !== 'ativo' && dataToInsert.status !== 'inativo')) {
+      dataToInsert.status = 'ativo';
+    }
+    
+    // Garantir que o status seja exatamente 'ativo' ou 'inativo' (sem espaços extras)
+    dataToInsert.status = dataToInsert.status === 'inativo' ? 'inativo' : 'ativo';
+    
+    // Debug: verificar o status antes de inserir
+    console.log('Status normalizado antes de inserir:', JSON.stringify(dataToInsert.status));
+    let maxRetries = 3;
+    let retryCount = 0;
+    let data = null;
+    let insertError = null;
+    let triedStatusFallback = false;
+    
+    // Tentar inserir, removendo colunas faltantes automaticamente
+    while (retryCount < maxRetries) {
+      const { data: resultData, error: resultError } = await supabaseAdmin
+        .from('fornecedores')
+        .insert(dataToInsert)
+        .select()
+        .single();
+
+      // Se não houver erro, sucesso!
+      if (!resultError) {
+        data = resultData;
+        break;
+      }
+
+      // Se o erro for sobre coluna que não existe, remover e tentar novamente
+      if (resultError.message && resultError.message.includes("Could not find the")) {
+        const columnMatch = resultError.message.match(/'(\w+)' column/);
+        if (columnMatch && columnMatch[1]) {
+          const missingColumn = columnMatch[1];
+          console.warn(`⚠️  Coluna "${missingColumn}" não encontrada na tabela. Removendo do insert...`);
+          
+          // Remover a coluna faltante
+          const { [missingColumn]: removed, ...rest } = dataToInsert;
+          dataToInsert = rest;
+          retryCount++;
+          
+          if (retryCount === 1) {
+            console.warn('💡 Execute a migration: database/migrations/20250303_add_categoria_fornecedores.sql');
+          }
+          continue;
+        }
+      }
+      
+      // Se não for erro de coluna faltante, verificar outros erros conhecidos
+      if (resultError.message && resultError.message.includes('violates check constraint')) {
+        if (resultError.message.includes('fornecedores_status_check')) {
+          // Fallback: em alguns bancos a constraint pode estar com valores 'Ativo'/'Inativo'
+          if (!triedStatusFallback && (dataToInsert.status === 'ativo' || dataToInsert.status === 'inativo')) {
+            triedStatusFallback = true;
+            dataToInsert.status = dataToInsert.status === 'inativo' ? 'Inativo' : 'Ativo';
+            retryCount++;
+            console.warn('⚠️ Constraint de status falhou com minúsculas. Tentando fallback com maiúsculas:', dataToInsert.status);
+            continue;
+          }
+          
+          console.error('Erro de constraint de status no POST (após fallback se aplicado):', {
+            statusEnviado: dataToInsert.status,
+            tipoStatus: typeof dataToInsert.status,
+            statusJSON: JSON.stringify(dataToInsert.status),
+            statusLength: dataToInsert.status?.length
+          });
+          return res.status(400).json({
+            error: 'Status inválido',
+            message: `O status deve ser "ativo" ou "inativo". Valor recebido: "${dataToInsert.status}"`
+          });
+        }
+      }
+      
+      // Se não for erro de coluna faltante, lançar o erro
+      insertError = resultError;
+      break;
+    }
 
     if (insertError) throw insertError;
 
@@ -204,15 +296,86 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       }
     }
 
-    const { data, error: updateError } = await supabaseAdmin
-      .from('fornecedores')
-      .update({
-        ...value,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single();
+    // Normalizar status se estiver sendo atualizado
+    let updateData = {
+      ...value,
+      updated_at: new Date().toISOString()
+    };
+    
+    // Se status estiver sendo atualizado, normalizar para garantir que seja válido
+    if (updateData.status !== undefined && updateData.status !== null) {
+      // Converter para minúsculas e remover espaços
+      updateData.status = String(updateData.status).toLowerCase().trim();
+      if (updateData.status !== 'ativo' && updateData.status !== 'inativo') {
+        return res.status(400).json({
+          error: 'Status inválido',
+          message: 'Status deve ser "ativo" ou "inativo"'
+        });
+      }
+    }
+    
+    let maxRetries = 3;
+    let retryCount = 0;
+    let data = null;
+    let updateError = null;
+    let triedStatusFallback = false;
+
+    // Tentar atualizar, removendo colunas faltantes automaticamente
+    while (retryCount < maxRetries) {
+      const { data: resultData, error: resultError } = await supabaseAdmin
+        .from('fornecedores')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single();
+
+      // Se não houver erro, sucesso!
+      if (!resultError) {
+        data = resultData;
+        break;
+      }
+
+      // Se o erro for sobre coluna que não existe, remover e tentar novamente
+      if (resultError.message && resultError.message.includes("Could not find the")) {
+        const columnMatch = resultError.message.match(/'(\w+)' column/);
+        if (columnMatch && columnMatch[1]) {
+          const missingColumn = columnMatch[1];
+          console.warn(`⚠️  Coluna "${missingColumn}" não encontrada na tabela. Removendo do update...`);
+          
+          // Remover a coluna faltante
+          const { [missingColumn]: removed, ...rest } = updateData;
+          updateData = rest;
+          retryCount++;
+          
+          if (retryCount === 1) {
+            console.warn('💡 Execute a migration: database/migrations/20250303_add_categoria_fornecedores.sql');
+          }
+          continue;
+        }
+      }
+      
+      // Se não for erro de coluna faltante, verificar outros erros conhecidos
+      if (resultError.message && resultError.message.includes('violates check constraint')) {
+        if (resultError.message.includes('fornecedores_status_check')) {
+          // Fallback: tentar com 'Ativo'/'Inativo' se estiver usando minúsculas
+          if (!triedStatusFallback && typeof updateData.status === 'string' && (updateData.status === 'ativo' || updateData.status === 'inativo')) {
+            triedStatusFallback = true;
+            updateData.status = updateData.status === 'inativo' ? 'Inativo' : 'Ativo';
+            retryCount++;
+            console.warn('⚠️ Constraint de status falhou no UPDATE com minúsculas. Tentando fallback com maiúsculas:', updateData.status);
+            continue;
+          }
+          return res.status(400).json({
+            error: 'Status inválido',
+            message: 'O status deve ser "ativo" ou "inativo"'
+          });
+        }
+      }
+      
+      // Se não for erro de coluna faltante, tratar normalmente
+      updateError = resultError;
+      break;
+    }
 
     if (updateError) {
       if (updateError.code === 'PGRST116') {

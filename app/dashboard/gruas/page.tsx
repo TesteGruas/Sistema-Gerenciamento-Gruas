@@ -1698,7 +1698,7 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="capacidade_1_cabo">Capacidade 1 cabo (kg) *</Label>
+                <Label htmlFor="capacidade_1_cabo">Capacidade 2 cabos (kg) - mínima *</Label>
                 <Input
                   id="capacidade_1_cabo"
                   type="number"
@@ -1711,7 +1711,7 @@ export default function GruasPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="capacidade_2_cabos">Capacidade 2 cabos (kg) *</Label>
+                <Label htmlFor="capacidade_2_cabos">Capacidade 4 cabos (kg) - máxima *</Label>
                 <Input
                   id="capacidade_2_cabos"
                   type="number"
@@ -1973,7 +1973,7 @@ export default function GruasPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="edit-capacidade_1_cabo">Capacidade 1 cabo (kg) *</Label>
+                <Label htmlFor="edit-capacidade_1_cabo">Capacidade 2 cabos (kg) - mínima *</Label>
                 <Input
                   id="edit-capacidade_1_cabo"
                   type="number"
@@ -1986,7 +1986,7 @@ export default function GruasPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="edit-capacidade_2_cabos">Capacidade 2 cabos (kg) *</Label>
+                <Label htmlFor="edit-capacidade_2_cabos">Capacidade 4 cabos (kg) - máxima *</Label>
                 <Input
                   id="edit-capacidade_2_cabos"
                   type="number"
@@ -2444,12 +2444,12 @@ export default function GruasPage() {
                     </div>
                     
                     <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade 1 Cabo</Label>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade 2 Cabos (mínima)</Label>
                       <p className="text-base">{formatValue(grua.capacidade_1_cabo)}</p>
                     </div>
                     
                     <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade 2 Cabos</Label>
+                      <Label className="text-sm font-medium text-gray-600">Capacidade 4 Cabos (máxima)</Label>
                       <p className="text-base">{formatValue(grua.capacidade_2_cabos)}</p>
                     </div>
                     

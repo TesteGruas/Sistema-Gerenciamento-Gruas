@@ -384,8 +384,8 @@ export default function OrcamentoComplementosPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="w-full h-full min-h-screen p-6 space-y-6">
+      <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
@@ -422,13 +422,13 @@ export default function OrcamentoComplementosPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 orcamento-complementos-grid">
         {/* Coluna Principal */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className="lg:col-span-2 space-y-6">
           {/* Dados do Cliente */}
           <Card>
             <CardHeader>
               <CardTitle>Dados do Cliente</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <div>
                 <Label>Cliente *</Label>
                 <ClienteSearch
@@ -445,7 +445,7 @@ export default function OrcamentoComplementosPage() {
             <CardHeader>
               <CardTitle>Informações do Orçamento</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label>Número da Proposta</Label>
@@ -557,7 +557,7 @@ export default function OrcamentoComplementosPage() {
               <CardTitle>Itens de Complementos</CardTitle>
               <CardDescription>Adicione os complementos do orçamento</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               {/* Busca de Complementos */}
               <div className="relative" ref={complementosSearchRef}>
                 <Input
@@ -597,11 +597,11 @@ export default function OrcamentoComplementosPage() {
               </Button>
 
               {/* Lista de Complementos */}
-              <div className="space-y-4">
+              <div className="space-y-6">
                 {complementos.map((comp, index) => (
-                  <Card key={index} className="p-4">
-                    <div className="flex justify-between items-start mb-4">
-                      <h4 className="font-semibold">Item {index + 1}</h4>
+                  <Card key={index} className="p-6">
+                    <div className="flex justify-between items-start mb-6">
+                      <h4 className="font-semibold text-lg">Item {index + 1}</h4>
                       <Button
                         type="button"
                         variant="ghost"
@@ -612,7 +612,7 @@ export default function OrcamentoComplementosPage() {
                       </Button>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       <div>
                         <Label>Nome do Item / Código *</Label>
                         <Input
@@ -753,7 +753,7 @@ export default function OrcamentoComplementosPage() {
             <CardHeader>
               <CardTitle>Observações</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <Textarea
                 value={formData.observacoes}
                 onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
@@ -765,12 +765,12 @@ export default function OrcamentoComplementosPage() {
         </div>
 
         {/* Coluna Lateral - Resumo */}
-        <div className="space-y-4">
+        <div className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>Resumo do Orçamento</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-4 pt-6">
               <div className="space-y-2">
                 <div className="flex justify-between">
                   <span className="text-sm text-muted-foreground">Subtotal Itens:</span>
@@ -811,7 +811,7 @@ export default function OrcamentoComplementosPage() {
             <CardHeader>
               <CardTitle>Garantia</CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-6">
               <p className="text-sm text-muted-foreground">
                 3 meses contra defeitos de fabricação
               </p>

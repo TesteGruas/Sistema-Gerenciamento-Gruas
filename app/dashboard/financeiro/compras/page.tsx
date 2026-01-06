@@ -35,7 +35,8 @@ import {
   Package,
   AlertTriangle,
   Upload,
-  X
+  X,
+  Zap
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { estoqueAPI, type Produto } from "@/lib/api-estoque"
@@ -914,12 +915,32 @@ function CreateCompraDialog({ isOpen, onClose, onSuccess }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
+      // Validar fornecedor_id
+      if (!formData.fornecedor_id || formData.fornecedor_id.trim() === '') {
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione um fornecedor",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const fornecedorId = parseInt(formData.fornecedor_id)
+      if (isNaN(fornecedorId) || fornecedorId <= 0) {
+        toast({
+          title: "Erro",
+          description: "Fornecedor inválido. Por favor, selecione um fornecedor válido",
+          variant: "destructive"
+        })
+        return
+      }
+
       // Calcular valor total dos itens
       const valorTotalItens = itens.reduce((total, item) => total + (item.quantidade * item.valor_unitario), 0)
       
       // Criar compra primeiro
       const compra = await createCompra({
-        fornecedor_id: parseInt(formData.fornecedor_id),
+        fornecedor_id: fornecedorId,
         numero_pedido: formData.numero_pedido,
         data_pedido: formData.data_pedido,
         data_entrega: formData.data_entrega || undefined,
@@ -1439,11 +1460,35 @@ function FornecedorSelector({
         isOpen={isCreateDialogOpen}
         onClose={() => setIsCreateDialogOpen(false)}
         onSuccess={async (novoFornecedor) => {
+          // Fechar o dialog primeiro
+          setIsCreateDialogOpen(false)
+          
+          // Verificar se o fornecedor foi criado com sucesso e tem ID
+          if (!novoFornecedor || !novoFornecedor.id) {
+            console.error('Erro: Fornecedor criado mas sem ID', novoFornecedor)
+            toast({
+              title: "Aviso",
+              description: "Fornecedor criado, mas não foi possível selecioná-lo automaticamente. Por favor, selecione manualmente.",
+              variant: "destructive"
+            })
+            return
+          }
+          
           // Recarregar lista de fornecedores
           await carregarFornecedores()
+          
+          // Garantir que o ID seja tratado corretamente (pode ser número ou string)
+          const fornecedorId = String(novoFornecedor.id)
+          
           // Selecionar o novo fornecedor automaticamente
-          onValueChange(novoFornecedor.id.toString())
-          setIsCreateDialogOpen(false)
+          // Usar setTimeout para garantir que o Select tenha atualizado após o recarregamento
+          setTimeout(() => {
+            onValueChange(fornecedorId)
+            toast({
+              title: "Sucesso",
+              description: `Fornecedor "${novoFornecedor.nome}" foi selecionado automaticamente`,
+            })
+          }, 200)
         }}
       />
     </div>
@@ -1608,9 +1653,19 @@ function CreateFornecedorDialog({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex justify-end">
+          {/* <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={preencherDadosDebug}
+              disabled={isSubmitting}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Preencher com Dados de Teste
+            </Button>
             <DebugButton onClick={preencherDadosDebug} disabled={isSubmitting} />
-          </div>
+          </div> */}
           <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="nome">Nome/Razão Social *</Label>
