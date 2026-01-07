@@ -126,7 +126,7 @@ const tipoConfig: Record<NotificationType, {
 }
 
 export default function NotificacoesPage() {
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const tiposPermitidos = obterTiposPermitidosPorRole(user?.role)
   
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -161,7 +161,8 @@ export default function NotificacoesPage() {
   const carregarNotificacoes = async (novaPagina?: number, novoLimite?: number) => {
     setLoading(true)
     try {
-      console.log('⏳ [Preload] Carregando notificações...')
+      console.log('⏳ [Dashboard] Carregando notificações...')
+      console.log('👤 [Dashboard] Usuário atual:', user?.email, 'ID:', user?.id, 'Role:', user?.role)
       const startTime = performance.now()
       
       const params = {
@@ -172,10 +173,22 @@ export default function NotificacoesPage() {
         lida: filtroTipo === 'todas' ? undefined : filtroTipo === 'nao_lidas' ? false : true
       }
 
+      console.log('📤 [Dashboard] Parâmetros da requisição:', params)
+      // Verificar token antes de fazer a requisição
+      if (typeof window !== 'undefined') {
+        const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+        console.log('🔑 [Dashboard] Token disponível:', token ? 'Sim (primeiros 20 chars: ' + token.substring(0, 20) + '...)' : 'Não')
+      }
       const response = await NotificacoesAPI.listar(params)
       const duration = Math.round(performance.now() - startTime)
       
-      console.log(`✅ [Preload] Notificações carregadas (${duration}ms) - ${response.data.length} registros`)
+      console.log(`✅ [Dashboard] Notificações carregadas (${duration}ms) - ${response.data.length} registros`)
+      console.log('📋 [Dashboard] Notificações retornadas:', response.data.map(n => ({
+        id: n.id,
+        titulo: n.titulo,
+        usuario_id: n.usuario_id,
+        destinatarios: n.destinatarios
+      })))
       
       setNotificacoes(response.data)
       setPaginacao(response.pagination)
@@ -192,13 +205,21 @@ export default function NotificacoesPage() {
   }
 
   // Carregar dados iniciais apenas uma vez (otimizado para carregar mais rápido)
+  // AGUARDAR usuário estar disponível antes de carregar
   useEffect(() => {
+    // Aguardar autenticação estar pronta
+    if (authLoading) {
+      console.log('⏳ [Preload] Aguardando autenticação...')
+      return
+    }
+    
     // Evitar carregamento duplo - só carregar uma vez
     if (initialLoadDoneRef.current) return
     
     if (!loadingRef.current) {
       initialLoadDoneRef.current = true
       console.log('⏳ [Preload] Iniciando carregamento da página de notificações...')
+      console.log('👤 [Preload] Usuário disponível:', user?.email, 'ID:', user?.id, 'Role:', user?.role)
       const pageStartTime = performance.now()
       
       loadingRef.current = true
@@ -210,7 +231,7 @@ export default function NotificacoesPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [authLoading, user])
 
   // Recarregar quando filtros mudarem (com debounce)
   useEffect(() => {
@@ -543,11 +564,13 @@ export default function NotificacoesPage() {
       </Card>
 
       {/* Tabela de Notificações */}
-      {loading ? (
+      {authLoading || loading ? (
         <Card>
           <CardContent className="p-8 text-center">
             <RefreshCw className="h-8 w-8 mx-auto text-gray-400 mb-4 animate-spin" />
-            <div className="text-gray-500">Carregando notificações...</div>
+            <div className="text-gray-500">
+              {authLoading ? 'Carregando autenticação...' : 'Carregando notificações...'}
+            </div>
           </CardContent>
         </Card>
       ) : notificacoes.length === 0 ? (

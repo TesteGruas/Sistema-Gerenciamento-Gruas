@@ -3,6 +3,7 @@ import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js'
+import { emitirNotificacaoMultiplos } from '../server.js'
 
 const router = express.Router()
 
@@ -73,8 +74,13 @@ router.get('/', authenticateToken, async (req, res) => {
     const offset = (page - 1) * limit
     let userId = req.user.id
 
+    console.log(`[notificacoes] 🚀 GET /api/notificacoes - Iniciando busca`)
+    console.log(`[notificacoes] 📧 Email do usuário: ${req.user.email}`)
+    console.log(`[notificacoes] 🆔 req.user.id inicial: ${userId} (tipo: ${typeof userId})`)
+
     // Se userId é UUID, buscar o ID inteiro da tabela usuarios
     if (typeof userId === 'string' && userId.includes('-')) {
+      console.log(`[notificacoes] 🔄 Convertendo UUID para ID numérico`)
       const { data: userData, error: userError } = await supabaseAdmin
         .from('usuarios')
         .select('id')
@@ -96,12 +102,65 @@ router.get('/', authenticateToken, async (req, res) => {
       }
 
       userId = userData.id
+      console.log(`[notificacoes] ✅ ID numérico encontrado: ${userId}`)
+    }
+    
+    console.log(`[notificacoes] 🆔 userId final para busca: ${userId} (tipo: ${typeof userId})`)
+    
+    // Verificar se é admin - admins veem TODAS as notificações
+    const userRole = req.user.role || req.user.perfil?.nome || null
+    const isAdmin = userRole && (
+      userRole.toLowerCase() === 'admin' || 
+      userRole.toLowerCase() === 'administrador' ||
+      userRole.toLowerCase() === 'adm'
+    )
+    
+    console.log(`[notificacoes] 👤 Role do usuário: ${userRole || 'N/A'}, É admin: ${isAdmin}`)
+
+    // Buscar cliente vinculado ao usuário (se existir) - apenas se NÃO for admin
+    let clienteId = null
+    let clienteCnpj = null
+    try {
+      console.log(`[notificacoes] 🔍 Buscando cliente para usuario_id: ${userId} (tipo: ${typeof userId})`)
+      const { data: cliente, error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .select('id, cnpj')
+        .eq('contato_usuario_id', userId)
+        .single()
+
+      if (clienteError) {
+        console.log(`[notificacoes] ⚠️ Erro ao buscar cliente:`, clienteError)
+        if (clienteError.code === 'PGRST116') {
+          console.log(`[notificacoes] ℹ️ Usuário ${userId} não é cliente (nenhum registro encontrado)`)
+        }
+      } else if (cliente) {
+        clienteId = cliente.id.toString()
+        clienteCnpj = cliente.cnpj ? cliente.cnpj.replace(/\D/g, '') : null // Remove formatação do CNPJ
+        console.log(`[notificacoes] ✅ Cliente encontrado: ID ${clienteId} (tipo: ${typeof clienteId}), CNPJ ${clienteCnpj || 'N/A'} para usuário ${userId}`)
+      } else {
+        console.log(`[notificacoes] ℹ️ Nenhum cliente encontrado para usuário ${userId}`)
+      }
+    } catch (error) {
+      // Não é cliente, continuar normalmente
+      console.log(`[notificacoes] ⚠️ Exceção ao buscar cliente para usuário ${userId}:`, error.message)
     }
 
+    // Buscar notificações vinculadas ao usuario_id OU onde o cliente está nos destinatários
     let query = supabaseAdmin
       .from('notificacoes')
       .select('*', { count: 'exact' })
-      .eq('usuario_id', userId)
+
+    // Se é ADMIN, não aplicar filtro de usuario_id (vai buscar TODAS as notificações)
+    // Se não é cliente e não é admin, buscar apenas por usuario_id
+    // Se é cliente, não aplicar filtro de usuario_id aqui (vai buscar por destinatários depois)
+    if (isAdmin) {
+      // Admin vê todas as notificações - não aplicar filtro de usuario_id
+      console.log(`[notificacoes] 🔓 Admin detectado - buscando TODAS as notificações`)
+    } else if (!clienteId) {
+      // Não é cliente e não é admin - buscar apenas por usuario_id
+      query = query.eq('usuario_id', userId)
+    }
+    // Se é cliente, não aplicar filtro aqui - vai buscar todas e filtrar por destinatários
 
     // Filtro por tipo
     if (req.query.tipo) {
@@ -120,29 +179,223 @@ router.get('/', authenticateToken, async (req, res) => {
       query = query.or(`titulo.ilike.%${searchTerm}%,mensagem.ilike.%${searchTerm}%`)
     }
 
-    query = query
-      .range(offset, offset + limit - 1)
-      .order('data', { ascending: false })
+    // Se é cliente, buscar também notificações onde o cliente está nos destinatários
+    let notificacoesPorUsuario = []
+    let notificacoesPorDestinatario = []
+    let countTotal = 0
 
-    const { data, error, count } = await query
+    // Query 1: Notificações vinculadas ao usuario_id
+    // Se é ADMIN, buscar TODAS as notificações sem filtro de usuario_id
+    // Se é cliente, NÃO buscar por usuario_id (apenas por destinatários específicos)
+    // Se não é cliente e não é admin, buscar normalmente por usuario_id
+    if (isAdmin) {
+      // Admin vê todas as notificações - buscar todas sem filtro de usuario_id
+      console.log(`[notificacoes] 🔓 Buscando TODAS as notificações (Admin)`)
+      const queryAdmin = query
+        .range(offset, offset + limit - 1)
+        .order('data', { ascending: false })
 
-    if (error) {
-      return res.status(500).json({
-        success: false,
-        error: 'Erro ao buscar notificações',
-        message: error.message
-      })
+      const { data: dataAdmin, error: errorAdmin, count: countAdmin } = await queryAdmin
+
+      if (errorAdmin) {
+        console.error('Erro ao buscar notificações (Admin):', errorAdmin)
+      } else {
+        notificacoesPorUsuario = dataAdmin || []
+        countTotal = countAdmin || 0
+        console.log(`[notificacoes] ✅ Admin - Encontradas ${notificacoesPorUsuario.length} notificações (total: ${countTotal})`)
+        if (notificacoesPorUsuario.length > 0) {
+          console.log(`[notificacoes] 📋 IDs:`, notificacoesPorUsuario.map(n => `${n.id} (usuario_id: ${n.usuario_id}, destinatarios: ${JSON.stringify(n.destinatarios)})`))
+        }
+      }
+    } else if (!clienteId) {
+      // Se não é cliente e não é admin, buscar por usuario_id normalmente
+      console.log(`[notificacoes] 🔍 Buscando notificações por usuario_id: ${userId} (NÃO é cliente)`)
+      const queryUsuario = query
+        .range(offset, offset + limit - 1)
+        .order('data', { ascending: false })
+
+      const { data: dataUsuario, error: errorUsuario, count: countUsuario } = await queryUsuario
+
+      if (errorUsuario) {
+        console.error('Erro ao buscar notificações por usuario_id:', errorUsuario)
+      } else {
+        notificacoesPorUsuario = dataUsuario || []
+        countTotal = countUsuario || 0
+        console.log(`[notificacoes] ✅ Encontradas ${notificacoesPorUsuario.length} notificações por usuario_id ${userId}`)
+        if (notificacoesPorUsuario.length > 0) {
+          console.log(`[notificacoes] 📋 IDs:`, notificacoesPorUsuario.map(n => `${n.id} (usuario_id: ${n.usuario_id}, destinatarios: ${JSON.stringify(n.destinatarios)})`))
+        }
+      }
+    } else {
+      // Se é cliente, não buscar por usuario_id (vai buscar apenas por destinatários)
+      console.log(`[notificacoes] ⏭️ Pulando busca por usuario_id (é cliente ${clienteId})`)
+      notificacoesPorUsuario = []
+      countTotal = 0
     }
 
-    const totalPages = Math.ceil(count / limit)
+    // Query 2: Se é cliente (e não é admin), buscar também notificações onde o cliente está nos destinatários
+    // Admin não precisa desta query pois já busca todas as notificações
+    if (clienteId && !isAdmin) {
+      try {
+        console.log(`[notificacoes] 🔍 Buscando notificações para cliente ID ${clienteId}, CNPJ ${clienteCnpj || 'N/A'} (usuario_id: ${userId})`)
+        
+        // Buscar todas as notificações que podem ter o cliente nos destinatários
+        // Não excluir por usuario_id aqui, vamos filtrar depois para evitar perder notificações
+        const { data: todasNotificacoes, error: errorDestinatario } = await supabaseAdmin
+          .from('notificacoes')
+          .select('*')
+          .order('data', { ascending: false })
+          .limit(1000) // Limite razoável para filtrar depois
+
+        if (!errorDestinatario && todasNotificacoes) {
+          console.log(`[notificacoes] 📋 Total de notificações encontradas: ${todasNotificacoes.length}`)
+          
+          // Filtrar manualmente onde o cliente está nos destinatários
+          console.log(`[notificacoes] 🔍 Filtrando ${todasNotificacoes.length} notificações para cliente ID ${clienteId} (tipo: ${typeof clienteId}), CNPJ ${clienteCnpj || 'N/A'}`)
+          
+          notificacoesPorDestinatario = todasNotificacoes.filter(notif => {
+            // Se é cliente, não excluir por usuario_id (já não buscamos por usuario_id)
+            // Verificar se o cliente está nos destinatários
+            if (notif.destinatarios && Array.isArray(notif.destinatarios)) {
+              // Log para debug
+              const temDestinatariosCliente = notif.destinatarios.some(dest => dest.tipo === 'cliente')
+              if (temDestinatariosCliente) {
+                console.log(`[notificacoes] 📝 Notificação ${notif.id} tem destinatários cliente:`, JSON.stringify(notif.destinatarios))
+              }
+              
+              const temCliente = notif.destinatarios.some(dest => {
+                if (dest.tipo !== 'cliente') return false
+                
+                // Comparar IDs de várias formas possíveis (string, número, etc)
+                // Normalizar ambos para string e número para comparação robusta
+                const destIdStr = String(dest.id || '').trim()
+                const clienteIdStr = String(clienteId || '').trim()
+                const destIdNum = parseInt(dest.id) || 0
+                const clienteIdNum = parseInt(clienteId) || 0
+                
+                console.log(`[notificacoes] 🔍 Comparando: dest.id="${dest.id}" (tipo: ${typeof dest.id}) vs clienteId="${clienteId}" (tipo: ${typeof clienteId})`)
+                console.log(`[notificacoes] 🔍 Strings: "${destIdStr}" vs "${clienteIdStr}"`)
+                console.log(`[notificacoes] 🔍 Números: ${destIdNum} vs ${clienteIdNum}`)
+                
+                // Comparação robusta: string === string OU número === número OU conversões
+                const matchId = (
+                  destIdStr === clienteIdStr ||
+                  destIdNum === clienteIdNum ||
+                  String(destIdNum) === clienteIdStr ||
+                  destIdStr === String(clienteIdNum) ||
+                  (destIdNum > 0 && destIdNum === parseInt(clienteIdStr)) ||
+                  (clienteIdNum > 0 && parseInt(destIdStr) === clienteIdNum)
+                )
+                
+                // Comparar CNPJ (campo info) se disponível
+                let matchCnpj = false
+                if (clienteCnpj && dest.info) {
+                  const destCnpj = dest.info.replace(/\D/g, '') // Remove formatação
+                  matchCnpj = destCnpj === clienteCnpj
+                  console.log(`[notificacoes] 🔍 Comparando CNPJ: destCnpj="${destCnpj}" vs clienteCnpj="${clienteCnpj}", match=${matchCnpj}`)
+                }
+                
+                const match = matchId || matchCnpj
+                
+                if (match) {
+                  console.log(`[notificacoes] ✅ Notificação ${notif.id} encontrada para cliente ${clienteId} (dest.id: ${dest.id}, tipo: ${typeof dest.id}, dest.info: ${dest.info}, matchId: ${matchId}, matchCnpj: ${matchCnpj})`)
+                } else {
+                  console.log(`[notificacoes] ❌ Notificação ${notif.id} NÃO corresponde ao cliente ${clienteId} (dest.id: ${dest.id}, tipo: ${typeof dest.id})`)
+                }
+                
+                return match
+              })
+              
+              return temCliente
+            }
+            return false
+          })
+          
+          console.log(`[notificacoes] ✅ Notificações encontradas por destinatário: ${notificacoesPorDestinatario.length}`)
+        } else if (errorDestinatario) {
+          console.error(`[notificacoes] ❌ Erro ao buscar notificações por destinatário:`, errorDestinatario)
+        }
+      } catch (error) {
+        console.error('Erro ao buscar notificações por destinatário:', error)
+      }
+    }
+
+    // Combinar e ordenar notificações
+    // Se é admin, já tem todas as notificações em notificacoesPorUsuario, não precisa combinar
+    const todasNotificacoes = isAdmin 
+      ? notificacoesPorUsuario 
+      : [...notificacoesPorUsuario, ...notificacoesPorDestinatario]
+    
+    console.log(`[notificacoes] 📊 Resumo da busca:`)
+    console.log(`  - Role: ${userRole || 'N/A'}`)
+    console.log(`  - É Admin: ${isAdmin ? 'Sim' : 'Não'}`)
+    console.log(`  - Cliente ID: ${clienteId || 'N/A'}`)
+    console.log(`  - Cliente CNPJ: ${clienteCnpj || 'N/A'}`)
+    console.log(`  - Usuario ID: ${userId}`)
+    console.log(`  - Notificações por usuario_id: ${notificacoesPorUsuario.length}`)
+    if (notificacoesPorUsuario.length > 0) {
+      console.log(`  - IDs das notificações por usuario_id:`, notificacoesPorUsuario.map(n => n.id))
+    }
+    console.log(`  - Notificações por destinatário: ${notificacoesPorDestinatario.length}`)
+    if (notificacoesPorDestinatario.length > 0) {
+      console.log(`  - IDs das notificações por destinatário:`, notificacoesPorDestinatario.map(n => n.id))
+    }
+    console.log(`  - Total antes de remover duplicatas: ${todasNotificacoes.length}`)
+    
+    // Remover duplicatas (por ID)
+    const notificacoesUnicas = todasNotificacoes.filter((notif, index, self) => 
+      index === self.findIndex(n => n.id === notif.id)
+    )
+    
+    console.log(`  - Total após remover duplicatas: ${notificacoesUnicas.length}`)
+
+    // Aplicar filtros adicionais
+    let notificacoesFiltradas = notificacoesUnicas
+
+    // Filtro por tipo
+    if (req.query.tipo) {
+      notificacoesFiltradas = notificacoesFiltradas.filter(n => n.tipo === req.query.tipo)
+    }
+
+    // Filtro por lida
+    if (req.query.lida !== undefined) {
+      const lida = req.query.lida === 'true'
+      notificacoesFiltradas = notificacoesFiltradas.filter(n => n.lida === lida)
+    }
+
+    // Filtro por busca (título ou mensagem)
+    if (req.query.search) {
+      const searchTerm = req.query.search.toLowerCase()
+      notificacoesFiltradas = notificacoesFiltradas.filter(n => 
+        (n.titulo && n.titulo.toLowerCase().includes(searchTerm)) ||
+        (n.mensagem && n.mensagem.toLowerCase().includes(searchTerm))
+      )
+    }
+
+    // Ordenar por data (mais recente primeiro)
+    notificacoesFiltradas.sort((a, b) => {
+      const dateA = new Date(a.data || a.created_at).getTime()
+      const dateB = new Date(b.data || b.created_at).getTime()
+      return dateB - dateA
+    })
+
+    // Aplicar paginação manualmente
+    const totalFiltrado = notificacoesFiltradas.length
+    const notificacoesPaginadas = notificacoesFiltradas.slice(offset, offset + limit)
+    const totalPages = Math.ceil(totalFiltrado / limit)
+
+    console.log(`[notificacoes] 📤 Retornando ${notificacoesPaginadas.length} notificações (total filtrado: ${totalFiltrado})`)
+    if (notificacoesPaginadas.length > 0) {
+      console.log(`[notificacoes] 📋 IDs das notificações retornadas:`, notificacoesPaginadas.map(n => n.id))
+    }
 
     res.json({
       success: true,
-      data: data || [],
+      data: notificacoesPaginadas,
       pagination: {
         page,
         limit,
-        total: count,
+        total: totalFiltrado,
         pages: totalPages
       }
     })
@@ -172,6 +425,14 @@ router.get('/nao-lidas', authenticateToken, async (req, res) => {
   try {
     let userId = req.user.id
 
+    // Verificar se é admin
+    const userRole = req.user.role || req.user.perfil?.nome || null
+    const isAdmin = userRole && (
+      userRole.toLowerCase() === 'admin' || 
+      userRole.toLowerCase() === 'administrador' ||
+      userRole.toLowerCase() === 'adm'
+    )
+
     // Se userId é UUID, buscar o ID inteiro da tabela usuarios
     if (typeof userId === 'string' && userId.includes('-')) {
       const { data: userData, error: userError } = await supabaseAdmin
@@ -191,24 +452,125 @@ router.get('/nao-lidas', authenticateToken, async (req, res) => {
       userId = userData.id
     }
 
-    const { data, error } = await supabaseAdmin
+    // Se é admin, buscar todas as notificações não lidas
+    if (isAdmin) {
+      const { data, error } = await supabaseAdmin
+        .from('notificacoes')
+        .select('*')
+        .eq('lida', false)
+        .order('data', { ascending: false })
+
+      if (error) {
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao buscar notificações não lidas',
+          message: error.message
+        })
+      }
+
+      return res.json({
+        success: true,
+        data: data || []
+      })
+    }
+
+    // Buscar cliente vinculado ao usuário (se existir)
+    let clienteId = null
+    let clienteCnpj = null
+    try {
+      const { data: cliente } = await supabaseAdmin
+        .from('clientes')
+        .select('id, cnpj')
+        .eq('contato_usuario_id', userId)
+        .single()
+
+      if (cliente) {
+        clienteId = cliente.id.toString()
+        clienteCnpj = cliente.cnpj ? cliente.cnpj.replace(/\D/g, '') : null
+      }
+    } catch (error) {
+      // Não é cliente, continuar normalmente
+    }
+
+    // Buscar notificações vinculadas ao usuario_id
+    const { data: dataUsuario, error: errorUsuario } = await supabaseAdmin
       .from('notificacoes')
       .select('*')
       .eq('usuario_id', userId)
       .eq('lida', false)
       .order('data', { ascending: false })
 
-    if (error) {
+    if (errorUsuario) {
       return res.status(500).json({
         success: false,
         error: 'Erro ao buscar notificações não lidas',
-        message: error.message
+        message: errorUsuario.message
       })
     }
 
+    let notificacoesPorUsuario = dataUsuario || []
+    let notificacoesPorDestinatario = []
+
+    // Se é cliente, buscar também notificações onde o cliente está nos destinatários
+    if (clienteId) {
+      try {
+        const { data: todasNotificacoes, error: errorDestinatario } = await supabaseAdmin
+          .from('notificacoes')
+          .select('*')
+          .eq('lida', false)
+          .order('data', { ascending: false })
+          .limit(1000)
+
+        if (!errorDestinatario && todasNotificacoes) {
+          notificacoesPorDestinatario = todasNotificacoes.filter(notif => {
+            // Se já está vinculada ao usuario_id, não incluir aqui
+            if (notif.usuario_id === userId) {
+              return false
+            }
+            
+            // Verificar se o cliente está nos destinatários
+            if (notif.destinatarios && Array.isArray(notif.destinatarios)) {
+              return notif.destinatarios.some(dest => {
+                if (dest.tipo !== 'cliente') return false
+                
+                // Comparar IDs
+                const destId = dest.id?.toString() || String(dest.id || '')
+                const clienteIdStr = clienteId.toString()
+                const matchId = (
+                  destId === clienteIdStr || 
+                  destId === String(parseInt(clienteIdStr)) ||
+                  parseInt(destId) === parseInt(clienteIdStr) ||
+                  dest.id === parseInt(clienteId) ||
+                  dest.id === clienteId
+                )
+                
+                // Comparar CNPJ (campo info) se disponível
+                let matchCnpj = false
+                if (clienteCnpj && dest.info) {
+                  const destCnpj = dest.info.replace(/\D/g, '')
+                  matchCnpj = destCnpj === clienteCnpj
+                }
+                
+                return matchId || matchCnpj
+              })
+            }
+            return false
+          })
+        }
+      } catch (error) {
+        console.error('Erro ao buscar notificações por destinatário:', error)
+      }
+    }
+
+    // Combinar e remover duplicatas
+    const todasNotificacoes = [...notificacoesPorUsuario, ...notificacoesPorDestinatario]
+    const notificacoesUnicas = todasNotificacoes.filter((notif, index, self) => 
+      index === self.findIndex(n => n.id === notif.id)
+    )
+
     res.json({
       success: true,
-      data: data || []
+      data: notificacoesUnicas
     })
   } catch (error) {
     console.error('Erro ao listar notificações não lidas:', error)
@@ -236,6 +598,14 @@ router.get('/count/nao-lidas', authenticateToken, async (req, res) => {
   try {
     let userId = req.user.id
 
+    // Verificar se é admin
+    const userRole = req.user.role || req.user.perfil?.nome || null
+    const isAdmin = userRole && (
+      userRole.toLowerCase() === 'admin' || 
+      userRole.toLowerCase() === 'administrador' ||
+      userRole.toLowerCase() === 'adm'
+    )
+
     // Se userId é UUID, buscar o ID inteiro da tabela usuarios
     if (typeof userId === 'string' && userId.includes('-')) {
       const { data: userData, error: userError } = await supabaseAdmin
@@ -255,23 +625,117 @@ router.get('/count/nao-lidas', authenticateToken, async (req, res) => {
       userId = userData.id
     }
 
-    const { count, error } = await supabaseAdmin
+    // Se é admin, contar todas as notificações não lidas
+    if (isAdmin) {
+      const { count, error } = await supabaseAdmin
+        .from('notificacoes')
+        .select('*', { count: 'exact', head: true })
+        .eq('lida', false)
+
+      if (error) {
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao contar notificações não lidas',
+          message: error.message
+        })
+      }
+
+      return res.json({
+        success: true,
+        count: count || 0
+      })
+    }
+
+    // Buscar cliente vinculado ao usuário (se existir)
+    let clienteId = null
+    let clienteCnpj = null
+    try {
+      const { data: cliente } = await supabaseAdmin
+        .from('clientes')
+        .select('id, cnpj')
+        .eq('contato_usuario_id', userId)
+        .single()
+
+      if (cliente) {
+        clienteId = cliente.id.toString()
+        clienteCnpj = cliente.cnpj ? cliente.cnpj.replace(/\D/g, '') : null
+      }
+    } catch (error) {
+      // Não é cliente, continuar normalmente
+    }
+
+    // Buscar notificações vinculadas ao usuario_id
+    const { count: countUsuario, error: errorUsuario } = await supabaseAdmin
       .from('notificacoes')
       .select('*', { count: 'exact', head: true })
       .eq('usuario_id', userId)
       .eq('lida', false)
 
-    if (error) {
+    if (errorUsuario) {
       return res.status(500).json({
         success: false,
         error: 'Erro ao contar notificações não lidas',
-        message: error.message
+        message: errorUsuario.message
       })
+    }
+
+    let countTotal = countUsuario || 0
+
+    // Se é cliente, buscar também notificações onde o cliente está nos destinatários
+    if (clienteId) {
+      try {
+        const { data: todasNotificacoes, error: errorDestinatario } = await supabaseAdmin
+          .from('notificacoes')
+          .select('*')
+          .eq('lida', false)
+          .limit(1000)
+
+        if (!errorDestinatario && todasNotificacoes) {
+          const notificacoesPorDestinatario = todasNotificacoes.filter(notif => {
+            // Se já está vinculada ao usuario_id, não contar aqui
+            if (notif.usuario_id === userId) {
+              return false
+            }
+            
+            // Verificar se o cliente está nos destinatários
+            if (notif.destinatarios && Array.isArray(notif.destinatarios)) {
+              return notif.destinatarios.some(dest => {
+                if (dest.tipo !== 'cliente') return false
+                
+                // Comparar IDs
+                const destId = dest.id?.toString() || String(dest.id || '')
+                const clienteIdStr = clienteId.toString()
+                const matchId = (
+                  destId === clienteIdStr || 
+                  destId === String(parseInt(clienteIdStr)) ||
+                  parseInt(destId) === parseInt(clienteIdStr) ||
+                  dest.id === parseInt(clienteId) ||
+                  dest.id === clienteId
+                )
+                
+                // Comparar CNPJ (campo info) se disponível
+                let matchCnpj = false
+                if (clienteCnpj && dest.info) {
+                  const destCnpj = dest.info.replace(/\D/g, '')
+                  matchCnpj = destCnpj === clienteCnpj
+                }
+                
+                return matchId || matchCnpj
+              })
+            }
+            return false
+          })
+          
+          countTotal += notificacoesPorDestinatario.length
+        }
+      } catch (error) {
+        console.error('Erro ao contar notificações por destinatário:', error)
+      }
     }
 
     res.json({
       success: true,
-      count: count || 0
+      count: countTotal
     })
   } catch (error) {
     console.error('Erro ao contar notificações não lidas:', error)
@@ -430,6 +894,32 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
         error: 'Erro ao criar notificação',
         message: insertError.message
       })
+    }
+
+    // Emitir notificações via WebSocket (tempo real)
+    if (data && data.length > 0) {
+      try {
+        data.forEach((notificacao, index) => {
+          const usuarioId = usuariosUnicos[index]
+          if (usuarioId && notificacao) {
+            emitirNotificacaoMultiplos([usuarioId], {
+              id: String(notificacao.id),
+              titulo: notificacao.titulo,
+              mensagem: notificacao.mensagem,
+              tipo: notificacao.tipo,
+              link: notificacao.link,
+              lida: false,
+              data: notificacao.data || notificacao.created_at,
+              remetente: notificacao.remetente,
+              destinatarios: notificacao.destinatarios
+            })
+          }
+        })
+        console.log(`[notificacoes] 📤 WebSocket: ${data.length} notificação(ões) emitida(s)`)
+      } catch (wsError) {
+        console.error(`[notificacoes] ❌ Erro ao emitir WebSocket:`, wsError.message)
+        // Não falhar a criação se WebSocket falhar
+      }
     }
 
     // Inicializar variáveis de WhatsApp ANTES de qualquer processamento

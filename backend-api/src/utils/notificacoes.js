@@ -1,5 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js';
+import { emitirNotificacao } from '../server.js';
 
 /**
  * Cria uma notificação de aprovação de horas extras para o gestor
@@ -74,7 +75,7 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
     const mensagem = `${registro.funcionario.nome} tem ${registro.horas_extras}h extras para aprovar`;
     const link = `/pwa/aprovacoes/${registro.id}`;
 
-    const { error } = await supabaseAdmin
+    const { data: notificacaoData, error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
         usuario_id: usuarioId,
@@ -84,7 +85,9 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
         link,
         lida: false,
         created_at: new Date().toISOString()
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('Erro ao criar notificação de aprovação:', error);
@@ -92,6 +95,24 @@ export async function criarNotificacaoAprovacao(registro, gestor) {
     }
 
     console.log(`Notificação de aprovação criada para gestor ${gestor.nome} (usuario_id: ${usuarioId})`);
+    
+    // Emitir via WebSocket (tempo real)
+    if (notificacaoData) {
+      try {
+        emitirNotificacao(usuarioId, {
+          id: String(notificacaoData.id),
+          titulo,
+          mensagem,
+          tipo: 'warning',
+          link,
+          lida: false,
+          data: notificacaoData.created_at,
+          remetente: 'Sistema'
+        })
+      } catch (wsError) {
+        console.error('Erro ao emitir WebSocket:', wsError.message)
+      }
+    }
     
     // Enviar via WhatsApp
     await enviarNotificacaoWhatsApp(usuarioId, titulo, mensagem, link);
@@ -116,7 +137,7 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
       : `Suas horas extras de ${registro.data} foram rejeitadas por ${gestor.nome}`;
     const link = `/dashboard/ponto`;
 
-    const { error } = await supabaseAdmin
+    const { data: notificacaoData, error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
         usuario_id: registro.funcionario_id,
@@ -126,7 +147,9 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
         link,
         lida: false,
         created_at: new Date().toISOString()
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('Erro ao criar notificação de resultado:', error);
@@ -134,6 +157,24 @@ export async function criarNotificacaoResultado(registro, resultado, gestor) {
     }
 
     console.log(`Notificação de resultado criada para funcionário ${registro.funcionario.nome}`);
+    
+    // Emitir via WebSocket (tempo real)
+    if (notificacaoData) {
+      try {
+        emitirNotificacao(registro.funcionario_id, {
+          id: String(notificacaoData.id),
+          titulo,
+          mensagem,
+          tipo,
+          link,
+          lida: false,
+          data: notificacaoData.created_at,
+          remetente: gestor.nome || 'Sistema'
+        })
+      } catch (wsError) {
+        console.error('Erro ao emitir WebSocket:', wsError.message)
+      }
+    }
     
     // Enviar via WhatsApp
     await enviarNotificacaoWhatsApp(registro.funcionario_id, titulo, mensagem, link);
@@ -174,7 +215,7 @@ export async function criarNotificacaoLembrete(registro, gestor) {
     const mensagem = `Lembrete: ${registro.funcionario.nome} ainda tem ${registro.horas_extras}h extras aguardando aprovação há mais de 1 dia`;
     const link = `/pwa/aprovacoes/${registro.id}`;
 
-    const { error } = await supabaseAdmin
+    const { data: notificacaoData, error } = await supabaseAdmin
       .from('notificacoes')
       .insert({
         usuario_id: usuarioId,
@@ -184,7 +225,9 @@ export async function criarNotificacaoLembrete(registro, gestor) {
         link,
         lida: false,
         created_at: new Date().toISOString()
-      });
+      })
+      .select()
+      .single();
 
     if (error) {
       console.error('Erro ao criar notificação de lembrete:', error);
@@ -192,6 +235,24 @@ export async function criarNotificacaoLembrete(registro, gestor) {
     }
 
     console.log(`Notificação de lembrete criada para gestor ${gestor.nome} (usuario_id: ${usuarioId})`);
+    
+    // Emitir via WebSocket (tempo real)
+    if (notificacaoData) {
+      try {
+        emitirNotificacao(usuarioId, {
+          id: String(notificacaoData.id),
+          titulo,
+          mensagem,
+          tipo: 'info',
+          link,
+          lida: false,
+          data: notificacaoData.created_at,
+          remetente: 'Sistema'
+        })
+      } catch (wsError) {
+        console.error('Erro ao emitir WebSocket:', wsError.message)
+      }
+    }
     
     // Enviar via WhatsApp
     await enviarNotificacaoWhatsApp(usuarioId, titulo, mensagem, link);

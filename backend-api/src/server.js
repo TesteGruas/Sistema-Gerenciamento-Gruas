@@ -1,4 +1,6 @@
 import express from 'express'
+import { createServer } from 'http'
+import { Server } from 'socket.io'
 import cors from 'cors'
 import compression from 'compression'
 import helmet from 'helmet'
@@ -9,6 +11,8 @@ import swaggerUi from 'swagger-ui-express'
 import dotenv from 'dotenv'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import jwt from 'jsonwebtoken'
+import { supabaseAdmin } from './config/supabase.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -140,6 +144,188 @@ import { initRedis } from './config/redis.js'
 
 const app = express()
 const PORT = process.env.PORT || 3001
+
+// Criar servidor HTTP para Socket.IO
+const httpServer = createServer(app)
+
+// Configurar Socket.IO com CORS
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+    credentials: true
+  },
+  transports: ['websocket', 'polling'] // Suporta ambos
+})
+
+// Armazenar conexões por usuário
+const userSockets = new Map() // userId -> Set<socketId>
+
+// Middleware de autenticação Socket.IO
+io.use(async (socket, next) => {
+  try {
+    const token = socket.handshake.auth.token
+    
+    if (!token) {
+      return next(new Error('Token não fornecido'))
+    }
+
+    // Verificar token JWT
+    let decoded
+    try {
+      // Tentar verificar como JWT primeiro
+      decoded = jwt.verify(token, process.env.JWT_SECRET || 'your-secret-key')
+    } catch (jwtError) {
+      // Se falhar, tentar verificar com Supabase Auth
+      const { data: { user }, error } = await supabaseAdmin.auth.getUser(token)
+      if (error || !user) {
+        return next(new Error('Token inválido'))
+      }
+      decoded = {
+        id: user.id,
+        email: user.email
+      }
+    }
+    
+    // Buscar usuario_id (pode ser UUID ou integer)
+    let userId = decoded.id
+    
+    // Se é UUID, buscar ID inteiro
+    if (typeof userId === 'string' && userId.includes('-')) {
+      const { data: userData, error: userError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .eq('email', decoded.email)
+        .single()
+      
+      if (userError || !userData) {
+        return next(new Error('Usuário não encontrado'))
+      }
+      
+      userId = userData.id
+    }
+    
+    socket.userId = userId
+    socket.userEmail = decoded.email
+    
+    next()
+  } catch (error) {
+    console.error('❌ [WebSocket] Erro na autenticação:', error.message)
+    next(new Error('Token inválido'))
+  }
+})
+
+// Gerenciar conexões WebSocket
+io.on('connection', (socket) => {
+  const userId = socket.userId
+  
+  console.log(`✅ [WebSocket] Usuário ${userId} conectado (socket: ${socket.id})`)
+  
+  // Adicionar socket ao conjunto de sockets do usuário
+  if (!userSockets.has(userId)) {
+    userSockets.set(userId, new Set())
+  }
+  userSockets.get(userId).add(socket.id)
+  
+  // Entrar em sala do usuário
+  socket.join(`user:${userId}`)
+  
+  // Evento: Cliente pronto
+  socket.emit('connected', {
+    userId,
+    timestamp: new Date().toISOString()
+  })
+  
+  // Evento: Marcar notificação como lida
+  socket.on('marcar-lida', async (data) => {
+    try {
+      const { notificacaoId } = data
+      
+      // Atualizar no banco
+      const { error } = await supabaseAdmin
+        .from('notificacoes')
+        .update({ lida: true })
+        .eq('id', notificacaoId)
+        .eq('usuario_id', userId)
+      
+      if (error) {
+        socket.emit('erro', { mensagem: 'Erro ao marcar como lida' })
+        return
+      }
+      
+      // Confirmar atualização
+      socket.emit('notificacao-atualizada', {
+        id: notificacaoId,
+        lida: true
+      })
+      
+      console.log(`✅ [WebSocket] Notificação ${notificacaoId} marcada como lida por usuário ${userId}`)
+    } catch (error) {
+      console.error('❌ [WebSocket] Erro ao marcar como lida:', error)
+      socket.emit('erro', { mensagem: 'Erro interno' })
+    }
+  })
+  
+  // Evento: Marcar todas como lidas
+  socket.on('marcar-todas-lidas', async () => {
+    try {
+      const { error } = await supabaseAdmin
+        .from('notificacoes')
+        .update({ lida: true })
+        .eq('usuario_id', userId)
+        .eq('lida', false)
+      
+      if (error) {
+        socket.emit('erro', { mensagem: 'Erro ao marcar todas como lidas' })
+        return
+      }
+      
+      socket.emit('todas-marcadas-lidas', {
+        timestamp: new Date().toISOString()
+      })
+      
+      console.log(`✅ [WebSocket] Todas as notificações marcadas como lidas por usuário ${userId}`)
+    } catch (error) {
+      console.error('❌ [WebSocket] Erro ao marcar todas como lidas:', error)
+      socket.emit('erro', { mensagem: 'Erro interno' })
+    }
+  })
+  
+  // Evento: Desconexão
+  socket.on('disconnect', () => {
+    console.log(`❌ [WebSocket] Usuário ${userId} desconectado (socket: ${socket.id})`)
+    
+    // Remover socket do conjunto
+    if (userSockets.has(userId)) {
+      userSockets.get(userId).delete(socket.id)
+      
+      // Se não há mais sockets, remover entrada
+      if (userSockets.get(userId).size === 0) {
+        userSockets.delete(userId)
+      }
+    }
+  })
+})
+
+// Função auxiliar para emitir notificação para usuário
+export function emitirNotificacao(usuarioId, notificacao) {
+  io.to(`user:${usuarioId}`).emit('nova-notificacao', {
+    ...notificacao,
+    timestamp: new Date().toISOString()
+  })
+  
+  console.log(`📤 [WebSocket] Notificação ${notificacao.id} enviada para usuário ${usuarioId}`)
+}
+
+// Função auxiliar para emitir para múltiplos usuários
+export function emitirNotificacaoMultiplos(usuarioIds, notificacao) {
+  usuarioIds.forEach(usuarioId => {
+    emitirNotificacao(usuarioId, notificacao)
+  })
+}
+
+// Exportar io para uso em outras rotas
+export { io }
 
 // Inicializar Redis (opcional, não bloqueia se falhar)
 initRedis().catch(err => {
@@ -541,10 +727,11 @@ app.use('*', (req, res) => {
 iniciarJobVerificacaoAprovacoes()
 inicializarScheduler()
 
-// Iniciar servidor
-app.listen(PORT, '0.0.0.0', () => {
+// Iniciar servidor HTTP (com WebSocket)
+httpServer.listen(PORT, '0.0.0.0', () => {
   console.log('🚀 ==========================================')
-  console.log(`📡 Servidor rodando na porta ${PORT}`)
+  console.log(`📡 Servidor HTTP rodando na porta ${PORT}`)
+  console.log(`🔌 WebSocket Server ativo`)
   console.log(`🏠 Escutando em TODAS as interfaces (0.0.0.0)`)
   console.log('🌐 Disponível em:')
   console.log(`   http://localhost:${PORT}`)

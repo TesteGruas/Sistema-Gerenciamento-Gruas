@@ -12,6 +12,7 @@ import {
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Badge } from '@/components/ui/badge'
 import { NotificacoesAPI, Notificacao, formatarTempoRelativo, NotificationType } from '@/lib/api-notificacoes'
+import { useWebSocketNotifications } from '@/hooks/use-websocket-notifications'
 
 // Ícones e cores por tipo de notificação
 const tipoConfig: Record<NotificationType, { bg: string; text: string; badge: string }> = {
@@ -31,6 +32,9 @@ export function NotificationsDropdown() {
   const [naoLidas, setNaoLidas] = useState(0)
   const [loading, setLoading] = useState(true)
   const [open, setOpen] = useState(false)
+  
+  // WebSocket para notificações em tempo real
+  const { connected: wsConnected } = useWebSocketNotifications()
   
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -107,6 +111,13 @@ export function NotificationsDropdown() {
               {naoLidas > 9 ? '9+' : naoLidas}
             </span>
           )}
+          {/* Indicador de conexão WebSocket */}
+          <span 
+            className={`absolute bottom-0 right-0 h-2 w-2 rounded-full border-2 border-white ${
+              wsConnected ? 'bg-green-500' : 'bg-gray-400'
+            }`} 
+            title={wsConnected ? 'Conectado (tempo real)' : 'Desconectado (polling)'} 
+          />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-96 p-0">

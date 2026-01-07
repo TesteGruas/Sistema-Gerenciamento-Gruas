@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { api } from '@/lib/api'
+import { useWebSocketNotifications } from './use-websocket-notifications'
 
 interface Notificacao {
   id: number;
@@ -23,13 +24,23 @@ interface UseNotificacoesReturn {
   refetch: () => Promise<void>;
 }
 
-const POLLING_INTERVAL = 30000; // 30 segundos
+// Reduzir polling quando WebSocket está conectado
+const POLLING_INTERVAL_WS = 300000; // 5 minutos se WebSocket conectado
+const POLLING_INTERVAL_REST = 30000; // 30 segundos se usando REST
 
 export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  
+  // Usar WebSocket para notificações em tempo real
+  const { 
+    connected: wsConnected, 
+    novaNotificacao,
+    marcarComoLida: wsMarcarComoLida,
+    marcarTodasComoLidas: wsMarcarTodasComoLidas
+  } = useWebSocketNotifications()
 
   /**
    * Busca notificações do usuário
@@ -60,36 +71,54 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
   }, [usuario_id]);
 
   /**
-   * Marca uma notificação como lida
+   * Marca uma notificação como lida (usar WebSocket se disponível, senão REST)
    */
   const marcarComoLida = useCallback(async (notificacao_id: number) => {
-    try {
-      await api.patch(`notificacoes/${notificacao_id}/marcar-lida`);
-
-      // Atualizar estado local
+    if (wsConnected) {
+      // Usar WebSocket se disponível
+      wsMarcarComoLida(String(notificacao_id))
+      // Atualizar estado local imediatamente (WebSocket confirma depois)
       setNotificacoes(prev =>
         prev.map(n => (n.id === notificacao_id ? { ...n, lida: true } : n))
-      );
-    } catch (err: any) {
-      console.error('Erro ao marcar notificação como lida:', err);
-      throw err;
+      )
+    } else {
+      // Fallback para REST
+      try {
+        await api.patch(`notificacoes/${notificacao_id}/marcar-lida`);
+
+        // Atualizar estado local
+        setNotificacoes(prev =>
+          prev.map(n => (n.id === notificacao_id ? { ...n, lida: true } : n))
+        );
+      } catch (err: any) {
+        console.error('Erro ao marcar notificação como lida:', err);
+        throw err;
+      }
     }
-  }, []);
+  }, [wsConnected, wsMarcarComoLida]);
 
   /**
-   * Marca todas as notificações como lidas
+   * Marca todas as notificações como lidas (usar WebSocket se disponível, senão REST)
    */
   const marcarTodasComoLidas = useCallback(async () => {
-    try {
-      await api.patch(`notificacoes/marcar-todas-lidas`);
+    if (wsConnected) {
+      // Usar WebSocket se disponível
+      wsMarcarTodasComoLidas()
+      // Atualizar estado local imediatamente (WebSocket confirma depois)
+      setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })))
+    } else {
+      // Fallback para REST
+      try {
+        await api.patch(`notificacoes/marcar-todas-lidas`);
 
-      // Atualizar estado local
-      setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
-    } catch (err: any) {
-      console.error('Erro ao marcar todas notificações como lidas:', err);
-      throw err;
+        // Atualizar estado local
+        setNotificacoes(prev => prev.map(n => ({ ...n, lida: true })));
+      } catch (err: any) {
+        console.error('Erro ao marcar todas notificações como lidas:', err);
+        throw err;
+      }
     }
-  }, []);
+  }, [wsConnected, wsMarcarTodasComoLidas]);
 
   /**
    * Refetch - recarrega a lista
@@ -99,23 +128,58 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
   }, [fetchNotificacoes]);
 
   /**
+   * Atualizar quando receber nova notificação via WebSocket
+   */
+  useEffect(() => {
+    if (novaNotificacao) {
+      setNotificacoes(prev => {
+        // Evitar duplicatas
+        const existe = prev.find(n => String(n.id) === String(novaNotificacao.id))
+        if (existe) return prev
+        
+        // Converter formato WebSocket para formato interno se necessário
+        const notifFormatada: Notificacao = {
+          id: typeof novaNotificacao.id === 'string' ? parseInt(novaNotificacao.id) : novaNotificacao.id,
+          usuario_id: usuario_id || 0,
+          tipo: novaNotificacao.tipo,
+          titulo: novaNotificacao.titulo,
+          mensagem: novaNotificacao.mensagem,
+          link: novaNotificacao.link,
+          lida: novaNotificacao.lida,
+          data: novaNotificacao.data,
+          created_at: novaNotificacao.created_at || novaNotificacao.data
+        }
+        
+        return [notifFormatada, ...prev]
+      })
+    }
+  }, [novaNotificacao, usuario_id])
+
+  /**
    * Calcula número de não lidas
    */
   const naoLidas = notificacoes.filter(n => !n.lida).length;
 
   /**
    * Configurar polling quando o componente é montado
+   * Reduzir frequência se WebSocket estiver conectado
    */
   useEffect(() => {
     if (!usuario_id) return;
 
+    // Limpar intervalo anterior
+    if (pollingIntervalRef.current) {
+      clearInterval(pollingIntervalRef.current);
+    }
+
     // Buscar imediatamente ao montar
     fetchNotificacoes();
 
-    // Configurar polling
+    // Configurar polling (menos frequente se WebSocket conectado)
+    const interval = wsConnected ? POLLING_INTERVAL_WS : POLLING_INTERVAL_REST;
     pollingIntervalRef.current = setInterval(() => {
       fetchNotificacoes();
-    }, POLLING_INTERVAL);
+    }, interval);
 
     // Cleanup ao desmontar
     return () => {
@@ -123,7 +187,7 @@ export function useNotificacoes(usuario_id?: number): UseNotificacoesReturn {
         clearInterval(pollingIntervalRef.current);
       }
     };
-  }, [usuario_id, fetchNotificacoes]);
+  }, [usuario_id, fetchNotificacoes, wsConnected]);
 
   /**
    * Pausar polling quando a aba está inativa (opcional)

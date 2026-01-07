@@ -55,6 +55,8 @@
     "pdf-lib": "^1.17.1",
     "pdfkit": "^0.17.2",
     "redis": "^4.6.12",
+    "socket.io": "^4.8.3",
+    "socket.io-client": "^4.8.3",
     "swagger-jsdoc": "^6.2.8",
     "swagger-ui-express": "^5.0.0",
     "uuid": "^13.0.0",
