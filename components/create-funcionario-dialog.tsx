@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, User } from "lucide-react"
+import { Plus, Loader2, User, Zap } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
@@ -180,12 +180,29 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     const dataAdmissao = new Date()
     dataAdmissao.setMonth(dataAdmissao.getMonth() - 6) // 6 meses atrás
     
+    // Gerar CPF válido para teste (formato: XXX.XXX.XXX-XX)
+    const gerarCPF = () => {
+      const num1 = Math.floor(Math.random() * 900) + 100
+      const num2 = Math.floor(Math.random() * 900) + 100
+      const num3 = Math.floor(Math.random() * 900) + 100
+      const dig = Math.floor(Math.random() * 90) + 10
+      return `${num1}.${num2}.${num3}-${dig}`
+    }
+    
+    // Gerar telefone aleatório
+    const gerarTelefone = () => {
+      const ddd = Math.floor(Math.random() * 90) + 10
+      const num1 = Math.floor(Math.random() * 9000) + 1000
+      const num2 = Math.floor(Math.random() * 9000) + 1000
+      return `${ddd}${num1}${num2}`
+    }
+    
     setForm({
-      name: "Carlos Eduardo Santos",
-      email: "carlos.santos@empresa.com.br",
-      phone: "(11) 98765-4321",
-      cpf: "123.456.789-00",
-      role: cargosAtivos.length > 0 ? cargosAtivos[0].nome : "Operador",
+      name: "SAMUEL LINKON GUEDES FIGUEIREDO",
+      email: "samuellinkon@gmail.com",
+      phone: gerarTelefone(),
+      cpf: gerarCPF(),
+      role: cargosAtivos.length > 0 ? cargosAtivos[0].nome : "Operador de Grua",
       status: "Ativo",
       turno: "Diurno",
       salary: "500000", // R$ 5.000,00 em centavos
@@ -207,7 +224,18 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={preencherDadosDebug}
+              disabled={submitting}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+              title="Preencher todos os campos com dados de teste"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Preencher Dados de Teste
+            </Button>
             <DebugButton onClick={preencherDadosDebug} disabled={submitting} />
           </div>
           <div className="grid grid-cols-2 gap-4">
@@ -269,6 +297,9 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                   <Select
                     value={form.role}
                     onValueChange={(value) => {
+                      if (value === "__loading__") {
+                        return // Ignorar valor de loading
+                      }
                       if (value === "__novo_cargo__") {
                         setMostrarInputNovoCargo(true)
                         setNovoCargo("")
@@ -282,7 +313,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                     </SelectTrigger>
                     <SelectContent>
                       {loadingCargos ? (
-                        <SelectItem value="" disabled>
+                        <SelectItem value="__loading__" disabled>
                           Carregando cargos...
                         </SelectItem>
                       ) : cargosFiltrados.length > 0 ? (

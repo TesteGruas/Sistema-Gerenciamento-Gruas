@@ -190,7 +190,8 @@ router.get('/', authenticateToken, async (req, res) => {
       `, { count: 'exact' })
 
     // Excluir supervisores (são terceirizados do cliente, não funcionários)
-    query = query.neq('cargo', 'Supervisor')
+    // Usar apenas eh_supervisor como filtro principal, pois alguns funcionários podem ter cargo NULL
+    // (quando usam apenas cargo_id, o campo cargo pode ser NULL)
     query = query.eq('eh_supervisor', false)
 
     // Aplicar filtros
@@ -242,8 +243,9 @@ router.get('/', authenticateToken, async (req, res) => {
       console.log('[FUNCIONARIOS] Nenhum termo de busca fornecido')
     }
 
-    // Aplicar paginação e ordenação (ID descendente para mostrar os mais recentes primeiro)
-    query = query.order('id', { ascending: false }).range(offset, offset + limit - 1)
+    // Aplicar ordenação (ID descendente para mostrar os mais recentes primeiro)
+    // NÃO aplicar paginação aqui - será aplicada depois de combinar com usuários
+    query = query.order('id', { ascending: false })
 
     console.log('[FUNCIONARIOS] Executando query no Supabase...')
     const { data: funcionariosData, error: funcionariosError, count: funcionariosCount } = await query
@@ -262,6 +264,14 @@ router.get('/', authenticateToken, async (req, res) => {
     console.log(`[FUNCIONARIOS] Status filtro: "${req.query.status || 'nenhum'}"`)
     console.log(`[FUNCIONARIOS] Funcionários encontrados: ${funcionariosData?.length || 0}`)
     console.log(`[FUNCIONARIOS] Total no banco: ${funcionariosCount || 0}`)
+    
+    // Debug: listar IDs dos funcionários encontrados
+    if (funcionariosData && funcionariosData.length > 0) {
+      const ids = funcionariosData.map(f => f.id).join(', ')
+      console.log(`[FUNCIONARIOS] IDs encontrados: ${ids}`)
+    } else {
+      console.log(`[FUNCIONARIOS] ⚠️ Nenhum funcionário encontrado na query`)
+    }
 
     // Buscar também usuários sem funcionario_id vinculado (como operadores)
     // que podem não estar na tabela funcionarios
@@ -327,24 +337,16 @@ router.get('/', authenticateToken, async (req, res) => {
         usuariosQuery = usuariosQuery.or(condicoes.join(','))
       }
       
-      // Aplicar paginação
-      // Se houver termo de busca, buscar mais resultados para garantir que encontramos todos os que correspondem
-      // Se não houver termo de busca, aplicar paginação normal
-      if (!searchTermClean) {
-        usuariosQuery = usuariosQuery.range(offset, offset + limit - 1)
-      } else {
-        // Com busca, buscar mais resultados para garantir que não perdemos nenhum
-        usuariosQuery = usuariosQuery.limit(limit * 3)
-      }
-      
+      // NÃO aplicar paginação aqui - será aplicada depois de combinar com funcionários
+      // Apenas aplicar ordenação
       usuariosQuery = usuariosQuery.order('created_at', { ascending: false })
       
       console.log(`[DEBUG] Query final de usuários:`, {
         termo: searchTermClean || 'nenhum',
         status: req.query.status || 'nenhum',
         funcionario_id: 'null',
-        offset: searchTermClean ? 'não aplicado' : offset,
-        limit: searchTermClean ? limit * 2 : limit
+        offset: 'não aplicado (paginação será feita depois)',
+        limit: 'não aplicado (paginação será feita depois)'
       })
       
       console.log(`[DEBUG] Query de usuários construída, executando...`)
@@ -460,27 +462,9 @@ router.get('/', authenticateToken, async (req, res) => {
     funcionariosComUsuario.sort((a, b) => (b.id || 0) - (a.id || 0))
 
     // Calcular total correto
-    // Se houver termo de busca, o count já está filtrado, então usamos o tamanho da lista combinada
-    // Se não houver termo de busca, precisamos contar todos os usuários sem funcionario_id
-    let totalItems
-    if (searchTermParam) {
-      // Com busca, o total é o tamanho da lista combinada (já filtrada)
-      totalItems = funcionariosComUsuario.length
-    } else {
-      // Sem busca, precisamos contar todos os usuários sem funcionario_id
-      // Para isso, vamos fazer uma query de contagem
-      let countQuery = supabaseAdmin
-        .from('usuarios')
-        .select('id', { count: 'exact', head: true })
-        .is('funcionario_id', null)
-      
-      if (req.query.status) {
-        countQuery = countQuery.eq('status', req.query.status)
-      }
-      
-      const { count: usuariosCount } = await countQuery
-      totalItems = (funcionariosCount || 0) + (usuariosCount || 0)
-    }
+    // O total é sempre o tamanho da lista combinada (já filtrada se houver busca)
+    // Isso garante que o total corresponde exatamente aos itens disponíveis
+    const totalItems = funcionariosComUsuario.length
     
     const totalPages = Math.ceil(totalItems / limit)
     const paginatedData = funcionariosComUsuario.slice(offset, offset + limit)
