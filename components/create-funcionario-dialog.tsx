@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, User, Zap } from "lucide-react"
+import { Plus, Loader2, User } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
@@ -224,18 +224,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={preencherDadosDebug}
-              disabled={submitting}
-              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-              title="Preencher todos os campos com dados de teste"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Preencher Dados de Teste
-            </Button>
+          <div className="flex justify-end">
             <DebugButton onClick={preencherDadosDebug} disabled={submitting} />
           </div>
           <div className="grid grid-cols-2 gap-4">

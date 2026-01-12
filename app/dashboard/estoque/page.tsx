@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2 } from "lucide-react"
+import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2, Zap } from "lucide-react"
 import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
@@ -800,17 +800,19 @@ export default function EstoquePage() {
   const preencherDadosDebugEstoque = () => {
     setFormData({
       nome: "Cabo de Aço 12mm",
-      descricao: "Cabo de aço galvanizado 12mm, resistência 8 toneladas",
+      descricao: "Cabo de aço galvanizado 12mm, resistência 8 toneladas. Ideal para operações de içamento e movimentação de cargas pesadas.",
       categoria_id: categorias.length > 0 ? categorias[0].id : 0,
       codigo_barras: "7891234567890",
-      unidade_medida: "metro",
+      unidade_medida: "M",
       valor_unitario: 45.50,
       estoque_minimo: 100,
       estoque_maximo: 500,
       localizacao: "Galpão A - Prateleira 3",
       status: "Ativo",
       quantidade_inicial: 250,
-      quantidade_reservada_inicial: 0
+      quantidade_reservada_inicial: 0,
+      classificacao_tipo: "item",
+      subcategoria_ativo: "" as ""
     })
   }
 
@@ -1264,7 +1266,18 @@ export default function EstoquePage() {
                 </DialogDescription>
               </DialogHeader>
               <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={preencherDadosDebugEstoque}
+                    disabled={loading}
+                    className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                    title="Preencher todos os campos com dados de teste"
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Preencher Dados de Teste
+                  </Button>
                   <DebugButton onClick={preencherDadosDebugEstoque} disabled={loading} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">

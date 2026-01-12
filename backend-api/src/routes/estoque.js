@@ -16,7 +16,9 @@ const produtoSchema = Joi.object({
   estoque_minimo: Joi.number().min(0).default(0),
   estoque_maximo: Joi.number().min(0).optional(),
   localizacao: Joi.string().allow('').optional(),
-  status: Joi.string().valid('Ativo', 'Inativo').default('Ativo')
+  status: Joi.string().valid('Ativo', 'Inativo').default('Ativo'),
+  classificacao_tipo: Joi.string().valid('componente', 'item', 'ativo', 'complemento').optional(),
+  subcategoria_ativo: Joi.string().valid('grua', 'equipamento_grua', 'ferramenta', 'ar_condicionado', 'camera', 'auto', 'pc').allow('').optional()
 }).custom((value, helpers) => {
   // Validar se estoque_maximo > estoque_minimo quando ambos estão definidos
   if (value.estoque_maximo && value.estoque_maximo <= value.estoque_minimo) {
@@ -24,8 +26,22 @@ const produtoSchema = Joi.object({
       message: 'O estoque máximo deve ser maior que o estoque mínimo'
     });
   }
+  
+  // Validar que subcategoria_ativo é obrigatória quando classificacao_tipo é 'ativo'
+  if (value.classificacao_tipo === 'ativo' && !value.subcategoria_ativo) {
+    return helpers.error('custom.subcategoriaAtivo', {
+      message: 'A subcategoria do ativo é obrigatória quando a classificação é "ativo"'
+    });
+  }
+  
   return value;
-}, 'Validação de estoque máximo')
+}, 'Validação de estoque máximo e classificação')
+
+// Schema de atualização para produtos (todos os campos opcionais)
+const produtoUpdateSchema = produtoSchema.fork(
+  ['nome', 'categoria_id', 'unidade_medida', 'valor_unitario'],
+  (schema) => schema.optional()
+)
 
 // Schema para movimentações de estoque
 const movimentacaoSchema = Joi.object({
@@ -244,10 +260,32 @@ router.post('/', authenticateToken, requirePermission('produtos:criar'), async (
       })
     }
 
+    // Preparar dados do produto
     const produtoData = {
-      ...value,
+      nome: value.nome,
+      descricao: value.descricao || null,
+      categoria_id: value.categoria_id,
+      codigo_barras: value.codigo_barras || null,
+      unidade_medida: value.unidade_medida,
+      valor_unitario: value.valor_unitario,
+      estoque_minimo: value.estoque_minimo || 0,
+      estoque_maximo: value.estoque_maximo || null,
+      localizacao: value.localizacao || null,
+      status: value.status || 'Ativo',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    }
+    
+    // Adicionar campos de classificação se fornecidos
+    // Nota: Esses campos só serão inseridos se as colunas existirem no banco
+    if (value.classificacao_tipo) {
+      produtoData.classificacao_tipo = value.classificacao_tipo
+    }
+    
+    if (value.subcategoria_ativo) {
+      produtoData.subcategoria_ativo = value.subcategoria_ativo
+    } else if (value.classificacao_tipo === 'ativo') {
+      produtoData.subcategoria_ativo = null
     }
 
     console.log('Dados do produto a ser criado:', produtoData)
@@ -260,6 +298,17 @@ router.post('/', authenticateToken, requirePermission('produtos:criar'), async (
 
     if (insertError) {
       console.error('Erro detalhado ao criar produto:', insertError)
+      
+      // Verificar se o erro é relacionado a colunas que não existem
+      if (insertError.message && insertError.message.includes('classificacao_tipo')) {
+        return res.status(500).json({
+          error: 'Erro ao criar produto',
+          message: 'As colunas de classificação não existem no banco de dados. Execute a migration primeiro.',
+          details: 'Execute o SQL em backend-api/database/migrations/20250228_reorganizar_categorias_estoque.sql no banco de dados',
+          migration_file: '20250228_reorganizar_categorias_estoque.sql'
+        })
+      }
+      
       return res.status(500).json({
         error: 'Erro ao criar produto',
         message: insertError.message,
@@ -336,7 +385,7 @@ router.put('/:id', authenticateToken, requirePermission('produtos:editar'), asyn
   try {
     const { id } = req.params
 
-    const { error, value } = produtoSchema.validate(req.body)
+    const { error, value } = produtoUpdateSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -346,8 +395,19 @@ router.put('/:id', authenticateToken, requirePermission('produtos:editar'), asyn
 
     const updateData = {
       ...value,
+      // Converter string vazia em null para subcategoria_ativo quando não for ativo
+      subcategoria_ativo: value.classificacao_tipo === 'ativo' && value.subcategoria_ativo 
+        ? value.subcategoria_ativo 
+        : (value.subcategoria_ativo === '' ? null : value.subcategoria_ativo),
       updated_at: new Date().toISOString()
     }
+    
+    // Remover campos undefined para não sobrescrever valores existentes
+    Object.keys(updateData).forEach(key => {
+      if (updateData[key] === undefined) {
+        delete updateData[key]
+      }
+    })
 
     const { data, error: updateError } = await supabaseAdmin
       .from('produtos')
