@@ -5,8 +5,9 @@
 export function adicionarRodapeEmpresaFrontend(doc: any) {
   const pageCount = doc.getNumberOfPages()
   const pageWidth = 210 // largura da página A4 em mm
+  const pageHeight = 297 // altura da página A4 em mm
   const margin = 14 // margem lateral
-  const rodapeY = 285 // posição Y do rodapé (próximo ao final da página)
+  const rodapeY = pageHeight - 12 // posição Y do rodapé (12mm do final da página)
 
   // Informações da empresa
   const empresaInfo = {
@@ -22,11 +23,13 @@ export function adicionarRodapeEmpresaFrontend(doc: any) {
 
     // Linha separadora acima do rodapé
     doc.setLineWidth(0.3)
-    doc.line(margin, rodapeY - 5, pageWidth - margin, rodapeY - 5)
+    doc.setDrawColor(200, 200, 200)
+    doc.line(margin, rodapeY - 3, pageWidth - margin, rodapeY - 3)
 
     // Texto do rodapé
     doc.setFontSize(7)
     doc.setFont('helvetica', 'normal')
+    doc.setTextColor(100, 100, 100)
 
     // Primeira linha: Nome da empresa, website e email
     const linha1 = `${empresaInfo.nome} ${empresaInfo.website} e-mail: ${empresaInfo.email}`
@@ -37,10 +40,13 @@ export function adicionarRodapeEmpresaFrontend(doc: any) {
 
     // Segunda linha: Endereço e telefones
     const linha2 = `${empresaInfo.endereco} ${empresaInfo.telefones}`
-    doc.text(linha2, pageWidth / 2, rodapeY + 5, {
+    doc.text(linha2, pageWidth / 2, rodapeY + 4, {
       align: 'center',
       maxWidth: pageWidth - margin * 2
     })
+    
+    // Resetar cor do texto
+    doc.setTextColor(0, 0, 0)
   }
 }
 

@@ -378,6 +378,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       // CAPA PADRÃO NR12 NR18
       // ============================================
       const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
+      
+      // Função auxiliar para adicionar nova página com logos
+      const adicionarNovaPaginaComLogos = async () => {
+        doc.addPage()
+        return await adicionarLogosNoCabecalhoFrontend(doc, 10)
+      }
+      
       let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
 
       // Box de cabeçalho com fundo - Capa padrão NR12 NR18
@@ -421,12 +428,15 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.text('NR18 - Condições e Meio Ambiente de Trabalho na Indústria da Construção', 105, yPos, { align: 'center' })
       yPos += 15
 
+      // Limite máximo considerando rodapé
+      // Rodapé está em 285mm (297mm - 12mm), então o conteúdo deve parar em 270mm para dar espaço
+      const MAX_Y = 270 // 285mm (rodapé) - 15mm de margem de segurança
+      
       // ============================================
       // ÍNDICE DO LIVRO
       // ============================================
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const indiceY = yPos
@@ -462,29 +472,32 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         '9. Observações Gerais'
       ]
 
-      indiceItens.forEach((item, index) => {
-        if (yPos > 270) {
-          doc.addPage()
-          yPos = 20
+      for (const item of indiceItens) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
         }
         doc.text(`${item}`, 18, yPos)
         yPos += 6
-      })
+      }
 
       yPos += 10
 
       // ============================================
       // INÍCIO DO CONTEÚDO
       // ============================================
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       // Box de informações da Grua
       const fabricante = (gruaSelecionada.fabricante || '').replace(/^Fabricante/i, '').trim()
       const modelo = (gruaSelecionada.modelo || '').replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
       const nomeGrua = fabricante && modelo ? `${fabricante} ${modelo}` : (gruaSelecionada.name || `Grua ${gruaSelecionada.id}`)
+      
+      // Verificar se há espaço suficiente para o box de informações (20mm) + data (6mm) + linha (10mm) + seção (50mm) = ~86mm
+      if (yPos > MAX_Y - 86) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
       
       const infoBoxY = yPos
       const infoBoxHeight = 20
@@ -521,6 +534,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.line(14, yPos, 196, yPos)
       yPos += 10
 
+      // Verificar novamente se há espaço suficiente para a seção "1. DADOS DA OBRA"
+      // A seção precisa de pelo menos 50mm de espaço (cabeçalho + conteúdo mínimo)
+      if (yPos > MAX_Y - 50) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
       // 1. DADOS DA OBRA
       const secaoY = yPos
       doc.setFillColor(66, 139, 202)
@@ -536,7 +555,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
       
-      // Criar tabela com duas colunas
+      // Criar tabela com duas colunas usando splitTextToSize para textos longos
       const dadosObra = [
         [`Nome:`, obra.name || 'N/A'],
         [`Endereço:`, obra.location || obra.endereco || 'N/A'],
@@ -549,34 +568,131 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Orçamento:`, obra.budget ? formatarMoeda(parseFloat(obra.budget.toString().replace(',', '.'))) : 'N/A']
       ]
 
-      // Dividir em duas colunas
+      // Dividir em duas colunas com quebra de texto adequada
       const col1XObra = 18
       const col2XObra = 110
+      const col1Width = 85 // Largura da primeira coluna
+      const col2Width = 75 // Largura da segunda coluna
       const linhaAlturaObra = 6
+      let col1YPos = yPos
+      let col2YPos = yPos
+      let maxYUsed = yPos
       
-      dadosObra.forEach(([label, value], index) => {
-        const linhaY = yPos + (index % 5) * linhaAlturaObra
+      for (let index = 0; index < dadosObra.length; index++) {
+        const [label, value] = dadosObra[index]
         const coluna = Math.floor(index / 5)
+        const linha = index % 5
         
-        if (coluna === 1 && index % 5 === 0) {
-          yPos += 5 * linhaAlturaObra + 2
+        // Quando muda de coluna, verificar se há espaço suficiente
+        if (coluna === 1 && linha === 0) {
+          // Verificar se há espaço para a segunda coluna na mesma página
+          const espacoNecessario = 5 * linhaAlturaObra + 20 // espaço para 5 linhas + margem
+          if (col1YPos + espacoNecessario > MAX_Y) {
+            // Não há espaço, quebrar página
+            col2YPos = await adicionarNovaPaginaComLogos()
+            col1YPos = col2YPos // Resetar também a primeira coluna para manter alinhamento
+          } else {
+            col2YPos = col1YPos // Mesma altura da primeira coluna
+          }
         }
         
         const xPos = coluna === 0 ? col1XObra : col2XObra
-        const currentY = coluna === 0 ? linhaY : yPos + (index % 5) * linhaAlturaObra
+        const width = coluna === 0 ? col1Width : col2Width
+        const currentColYPos = coluna === 0 ? col1YPos : col2YPos
+        const linhaY = currentColYPos + linha * linhaAlturaObra
         
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, xPos, currentY)
-        doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), xPos + 35, currentY)
-      })
+        // Verificar ANTES de escrever se há espaço suficiente (com margem de segurança)
+        // Estimar altura necessária para o texto
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, width - 5)
+        const alturaNecessaria = linhaY + (textLines.length * 4)
+        
+        // Verificar se precisa quebrar página ANTES de escrever
+        if (linhaY > MAX_Y || alturaNecessaria > MAX_Y) {
+          const newYPos = await adicionarNovaPaginaComLogos()
+          if (coluna === 0) {
+            col1YPos = newYPos
+          } else {
+            col2YPos = newYPos
+            // Se quebrou página na segunda coluna, resetar também a primeira
+            col1YPos = newYPos
+          }
+          const newLinhaY = (coluna === 0 ? col1YPos : col2YPos) + linha * linhaAlturaObra
+          
+          doc.setFont('helvetica', 'bold')
+          doc.text(label, xPos, newLinhaY)
+          doc.setFont('helvetica', 'normal')
+          
+          // Quebrar texto longo se necessário
+          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+            const lineY = newLinhaY + (lineIdx * 4)
+            // Verificar se cada linha não ultrapassa o limite
+            if (lineY > MAX_Y) {
+              const extraYPos = await adicionarNovaPaginaComLogos()
+              if (coluna === 0) {
+                col1YPos = extraYPos
+              } else {
+                col2YPos = extraYPos
+                col1YPos = extraYPos
+              }
+              doc.text(textLines[lineIdx], xPos + 35, col1YPos)
+            } else {
+              doc.text(textLines[lineIdx], xPos + 35, lineY)
+            }
+          }
+          
+          // Atualizar maxYUsed
+          const finalY = Math.max(newLinhaY + (textLines.length * 4), (coluna === 0 ? col1YPos : col2YPos))
+          if (finalY > maxYUsed) {
+            maxYUsed = finalY
+          }
+        } else {
+          doc.setFont('helvetica', 'bold')
+          doc.text(label, xPos, linhaY)
+          doc.setFont('helvetica', 'normal')
+          
+          // Quebrar texto longo se necessário
+          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+            const lineY = linhaY + (lineIdx * 4)
+            // Verificar se cada linha não ultrapassa o limite
+            if (lineY > MAX_Y) {
+              const extraYPos = await adicionarNovaPaginaComLogos()
+              if (coluna === 0) {
+                col1YPos = extraYPos
+              } else {
+                col2YPos = extraYPos
+                col1YPos = extraYPos
+              }
+              doc.text(textLines[lineIdx], xPos + 35, extraYPos)
+            } else {
+              if (lineIdx === 0) {
+                doc.text(textLines[lineIdx], xPos + 35, linhaY)
+              } else {
+                doc.text(textLines[lineIdx], xPos + 35, lineY)
+              }
+            }
+          }
+          
+          // Atualizar maxYUsed
+          const finalY = linhaY + (textLines.length * 4)
+          if (finalY > maxYUsed) {
+            maxYUsed = finalY
+          }
+        }
+      }
       
-      yPos += Math.ceil(dadosObra.length / 2) * linhaAlturaObra + 8
+      // Usar a altura máxima realmente usada + espaçamento
+      // Considerar a altura máxima entre as duas colunas
+      yPos = Math.max(col1YPos, col2YPos, maxYUsed) + 8
+      
+      // Garantir que não ultrapasse o limite
+      if (yPos > MAX_Y) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
 
       // 2. EQUIPAMENTO - GRUA
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao2Y = yPos
@@ -601,20 +717,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Capacidade:`, gruaSelecionada.capacidade || 'N/A']
       ]
 
-      dadosGrua.forEach(([label, value], index) => {
-        const linhaY = yPos + index * 6
+      for (const [label, value] of dadosGrua) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const linhaY = yPos
         doc.setFont('helvetica', 'bold')
         doc.text(label, 18, linhaY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), 18 + 40, linhaY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 150)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
+        }
+        
+        yPos += Math.max(6, textLines.length * 4)
+      }
       
-      yPos += dadosGrua.length * 6 + 8
+      yPos += 8
 
       // 3. RESPONSÁVEL TÉCNICO
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao3Y = yPos
@@ -641,14 +768,25 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
           [`Telefone:`, responsavel.telefone || 'N/A']
         ]
 
-        dadosResponsavel.forEach(([label, value], index) => {
-          const linhaY = yPos + index * 6
+        for (const [label, value] of dadosResponsavel) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
+          const linhaY = yPos
           doc.setFont('helvetica', 'bold')
           doc.text(label, 18, linhaY)
           doc.setFont('helvetica', 'normal')
-          doc.text(String(value || 'N/A'), 18 + 40, linhaY)
-        })
-        yPos += dadosResponsavel.length * 6
+          
+          // Quebrar texto longo se necessário
+          const valueStr = String(value || 'N/A')
+          const textLines = doc.splitTextToSize(valueStr, 150)
+          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+            doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
+          }
+          
+          yPos += Math.max(6, textLines.length * 4)
+        }
       } else {
         doc.text('Não informado', 18, yPos)
         yPos += 6
@@ -657,9 +795,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos += 8
 
       // 4. SINALEIROS
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao4Y = yPos
@@ -708,7 +845,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
           }
         })
 
-        yPos = (doc as any).lastAutoTable.finalY + 10
+        // Atualizar yPos após a tabela
+        const lastAutoTable = (doc as any).lastAutoTable
+        if (lastAutoTable && lastAutoTable.finalY) {
+          yPos = lastAutoTable.finalY + 10
+        } else {
+          yPos += 30 // Fallback se lastAutoTable não estiver disponível
+        }
       } else {
         doc.setFontSize(9)
         doc.setFont('helvetica', 'normal')
@@ -719,9 +862,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos += 4
 
       // 5. PARÂMETROS TÉCNICOS
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao5Y = yPos
@@ -756,30 +898,54 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       const col1XTec = 18
       const col2XTec = 110
       const linhaAlturaTec = 6
+      let maxYPosTec = yPos
       
-      parametrosTecnicos.forEach(([label, value], index) => {
+      for (let index = 0; index < parametrosTecnicos.length; index++) {
+        const [label, value] = parametrosTecnicos[index]
         const coluna = Math.floor(index / 6)
         const linha = index % 6
         
-        if (coluna === 1 && linha === 0) {
-          yPos += 6 * linhaAlturaTec + 2
+        // Calcular posição Y baseada na coluna
+        let currentY: number
+        if (coluna === 0) {
+          currentY = yPos + linha * linhaAlturaTec
+        } else {
+          // Segunda coluna - mesma altura da primeira coluna
+          currentY = yPos + linha * linhaAlturaTec
+        }
+        
+        // Verificar se precisa quebrar página
+        if (currentY > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+          currentY = yPos + linha * linhaAlturaTec
         }
         
         const xPos = coluna === 0 ? col1XTec : col2XTec
-        const currentY = coluna === 0 ? yPos + linha * linhaAlturaTec : yPos + linha * linhaAlturaTec
         
         doc.setFont('helvetica', 'bold')
         doc.text(label, xPos, currentY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), xPos + 45, currentY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 80)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], xPos + 45, currentY + (lineIdx * 4))
+        }
+        
+        // Atualizar maxYPosTec para calcular altura total corretamente
+        const finalY = currentY + (textLines.length * 4)
+        if (finalY > maxYPosTec) {
+          maxYPosTec = finalY
+        }
+      }
       
-      yPos += Math.ceil(parametrosTecnicos.length / 2) * linhaAlturaTec + 8
+      // Calcular yPos final baseado na altura máxima usada
+      yPos = maxYPosTec + 8
 
       // 6. VALORES E CONDIÇÕES COMERCIAIS
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao6Y = yPos
@@ -835,12 +1001,17 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         }
       })
 
-      yPos = (doc as any).lastAutoTable.finalY + 10
+      // Atualizar yPos após a tabela
+      const lastAutoTableValores = (doc as any).lastAutoTable
+      if (lastAutoTableValores && lastAutoTableValores.finalY) {
+        yPos = lastAutoTableValores.finalY + 10
+      } else {
+        yPos += 40 // Fallback se lastAutoTable não estiver disponível
+      }
 
       // 7. DOCUMENTOS E CERTIFICAÇÕES
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao7Y = yPos
@@ -863,20 +1034,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Apólice de Seguro:`, obra.apolice_numero || obra.apoliceNumero || 'Não informado']
       ]
 
-      documentosInfo.forEach(([label, value], index) => {
-        const linhaY = yPos + index * 6
+      for (const [label, value] of documentosInfo) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const linhaY = yPos
         doc.setFont('helvetica', 'bold')
         doc.text(label, 18, linhaY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 140)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
+        }
+        
+        yPos += Math.max(6, textLines.length * 4)
+      }
       
-      yPos += documentosInfo.length * 6 + 8
+      yPos += 8
 
       // 7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao71Y = yPos
@@ -902,20 +1084,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || 'Não informado']
       ]
 
-      dadosMontagem.forEach(([label, value], index) => {
-        const linhaY = yPos + index * 6
+      for (const [label, value] of dadosMontagem) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const linhaY = yPos
         doc.setFont('helvetica', 'bold')
         doc.text(label, 18, linhaY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), 18 + 60, linhaY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 130)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], 18 + 60, linhaY + (lineIdx * 4))
+        }
+        
+        yPos += Math.max(6, textLines.length * 4)
+      }
       
-      yPos += dadosMontagem.length * 6 + 8
+      yPos += 8
 
       // 7.2. PROPRIETÁRIO DO EQUIPAMENTO
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao72Y = yPos
@@ -940,20 +1133,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Email:`, gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado']
       ]
 
-      proprietario.forEach(([label, value], index) => {
-        const linhaY = yPos + index * 6
+      for (const [label, value] of proprietario) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const linhaY = yPos
         doc.setFont('helvetica', 'bold')
         doc.text(label, 18, linhaY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 140)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
+        }
+        
+        yPos += Math.max(6, textLines.length * 4)
+      }
       
-      yPos += proprietario.length * 6 + 8
+      yPos += 8
 
       // 7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao73Y = yPos
@@ -984,14 +1188,25 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
           [`Email:`, responsavelManutencao.funcionario?.email || 'Não informado']
         ]
 
-        dadosManutencao.forEach(([label, value], index) => {
-          const linhaY = yPos + index * 6
+        for (const [label, value] of dadosManutencao) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
+          const linhaY = yPos
           doc.setFont('helvetica', 'bold')
           doc.text(label, 18, linhaY)
           doc.setFont('helvetica', 'normal')
-          doc.text(String(value || 'N/A'), 18 + 40, linhaY)
-        })
-        yPos += dadosManutencao.length * 6
+          
+          // Quebrar texto longo se necessário
+          const valueStr = String(value || 'N/A')
+          const textLines = doc.splitTextToSize(valueStr, 150)
+          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+            doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
+          }
+          
+          yPos += Math.max(6, textLines.length * 4)
+        }
       } else {
         doc.text('Não informado', 18, yPos)
         yPos += 6
@@ -1000,9 +1215,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos += 8
 
       // 7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao74Y = yPos
@@ -1055,9 +1269,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos += 8
 
       // 7.5. MANUAL DE MONTAGEM
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao75Y = yPos
@@ -1087,9 +1300,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       yPos += 8
 
       // 7.6. ENTREGA TÉCNICA
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao76Y = yPos
@@ -1112,23 +1324,58 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       )
 
       if (termoEntrega) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
         const isAssinado = termoEntrega.status === 'assinado' || termoEntrega.arquivo_assinado
-        doc.text(`Termo de Entrega Técnica: ${termoEntrega.titulo || 'Termo de Entrega Técnica'}`, 18, yPos)
-        yPos += 6
+        const tituloText = `Termo de Entrega Técnica: ${termoEntrega.titulo || 'Termo de Entrega Técnica'}`
+        const tituloLines = doc.splitTextToSize(tituloText, 170)
+        for (const line of tituloLines) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          doc.text(line, 18, yPos)
+          yPos += 4
+        }
+        
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
         doc.text(`Status: ${isAssinado ? 'Assinado' : 'Pendente'}`, 18, yPos)
+        yPos += 6
+        
         if (termoEntrega.assinaturas && termoEntrega.assinaturas.length > 0) {
-          yPos += 6
-          doc.text(`Assinado por: ${termoEntrega.assinaturas.filter((a: any) => a.status === 'assinado').map((a: any) => a.user_nome || a.user_email).join(', ')}`, 18, yPos)
+          const assinantesText = `Assinado por: ${termoEntrega.assinaturas.filter((a: any) => a.status === 'assinado').map((a: any) => a.user_nome || a.user_email).join(', ')}`
+          const assinantesLines = doc.splitTextToSize(assinantesText, 170)
+          for (const line of assinantesLines) {
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            doc.text(line, 18, yPos)
+            yPos += 4
+          }
         }
       } else {
-        doc.text('Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.', 18, yPos)
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const texto = 'Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.'
+        const textLines = doc.splitTextToSize(texto, 170)
+        for (const line of textLines) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          doc.text(line, 18, yPos)
+          yPos += 4
+        }
       }
       yPos += 10
 
       // 7.7. PLANO DE CARGAS
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao77Y = yPos
@@ -1151,11 +1398,35 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       )
 
       if (planoCargas) {
-        doc.text(`Plano de Cargas: ${planoCargas.titulo || 'Plano de Cargas'}`, 18, yPos)
-        yPos += 6
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const tituloText = `Plano de Cargas: ${planoCargas.titulo || 'Plano de Cargas'}`
+        const tituloLines = doc.splitTextToSize(tituloText, 170)
+        for (const line of tituloLines) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          doc.text(line, 18, yPos)
+          yPos += 4
+        }
+        yPos += 2
+        
         if (planoCargas.descricao) {
-          doc.text(`Descrição: ${planoCargas.descricao}`, 18, yPos)
-          yPos += 6
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
+          const descText = `Descrição: ${planoCargas.descricao}`
+          const descLines = doc.splitTextToSize(descText, 170)
+          for (const line of descLines) {
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            doc.text(line, 18, yPos)
+            yPos += 4
+          }
         }
         
         // Anexos do plano de cargas
@@ -1165,33 +1436,70 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         )
 
         if (anexosPlano.length > 0) {
-          yPos += 6
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
+          yPos += 2
           doc.setFont('helvetica', 'bold')
           doc.text('Anexos:', 18, yPos)
           yPos += 6
           doc.setFont('helvetica', 'normal')
-          anexosPlano.forEach((anexo: any, idx: number) => {
-            doc.text(`${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`, 25, yPos)
-            yPos += 5
-          })
+          for (let idx = 0; idx < anexosPlano.length; idx++) {
+            const anexo = anexosPlano[idx]
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            
+            const anexoText = `${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`
+            const anexoLines = doc.splitTextToSize(anexoText, 170)
+            for (const line of anexoLines) {
+              if (yPos > MAX_Y) {
+                yPos = await adicionarNovaPaginaComLogos()
+              }
+              doc.text(line, 25, yPos)
+              yPos += 4
+            }
+          }
         }
       } else {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
         doc.text('Plano de cargas não encontrado.', 18, yPos)
         yPos += 6
+        
+        const notaText = 'Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.'
         doc.setFontSize(8)
-        doc.text('Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.', 18, yPos)
-        yPos += 5
+        const notaLines = doc.splitTextToSize(notaText, 170)
+        for (const line of notaLines) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          doc.text(line, 18, yPos)
+          yPos += 4
+        }
+        
         if (relacaoGrua?.local_instalacao) {
+          yPos += 2
           doc.setFontSize(9)
-          doc.text(`Local de Instalação (referência): ${relacaoGrua.local_instalacao}`, 18, yPos)
+          const localText = `Local de Instalação (referência): ${relacaoGrua.local_instalacao}`
+          const localLines = doc.splitTextToSize(localText, 170)
+          for (const line of localLines) {
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            doc.text(line, 18, yPos)
+            yPos += 4
+          }
         }
       }
       yPos += 8
 
       // 8. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
-      if (yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao8Y = yPos
@@ -1215,20 +1523,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 7.5)' : 'Não informado']
       ]
 
-      configTecnica.forEach(([label, value], index) => {
-        const linhaY = yPos + index * 6
+      for (const [label, value] of configTecnica) {
+        if (yPos > MAX_Y) {
+          yPos = await adicionarNovaPaginaComLogos()
+        }
+        
+        const linhaY = yPos
         doc.setFont('helvetica', 'bold')
         doc.text(label, 18, linhaY)
         doc.setFont('helvetica', 'normal')
-        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
-      })
+        
+        // Quebrar texto longo se necessário
+        const valueStr = String(value || 'N/A')
+        const textLines = doc.splitTextToSize(valueStr, 140)
+        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
+          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
+        }
+        
+        yPos += Math.max(6, textLines.length * 4)
+      }
       
-      yPos += configTecnica.length * 6 + 8
+      yPos += 8
 
       // 9. OBSERVAÇÕES GERAIS
-      if ((obra.observacoes || relacaoGrua?.observacoes) && yPos > 250) {
-        doc.addPage()
-        yPos = 20
+      if ((obra.observacoes || relacaoGrua?.observacoes) && yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
 
       if (obra.observacoes || relacaoGrua?.observacoes) {
@@ -1247,22 +1566,42 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         doc.setFont('helvetica', 'normal')
 
         if (obra.observacoes) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
           doc.setFont('helvetica', 'bold')
           doc.text('Observações da Obra:', 18, yPos)
           yPos += 6
           doc.setFont('helvetica', 'normal')
           const observacoesObra = doc.splitTextToSize(obra.observacoes, 170)
-          doc.text(observacoesObra, 18, yPos)
-          yPos += observacoesObra.length * 5 + 5
+          for (const line of observacoesObra) {
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            doc.text(line, 18, yPos)
+            yPos += 5
+          }
+          yPos += 5
         }
 
         if (relacaoGrua?.observacoes) {
+          if (yPos > MAX_Y) {
+            yPos = await adicionarNovaPaginaComLogos()
+          }
+          
           doc.setFont('helvetica', 'bold')
           doc.text('Observações da Grua:', 18, yPos)
           yPos += 6
           doc.setFont('helvetica', 'normal')
           const observacoesGrua = doc.splitTextToSize(relacaoGrua.observacoes, 170)
-          doc.text(observacoesGrua, 18, yPos)
+          for (const line of observacoesGrua) {
+            if (yPos > MAX_Y) {
+              yPos = await adicionarNovaPaginaComLogos()
+            }
+            doc.text(line, 18, yPos)
+            yPos += 5
+          }
         }
       }
 
