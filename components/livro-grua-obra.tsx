@@ -18,7 +18,10 @@ import {
   Settings,
   Download,
   Truck,
-  CreditCard
+  CreditCard,
+  BookOpen,
+  FileCheck,
+  Package
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
@@ -371,34 +374,112 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         format: 'a4'
       })
 
-      // Adicionar logos no cabeçalho
+      // ============================================
+      // CAPA PADRÃO NR12 NR18
+      // ============================================
       const { adicionarLogosNoCabecalhoFrontend } = await import('@/lib/utils/pdf-logos-frontend')
       let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
 
-      // Box de cabeçalho com fundo
+      // Box de cabeçalho com fundo - Capa padrão NR12 NR18
       const headerBoxY = yPos - 3
-      const headerBoxHeight = 25
+      const headerBoxHeight = 30
       doc.setFillColor(66, 139, 202) // Azul profissional
       doc.roundedRect(14, headerBoxY, 182, headerBoxHeight, 2, 2, 'F')
       
       // Título principal (branco sobre fundo azul)
       doc.setTextColor(255, 255, 255)
-      doc.setFontSize(20)
+      doc.setFontSize(22)
       doc.setFont('helvetica', 'bold')
-      doc.text('LIVRO DA GRUA', 105, yPos + 8, { align: 'center' })
+      doc.text('LIVRO DA GRUA', 105, yPos + 6, { align: 'center' })
+      
+      // Subtítulo NR12 NR18 (branco)
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('Conforme NR12 e NR18', 105, yPos + 14, { align: 'center' })
       
       // Subtítulo (branco)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'normal')
-      doc.text(`Manual de Operação da Obra`, 105, yPos + 14, { align: 'center' })
+      doc.text(`Manual de Operação da Obra`, 105, yPos + 20, { align: 'center' })
       
       // Nome da obra (branco)
       doc.setFontSize(10)
-      doc.text(obra.name || 'N/A', 105, yPos + 20, { align: 'center' })
+      doc.text(obra.name || 'N/A', 105, yPos + 26, { align: 'center' })
       
       // Resetar cor do texto
       doc.setTextColor(0, 0, 0)
-      yPos = headerBoxY + headerBoxHeight + 10
+      yPos = headerBoxY + headerBoxHeight + 15
+
+      // Informações da capa
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Este documento atende aos requisitos das Normas Regulamentadoras:', 105, yPos, { align: 'center' })
+      yPos += 6
+      doc.setFont('helvetica', 'bold')
+      doc.text('NR12 - Segurança no Trabalho em Máquinas e Equipamentos', 105, yPos, { align: 'center' })
+      yPos += 6
+      doc.text('NR18 - Condições e Meio Ambiente de Trabalho na Indústria da Construção', 105, yPos, { align: 'center' })
+      yPos += 15
+
+      // ============================================
+      // ÍNDICE DO LIVRO
+      // ============================================
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const indiceY = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, indiceY, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('ÍNDICE DO LIVRO', 18, indiceY + 6)
+      yPos = indiceY + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      
+      const indiceItens = [
+        '1. Dados da Obra',
+        '2. Equipamento - Grua',
+        '3. Responsável Técnico',
+        '4. Sinaleiros',
+        '5. Parâmetros Técnicos',
+        '6. Valores e Condições Comerciais',
+        '7. Documentos e Certificações',
+        '7.1. Dados da Montagem do(s) Equipamento(s)',
+        '7.2. Proprietário do Equipamento',
+        '7.3. Responsável pela Manutenção da Grua',
+        '7.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)',
+        '7.5. Manual de Montagem',
+        '7.6. Entrega Técnica',
+        '7.7. Plano de Cargas',
+        '8. Configuração e Especificações Técnicas',
+        '9. Observações Gerais'
+      ]
+
+      indiceItens.forEach((item, index) => {
+        if (yPos > 270) {
+          doc.addPage()
+          yPos = 20
+        }
+        doc.text(`${item}`, 18, yPos)
+        yPos += 6
+      })
+
+      yPos += 10
+
+      // ============================================
+      // INÍCIO DO CONTEÚDO
+      // ============================================
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
 
       // Box de informações da Grua
       const fabricante = (gruaSelecionada.fabricante || '').replace(/^Fabricante/i, '').trim()
@@ -755,6 +836,435 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       })
 
       yPos = (doc as any).lastAutoTable.finalY + 10
+
+      // 7. DOCUMENTOS E CERTIFICAÇÕES
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao7Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao7Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7. DOCUMENTOS E CERTIFICAÇÕES', 18, secao7Y + 6)
+      yPos = secao7Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const documentosInfo = [
+        [`CNO da Obra:`, obra.cno || obra.cno_obra || 'Não informado'],
+        [`ART de Instalação:`, obra.art_numero || obra.artNumero || 'Não informado'],
+        [`Apólice de Seguro:`, obra.apolice_numero || obra.apoliceNumero || 'Não informado']
+      ]
+
+      documentosInfo.forEach(([label, value], index) => {
+        const linhaY = yPos + index * 6
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, 18, linhaY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
+      })
+      
+      yPos += documentosInfo.length * 6 + 8
+
+      // 7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao71Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao71Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)', 18, secao71Y + 6)
+      yPos = secao71Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const dadosMontagem = [
+        [`Data de Montagem:`, relacaoGrua?.data_montagem ? formatarData(relacaoGrua.data_montagem) : relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado'],
+        [`Data de Desmontagem:`, relacaoGrua?.data_desmontagem ? formatarData(relacaoGrua.data_desmontagem) : relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado'],
+        [`Tipo de Base/Fundação:`, relacaoGrua?.tipo_base || relacaoGrua?.fundacao || 'Não informado'],
+        [`Altura Inicial:`, relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'Não informado'],
+        [`Altura Final:`, relacaoGrua?.altura_final ? `${relacaoGrua.altura_final}m` : 'Não informado'],
+        [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || 'Não informado']
+      ]
+
+      dadosMontagem.forEach(([label, value], index) => {
+        const linhaY = yPos + index * 6
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, 18, linhaY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), 18 + 60, linhaY)
+      })
+      
+      yPos += dadosMontagem.length * 6 + 8
+
+      // 7.2. PROPRIETÁRIO DO EQUIPAMENTO
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao72Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao72Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.2. PROPRIETÁRIO DO EQUIPAMENTO', 18, secao72Y + 6)
+      yPos = secao72Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const proprietario = [
+        [`Nome/Razão Social:`, gruaSelecionada.proprietario_nome || obra.cliente?.nome || 'Não informado'],
+        [`CNPJ:`, gruaSelecionada.proprietario_cnpj || obra.cliente?.cnpj || 'Não informado'],
+        [`Endereço:`, gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'],
+        [`Telefone:`, gruaSelecionada.proprietario_telefone || obra.cliente?.telefone || 'Não informado'],
+        [`Email:`, gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado']
+      ]
+
+      proprietario.forEach(([label, value], index) => {
+        const linhaY = yPos + index * 6
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, 18, linhaY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
+      })
+      
+      yPos += proprietario.length * 6 + 8
+
+      // 7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao73Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao73Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA', 18, secao73Y + 6)
+      yPos = secao73Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const responsavelManutencao = funcionariosGrua.find((f: any) => 
+        f.funcionario?.cargo?.toLowerCase().includes('manutenção') || 
+        f.funcionario?.cargo?.toLowerCase().includes('técnico') || 
+        f.funcionario?.cargo?.toLowerCase().includes('mecânico')
+      )
+
+      if (responsavelManutencao) {
+        const dadosManutencao = [
+          [`Nome:`, responsavelManutencao.funcionario?.nome || 'N/A'],
+          [`Cargo:`, responsavelManutencao.funcionario?.cargo || 'N/A'],
+          [`Telefone:`, responsavelManutencao.funcionario?.telefone || 'Não informado'],
+          [`Email:`, responsavelManutencao.funcionario?.email || 'Não informado']
+        ]
+
+        dadosManutencao.forEach(([label, value], index) => {
+          const linhaY = yPos + index * 6
+          doc.setFont('helvetica', 'bold')
+          doc.text(label, 18, linhaY)
+          doc.setFont('helvetica', 'normal')
+          doc.text(String(value || 'N/A'), 18 + 40, linhaY)
+        })
+        yPos += dadosManutencao.length * 6
+      } else {
+        doc.text('Não informado', 18, yPos)
+        yPos += 6
+      }
+
+      yPos += 8
+
+      // 7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao74Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao74Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s)', 18, secao74Y + 6)
+      yPos = secao74Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const operador = funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))
+      const montador = funcionariosGrua.find((f: any) => 
+        f.funcionario?.cargo?.toLowerCase().includes('montagem') || 
+        f.funcionario?.cargo?.toLowerCase().includes('montador')
+      )
+
+      if (operador) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Operador da Grua:', 18, yPos)
+        yPos += 6
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Nome: ${operador.funcionario?.nome || 'N/A'}`, 25, yPos)
+        yPos += 5
+        doc.text(`Cargo: ${operador.funcionario?.cargo || 'N/A'}`, 25, yPos)
+        yPos += 8
+      }
+
+      if (montador) {
+        doc.setFont('helvetica', 'bold')
+        doc.text('Responsável pela Montagem:', 18, yPos)
+        yPos += 6
+        doc.setFont('helvetica', 'normal')
+        doc.text(`Nome: ${montador.funcionario?.nome || 'N/A'}`, 25, yPos)
+        yPos += 5
+        doc.text(`Cargo: ${montador.funcionario?.cargo || 'N/A'}`, 25, yPos)
+        yPos += 8
+      }
+
+      if (!operador && !montador) {
+        doc.text('Não informado', 18, yPos)
+        yPos += 6
+      }
+
+      yPos += 8
+
+      // 7.5. MANUAL DE MONTAGEM
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao75Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao75Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.5. MANUAL DE MONTAGEM', 18, secao75Y + 6)
+      yPos = secao75Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const manualMontagem = documentos.find((doc: any) => 
+        doc.titulo?.toLowerCase().includes('manual') && 
+        (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação'))
+      )
+
+      if (manualMontagem) {
+        doc.text(`Manual disponível: ${manualMontagem.titulo || 'Manual de Montagem'}`, 18, yPos)
+      } else {
+        doc.text('Não informado', 18, yPos)
+      }
+      yPos += 8
+
+      // 7.6. ENTREGA TÉCNICA
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao76Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao76Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.6. ENTREGA TÉCNICA', 18, secao76Y + 6)
+      yPos = secao76Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const termoEntrega = documentos.find((doc: any) => 
+        (doc.titulo?.toLowerCase().includes('entrega') && doc.titulo?.toLowerCase().includes('técnica')) ||
+        (doc.titulo?.toLowerCase().includes('termo') && doc.titulo?.toLowerCase().includes('entrega'))
+      )
+
+      if (termoEntrega) {
+        const isAssinado = termoEntrega.status === 'assinado' || termoEntrega.arquivo_assinado
+        doc.text(`Termo de Entrega Técnica: ${termoEntrega.titulo || 'Termo de Entrega Técnica'}`, 18, yPos)
+        yPos += 6
+        doc.text(`Status: ${isAssinado ? 'Assinado' : 'Pendente'}`, 18, yPos)
+        if (termoEntrega.assinaturas && termoEntrega.assinaturas.length > 0) {
+          yPos += 6
+          doc.text(`Assinado por: ${termoEntrega.assinaturas.filter((a: any) => a.status === 'assinado').map((a: any) => a.user_nome || a.user_email).join(', ')}`, 18, yPos)
+        }
+      } else {
+        doc.text('Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.', 18, yPos)
+      }
+      yPos += 10
+
+      // 7.7. PLANO DE CARGAS
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao77Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao77Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.7. PLANO DE CARGAS', 18, secao77Y + 6)
+      yPos = secao77Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const planoCargas = documentos.find((doc: any) => 
+        doc.titulo?.toLowerCase().includes('plano') && 
+        doc.titulo?.toLowerCase().includes('carga')
+      )
+
+      if (planoCargas) {
+        doc.text(`Plano de Cargas: ${planoCargas.titulo || 'Plano de Cargas'}`, 18, yPos)
+        yPos += 6
+        if (planoCargas.descricao) {
+          doc.text(`Descrição: ${planoCargas.descricao}`, 18, yPos)
+          yPos += 6
+        }
+        
+        // Anexos do plano de cargas
+        const anexosPlano = documentos.filter((doc: any) => 
+          doc.titulo?.toLowerCase().includes('anexo') && 
+          (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
+        )
+
+        if (anexosPlano.length > 0) {
+          yPos += 6
+          doc.setFont('helvetica', 'bold')
+          doc.text('Anexos:', 18, yPos)
+          yPos += 6
+          doc.setFont('helvetica', 'normal')
+          anexosPlano.forEach((anexo: any, idx: number) => {
+            doc.text(`${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`, 25, yPos)
+            yPos += 5
+          })
+        }
+      } else {
+        doc.text('Plano de cargas não encontrado.', 18, yPos)
+        yPos += 6
+        doc.setFontSize(8)
+        doc.text('Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.', 18, yPos)
+        yPos += 5
+        if (relacaoGrua?.local_instalacao) {
+          doc.setFontSize(9)
+          doc.text(`Local de Instalação (referência): ${relacaoGrua.local_instalacao}`, 18, yPos)
+        }
+      }
+      yPos += 8
+
+      // 8. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
+      if (yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      const secao8Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao8Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('8. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS', 18, secao8Y + 6)
+      yPos = secao8Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const configTecnica = [
+        [`Raio de Operação:`, relacaoGrua?.raio_operacao || relacaoGrua?.raio || gruaSelecionada.alcance_maximo || 'N/A'],
+        [`Altura de Operação:`, gruaSelecionada.altura_maxima || relacaoGrua?.altura || 'N/A'],
+        [`Manual de Operação:`, relacaoGrua?.manual_operacao || 'Vinculado à obra'],
+        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 7.5)' : 'Não informado']
+      ]
+
+      configTecnica.forEach(([label, value], index) => {
+        const linhaY = yPos + index * 6
+        doc.setFont('helvetica', 'bold')
+        doc.text(label, 18, linhaY)
+        doc.setFont('helvetica', 'normal')
+        doc.text(String(value || 'N/A'), 18 + 50, linhaY)
+      })
+      
+      yPos += configTecnica.length * 6 + 8
+
+      // 9. OBSERVAÇÕES GERAIS
+      if ((obra.observacoes || relacaoGrua?.observacoes) && yPos > 250) {
+        doc.addPage()
+        yPos = 20
+      }
+
+      if (obra.observacoes || relacaoGrua?.observacoes) {
+        const secao9Y = yPos
+        doc.setFillColor(66, 139, 202)
+        doc.roundedRect(14, secao9Y, 182, 8, 2, 2, 'F')
+        
+        doc.setTextColor(255, 255, 255)
+        doc.setFontSize(12)
+        doc.setFont('helvetica', 'bold')
+        doc.text('9. OBSERVAÇÕES GERAIS', 18, secao9Y + 6)
+        yPos = secao9Y + 12
+
+        doc.setTextColor(0, 0, 0)
+        doc.setFontSize(9)
+        doc.setFont('helvetica', 'normal')
+
+        if (obra.observacoes) {
+          doc.setFont('helvetica', 'bold')
+          doc.text('Observações da Obra:', 18, yPos)
+          yPos += 6
+          doc.setFont('helvetica', 'normal')
+          const observacoesObra = doc.splitTextToSize(obra.observacoes, 170)
+          doc.text(observacoesObra, 18, yPos)
+          yPos += observacoesObra.length * 5 + 5
+        }
+
+        if (relacaoGrua?.observacoes) {
+          doc.setFont('helvetica', 'bold')
+          doc.text('Observações da Grua:', 18, yPos)
+          yPos += 6
+          doc.setFont('helvetica', 'normal')
+          const observacoesGrua = doc.splitTextToSize(relacaoGrua.observacoes, 170)
+          doc.text(observacoesGrua, 18, yPos)
+        }
+      }
 
       // Adicionar rodapé
       const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
@@ -1623,6 +2133,427 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
+          {/* 7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Package className="w-4 h-4" />
+                7.1. Dados da Montagem do(s) Equipamento(s)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500">Data de Montagem</p>
+                  <p className="font-medium">{relacaoGrua?.data_montagem ? formatarData(relacaoGrua.data_montagem) : relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Data de Desmontagem</p>
+                  <p className="font-medium">{relacaoGrua?.data_desmontagem ? formatarData(relacaoGrua.data_desmontagem) : relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Tipo de Base/Fundação</p>
+                  <p className="font-medium">{relacaoGrua?.tipo_base || relacaoGrua?.fundacao || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Altura Inicial (m)</p>
+                  <p className="font-medium">{relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Altura Final (m)</p>
+                  <p className="font-medium">{relacaoGrua?.altura_final ? `${relacaoGrua.altura_final}m` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Local de Instalação</p>
+                  <p className="font-medium">{relacaoGrua?.local_instalacao || obra.endereco || 'Não informado'}</p>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-gray-500">Observações da Montagem</p>
+                  <p className="font-medium">{relacaoGrua?.observacoes_montagem || relacaoGrua?.observacoes || 'Não informado'}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.2. PROPRIETÁRIO DO EQUIPAMENTO */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Building2 className="w-4 h-4" />
+                7.2. Proprietário do Equipamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Nome/Razão Social</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_nome || obra.cliente?.nome || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">CNPJ</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_cnpj || obra.cliente?.cnpj || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Endereço</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Telefone</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_telefone || obra.cliente?.telefone || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Email</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado'}</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wrench className="w-4 h-4" />
+                7.3. Responsável pela Manutenção da Grua
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico')) ? (
+                  <>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Nome</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.nome}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Cargo</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.cargo}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Telefone</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.telefone || 'Não informado'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Email</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.email || 'Não informado'}
+                        </p>
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <div className="md:col-span-2">
+                    <p className="text-gray-500">Não informado</p>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Users className="w-4 h-4" />
+                7.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {/* Operador */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-2 font-semibold">Operador da Grua</p>
+                  {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador')) ? (
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Nome</p>
+                          <p className="font-medium">
+                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Cargo</p>
+                          <p className="font-medium">
+                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.cargo}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <p className="text-gray-500">Não informado</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Responsável pela Montagem */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-2 font-semibold">Responsável pela Montagem</p>
+                  {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('montagem') || f.funcionario?.cargo?.toLowerCase().includes('montador')) ? (
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs text-gray-500">Nome</p>
+                          <p className="font-medium">
+                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('montagem') || f.funcionario?.cargo?.toLowerCase().includes('montador'))?.funcionario?.nome}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-gray-500">Cargo</p>
+                          <p className="font-medium">
+                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('montagem') || f.funcionario?.cargo?.toLowerCase().includes('montador'))?.funcionario?.cargo}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <p className="text-gray-500">Não informado</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.5. MANUAL DE MONTAGEM */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <BookOpen className="w-4 h-4" />
+                7.5. Manual de Montagem
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Manual de Montagem Disponível</p>
+                  {(() => {
+                    const manualMontagem = documentos.find((doc: any) => 
+                      doc.titulo?.toLowerCase().includes('manual') && 
+                      (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação'))
+                    ) || relacaoGrua?.manual_montagem
+                    
+                    if (manualMontagem) {
+                      return (
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <p className="font-medium">{manualMontagem.titulo || 'Manual de Montagem'}</p>
+                              {manualMontagem.descricao && <p className="text-sm text-gray-600 mt-1">{manualMontagem.descricao}</p>}
+                            </div>
+                            {manualMontagem.arquivo_assinado || manualMontagem.caminho_arquivo || manualMontagem.arquivo_original ? (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => downloadDocumento(manualMontagem)}
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar
+                              </Button>
+                            ) : null}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="text-gray-500">Não informado</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.6. ENTREGA TÉCNICA */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileCheck className="w-4 h-4" />
+                7.6. Entrega Técnica
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Termo de Entrega Técnica</p>
+                  {(() => {
+                    const termoEntrega = documentos.find((doc: any) => 
+                      doc.titulo?.toLowerCase().includes('entrega') && 
+                      doc.titulo?.toLowerCase().includes('técnica')
+                    ) || documentos.find((doc: any) => 
+                      doc.titulo?.toLowerCase().includes('termo') && 
+                      doc.titulo?.toLowerCase().includes('entrega')
+                    )
+                    
+                    if (termoEntrega) {
+                      const isAssinado = termoEntrega.status === 'assinado' || termoEntrega.arquivo_assinado
+                      
+                      return (
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <p className="font-medium">{termoEntrega.titulo || 'Termo de Entrega Técnica'}</p>
+                                {isAssinado && (
+                                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                                    <ClipboardCheck className="w-3 h-3 mr-1" />
+                                    Assinado
+                                  </Badge>
+                                )}
+                              </div>
+                              {termoEntrega.descricao && <p className="text-sm text-gray-600">{termoEntrega.descricao}</p>}
+                              {termoEntrega.assinaturas && termoEntrega.assinaturas.length > 0 && (
+                                <p className="text-xs text-gray-500 mt-2">
+                                  Assinado por: {termoEntrega.assinaturas.filter((a: any) => a.status === 'assinado').map((a: any) => a.user_nome || a.user_email).join(', ')}
+                                </p>
+                              )}
+                            </div>
+                            {(termoEntrega.arquivo_assinado || termoEntrega.caminho_arquivo || termoEntrega.arquivo_original) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => downloadDocumento(termoEntrega)}
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="text-gray-500">Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.</p>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.7. PLANO DE CARGAS */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                7.7. Plano de Cargas
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {(() => {
+                  const planoCargas = documentos.find((doc: any) => 
+                    doc.titulo?.toLowerCase().includes('plano') && 
+                    doc.titulo?.toLowerCase().includes('carga')
+                  )
+                  
+                  if (planoCargas) {
+                    return (
+                      <div>
+                        <div className="p-3 bg-gray-50 rounded-md mb-4">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="font-medium">{planoCargas.titulo || 'Plano de Cargas'}</p>
+                              {planoCargas.descricao && <p className="text-sm text-gray-600 mt-1">{planoCargas.descricao}</p>}
+                            </div>
+                            {(planoCargas.arquivo_assinado || planoCargas.caminho_arquivo || planoCargas.arquivo_original) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => downloadDocumento(planoCargas)}
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        
+                        {/* Anexos do plano de cargas */}
+                        {documentos.filter((doc: any) => 
+                          doc.titulo?.toLowerCase().includes('anexo') && 
+                          (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
+                        ).length > 0 && (
+                          <div>
+                            <p className="text-xs text-gray-500 mb-2">Anexos do Plano de Cargas</p>
+                            <div className="space-y-2">
+                              {documentos.filter((doc: any) => 
+                                doc.titulo?.toLowerCase().includes('anexo') && 
+                                (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
+                              ).map((anexo: any, idx: number) => (
+                                <div key={idx} className="p-3 bg-gray-50 rounded-md flex items-center justify-between">
+                                  <div className="flex-1">
+                                    <p className="font-medium">{anexo.titulo || `Anexo ${idx + 1}`}</p>
+                                    {anexo.descricao && <p className="text-sm text-gray-600">{anexo.descricao}</p>}
+                                  </div>
+                                  {(anexo.arquivo_assinado || anexo.caminho_arquivo || anexo.arquivo_original) && (
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => downloadDocumento(anexo)}
+                                    >
+                                      <Download className="w-4 h-4 mr-1" />
+                                      Baixar
+                                    </Button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                  
+                  // Se não encontrar plano de cargas, mostrar informações do local de instalação
+                  return (
+                    <div className="p-3 bg-gray-50 rounded-md">
+                      <p className="text-gray-500 mb-2">Plano de cargas não encontrado.</p>
+                      <p className="text-xs text-gray-500">
+                        Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.
+                      </p>
+                      {relacaoGrua?.local_instalacao && (
+                        <div className="mt-3">
+                          <p className="text-xs text-gray-500">Local de Instalação (referência):</p>
+                          <p className="font-medium">{relacaoGrua.local_instalacao}</p>
+                        </div>
+                      )}
+                    </div>
+                  )
+                })()}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* 8. CONFIGURAÇÃO E ESPECIFICAÇÕES */}
           <Card>
             <CardHeader className="pb-3">
@@ -1644,6 +2575,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500">Manual de Operação</p>
                   <p className="font-medium">{relacaoGrua?.manual_operacao || 'Vinculado à obra'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Manual de Montagem</p>
+                  <p className="font-medium">
+                    {documentos.find((doc: any) => doc.titulo?.toLowerCase().includes('manual') && doc.titulo?.toLowerCase().includes('montagem')) 
+                      ? 'Disponível (ver seção 7.5)' 
+                      : 'Não informado'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Procedimentos</p>
