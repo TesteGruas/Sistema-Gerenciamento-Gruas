@@ -676,6 +676,117 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
       yPos += 20;
     }
 
+    // ===== CUSTO DE OBRA - MENSAL (Tabela Detalhada) =====
+    if (custosMensais && custosMensais.length > 0) {
+      if (yPos > 700) {
+        yPos = adicionarNovaPaginaComLogos();
+      }
+      
+      doc.fontSize(11).font('Helvetica-Bold').text('CUSTO DE OBRA - MENSAL', 40, yPos);
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Tipo', 40, yPos);
+      doc.text('Quantidade', 200, yPos);
+      doc.text('Valor Unitário', 300, yPos);
+      doc.text('Valor Total', 450, yPos);
+      yPos += 12;
+      
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      let totalMensalDetalhado = 0;
+      const prazoMeses = parseInt(orcamento.prazo_locacao_meses) || 1;
+      
+      custosMensais.forEach(item => {
+        if (yPos > 750) {
+          yPos = adicionarNovaPaginaComLogos();
+        }
+        
+        const quantidade = prazoMeses; // Quantidade em meses
+        const valorUnitario = parseFloat(item.valor_mensal || 0);
+        const valorTotal = valorUnitario * quantidade;
+        totalMensalDetalhado += valorTotal;
+        
+        doc.text(item.tipo || '-', 40, yPos, { width: 150 });
+        doc.text(`${quantidade} mês${quantidade > 1 ? 'es' : ''}`, 200, yPos);
+        doc.text(formatarMoeda(valorUnitario), 300, yPos);
+        doc.text(formatarMoeda(valorTotal), 450, yPos);
+        yPos += 15;
+      });
+      
+      // Total
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text('TOTAL MENSAL:', 300, yPos);
+      doc.text(formatarMoeda(totalMensalDetalhado / prazoMeses), 450, yPos);
+      yPos += 20;
+    }
+
+    // ===== VALOR TOTAL DOS SERVIÇOS (Tabela Detalhada) =====
+    // Incluir valores fixos e serviços adicionais
+    const todosServicos = [...(valoresFixos || []), ...(servicosAdicionais || [])];
+    
+    if (todosServicos.length > 0) {
+      if (yPos > 700) {
+        yPos = adicionarNovaPaginaComLogos();
+      }
+      
+      doc.fontSize(11).font('Helvetica-Bold').text('VALOR TOTAL DOS SERVIÇOS', 40, yPos);
+      yPos += 15;
+      
+      // Cabeçalho da tabela
+      doc.fontSize(9).font('Helvetica-Bold');
+      doc.text('Tipo', 40, yPos);
+      doc.text('Quantidade', 200, yPos);
+      doc.text('Valor Unitário', 300, yPos);
+      doc.text('Valor Total', 450, yPos);
+      yPos += 12;
+      
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      
+      doc.fontSize(9).font('Helvetica');
+      let totalServicos = 0;
+      
+      todosServicos.forEach(item => {
+        if (yPos > 750) {
+          yPos = adicionarNovaPaginaComLogos();
+        }
+        
+        const quantidade = parseFloat(item.quantidade) || 1;
+        const valorUnitario = parseFloat(item.valor_unitario) || 0;
+        const valorTotal = parseFloat(item.valor_total) || (quantidade * valorUnitario);
+        totalServicos += valorTotal;
+        
+        const tipo = item.tipo || item.produto_servico || '-';
+        const unidade = item.unidade || 'unidade';
+        
+        doc.text(tipo, 40, yPos, { width: 150 });
+        doc.text(`${quantidade} ${unidade}`, 200, yPos);
+        doc.text(formatarMoeda(valorUnitario), 300, yPos);
+        doc.text(formatarMoeda(valorTotal), 450, yPos);
+        yPos += 15;
+        
+        if (item.observacoes) {
+          doc.fontSize(8).font('Helvetica-Oblique').text(`Obs: ${item.observacoes}`, 40, yPos, { width: 500 });
+          yPos += 12;
+          doc.fontSize(9).font('Helvetica');
+        }
+      });
+      
+      // Total
+      doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+      yPos += 8;
+      doc.fontSize(10).font('Helvetica-Bold');
+      doc.text('TOTAL SERVIÇOS:', 300, yPos);
+      doc.text(formatarMoeda(totalServicos), 450, yPos);
+      yPos += 20;
+    }
+
     // ===== TABELA DE HORAS EXTRAS =====
     // Apenas para orçamentos normais (não locação)
     if (!isLocacao && horasExtras && horasExtras.length > 0) {
@@ -897,847 +1008,4 @@ router.get('/orcamentos/:id/pdf', authenticateToken, requirePermission('obras:vi
   }
 });
 
-/**
- * GET /api/relatorios/orcamentos-locacao/:id/pdf
- * Gerar PDF do orçamento de locação
- */
-router.get('/orcamentos-locacao/:id/pdf', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Buscar orçamento de locação diretamente
-    const { data: orcamento, error: orcamentoError } = await supabaseAdmin
-      .from('orcamentos_locacao')
-      .select(`
-        *,
-        clientes:cliente_id (
-          id,
-          nome,
-          cnpj,
-          contato_cpf,
-          endereco,
-          cidade,
-          estado,
-          cep,
-          telefone,
-          email,
-          contato
-        ),
-        funcionarios:vendedor_id (
-          id,
-          nome,
-          email
-        )
-      `)
-      .eq('id', id)
-      .single();
-
-    if (orcamentoError || !orcamento) {
-      console.error(`[PDF Locação] Erro ao buscar orçamento ${id}:`, orcamentoError);
-      return res.status(404).json({
-        success: false,
-        error: 'Orçamento de locação não encontrado',
-        message: orcamentoError?.message || 'Orçamento de locação não encontrado'
-      });
-    }
-
-    console.log(`[PDF Locação] Orçamento encontrado:`, JSON.stringify(orcamento, null, 2));
-
-    // Buscar dados relacionados de orçamentos de locação
-    const [
-      { data: itensLocacao },
-      { data: valoresFixosLocacao },
-      { data: custosMensaisLocacao }
-    ] = await Promise.all([
-      supabaseAdmin.from('orcamento_itens_locacao').select('*').eq('orcamento_id', id).order('id'),
-      supabaseAdmin.from('orcamento_valores_fixos_locacao').select('*').eq('orcamento_id', id).order('id'),
-      supabaseAdmin.from('orcamento_custos_mensais_locacao').select('*').eq('orcamento_id', id).order('id')
-    ]);
-
-    const itens = itensLocacao || [];
-    const valoresFixos = valoresFixosLocacao || [];
-    const custosMensais = custosMensaisLocacao || [];
-    
-    console.log(`[PDF Locação] Itens encontrados: ${itens.length}`, itens);
-    console.log(`[PDF Locação] Valores Fixos: ${valoresFixos.length}`, valoresFixos);
-    console.log(`[PDF Locação] Custos Mensais: ${custosMensais.length}`, custosMensais);
-
-    // Criar documento PDF
-    const doc = new PDFDocument({ 
-      size: 'A4', 
-      margin: 40,
-      info: {
-        Title: `Orçamento de Locação ${orcamento.numero || id}`,
-        Author: 'Sistema de Gerenciamento de Gruas',
-        Subject: 'Orçamento de Locação de Grua',
-        Creator: 'Sistema IRBANA'
-      }
-    });
-
-    // Configurar headers da resposta
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename=orcamento-locacao-${orcamento.numero || id}.pdf`);
-
-    // Pipe do documento para a resposta
-    doc.pipe(res);
-
-    // Cor principal: #d93020 (RGB: 217, 48, 32)
-    const corPrincipal = '#d93020';
-    const corPrincipalRGB = { r: 217, g: 48, b: 32 };
-
-    // Constante para posição inicial após logos 
-    // Padding de 150px do topo em todas as páginas para garantir espaçamento adequado
-    const Y_POS_APOS_LOGOS = 150;
-    
-    // Função auxiliar para adicionar nova página com logos
-    const adicionarNovaPaginaComLogos = () => {
-      doc.addPage();
-      // Adicionar logos imediatamente na nova página criada
-      try {
-        adicionarLogosNaPagina(doc, 40);
-        console.log(`[PDF] Logos adicionados imediatamente na nova página`);
-      } catch (error) {
-        console.error('[PDF] Erro ao adicionar logos na nova página:', error.message);
-      }
-      // Retornar posição Y para começar o conteúdo abaixo dos logos (150px do topo)
-      return Y_POS_APOS_LOGOS;
-    };
-
-    let yPos = 40;
-
-    // ===== CABEÇALHO COM LOGOS =====
-    yPos = adicionarLogosNoCabecalho(doc, yPos);
-    // Aumentar espaçamento após os logos para evitar sobreposição
-    yPos += 25;
-
-    // Título com cor
-    // Determinar o título baseado no tipo de orçamento
-    // Para locação de grua: "ORÇAMENTO DE LOCAÇÃO DE GRUA"
-    // Para complementos (venda ou locação): "ORÇAMENTO"
-    let tituloOrcamento = 'ORÇAMENTO';
-    if (orcamento.tipo_orcamento === 'locacao_grua') {
-      tituloOrcamento = 'ORÇAMENTO DE LOCAÇÃO DE GRUA';
-    }
-    
-    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-       .fontSize(18)
-       .font('Helvetica-Bold')
-       .text(tituloOrcamento, 40, yPos, { align: 'center' });
-    yPos += 25;
-    
-    const numeroOrcamento = orcamento.numero || `LOC-${id}`;
-    doc.fillColor('black')
-       .fontSize(12)
-       .font('Helvetica')
-       .text(`Nº ${numeroOrcamento}`, 40, yPos, { align: 'center' });
-    yPos += 20;
-
-    // Linha separadora com cor
-    doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-       .lineWidth(2)
-       .moveTo(40, yPos)
-       .lineTo(555, yPos)
-       .stroke();
-    doc.strokeColor('black').lineWidth(1); // Resetar para preto
-    yPos += 20;
-
-    // ===== DADOS DO CLIENTE =====
-    doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-       .fontSize(11)
-       .font('Helvetica-Bold')
-       .text('DADOS DO CLIENTE', 40, yPos);
-    doc.fillColor('black'); // Resetar para preto
-    yPos += 15;
-    doc.fontSize(10).font('Helvetica');
-    
-    const cliente = orcamento.clientes || {};
-    
-    doc.text(`Nome: ${cliente.nome || '-'}`, 40, yPos);
-    yPos += 12;
-    
-    // Formatar CNPJ/CPF
-    const cnpj = cliente.cnpj || '';
-    const cpf = cliente.contato_cpf || '';
-    let documento = '-';
-    if (cnpj) {
-      const cnpjLimpo = cnpj.replace(/\D/g, '');
-      if (cnpjLimpo.length === 14) {
-        documento = cnpjLimpo.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5');
-      } else {
-        documento = cnpj;
-      }
-    } else if (cpf) {
-      const cpfLimpo = cpf.replace(/\D/g, '');
-      if (cpfLimpo.length === 11) {
-        documento = cpfLimpo.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
-      } else {
-        documento = cpf;
-      }
-    }
-    
-    doc.text(`CNPJ/CPF: ${documento}`, 40, yPos);
-    yPos += 12;
-    
-    const enderecoCliente = [
-      cliente.endereco,
-      cliente.cidade,
-      cliente.estado,
-      cliente.cep
-    ].filter(Boolean).join(', ');
-    
-    if (enderecoCliente) {
-      doc.text(`Endereço: ${enderecoCliente}`, 40, yPos);
-      yPos += 12;
-    }
-    
-    doc.text(`Telefone: ${cliente.telefone || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Email: ${cliente.email || '-'}`, 40, yPos);
-    yPos += 12;
-    doc.text(`Contato: ${cliente.contato || '-'}`, 40, yPos);
-    yPos += 20;
-
-    // ===== DADOS DA OBRA =====
-    const temDadosObra = orcamento.obra_nome && orcamento.obra_nome !== '-';
-    
-    if (temDadosObra) {
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('DADOS DA OBRA', 40, yPos);
-      doc.fillColor('black'); // Resetar para preto
-      yPos += 15;
-      doc.fontSize(10).font('Helvetica');
-      
-      const obraNome = orcamento.obra_nome || '-';
-      const obraTipo = orcamento.tipo_obra || '-';
-      const obraEndereco = orcamento.obra_endereco;
-      const obraCidade = orcamento.obra_cidade;
-      const obraEstado = orcamento.obra_estado;
-      
-      doc.text(`Nome da Obra: ${obraNome}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Tipo: ${obraTipo}`, 40, yPos);
-      yPos += 12;
-      
-      const enderecoObra = [obraEndereco, obraCidade, obraEstado].filter(Boolean).join(', ');
-      if (enderecoObra) {
-        doc.text(`Endereço: ${enderecoObra}`, 40, yPos);
-        yPos += 12;
-      }
-      yPos += 8;
-    }
-
-    // ===== DADOS DA GRUA =====
-    const temDadosGrua = orcamento.equipamento && orcamento.equipamento !== '-';
-    
-    if (temDadosGrua) {
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('DADOS DA GRUA', 40, yPos);
-      doc.fillColor('black'); // Resetar para preto
-      yPos += 15;
-      doc.fontSize(10).font('Helvetica');
-      
-      const equipamento = orcamento.equipamento || '-';
-      const gruaModelo = orcamento.grua_modelo || equipamento || '-';
-      const gruaLanca = orcamento.comprimento_lanca || orcamento.grua_lanca;
-      const gruaAlturaFinal = orcamento.altura_final || orcamento.grua_altura_final;
-      const gruaTipoBase = orcamento.grua_tipo_base || '-';
-      const gruaAno = orcamento.grua_ano;
-      const gruaPotencia = orcamento.potencia_eletrica || orcamento.grua_potencia;
-      const gruaCapacidade1 = orcamento.carga_maxima || orcamento.grua_capacidade_1_cabo;
-      const gruaCapacidade2 = orcamento.carga_ponta || orcamento.grua_capacidade_2_cabos;
-      const gruaVoltagem = orcamento.energia_necessaria || orcamento.grua_voltagem || '-';
-      
-      doc.text(`Modelo: ${gruaModelo}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Lança: ${gruaLanca ? `${gruaLanca}m` : '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Altura Final: ${gruaAlturaFinal ? `${gruaAlturaFinal}m` : '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Base: ${gruaTipoBase}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Ano: ${gruaAno || '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Potência: ${gruaPotencia ? `${gruaPotencia}` : '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Capacidade 2 cabos (mínima): ${gruaCapacidade1 ? `${gruaCapacidade1}kg` : '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Capacidade 4 cabos (máxima): ${gruaCapacidade2 ? `${gruaCapacidade2}kg` : '-'}`, 40, yPos);
-      yPos += 12;
-      doc.text(`Voltagem: ${gruaVoltagem}`, 40, yPos);
-      yPos += 12;
-      yPos += 8;
-    }
-
-    // Verificar se precisa de nova página
-    if (yPos > 700) {
-      yPos = adicionarNovaPaginaComLogos();
-    }
-
-    // ===== ITENS DO ORÇAMENTO =====
-    // Para orçamentos de locação, usar apenas os itens de orcamento_itens_locacao
-    let todosItens = itens || [];
-    
-    // Flag para indicar se valores fixos foram convertidos em itens
-    let valoresFixosConvertidosEmItens = false;
-    
-    // Se não houver itens, mas houver valores fixos ou custos mensais, converter
-    if (todosItens.length === 0 && (valoresFixos.length > 0 || custosMensais.length > 0)) {
-      valoresFixosConvertidosEmItens = true;
-      todosItens = [
-        ...valoresFixos.map(vf => ({
-          produto_servico: vf.tipo || 'Valor Fixo',
-          descricao: vf.descricao || '-',
-          quantidade: parseFloat(vf.quantidade) || 1,
-          valor_unitario: parseFloat(vf.valor_unitario) || 0,
-          valor_total: parseFloat(vf.valor_total) || 0,
-          unidade: 'unidade',
-          observacoes: vf.observacoes
-        })),
-        ...custosMensais.map(cm => {
-          const prazoMeses = parseInt(orcamento.prazo_locacao_meses) || 1;
-          return {
-            produto_servico: cm.tipo || 'Custo Mensal',
-            descricao: cm.descricao || '-',
-            quantidade: prazoMeses,
-            valor_unitario: parseFloat(cm.valor_mensal) || 0,
-            valor_total: (parseFloat(cm.valor_mensal) || 0) * prazoMeses,
-            unidade: 'mês',
-            observacoes: cm.observacoes
-          };
-        })
-      ];
-    }
-    
-    if (todosItens && todosItens.length > 0) {
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('ITENS DO ORÇAMENTO', 40, yPos);
-      doc.fillColor('black'); // Resetar para preto
-      yPos += 15;
-      
-      // Cabeçalho da tabela com cor
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(9)
-         .font('Helvetica-Bold');
-      doc.text('Produto/Serviço', 40, yPos);
-      doc.text('Descrição', 150, yPos);
-      doc.text('Qtd', 300, yPos);
-      doc.text('Valor Unit.', 350, yPos);
-      doc.text('Valor Total', 450, yPos);
-      doc.fillColor('black'); // Resetar para preto
-      yPos += 12;
-      
-      // Linha separadora com cor
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(1.5)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1); // Resetar para preto
-      yPos += 8;
-      
-      doc.fontSize(9).font('Helvetica');
-      todosItens.forEach(item => {
-        if (yPos > 750) {
-          yPos = adicionarNovaPaginaComLogos();
-        }
-        
-        // Garantir que os valores sejam numéricos
-        const quantidade = parseFloat(item.quantidade) || 0;
-        const valorUnitario = parseFloat(item.valor_unitario) || 0;
-        const valorTotal = parseFloat(item.valor_total) || 0;
-        const unidade = item.unidade || '';
-        
-        doc.text(item.produto_servico || '-', 40, yPos, { width: 100 });
-        doc.text(item.descricao || '-', 150, yPos, { width: 140 });
-        doc.text(`${quantidade} ${unidade}`.trim(), 300, yPos);
-        doc.text(formatarMoeda(valorUnitario), 350, yPos);
-        doc.text(formatarMoeda(valorTotal), 450, yPos);
-        yPos += 15;
-        
-        if (item.observacoes) {
-          doc.fontSize(8).font('Helvetica-Oblique').text(`Obs: ${item.observacoes}`, 150, yPos, { width: 400 });
-          yPos += 12;
-          doc.fontSize(9).font('Helvetica');
-        }
-      });
-      
-      // Total dos itens (será usado depois para calcular o total geral)
-      const totalItens = todosItens.reduce((sum, item) => {
-        const valorTotal = parseFloat(item.valor_total) || 0;
-        return sum + valorTotal;
-      }, 0);
-      
-      // Linha separadora com cor
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(1.5)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1); // Resetar para preto
-      yPos += 8;
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(10)
-         .font('Helvetica-Bold');
-      doc.text(`TOTAL ITENS: ${formatarMoeda(totalItens)}`, 350, yPos, { align: 'right' });
-      doc.fillColor('black'); // Resetar para preto
-      yPos += 20;
-    }
-
-    // ===== VALORES FIXOS =====
-    // Só exibir valores fixos se não foram convertidos em itens
-    if (valoresFixos && valoresFixos.length > 0 && !valoresFixosConvertidosEmItens) {
-      // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
-      if (yPos > 680) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('VALORES FIXOS', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      // Cabeçalho da tabela
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(9)
-         .font('Helvetica-Bold');
-      doc.text('Tipo', 40, yPos);
-      doc.text('Descrição', 120, yPos);
-      doc.text('Qtd', 300, yPos);
-      doc.text('Valor Unit.', 350, yPos);
-      doc.text('Valor Total', 450, yPos);
-      doc.fillColor('black');
-      yPos += 12;
-      
-      // Linha separadora
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(1.5)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1);
-      yPos += 8;
-      
-      doc.fontSize(9).font('Helvetica');
-      valoresFixos.forEach(vf => {
-        if (yPos > 750) {
-          yPos = adicionarNovaPaginaComLogos();
-        }
-        
-        const quantidade = parseFloat(vf.quantidade) || 0;
-        const valorUnitario = parseFloat(vf.valor_unitario) || 0;
-        const valorTotal = parseFloat(vf.valor_total) || 0;
-        
-        doc.text(vf.tipo || '-', 40, yPos, { width: 70 });
-        doc.text(vf.descricao || '-', 120, yPos, { width: 170 });
-        doc.text(quantidade.toString(), 300, yPos);
-        doc.text(formatarMoeda(valorUnitario), 350, yPos);
-        doc.text(formatarMoeda(valorTotal), 450, yPos);
-        yPos += 15;
-      });
-      
-      // Total dos valores fixos
-      const totalValoresFixos = valoresFixos.reduce((sum, vf) => {
-        const valorTotal = parseFloat(vf.valor_total) || 0;
-        return sum + valorTotal;
-      }, 0);
-      
-      // Linha separadora com cor
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(1.5)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1);
-      yPos += 8;
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(10)
-         .font('Helvetica-Bold');
-      doc.text(`TOTAL VALORES FIXOS: ${formatarMoeda(totalValoresFixos)}`, 350, yPos, { align: 'right' });
-      doc.fillColor('black');
-      yPos += 20;
-    }
-    
-    // ===== TOTAL GERAL =====
-    // Calcular total geral (itens + valores fixos, mas só somar valores fixos se não foram convertidos em itens)
-    const totalItens = (todosItens || []).reduce((sum, item) => {
-      const valorTotal = parseFloat(item.valor_total) || 0;
-      return sum + valorTotal;
-    }, 0);
-    
-    // Só somar valores fixos se não foram convertidos em itens
-    const totalValoresFixos = valoresFixosConvertidosEmItens ? 0 : (valoresFixos || []).reduce((sum, vf) => {
-      const valorTotal = parseFloat(vf.valor_total) || 0;
-      return sum + valorTotal;
-    }, 0);
-    
-    const totalGeral = totalItens + totalValoresFixos;
-    
-    // Exibir total geral apenas se houver valores
-    if (totalGeral > 0) {
-      // Verificar se há espaço suficiente
-      if (yPos > 700) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      // Linha separadora com cor
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(2)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1);
-      yPos += 10;
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(12)
-         .font('Helvetica-Bold');
-      doc.text(`TOTAL GERAL: ${formatarMoeda(totalGeral)}`, 350, yPos, { align: 'right' });
-      doc.fillColor('black');
-      yPos += 25;
-    }
-
-    // ===== CUSTOS MENSAIS =====
-    if (custosMensais && custosMensais.length > 0) {
-      // Verificar se há espaço suficiente para a tabela (precisa de ~100px mínimo)
-      if (yPos > 680) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('CUSTOS MENSAIS', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      // Cabeçalho da tabela
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(9)
-         .font('Helvetica-Bold');
-      doc.text('Tipo', 40, yPos);
-      doc.text('Descrição', 120, yPos);
-      doc.text('Valor Mensal', 350, yPos);
-      doc.text('Obrigatório', 450, yPos);
-      doc.fillColor('black');
-      yPos += 12;
-      
-      // Linha separadora
-      doc.strokeColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .lineWidth(1.5)
-         .moveTo(40, yPos)
-         .lineTo(555, yPos)
-         .stroke();
-      doc.strokeColor('black').lineWidth(1);
-      yPos += 8;
-      
-      doc.fontSize(9).font('Helvetica');
-      custosMensais.forEach(cm => {
-        if (yPos > 750) {
-          yPos = adicionarNovaPaginaComLogos();
-        }
-        
-        const valorMensal = parseFloat(cm.valor_mensal) || 0;
-        const obrigatorio = cm.obrigatorio ? 'Sim' : 'Não';
-        
-        doc.text(cm.tipo || '-', 40, yPos, { width: 70 });
-        doc.text(cm.descricao || '-', 120, yPos, { width: 220 });
-        doc.text(formatarMoeda(valorMensal), 350, yPos);
-        doc.text(obrigatorio, 450, yPos);
-        yPos += 15;
-      });
-      
-      yPos += 10;
-    }
-
-    // ===== CONDIÇÕES COMERCIAIS =====
-    if (orcamento.condicoes_comerciais) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('CONDIÇÕES COMERCIAIS', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoCondicoesComerciais = orcamento.condicoes_comerciais || '';
-      const linhas = textoCondicoesComerciais.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoCondicoesComerciais, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== CONDIÇÕES DE PAGAMENTO =====
-    if (orcamento.condicoes_pagamento) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('CONDIÇÕES DE PAGAMENTO', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoCondicoesPagamento = orcamento.condicoes_pagamento || '';
-      const linhas = textoCondicoesPagamento.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoCondicoesPagamento, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== CONDIÇÕES GERAIS =====
-    if (orcamento.condicoes_gerais) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('CONDIÇÕES GERAIS', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoCondicoes = orcamento.condicoes_gerais || '';
-      const linhas = textoCondicoes.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoCondicoes, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== LOGÍSTICA =====
-    if (orcamento.logistica) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('LOGÍSTICA', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoLogistica = orcamento.logistica || '';
-      const linhas = textoLogistica.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoLogistica, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== PRAZO DE ENTREGA =====
-    if (orcamento.prazo_entrega) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('PRAZO DE ENTREGA', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoPrazoEntrega = orcamento.prazo_entrega || '';
-      const linhas = textoPrazoEntrega.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoPrazoEntrega, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== GARANTIAS =====
-    if (orcamento.garantias) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('GARANTIAS', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoGarantias = orcamento.garantias || '';
-      const linhas = textoGarantias.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoGarantias, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== OBSERVAÇÕES =====
-    if (orcamento.observacoes) {
-      // Verificar se há espaço suficiente (precisa de ~50px mínimo)
-      if (yPos > 720) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-         .fontSize(11)
-         .font('Helvetica-Bold')
-         .text('OBSERVAÇÕES', 40, yPos);
-      doc.fillColor('black');
-      yPos += 15;
-      
-      doc.fontSize(10).font('Helvetica');
-      const textoObservacoes = orcamento.observacoes || '';
-      const linhas = textoObservacoes.split('\n');
-      const alturaPorLinha = 12;
-      const alturaEstimada = linhas.length * alturaPorLinha;
-      
-      if (yPos + alturaEstimada > 750) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.text(textoObservacoes, 40, yPos, {
-        width: 515,
-        align: 'left'
-      });
-      yPos += alturaEstimada + 15;
-    }
-
-    // ===== ASSINATURAS =====
-    // Verificar se há espaço suficiente para as assinaturas (precisa de ~70px)
-    // Altura da página A4 é ~792px, margem inferior ~60px, então máximo é ~732px
-    if (yPos > 660) {
-        yPos = adicionarNovaPaginaComLogos();
-      }
-      
-      doc.fillColor(corPrincipalRGB.r, corPrincipalRGB.g, corPrincipalRGB.b)
-       .fontSize(11)
-       .font('Helvetica-Bold')
-       .text('ASSINATURAS', 40, yPos);
-    doc.fillColor('black'); // Resetar para preto
-    yPos += 20;
-    doc.fontSize(10).font('Helvetica');
-    
-    const dataAtual = formatarData(new Date());
-    doc.text(`Cliente: ${dataAtual}`, 40, yPos);
-    yPos += 15;
-    doc.text(`Empresa: ${dataAtual}`, 40, yPos);
-    yPos += 20;
-
-    // ===== LOGOS EM TODAS AS PÁGINAS =====
-    // Os logos já foram adicionados:
-    // - Na primeira página no início (via adicionarLogosNoCabecalho)
-    // - Nas páginas subsequentes imediatamente após criação (via adicionarNovaPaginaComLogos)
-    // Esta seção garante que todos os logos estejam presentes
-    try {
-      // Aguardar um pouco para garantir que todas as páginas estejam no buffer
-      const pageRange = doc.bufferedPageRange();
-      const startPage = pageRange.start || 0;
-      const pageCount = pageRange.count || 0;
-      
-      console.log(`[PDF Logos] Verificando logos em ${pageCount} páginas (start: ${startPage})`);
-      
-      // Adicionar logos em todas as páginas para garantir (pode haver páginas que não foram tratadas)
-      for (let i = startPage; i < startPage + pageCount; i++) {
-        try {
-          doc.switchToPage(i);
-          adicionarLogosNaPagina(doc, 40);
-          console.log(`[PDF Logos] Logos garantidos na página ${i}`);
-        } catch (error) {
-          console.warn(`[PDF Logos] Erro ao adicionar logos na página ${i}:`, error.message);
-        }
-      }
-    } catch (error) {
-      console.error('[PDF Logos] Erro ao verificar logos em todas as páginas:', error.message);
-    }
-    
-    // ===== RODAPÉ =====
-    // Adicionar informações da empresa em todas as páginas
-    adicionarRodapeEmpresa(doc);
-
-    // Finalizar documento
-    doc.end();
-
-  } catch (error) {
-    console.error('Erro ao gerar PDF do orçamento de locação:', error);
-    if (!res.headersSent) {
-      res.status(500).json({
-        success: false,
-        error: 'Erro ao gerar PDF',
-        message: error.message
-      });
-    }
-  }
-});
-
 export default router;
-

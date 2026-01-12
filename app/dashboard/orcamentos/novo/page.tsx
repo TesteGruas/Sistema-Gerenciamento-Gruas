@@ -36,7 +36,6 @@ import GruaSearch from "@/components/grua-search"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Checkbox } from "@/components/ui/checkbox"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
-import { orcamentosLocacaoApi } from "@/lib/api-orcamentos-locacao"
 import { createOrcamento, updateOrcamento, getOrcamento } from "@/lib/api-orcamentos"
 
 // Funções de máscara de moeda
@@ -107,8 +106,8 @@ export default function NovoOrcamentoPage() {
   const { user } = useAuth()
   const { debugMode } = useDebugMode()
   const orcamentoId = searchParams.get('id')
-  const tipo = searchParams.get('tipo') || 'locacao' // 'obra' ou 'locacao'
-  const isObra = tipo === 'obra'
+  const tipo = searchParams.get('tipo') || 'obra' // 'obra'
+  const isObra = true
   const [isLoadingOrcamento, setIsLoadingOrcamento] = useState(false)
   const [isEditMode, setIsEditMode] = useState(false)
   
@@ -126,7 +125,7 @@ export default function NovoOrcamentoPage() {
     tipo_obra: '',
     equipamento: '',
     
-    // Especificações técnicas
+    // Especificações técnicas básicas
     altura_inicial: '',
     altura_final: '',
     comprimento_lanca: '',
@@ -134,6 +133,19 @@ export default function NovoOrcamentoPage() {
     carga_ponta: '',
     potencia_eletrica: '',
     energia_necessaria: '',
+    
+    // Dados técnicos detalhados da grua
+    tipo_base: '',
+    velocidade_giro: '',
+    velocidade_elevacao: '',
+    velocidade_translacao: '',
+    potencia_instalada: '',
+    voltagem: '',
+    tipo_ligacao: '',
+    capacidade_ponta: '',
+    capacidade_maxima_raio: '',
+    ano_fabricacao: '',
+    vida_util: '',
     
     // Custos mensais
     valor_locacao_mensal: '',
@@ -147,18 +159,18 @@ export default function NovoOrcamentoPage() {
     tolerancia_dias: '15',
     
     // Escopo básico
-    escopo_incluso: '',
+    escopo_incluso: 'Operador e sinaleiro por turno (carga horária mensal definida). Manutenção em horário normal de trabalho. Treinamento, ART e documentação conforme NR-18.',
     
     // Responsabilidades do cliente
-    responsabilidades_cliente: '',
+    responsabilidades_cliente: 'Fornecer energia 380V no local. Disponibilizar sinaleiros para içamento. Acessos preparados para transporte e montagem. Cumprimento das normas NR-18 e infraestrutura para instalação.',
     
     // Condições comerciais
-    condicoes_comerciais: '',
+    condicoes_comerciais: 'Medição mensal e pagamento até dia 15. Valores isentos de impostos por serem locação. Multa em caso de cancelamento após mobilização (geralmente 2 meses de locação). Validade da proposta enquanto houver equipamento disponível.',
     
     // Condições gerais, logística e garantias
-    condicoes_gerais: '',
-    logistica: '',
-    garantias: '',
+    condicoes_gerais: 'Condições gerais de contrato, termos legais, cláusulas contratuais conforme legislação vigente.',
+    logistica: 'Transporte da grua até a obra e retorno ao depósito. Prazo de entrega conforme acordado. Condições de instalação e responsabilidades logísticas conforme especificado.',
+    garantias: 'Garantia de funcionamento do equipamento durante o período de locação. Garantia de peças e componentes conforme especificações técnicas. Prazo de garantia conforme termos contratuais.',
     
     // Observações
     observacoes: ''
@@ -408,13 +420,25 @@ export default function NovoOrcamentoPage() {
         obra_estado: orcamento.obra_estado || '',
         tipo_obra: orcamento.tipo_obra || '',
         equipamento: equipamento,
-        altura_inicial: orcamento.altura_inicial?.toString() || '',
-        altura_final: orcamento.altura_final?.toString() || '',
-        comprimento_lanca: orcamento.comprimento_lanca?.toString() || '',
-        carga_maxima: orcamento.carga_maxima?.toString() || '',
-        carga_ponta: orcamento.carga_ponta?.toString() || '',
-        potencia_eletrica: orcamento.potencia_eletrica || '',
-        energia_necessaria: orcamento.energia_necessaria || '',
+        altura_inicial: orcamento.grua_altura_inicial?.toString() || orcamento.altura_inicial?.toString() || '',
+        altura_final: orcamento.grua_altura_final?.toString() || orcamento.altura_final?.toString() || '',
+        comprimento_lanca: orcamento.grua_lanca?.toString() || orcamento.comprimento_lanca?.toString() || '',
+        carga_maxima: orcamento.grua_capacidade_1_cabo?.toString() || orcamento.carga_maxima?.toString() || '',
+        carga_ponta: orcamento.grua_capacidade_2_cabos?.toString() || orcamento.carga_ponta?.toString() || '',
+        potencia_eletrica: orcamento.grua_potencia ? `${orcamento.grua_potencia} KVA` : orcamento.potencia_eletrica || '',
+        energia_necessaria: orcamento.grua_voltagem || orcamento.energia_necessaria || '',
+        // Campos técnicos detalhados
+        tipo_base: orcamento.grua_tipo_base || '',
+        velocidade_giro: orcamento.grua_velocidade_giro?.toString() || '',
+        velocidade_elevacao: orcamento.grua_velocidade_elevacao?.toString() || '',
+        velocidade_translacao: orcamento.grua_velocidade_translacao?.toString() || '',
+        potencia_instalada: orcamento.grua_potencia_instalada?.toString() || '',
+        voltagem: orcamento.grua_voltagem || '',
+        tipo_ligacao: orcamento.grua_tipo_ligacao || '',
+        capacidade_ponta: orcamento.grua_capacidade_ponta?.toString() || '',
+        capacidade_maxima_raio: orcamento.grua_capacidade_maxima_raio?.toString() || '',
+        ano_fabricacao: orcamento.grua_ano?.toString() || '',
+        vida_util: orcamento.grua_vida_util?.toString() || '',
         valor_locacao_mensal: orcamento.valor_locacao_mensal?.toString() || '',
         valor_operador: orcamento.valor_operador?.toString() || '',
         valor_sinaleiro: orcamento.valor_sinaleiro?.toString() || '',
@@ -676,12 +700,12 @@ export default function NovoOrcamentoPage() {
         const gruaModelo = equipamentoFinal || gruaSelecionada?.modelo || ''
         const gruaLanca = formData.comprimento_lanca ? parseFloat(formData.comprimento_lanca) : (gruaSelecionada?.lanca || null)
         const gruaAlturaFinal = formData.altura_final ? parseFloat(formData.altura_final) : (gruaSelecionada?.altura_final || null)
-        const gruaTipoBase = gruaSelecionada?.tipo_base || ''
-        const gruaAno = gruaSelecionada?.ano || null
-        const gruaPotencia = formData.potencia_eletrica ? parseFloat(formData.potencia_eletrica) : (gruaSelecionada?.potencia_instalada || null)
+        const gruaTipoBase = formData.tipo_base || gruaSelecionada?.tipo_base || ''
+        const gruaAno = formData.ano_fabricacao ? parseInt(formData.ano_fabricacao) : (gruaSelecionada?.ano || null)
+        const gruaPotencia = formData.potencia_instalada ? parseFloat(formData.potencia_instalada) : (formData.potencia_eletrica ? parseFloat(formData.potencia_eletrica.replace(/[^\d.]/g, '')) : (gruaSelecionada?.potencia_instalada || null))
         const gruaCapacidade1 = formData.carga_maxima ? parseFloat(formData.carga_maxima) : (gruaSelecionada?.capacidade_1_cabo || null)
         const gruaCapacidade2 = formData.carga_ponta ? parseFloat(formData.carga_ponta) : (gruaSelecionada?.capacidade_2_cabos || null)
-        const gruaVoltagem = formData.energia_necessaria || gruaSelecionada?.voltagem || ''
+        const gruaVoltagem = formData.voltagem || formData.energia_necessaria || gruaSelecionada?.voltagem || ''
         
         const orcamentoData = {
           cliente_id: clienteId ? parseInt(clienteId.toString()) : null,
@@ -701,7 +725,7 @@ export default function NovoOrcamentoPage() {
           obra_tipo: formData.tipo_obra || '',
           obra_endereco: formData.obra_endereco || '',
           obra_cidade: formData.obra_cidade || '',
-          // Campos de grua
+          // Campos de grua - básicos
           grua_id: gruaId,
           grua_modelo: gruaModelo,
           grua_lanca: gruaLanca,
@@ -712,6 +736,16 @@ export default function NovoOrcamentoPage() {
           grua_capacidade_1_cabo: gruaCapacidade1,
           grua_capacidade_2_cabos: gruaCapacidade2,
           grua_voltagem: gruaVoltagem,
+          // Campos técnicos detalhados
+          grua_altura_inicial: formData.altura_inicial ? parseFloat(formData.altura_inicial) : null,
+          grua_velocidade_giro: formData.velocidade_giro ? parseFloat(formData.velocidade_giro) : null,
+          grua_velocidade_elevacao: formData.velocidade_elevacao ? parseFloat(formData.velocidade_elevacao) : null,
+          grua_velocidade_translacao: formData.velocidade_translacao ? parseFloat(formData.velocidade_translacao) : null,
+          grua_potencia_instalada: formData.potencia_instalada ? parseFloat(formData.potencia_instalada) : null,
+          grua_tipo_ligacao: formData.tipo_ligacao || null,
+          grua_capacidade_ponta: formData.capacidade_ponta ? parseFloat(formData.capacidade_ponta) : null,
+          grua_capacidade_maxima_raio: formData.capacidade_maxima_raio ? parseFloat(formData.capacidade_maxima_raio) : null,
+          grua_vida_util: formData.vida_util ? parseInt(formData.vida_util) : null,
           // Campos gerais
           prazo_locacao_meses: prazoMeses,
           data_inicio_estimada: formData.data_inicio_estimada || null,
@@ -742,96 +776,6 @@ export default function NovoOrcamentoPage() {
           response = await updateOrcamento({ id: parseInt(orcamentoId), ...orcamentoData })
         } else {
           response = await createOrcamento(orcamentoData)
-        }
-      } else {
-        // ===== ORÇAMENTO DE LOCAÇÃO =====
-        // Calcular valor total dos complementos
-        let valorTotalComplementos = 0
-        const itensComplementos = complementosSelecionados.map(complemento => {
-          let valorItem = 0
-          let quantidade = complemento.quantidade || 1
-          
-          // Calcular valor baseado no tipo de precificação
-          if (complemento.tipo_precificacao === 'mensal') {
-            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade * prazoMeses
-          } else if (complemento.tipo_precificacao === 'unico') {
-            valorItem = (complemento.preco_unitario_centavos / 100) * quantidade
-          } else {
-            // Para por_metro, por_hora, por_dia - usar o valor_total já calculado
-            valorItem = complemento.valor_total || (complemento.preco_unitario_centavos / 100) * quantidade
-          }
-          
-          valorTotalComplementos += valorItem
-          
-          return {
-            produto_servico: complemento.nome,
-            descricao: complemento.descricao || `${complemento.nome} - ${complemento.sku || ''}`,
-            quantidade: complemento.tipo_precificacao === 'mensal' ? quantidade * prazoMeses : quantidade,
-            valor_unitario: complemento.preco_unitario_centavos / 100,
-            valor_total: valorItem,
-            tipo: (complemento.sku?.startsWith('ACESS') ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
-            unidade: complemento.unidade || 'unidade',
-            observacoes: complemento.descricao || ''
-          }
-        })
-        
-        // Calcular valor total dos valores fixos
-        const valorTotalValoresFixos = valoresFixos.reduce((sum, vf) => sum + (vf.quantidade * vf.valor_unitario), 0)
-        
-        const valorTotalOrcamento = (totalMensal * prazoMeses) + valorTotalComplementos + valorTotalValoresFixos
-        
-        const orcamentoData = {
-          numero,
-          cliente_id: clienteId ? parseInt(clienteId.toString()) : null,
-          data_orcamento: hoje.toISOString().split('T')[0],
-          data_validade: formData.data_inicio_estimada 
-            ? new Date(new Date(formData.data_inicio_estimada).getTime() + (prazoMeses * 30 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0]
-            : new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
-          valor_total: valorTotalOrcamento,
-          desconto: 0,
-          status: (isDraft ? 'rascunho' : 'enviado') as 'rascunho' | 'enviado',
-          tipo_orcamento: 'locacao_grua' as 'locacao_grua' | 'locacao_plataforma',
-          condicoes_pagamento: formData.condicoes_comerciais || '',
-          condicoes_gerais: formData.condicoes_gerais || '',
-          logistica: formData.logistica || '',
-          garantias: formData.garantias || '',
-          prazo_entrega: formData.prazo_locacao_meses ? `${formData.prazo_locacao_meses} meses` : '',
-          observacoes: formData.observacoes || '',
-          valores_fixos: valoresFixos.map(vf => ({
-            tipo: vf.tipo,
-            descricao: vf.descricao,
-            quantidade: vf.quantidade,
-            valor_unitario: vf.valor_unitario,
-            valor_total: vf.quantidade * vf.valor_unitario,
-            observacoes: vf.observacoes || ''
-          })),
-          custos_mensais: custosMensais.map(cm => ({
-            tipo: cm.tipo,
-            descricao: cm.descricao,
-            valor_mensal: cm.valor_mensal,
-            obrigatorio: cm.obrigatorio,
-            observacoes: cm.observacoes || ''
-          })),
-          itens: [
-            // Incluir custos mensais como itens para compatibilidade
-            ...custosMensais.map(cm => ({
-              produto_servico: cm.tipo,
-              descricao: cm.descricao,
-              quantidade: prazoMeses,
-              valor_unitario: cm.valor_mensal,
-              valor_total: cm.valor_mensal * prazoMeses,
-              tipo: (cm.tipo === 'Locação' ? 'equipamento' : 'servico') as 'equipamento' | 'servico' | 'produto',
-              unidade: 'mês',
-              observacoes: cm.observacoes || ''
-            })),
-            ...itensComplementos
-          ]
-        }
-
-        if (isEditMode && orcamentoId) {
-          response = await orcamentosLocacaoApi.update(parseInt(orcamentoId), orcamentoData)
-        } else {
-          response = await orcamentosLocacaoApi.create(orcamentoData)
         }
       }
 
@@ -1157,13 +1101,13 @@ export default function NovoOrcamentoPage() {
             <Building2 className="w-4 h-4 mr-2" />
             Identificação
           </TabsTrigger>
-          <TabsTrigger value="tecnico">
+          <TabsTrigger value="equipamento">
             <Wrench className="w-4 h-4 mr-2" />
-            Técnico
+            Equipamento
           </TabsTrigger>
-          <TabsTrigger value="custos">
+          <TabsTrigger value="valores">
             <DollarSign className="w-4 h-4 mr-2" />
-            Custos
+            Valores
           </TabsTrigger>
           <TabsTrigger value="prazos">
             <Calendar className="w-4 h-4 mr-2" />
@@ -1173,9 +1117,9 @@ export default function NovoOrcamentoPage() {
             <FileText className="w-4 h-4 mr-2" />
             Condições
           </TabsTrigger>
-          <TabsTrigger value="itens">
+          <TabsTrigger value="complementos">
             <Package className="w-4 h-4 mr-2" />
-            Itens
+            Complementos
           </TabsTrigger>
         </TabsList>
 
@@ -1288,7 +1232,35 @@ export default function NovoOrcamentoPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="tecnico" className="space-y-4 mt-4">
+        <TabsContent value="equipamento" className="space-y-4 mt-4">
+          {/* Seção: Seleção de Equipamento */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Equipamento Ofertado</CardTitle>
+              <CardDescription>
+                Selecione o equipamento principal do orçamento
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label>Equipamento Ofertado *</Label>
+                <GruaSearch
+                  onGruaSelect={handleGruaSelect}
+                  selectedGrua={gruaSelecionada}
+                />
+                {formData.equipamento && (
+                  <Input
+                    value={formData.equipamento}
+                    onChange={(e) => setFormData({ ...formData, equipamento: e.target.value })}
+                    className="mt-2"
+                    placeholder="Ex: Grua Torre / XCMG QTZ40B"
+                  />
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Seção: Especificações Técnicas */}
           <Card>
             <CardHeader>
               <CardTitle>Especificações Técnicas da Grua</CardTitle>
@@ -1296,78 +1268,222 @@ export default function NovoOrcamentoPage() {
                 Dados técnicos essenciais do equipamento
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>Altura Inicial (m)</Label>
-                  <Input
-                    type="number"
-                    value={formData.altura_inicial}
-                    onChange={(e) => setFormData({ ...formData, altura_inicial: e.target.value })}
-                    placeholder="Ex: 21"
-                  />
+            <CardContent className="space-y-6">
+              {/* Dados Básicos */}
+              <div>
+                <h4 className="font-semibold text-sm mb-3 text-gray-700">Dados Básicos</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Altura Inicial (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.altura_inicial}
+                      onChange={(e) => setFormData({ ...formData, altura_inicial: e.target.value })}
+                      placeholder="Ex: 21"
+                    />
+                  </div>
+                  <div>
+                    <Label>Altura Final Prevista (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.altura_final}
+                      onChange={(e) => setFormData({ ...formData, altura_final: e.target.value })}
+                      placeholder="Ex: 95"
+                    />
+                  </div>
+                  <div>
+                    <Label>Comprimento da Lança (m)</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      value={formData.comprimento_lanca}
+                      onChange={(e) => setFormData({ ...formData, comprimento_lanca: e.target.value })}
+                      placeholder="Ex: 30"
+                    />
+                  </div>
+                  <div>
+                    <Label>Carga Máxima (kg)</Label>
+                    <Input
+                      type="number"
+                      value={formData.carga_maxima}
+                      onChange={(e) => setFormData({ ...formData, carga_maxima: e.target.value })}
+                      placeholder="Ex: 2000"
+                    />
+                  </div>
+                  <div>
+                    <Label>Carga na Ponta (kg)</Label>
+                    <Input
+                      type="number"
+                      value={formData.carga_ponta}
+                      onChange={(e) => setFormData({ ...formData, carga_ponta: e.target.value })}
+                      placeholder="Ex: 1300"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Altura Final Prevista (m)</Label>
-                  <Input
-                    type="number"
-                    value={formData.altura_final}
-                    onChange={(e) => setFormData({ ...formData, altura_final: e.target.value })}
-                    placeholder="Ex: 95"
-                  />
+              </div>
+
+              {/* Parâmetros Técnicos Detalhados */}
+              <div>
+                <h4 className="font-semibold text-sm mb-3 text-gray-700">Parâmetros Técnicos Detalhados</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Tipo de Base</Label>
+                    <Select
+                      value={formData.tipo_base}
+                      onValueChange={(value) => setFormData({ ...formData, tipo_base: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="chumbador">Chumbador</SelectItem>
+                        <SelectItem value="cruzeta">Cruzeta</SelectItem>
+                        <SelectItem value="outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Velocidade de Giro (rpm)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={formData.velocidade_giro}
+                      onChange={(e) => setFormData({ ...formData, velocidade_giro: e.target.value })}
+                      placeholder="Ex: 0.8"
+                    />
+                  </div>
+                  <div>
+                    <Label>Velocidade de Elevação (m/min)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={formData.velocidade_elevacao}
+                      onChange={(e) => setFormData({ ...formData, velocidade_elevacao: e.target.value })}
+                      placeholder="Ex: 60"
+                    />
+                  </div>
+                  <div>
+                    <Label>Velocidade de Translação (m/min)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={formData.velocidade_translacao}
+                      onChange={(e) => setFormData({ ...formData, velocidade_translacao: e.target.value })}
+                      placeholder="Ex: 20"
+                    />
+                  </div>
+                  <div>
+                    <Label>Potência Instalada (kVA)</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      value={formData.potencia_instalada}
+                      onChange={(e) => setFormData({ ...formData, potencia_instalada: e.target.value })}
+                      placeholder="Ex: 42"
+                    />
+                  </div>
+                  <div>
+                    <Label>Voltagem (V)</Label>
+                    <Select
+                      value={formData.voltagem}
+                      onValueChange={(value) => setFormData({ ...formData, voltagem: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="220">220V</SelectItem>
+                        <SelectItem value="380">380V</SelectItem>
+                        <SelectItem value="440">440V</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Tipo de Ligação Elétrica</Label>
+                    <Select
+                      value={formData.tipo_ligacao}
+                      onValueChange={(value) => setFormData({ ...formData, tipo_ligacao: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monofasica">Monofásica</SelectItem>
+                        <SelectItem value="trifasica">Trifásica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Capacidade na Ponta (kg)</Label>
+                    <Input
+                      type="number"
+                      value={formData.capacidade_ponta}
+                      onChange={(e) => setFormData({ ...formData, capacidade_ponta: e.target.value })}
+                      placeholder="Ex: 1300"
+                    />
+                  </div>
+                  <div>
+                    <Label>Capacidade Máxima no Raio (kg)</Label>
+                    <Input
+                      type="number"
+                      value={formData.capacidade_maxima_raio}
+                      onChange={(e) => setFormData({ ...formData, capacidade_maxima_raio: e.target.value })}
+                      placeholder="Ex: 2000"
+                    />
+                  </div>
+                  <div>
+                    <Label>Ano de Fabricação</Label>
+                    <Input
+                      type="number"
+                      value={formData.ano_fabricacao}
+                      onChange={(e) => setFormData({ ...formData, ano_fabricacao: e.target.value })}
+                      placeholder="Ex: 2020"
+                    />
+                  </div>
+                  <div>
+                    <Label>Vida Útil (anos)</Label>
+                    <Input
+                      type="number"
+                      value={formData.vida_util}
+                      onChange={(e) => setFormData({ ...formData, vida_util: e.target.value })}
+                      placeholder="Ex: 20"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <Label>Comprimento da Lança (m)</Label>
-                  <Input
-                    type="number"
-                    value={formData.comprimento_lanca}
-                    onChange={(e) => setFormData({ ...formData, comprimento_lanca: e.target.value })}
-                    placeholder="Ex: 30"
-                  />
-                </div>
-                <div>
-                  <Label>Carga Máxima (kg)</Label>
-                  <Input
-                    type="number"
-                    value={formData.carga_maxima}
-                    onChange={(e) => setFormData({ ...formData, carga_maxima: e.target.value })}
-                    placeholder="Ex: 2000"
-                  />
-                </div>
-                <div>
-                  <Label>Carga na Ponta (kg)</Label>
-                  <Input
-                    type="number"
-                    value={formData.carga_ponta}
-                    onChange={(e) => setFormData({ ...formData, carga_ponta: e.target.value })}
-                    placeholder="Ex: 1300"
-                  />
-                </div>
-                <div>
-                  <Label>Potência Elétrica</Label>
-                  <Input
-                    value={formData.potencia_eletrica}
-                    onChange={(e) => setFormData({ ...formData, potencia_eletrica: e.target.value })}
-                    placeholder="Ex: 42 KVA"
-                  />
-                </div>
-                <div>
-                  <Label>Energia Necessária</Label>
-                  <Input
-                    value={formData.energia_necessaria}
-                    onChange={(e) => setFormData({ ...formData, energia_necessaria: e.target.value })}
-                    placeholder="Ex: 380V"
-                  />
+              </div>
+
+              {/* Dados Elétricos (Compatibilidade) */}
+              <div>
+                <h4 className="font-semibold text-sm mb-3 text-gray-700">Dados Elétricos</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label>Potência Elétrica</Label>
+                    <Input
+                      value={formData.potencia_eletrica}
+                      onChange={(e) => setFormData({ ...formData, potencia_eletrica: e.target.value })}
+                      placeholder="Ex: 42 KVA"
+                    />
+                  </div>
+                  <div>
+                    <Label>Energia Necessária</Label>
+                    <Input
+                      value={formData.energia_necessaria}
+                      onChange={(e) => setFormData({ ...formData, energia_necessaria: e.target.value })}
+                      placeholder="Ex: 380V"
+                    />
+                  </div>
                 </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="custos" className="space-y-4 mt-4">
+        <TabsContent value="valores" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Custos Mensais Principais</CardTitle>
+              <CardTitle>Valores Mensais Principais</CardTitle>
               <CardDescription>
                 Valores mensais básicos (locação, operador, sinaleiro e manutenção)
               </CardDescription>
@@ -1580,7 +1696,10 @@ export default function NovoOrcamentoPage() {
         <TabsContent value="condicoes" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Escopo Básico Incluso</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Escopo Básico Incluso</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 O que está incluído no orçamento básico
               </CardDescription>
@@ -1597,7 +1716,10 @@ export default function NovoOrcamentoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Responsabilidades do Cliente</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Responsabilidades do Cliente</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 O que o cliente deve fornecer/preparar
               </CardDescription>
@@ -1614,7 +1736,10 @@ export default function NovoOrcamentoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Condições Comerciais</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Condições Comerciais</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 Termos de pagamento e condições gerais
               </CardDescription>
@@ -1631,7 +1756,10 @@ export default function NovoOrcamentoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Condições Gerais</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Condições Gerais</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 Condições gerais do contrato e termos legais
               </CardDescription>
@@ -1648,7 +1776,10 @@ export default function NovoOrcamentoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Logística</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Logística</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 Informações sobre transporte, entrega e instalação
               </CardDescription>
@@ -1665,7 +1796,10 @@ export default function NovoOrcamentoPage() {
 
           <Card>
             <CardHeader>
-              <CardTitle>Garantias</CardTitle>
+              <CardTitle className="flex items-center justify-between">
+                <span>Garantias</span>
+                <Badge variant="outline" className="text-xs">Pré-preenchido - Edite se necessário</Badge>
+              </CardTitle>
               <CardDescription>
                 Garantias oferecidas e condições de garantia
               </CardDescription>
@@ -1695,40 +1829,13 @@ export default function NovoOrcamentoPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="itens" className="space-y-4 mt-4">
-          {/* Seção de Equipamentos */}
-          <Card>
-            <CardHeader>
-              <CardTitle>Equipamento Ofertado</CardTitle>
-              <CardDescription>
-                Selecione o equipamento principal do orçamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div>
-                <Label>Equipamento Ofertado *</Label>
-                <GruaSearch
-                  onGruaSelect={handleGruaSelect}
-                  selectedGrua={gruaSelecionada}
-                />
-                {formData.equipamento && (
-                  <Input
-                    value={formData.equipamento}
-                    onChange={(e) => setFormData({ ...formData, equipamento: e.target.value })}
-                    className="mt-2"
-                    placeholder="Ex: Grua Torre / XCMG QTZ40B"
-                  />
-                )}
-              </div>
-            </CardContent>
-          </Card>
-
+        <TabsContent value="complementos" className="space-y-4 mt-4">
           {/* Seção de Complementos */}
           <Card>
             <CardHeader>
               <CardTitle>Complementos do Orçamento</CardTitle>
               <CardDescription>
-                Adicione complementos adicionais que podem ser atrelados a este orçamento
+                Equipamentos de complementos caso o cliente solicite junto à proposta inicial, ou após a aprovação
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">

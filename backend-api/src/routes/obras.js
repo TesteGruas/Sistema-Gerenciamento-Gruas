@@ -38,6 +38,7 @@ const obraSchema = Joi.object({
   data_inicio: Joi.date().allow(null).optional(),
   data_fim: Joi.date().allow(null).optional(),
   orcamento: Joi.number().positive().allow(null).optional(),
+  orcamento_id: Joi.number().integer().positive().allow(null).optional(), // ID do orçamento aprovado vinculado
   observacoes: Joi.string().allow('', null).optional(),
   responsavel_id: Joi.number().integer().positive().allow(null).optional(),
   responsavel_nome: Joi.string().allow('', null).optional(),
@@ -1138,6 +1139,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       data_inicio: value.data_inicio,
       data_fim: value.data_fim,
       orcamento: value.orcamento,
+      orcamento_id: value.orcamento_id, // ID do orçamento aprovado vinculado
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
@@ -2107,25 +2109,29 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
 router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
-    const { nome, cpf_cnpj, crea, email, telefone, funcionario_id } = req.body
+    const { nome, cpf_cnpj, crea, crea_empresa, email, telefone, funcionario_id, tipo } = req.body
 
     // Validar dados
     const schema = Joi.object({
       funcionario_id: Joi.number().integer().positive().optional(),
       nome: Joi.string().min(2).when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
-      cpf_cnpj: Joi.string().when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
+      cpf_cnpj: Joi.string().when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.optional() }),
       crea: Joi.string().allow(null, '').optional(),
+      crea_empresa: Joi.string().allow(null, '').optional(),
       email: Joi.string().email().allow(null, '').optional(),
-      telefone: Joi.string().allow(null, '').optional()
+      telefone: Joi.string().allow(null, '').optional(),
+      tipo: Joi.string().valid('obra', 'irbana_equipamentos', 'irbana_manutencoes', 'irbana_montagem_operacao').default('obra')
     })
 
-    const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, email, telefone, funcionario_id })
+    const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, crea_empresa, email, telefone, funcionario_id, tipo })
     if (validationError) {
       return res.status(400).json({ error: validationError.details[0].message })
     }
 
-    // Se vier funcionario_id, atualiza diretamente os campos na tabela obras
-    if (funcionario_id) {
+    const tipoFinal = tipo || 'obra'
+
+    // Se vier funcionario_id, atualiza diretamente os campos na tabela obras (apenas para tipo 'obra')
+    if (funcionario_id && tipoFinal === 'obra') {
       const { data: func, error: errFunc } = await supabaseAdmin
         .from('funcionarios')
         .select('id, nome')
@@ -2147,18 +2153,28 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       return res.json({ success: true, data: obraAtualizada })
     }
 
-    // Fluxo sem funcionario_id: manter tabela responsaveis_tecnicos e também refletir na tabela obras
+    // Fluxo sem funcionario_id ou para tipos IRBANA: usar tabela responsaveis_tecnicos
+    // Buscar responsável existente do mesmo tipo
     const { data: existing, error: checkError } = await supabaseAdmin
       .from('responsaveis_tecnicos')
       .select('id')
       .eq('obra_id', id)
-      .single()
+      .eq('tipo', tipoFinal)
+      .maybeSingle()
 
     let result
     if (existing) {
+      // Atualizar existente
+      const updateData = { nome }
+      if (cpf_cnpj) updateData.cpf_cnpj = cpf_cnpj
+      if (crea !== undefined) updateData.crea = crea || null
+      if (crea_empresa !== undefined) updateData.crea_empresa = crea_empresa || null
+      if (email !== undefined) updateData.email = email || null
+      if (telefone !== undefined) updateData.telefone = telefone || null
+
       const { data, error } = await supabaseAdmin
         .from('responsaveis_tecnicos')
-        .update({ nome, cpf_cnpj, crea, email, telefone })
+        .update(updateData)
         .eq('id', existing.id)
         .select()
         .single()
@@ -2166,9 +2182,21 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       if (error) throw error
       result = data
     } else {
+      // Criar novo
+      const insertData = {
+        obra_id: id,
+        nome,
+        cpf_cnpj: cpf_cnpj || '',
+        crea: crea || null,
+        crea_empresa: crea_empresa || null,
+        email: email || null,
+        telefone: telefone || null,
+        tipo: tipoFinal
+      }
+
       const { data, error } = await supabaseAdmin
         .from('responsaveis_tecnicos')
-        .insert({ obra_id: id, nome, cpf_cnpj, crea, email, telefone })
+        .insert(insertData)
         .select()
         .single()
 
@@ -2176,13 +2204,15 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       result = data
     }
 
-    // Atualizar também a obra com o nome do responsável informado manualmente
-    const { error: errUpdateObraManual } = await supabaseAdmin
-      .from('obras')
-      .update({ responsavel_id: null, responsavel_nome: nome })
-      .eq('id', id)
+    // Atualizar também a obra com o nome do responsável informado manualmente (apenas para tipo 'obra')
+    if (tipoFinal === 'obra') {
+      const { error: errUpdateObraManual } = await supabaseAdmin
+        .from('obras')
+        .update({ responsavel_id: null, responsavel_nome: nome })
+        .eq('id', id)
 
-    if (errUpdateObraManual) throw errUpdateObraManual
+      if (errUpdateObraManual) throw errUpdateObraManual
+    }
 
     res.json({ success: true, data: result })
   } catch (error) {
@@ -2198,18 +2228,51 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
 router.get('/:id/responsavel-tecnico', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
+    const { tipo } = req.query // Permite filtrar por tipo
 
-    const { data, error } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('responsaveis_tecnicos')
       .select('*')
       .eq('obra_id', id)
-      .single()
+
+    // Se especificar tipo, filtrar por tipo. Caso contrário, retornar o primeiro (compatibilidade)
+    if (tipo) {
+      query = query.eq('tipo', tipo).maybeSingle()
+    } else {
+      // Por padrão, retornar o responsável da obra (tipo 'obra') para compatibilidade
+      query = query.eq('tipo', 'obra').maybeSingle()
+    }
+
+    const { data, error } = await query
 
     if (error && error.code !== 'PGRST116') throw error
 
     res.json({ success: true, data: data || null })
   } catch (error) {
     console.error('Erro ao obter responsável técnico:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/obras/:id/responsaveis-tecnicos
+ * Obter todos os responsáveis técnicos da obra (incluindo IRBANA)
+ */
+router.get('/:id/responsaveis-tecnicos', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('responsaveis_tecnicos')
+      .select('*')
+      .eq('obra_id', id)
+      .order('tipo', { ascending: true })
+
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao obter responsáveis técnicos:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
   }
 })
@@ -2323,6 +2386,43 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
 
     // Usar dados validados e sanitizados
     const sinaleirosValidados = validatedData.sinaleiros
+
+    // Validar documentos completos para sinaleiros externos (reserva) antes de vincular
+    for (const sinaleiroData of sinaleirosValidados) {
+      if (sinaleiroData.tipo === 'reserva' && sinaleiroData.id) {
+        // Verificar se o sinaleiro já existe e tem documentos completos
+        const { data: documentos, error: documentosError } = await supabaseAdmin
+          .from('documentos_sinaleiro')
+          .select('tipo, status')
+          .eq('sinaleiro_id', sinaleiroData.id)
+
+        if (!documentosError && documentos) {
+          const documentosObrigatorios = ['rg_frente', 'rg_verso', 'comprovante_vinculo']
+          const documentosEncontrados = documentos.map(d => d.tipo)
+          const documentosFaltando = documentosObrigatorios.filter(tipo => !documentosEncontrados.includes(tipo))
+          
+          // Verificar se todos os documentos obrigatórios estão aprovados
+          const documentosAprovados = documentos.filter(d => 
+            documentosObrigatorios.includes(d.tipo) && d.status === 'aprovado'
+          )
+
+          if (documentosFaltando.length > 0 || documentosAprovados.length < documentosObrigatorios.length) {
+            const nomesDocumentos = {
+              'rg_frente': 'RG (Frente)',
+              'rg_verso': 'RG (Verso)',
+              'comprovante_vinculo': 'Comprovante de Vínculo'
+            }
+            const nomesFaltando = documentosFaltando.map(tipo => nomesDocumentos[tipo] || tipo).join(', ')
+            
+            return res.status(400).json({ 
+              error: 'Documentos incompletos',
+              message: `O sinaleiro "${sinaleiroData.nome}" não pode ser vinculado à obra. Documentos faltando ou não aprovados: ${nomesFaltando || 'Documentos não aprovados'}. Complete o cadastro pelo RH antes de vincular à obra.`,
+              documentosFaltando
+            })
+          }
+        }
+      }
+    }
 
     // Verificar se já existem sinaleiros para esta obra
     const { data: existing } = await supabaseAdmin
@@ -2485,6 +2585,78 @@ router.get('/sinaleiros/:id/documentos', authenticateToken, async (req, res) => 
   } catch (error) {
     console.error('Erro ao listar documentos do sinaleiro:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/obras/sinaleiros/:id/validar-documentos
+ * Validar se sinaleiro tem documentos obrigatórios completos
+ */
+router.get('/sinaleiros/:id/validar-documentos', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+
+    // Verificar se o sinaleiro existe e obter o tipo
+    const { data: sinaleiro, error: sinaleiroError } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .select('id, tipo')
+      .eq('id', id)
+      .single()
+
+    if (sinaleiroError || !sinaleiro) {
+      return res.status(404).json({ 
+        success: false,
+        completo: false,
+        error: 'Sinaleiro não encontrado'
+      })
+    }
+
+    // Sinaleiros internos (principal) não precisam de documentos
+    if (sinaleiro.tipo === 'principal') {
+      return res.json({ 
+        success: true,
+        completo: true,
+        message: 'Sinaleiros internos não precisam de documentos'
+      })
+    }
+
+    // Documentos obrigatórios para sinaleiros externos (reserva)
+    const documentosObrigatorios = ['rg_frente', 'rg_verso', 'comprovante_vinculo']
+
+    // Buscar documentos do sinaleiro
+    const { data: documentos, error: documentosError } = await supabaseAdmin
+      .from('documentos_sinaleiro')
+      .select('tipo, status')
+      .eq('sinaleiro_id', id)
+
+    if (documentosError) throw documentosError
+
+    // Verificar quais documentos estão faltando
+    const documentosEncontrados = documentos?.map(d => d.tipo) || []
+    const documentosFaltando = documentosObrigatorios.filter(tipo => !documentosEncontrados.includes(tipo))
+
+    // Verificar se todos os documentos obrigatórios estão aprovados
+    const documentosAprovados = documentos?.filter(d => 
+      documentosObrigatorios.includes(d.tipo) && d.status === 'aprovado'
+    ) || []
+
+    const completo = documentosFaltando.length === 0 && documentosAprovados.length === documentosObrigatorios.length
+
+    res.json({ 
+      success: true,
+      completo,
+      documentosFaltando: completo ? [] : documentosFaltando,
+      documentosAprovados: documentosAprovados.length,
+      documentosObrigatorios: documentosObrigatorios.length
+    })
+  } catch (error) {
+    console.error('Erro ao validar documentos do sinaleiro:', error)
+    res.status(500).json({ 
+      success: false,
+      completo: false,
+      error: 'Erro interno do servidor', 
+      message: error.message 
+    })
   }
 })
 

@@ -919,7 +919,7 @@ function ObraDetailsPageContent() {
     valorPeriodo: 0
   })
   
-  // Estados para custos mensais - agora no store
+  // Estados para valores - agora no store
   const [mesSelecionado, setMesSelecionado] = useState('')
   const [isNovoMesOpen, setIsNovoMesOpen] = useState(false)
   const [novoMesData, setNovoMesData] = useState({
@@ -1277,7 +1277,7 @@ function ObraDetailsPageContent() {
       })
   }
 
-  // Funções para custos mensais
+  // Funções para valores
   const gerarMesesDisponiveis = () => {
     if (!obra) return []
     
@@ -3210,7 +3210,6 @@ useEffect(() => {
         <TabsTrigger value="geral" className="flex-1 min-w-[120px] whitespace-nowrap">Geral</TabsTrigger>
         <TabsTrigger value="gruas" className="flex-1 min-w-[120px] whitespace-nowrap">Gruas</TabsTrigger>
         <TabsTrigger value="funcionarios" className="flex-1 min-w-[120px] whitespace-nowrap">Funcionários</TabsTrigger>
-        <TabsTrigger value="sinaleiros" className="flex-1 min-w-[120px] whitespace-nowrap">Sinaleiros</TabsTrigger>
         <TabsTrigger value="medicoes-mensais" className="flex-1 min-w-[120px] whitespace-nowrap">
           Medições Mensais
         </TabsTrigger>
@@ -4321,9 +4320,8 @@ useEffect(() => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
 
-        <TabsContent value="sinaleiros" className="space-y-4">
+          {/* Seção: Sinaleiros */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">

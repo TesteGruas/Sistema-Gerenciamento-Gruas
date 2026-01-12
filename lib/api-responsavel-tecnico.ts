@@ -19,8 +19,10 @@ export interface ResponsavelTecnicoCreateData {
   nome?: string
   cpf_cnpj?: string
   crea?: string
+  crea_empresa?: string // CREA da empresa (para IRBANA: SP 2494244)
   email?: string
   telefone?: string
+  tipo?: 'obra' | 'irbana_equipamentos' | 'irbana_manutencoes' | 'irbana_montagem_operacao' // Tipo do responsável técnico
 }
 
 export interface ResponsavelTecnicoResponse {

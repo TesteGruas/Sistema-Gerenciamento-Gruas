@@ -95,6 +95,33 @@ const styles = StyleSheet.create({
   },
   totalText: { fontSize: 10, fontWeight: "bold" },
   muted: { color: "#6B7280" },
+  table: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    borderRadius: 4
+  },
+  tableRow: {
+    flexDirection: "row",
+    borderBottomWidth: 1,
+    borderBottomColor: "#E5E7EB",
+    paddingVertical: 6,
+    paddingHorizontal: 8
+  },
+  tableHeader: {
+    backgroundColor: "#F9FAFB",
+    fontWeight: "bold",
+    fontSize: 9
+  },
+  tableCell: {
+    fontSize: 9,
+    flex: 1
+  },
+  tableCellRight: {
+    fontSize: 9,
+    flex: 1,
+    textAlign: "right"
+  },
   footer: {
     position: "absolute",
     bottom: 18,
@@ -179,6 +206,22 @@ interface OrcamentoPDFData {
     energia?: string
   }
   custosMensais: Array<{ nome: string; valor: number }>
+  // Valores detalhados para tabelas
+  custosMensaisDetalhados?: Array<{
+    tipo: string
+    quantidade: number
+    valor_unitario: number
+    valor_total: number
+    unidade?: string
+  }>
+  servicosAdicionais?: Array<{
+    tipo: string
+    descricao: string
+    quantidade: number
+    valor_unitario: number
+    valor_total: number
+    unidade?: string
+  }>
   prazo: {
     meses: number
     inicioEstimado?: string
@@ -305,8 +348,8 @@ export const OrcamentoPDFDocument = ({ data }: { data: OrcamentoPDFData }) => {
           </>
         )}
 
-        {/* Custos Mensais */}
-        <Text style={styles.sectionTitle}>Custos Mensais</Text>
+        {/* Valores */}
+        <Text style={styles.sectionTitle}>Valores</Text>
         <View style={styles.card}>
           {data.custosMensais.map((c, idx) => (
             <View style={styles.row} key={idx}>
@@ -321,6 +364,78 @@ export const OrcamentoPDFDocument = ({ data }: { data: OrcamentoPDFData }) => {
             </View>
           </View>
         </View>
+
+        {/* Valores Detalhados - Custo de Obra Mensal */}
+        {data.custosMensaisDetalhados && data.custosMensaisDetalhados.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>CUSTO DE OBRA - MENSAL</Text>
+            <View style={styles.table}>
+              {/* Cabeçalho da tabela */}
+              <View style={[styles.tableRow, styles.tableHeader]}>
+                <Text style={[styles.tableCell, { flex: 2 }]}>Tipo</Text>
+                <Text style={styles.tableCellRight}>Quantidade</Text>
+                <Text style={styles.tableCellRight}>Valor Unitário</Text>
+                <Text style={styles.tableCellRight}>Valor Total</Text>
+              </View>
+              {/* Linhas da tabela */}
+              {data.custosMensaisDetalhados.map((custo, idx) => (
+                <View style={styles.tableRow} key={idx}>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{custo.tipo}</Text>
+                  <Text style={styles.tableCellRight}>
+                    {custo.quantidade} {custo.unidade || ''}
+                  </Text>
+                  <Text style={styles.tableCellRight}>{money(custo.valor_unitario)}</Text>
+                  <Text style={styles.tableCellRight}>{money(custo.valor_total)}</Text>
+                </View>
+              ))}
+              {/* Total */}
+              <View style={[styles.tableRow, { backgroundColor: "#F9FAFB" }]}>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>TOTAL MENSAL</Text>
+                <Text style={styles.tableCellRight}></Text>
+                <Text style={styles.tableCellRight}></Text>
+                <Text style={[styles.tableCellRight, { fontWeight: "bold" }]}>
+                  {money(data.custosMensaisDetalhados.reduce((sum, c) => sum + (c.valor_total || 0), 0))}
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
+
+        {/* Valores Detalhados - Serviços Adicionais */}
+        {data.servicosAdicionais && data.servicosAdicionais.length > 0 && (
+          <>
+            <Text style={styles.sectionTitle}>VALOR TOTAL DOS SERVIÇOS</Text>
+            <View style={styles.table}>
+              {/* Cabeçalho da tabela */}
+              <View style={[styles.tableRow, styles.tableHeader]}>
+                <Text style={[styles.tableCell, { flex: 2 }]}>Tipo</Text>
+                <Text style={styles.tableCellRight}>Quantidade</Text>
+                <Text style={styles.tableCellRight}>Valor Unitário</Text>
+                <Text style={styles.tableCellRight}>Valor Total</Text>
+              </View>
+              {/* Linhas da tabela */}
+              {data.servicosAdicionais.map((servico, idx) => (
+                <View style={styles.tableRow} key={idx}>
+                  <Text style={[styles.tableCell, { flex: 2 }]}>{servico.tipo || servico.descricao}</Text>
+                  <Text style={styles.tableCellRight}>
+                    {servico.quantidade} {servico.unidade || ''}
+                  </Text>
+                  <Text style={styles.tableCellRight}>{money(servico.valor_unitario)}</Text>
+                  <Text style={styles.tableCellRight}>{money(servico.valor_total)}</Text>
+                </View>
+              ))}
+              {/* Total */}
+              <View style={[styles.tableRow, { backgroundColor: "#F9FAFB" }]}>
+                <Text style={[styles.tableCell, { flex: 2, fontWeight: "bold" }]}>TOTAL SERVIÇOS</Text>
+                <Text style={styles.tableCellRight}></Text>
+                <Text style={styles.tableCellRight}></Text>
+                <Text style={[styles.tableCellRight, { fontWeight: "bold" }]}>
+                  {money(data.servicosAdicionais.reduce((sum, s) => sum + (s.valor_total || 0), 0))}
+                </Text>
+              </View>
+            </View>
+          </>
+        )}
 
         {/* Prazos e Datas */}
         <Text style={styles.sectionTitle}>Prazos e Datas</Text>

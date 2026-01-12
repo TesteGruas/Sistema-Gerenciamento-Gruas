@@ -35,6 +35,7 @@ import {
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
+import { getOrcamentoAprovadoPorCliente, getOrcamentoCompleto, Orcamento } from "@/lib/api-orcamentos"
 import { ButtonLoader } from "@/components/ui/loader"
 import ClienteSearch from "@/components/cliente-search"
 import GruaSearch from "@/components/grua-search"
@@ -202,8 +203,58 @@ export default function NovaObraPage() {
   const [artArquivo, setArtArquivo] = useState<File | null>(null)
   const [apoliceNumero, setApoliceNumero] = useState<string>('')
   const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  // Novos documentos adicionais
+  const [manualTecnicoArquivo, setManualTecnicoArquivo] = useState<File | null>(null)
+  const [termoEntregaArquivo, setTermoEntregaArquivo] = useState<File | null>(null)
+  const [planoCargaArquivo, setPlanoCargaArquivo] = useState<File | null>(null)
+  const [aterramentoArquivo, setAterramentoArquivo] = useState<File | null>(null)
   const [responsavelTecnico, setResponsavelTecnico] = useState<ResponsavelTecnicoData | null>(null)
+  
+  // Estados para Responsáveis Técnicos IRBANA
+  const [responsavelEquipamentos, setResponsavelEquipamentos] = useState<ResponsavelTecnicoData>({
+    nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+    cpf_cnpj: '',
+    crea: '5071184591',
+    email: '',
+    telefone: ''
+  })
+  const [responsavelManutencoes, setResponsavelManutencoes] = useState<ResponsavelTecnicoData>({
+    nome: 'NESTOR ALVAREZ GONZALEZ',
+    cpf_cnpj: '',
+    crea: '',
+    email: '',
+    telefone: '(11) 98818-5951'
+  })
+  const [responsavelMontagemOperacao, setResponsavelMontagemOperacao] = useState<ResponsavelTecnicoData>({
+    nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+    cpf_cnpj: '',
+    crea: '5071184591',
+    email: '',
+    telefone: ''
+  })
+  
   const [sinaleiros, setSinaleiros] = useState<any[]>([])
+  
+  // Estados para orçamento aprovado
+  const [orcamentoAprovado, setOrcamentoAprovado] = useState<Orcamento | null>(null)
+  const [orcamentoId, setOrcamentoId] = useState<number | null>(null)
+  const [loadingOrcamento, setLoadingOrcamento] = useState(false)
+  
+  // Estados para Dados de Montagem do Equipamento
+  const [dadosMontagemEquipamento, setDadosMontagemEquipamento] = useState({
+    altura_final: '',
+    tipo_base: '',
+    capacidade_1_cabo: '',
+    capacidade_2_cabos: '',
+    potencia_instalada: '',
+    voltagem: '',
+    velocidade_rotacao: '',
+    velocidade_elevacao: '',
+    velocidade_translacao: '',
+    tipo_ligacao: '',
+    capacidade_ponta: '',
+    observacoes_montagem: ''
+  })
   
   // Estados para modal de criação de cliente
   const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
@@ -226,7 +277,7 @@ export default function NovaObraPage() {
     usuario_senha: ''
   })
   
-  // Estados para custos mensais
+  // Estados para valores
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
   const [custoForm, setCustoForm] = useState({
     item: '',
@@ -238,7 +289,7 @@ export default function NovaObraPage() {
     mes: new Date().toISOString().slice(0, 7)
   })
 
-  // Funções para custos mensais
+  // Funções para valores
   const adicionarCustoMensal = () => {
     const novoCusto: CustoMensal = {
       id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -363,10 +414,78 @@ export default function NovaObraPage() {
     }
   }
 
-  const handleClienteSelect = (cliente: any) => {
+  const handleClienteSelect = async (cliente: any) => {
     setClienteSelecionado(cliente)
     if (cliente) {
       setObraFormData({ ...obraFormData, clienteId: cliente.id })
+      
+      // Buscar orçamento aprovado para este cliente
+      setLoadingOrcamento(true)
+      try {
+        const clienteId = cliente.id || cliente.cliente_id
+        if (clienteId) {
+          const orcamento = await getOrcamentoAprovadoPorCliente(clienteId)
+          
+          if (orcamento) {
+            // Buscar dados completos do orçamento (incluindo custos mensais)
+            const orcamentoCompleto = await getOrcamentoCompleto(orcamento.id)
+            
+            if (orcamentoCompleto.success && orcamentoCompleto.data) {
+              setOrcamentoAprovado(orcamentoCompleto.data)
+              setOrcamentoId(orcamento.id)
+              
+              // Pré-preencher valores do orçamento
+              if (orcamentoCompleto.data.orcamento_custos_mensais && orcamentoCompleto.data.orcamento_custos_mensais.length > 0) {
+                const custosDoOrcamento = orcamentoCompleto.data.orcamento_custos_mensais.map((cm: any, index: number) => ({
+                  id: `cm_orc_${cm.id || index + 1}`,
+                  obraId: '',
+                  item: `0${index + 1}.0${index + 1}`,
+                  descricao: cm.descricao || cm.tipo || '',
+                  unidade: 'mês',
+                  quantidadeOrcamento: 1,
+                  valorUnitario: parseFloat(cm.valor_mensal) || 0,
+                  totalOrcamento: parseFloat(cm.valor_mensal) || 0,
+                  mes: new Date().toISOString().slice(0, 7),
+                  quantidadeRealizada: 0,
+                  valorRealizado: 0,
+                  quantidadeAcumulada: 0,
+                  valorAcumulado: 0,
+                  quantidadeSaldo: 1,
+                  valorSaldo: parseFloat(cm.valor_mensal) || 0,
+                  tipo: 'contrato' as const,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString()
+                }))
+                
+                setCustosMensais(custosDoOrcamento)
+                
+                toast({
+                  title: "Orçamento encontrado",
+                  description: `Valores do orçamento aprovado #${orcamento.id} foram pré-preenchidos.`,
+                  variant: "default"
+                })
+              }
+            }
+          } else {
+            setOrcamentoAprovado(null)
+            setOrcamentoId(null)
+            toast({
+              title: "Atenção",
+              description: "Nenhum orçamento aprovado encontrado para este cliente. É necessário ter um orçamento aprovado para criar uma obra.",
+              variant: "destructive"
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar orçamento aprovado:', error)
+        toast({
+          title: "Erro",
+          description: "Erro ao buscar orçamento aprovado. Verifique sua conexão.",
+          variant: "destructive"
+        })
+      } finally {
+        setLoadingOrcamento(false)
+      }
     }
   }
 
@@ -474,6 +593,16 @@ export default function NovaObraPage() {
       return
     }
 
+    // Validação de orçamento aprovado obrigatório
+    if (!orcamentoId || !orcamentoAprovado) {
+      toast({
+        title: "Erro",
+        description: "É necessário ter um orçamento aprovado para criar uma obra. Selecione um cliente com orçamento aprovado.",
+        variant: "destructive"
+      })
+      return
+    }
+
     // Validações dos novos campos obrigatórios
     if (!cno) {
       toast({
@@ -529,6 +658,7 @@ export default function NovaObraPage() {
         estado: obraFormData.estado,
         tipo: obraFormData.tipo,
         clienteId: clienteIdFinal,
+        orcamento_id: orcamentoId, // ID do orçamento aprovado vinculado
         observations: obraFormData.observations,
         // Campos adicionais
         cep: obraFormData.cep ? obraFormData.cep.replace(/\D/g, '') : '',
@@ -548,13 +678,29 @@ export default function NovaObraPage() {
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
         monthlyFee: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].taxa_mensal?.toString() || '' : '',
         // Múltiplas gruas
-        gruasSelecionadas: gruasSelecionadas,
+        gruasSelecionadas: gruasSelecionadas.map(grua => ({
+          ...grua,
+          // Incluir dados de montagem do equipamento na grua
+          altura_final: dadosMontagemEquipamento.altura_final ? parseFloat(dadosMontagemEquipamento.altura_final) : undefined,
+          tipo_base: dadosMontagemEquipamento.tipo_base || undefined,
+          capacidade_1_cabo: dadosMontagemEquipamento.capacidade_1_cabo ? parseFloat(dadosMontagemEquipamento.capacidade_1_cabo) : undefined,
+          capacidade_2_cabos: dadosMontagemEquipamento.capacidade_2_cabos ? parseFloat(dadosMontagemEquipamento.capacidade_2_cabos) : undefined,
+          capacidade_ponta: dadosMontagemEquipamento.capacidade_ponta ? parseFloat(dadosMontagemEquipamento.capacidade_ponta) : undefined,
+          potencia_instalada: dadosMontagemEquipamento.potencia_instalada ? parseFloat(dadosMontagemEquipamento.potencia_instalada) : undefined,
+          voltagem: dadosMontagemEquipamento.voltagem || undefined,
+          tipo_ligacao: dadosMontagemEquipamento.tipo_ligacao || undefined,
+          velocidade_rotacao: dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined,
+          velocidade_elevacao: dadosMontagemEquipamento.velocidade_elevacao ? parseFloat(dadosMontagemEquipamento.velocidade_elevacao) : undefined,
+          velocidade_translacao: dadosMontagemEquipamento.velocidade_translacao ? parseFloat(dadosMontagemEquipamento.velocidade_translacao) : undefined,
+        })),
+        // Dados de montagem do equipamento (geral)
+        dados_montagem_equipamento: dadosMontagemEquipamento,
         // Dados do responsável
         responsavelId: obraFormData.responsavelId,
         responsavelName: obraFormData.responsavelName,
         // Lista de funcionários
         funcionarios: funcionariosSelecionados,
-        // Custos mensais - converter para formato do backend
+        // Valores - converter para formato do backend
         custos_mensais: custosMensais.map(custo => ({
           item: custo.item,
           descricao: custo.descricao,
@@ -610,55 +756,63 @@ export default function NovaObraPage() {
       console.log('  - responsavelTecnico:', responsavelTecnico)
       console.log('  - sinaleiros:', sinaleiros)
       
-      // 3. Fazer upload dos arquivos ART e Apólice
+      // 3. Fazer upload dos arquivos ART, Apólice e documentos adicionais
       let artArquivoUrl = ''
       let apoliceArquivoUrl = ''
+      
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      // Função auxiliar para fazer upload de arquivo
+      const fazerUploadArquivo = async (arquivo: File, categoria: string): Promise<string> => {
+        const formData = new FormData()
+        formData.append('arquivo', arquivo)
+        formData.append('categoria', categoria)
+        
+        const response = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`
+          },
+          body: formData
+        })
+        
+        if (response.ok) {
+          const result = await response.json()
+          return result.data?.caminho || result.data?.arquivo || ''
+        }
+        return ''
+      }
       
       try {
         // Upload ART
         if (artArquivo) {
-          const formDataArt = new FormData()
-          formDataArt.append('arquivo', artArquivo)
-          formDataArt.append('categoria', 'art')
-          
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-          
-          const uploadArtResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            body: formDataArt
-          })
-          
-          if (uploadArtResponse.ok) {
-            const uploadArtResult = await uploadArtResponse.json()
-            artArquivoUrl = uploadArtResult.data?.caminho || uploadArtResult.data?.arquivo || ''
-          }
+          artArquivoUrl = await fazerUploadArquivo(artArquivo, 'art')
         }
         
         // Upload Apólice
         if (apoliceArquivo) {
-          const formDataApolice = new FormData()
-          formDataApolice.append('arquivo', apoliceArquivo)
-          formDataApolice.append('categoria', 'apolice')
-          
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-          
-          const uploadApoliceResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            body: formDataApolice
-          })
-          
-          if (uploadApoliceResponse.ok) {
-            const uploadApoliceResult = await uploadApoliceResponse.json()
-            apoliceArquivoUrl = uploadApoliceResult.data?.caminho || uploadApoliceResult.data?.arquivo || ''
-          }
+          apoliceArquivoUrl = await fazerUploadArquivo(apoliceArquivo, 'apolice')
+        }
+        
+        // Upload Manual Técnico
+        if (manualTecnicoArquivo) {
+          await fazerUploadArquivo(manualTecnicoArquivo, 'manual_tecnico')
+        }
+        
+        // Upload Termo de Entrega Técnica
+        if (termoEntregaArquivo) {
+          await fazerUploadArquivo(termoEntregaArquivo, 'termo_entrega_tecnica')
+        }
+        
+        // Upload Plano de Carga
+        if (planoCargaArquivo) {
+          await fazerUploadArquivo(planoCargaArquivo, 'plano_carga')
+        }
+        
+        // Upload Aterramento
+        if (aterramentoArquivo) {
+          await fazerUploadArquivo(aterramentoArquivo, 'aterramento')
         }
         
         // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
@@ -802,13 +956,54 @@ export default function NovaObraPage() {
     setArtArquivo(null)
     setApoliceNumero('')
     setApoliceArquivo(null)
+    setManualTecnicoArquivo(null)
+    setTermoEntregaArquivo(null)
+    setPlanoCargaArquivo(null)
+    setAterramentoArquivo(null)
     setResponsavelTecnico(null)
+    setResponsavelEquipamentos({
+      nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+      cpf_cnpj: '',
+      crea: '5071184591',
+      email: '',
+      telefone: ''
+    })
+    setResponsavelManutencoes({
+      nome: 'NESTOR ALVAREZ GONZALEZ',
+      cpf_cnpj: '',
+      crea: '',
+      email: '',
+      telefone: '(11) 98818-5951'
+    })
+    setResponsavelMontagemOperacao({
+      nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+      cpf_cnpj: '',
+      crea: '5071184591',
+      email: '',
+      telefone: ''
+    })
     setSinaleiros([])
     setGruasSelecionadas([])
     setFuncionariosSelecionados([])
     setResponsavelSelecionado(null)
     setClienteSelecionado(null)
     setCustosMensais([])
+    setOrcamentoAprovado(null)
+    setOrcamentoId(null)
+    setDadosMontagemEquipamento({
+      altura_final: '',
+      tipo_base: '',
+      capacidade_1_cabo: '',
+      capacidade_2_cabos: '',
+      potencia_instalada: '',
+      voltagem: '',
+      velocidade_rotacao: '',
+      velocidade_elevacao: '',
+      velocidade_translacao: '',
+      tipo_ligacao: '',
+      capacidade_ponta: '',
+      observacoes_montagem: ''
+    })
   }
 
   // Função para preencher todos os campos com dados de teste
@@ -941,7 +1136,7 @@ export default function NovaObraPage() {
       responsavelName: 'Eng. Maria Costa'
     }))
 
-    // Custos mensais de teste
+    // Valores de teste
     const custoTeste1 = {
       id: `cm_${Date.now()}_teste1`,
       obraId: '',
@@ -1018,10 +1213,9 @@ export default function NovaObraPage() {
             <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
             <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="responsavel-tecnico">Responsável Técnico</TabsTrigger>
-            <TabsTrigger value="sinaleiros">Sinaleiros</TabsTrigger>
             <TabsTrigger value="grua">Grua</TabsTrigger>
             <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
-            <TabsTrigger value="custos">Custos Mensais</TabsTrigger>
+            <TabsTrigger value="custos">Valores</TabsTrigger>
           </TabsList>
 
           {/* Aba: Dados da Obra */}
@@ -1229,6 +1423,189 @@ export default function NovaObraPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Seção: Dados de Montagem do Equipamento */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-blue-600" />
+                  Dados de Montagem do Equipamento
+                </CardTitle>
+                <CardDescription>
+                  Configure a configuração da grua contratada pelo cliente (90% das vezes não vêm com os tamanhos originais)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                  <p className="text-sm text-amber-800">
+                    <strong>Importante:</strong> Preencha os dados da configuração real da grua contratada pelo cliente, pois geralmente diferem dos tamanhos originais do equipamento.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="altura_final">Altura Final (m)</Label>
+                    <Input
+                      id="altura_final"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.altura_final}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, altura_final: e.target.value })}
+                      placeholder="Ex: 45.50"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="tipo_base">Tipo de Base</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.tipo_base} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_base: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo de base" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Chumbador">Chumbador</SelectItem>
+                        <SelectItem value="Roda">Roda</SelectItem>
+                        <SelectItem value="Carrinho">Carrinho</SelectItem>
+                        <SelectItem value="Fixação Direta">Fixação Direta</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_1_cabo">Capacidade com 1 Cabo (kg)</Label>
+                    <Input
+                      id="capacidade_1_cabo"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_1_cabo}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_1_cabo: e.target.value })}
+                      placeholder="Ex: 8000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_2_cabos">Capacidade com 2 Cabos (kg)</Label>
+                    <Input
+                      id="capacidade_2_cabos"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_2_cabos}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_2_cabos: e.target.value })}
+                      placeholder="Ex: 16000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_ponta">Capacidade na Ponta (kg)</Label>
+                    <Input
+                      id="capacidade_ponta"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_ponta}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_ponta: e.target.value })}
+                      placeholder="Ex: 2000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="potencia_instalada">Potência Instalada (kVA)</Label>
+                    <Input
+                      id="potencia_instalada"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.potencia_instalada}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, potencia_instalada: e.target.value })}
+                      placeholder="Ex: 30.5"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="voltagem">Voltagem (V)</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.voltagem} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, voltagem: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a voltagem" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="220">220V</SelectItem>
+                        <SelectItem value="380">380V</SelectItem>
+                        <SelectItem value="440">440V</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="tipo_ligacao">Tipo de Ligação</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.tipo_ligacao} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_ligacao: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Trifásica">Trifásica</SelectItem>
+                        <SelectItem value="Monofásica">Monofásica</SelectItem>
+                        <SelectItem value="Bifásica">Bifásica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_rotacao">Velocidade de Rotação (rpm)</Label>
+                    <Input
+                      id="velocidade_rotacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_rotacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_rotacao: e.target.value })}
+                      placeholder="Ex: 0.8"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min)</Label>
+                    <Input
+                      id="velocidade_elevacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_elevacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_elevacao: e.target.value })}
+                      placeholder="Ex: 40"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_translacao">Velocidade de Translação (m/min)</Label>
+                    <Input
+                      id="velocidade_translacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_translacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_translacao: e.target.value })}
+                      placeholder="Ex: 25"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="observacoes_montagem">Observações sobre a Montagem</Label>
+                  <Textarea
+                    id="observacoes_montagem"
+                    value={dadosMontagemEquipamento.observacoes_montagem}
+                    onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, observacoes_montagem: e.target.value })}
+                    placeholder="Observações sobre a configuração específica da grua contratada..."
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Aba: Documentos */}
@@ -1318,60 +1695,227 @@ export default function NovaObraPage() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* Card: Documentos Adicionais */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-blue-600" />
+                  Documentos Adicionais do Equipamento
+                </CardTitle>
+                <CardDescription>
+                  Documentos técnicos e de entrega do equipamento
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Manual Técnico */}
+                  <div className="space-y-2">
+                    <Label>Manual Técnico do Equipamento</Label>
+                    <DocumentoUpload
+                      label="Upload do Manual Técnico (PDF)"
+                      accept="application/pdf"
+                      maxSize={10 * 1024 * 1024}
+                      required={false}
+                      onUpload={(file) => setManualTecnicoArquivo(file)}
+                      onRemove={() => setManualTecnicoArquivo(null)}
+                      currentFile={manualTecnicoArquivo}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Manual técnico do equipamento fornecido pelo fabricante
+                    </p>
+                  </div>
+
+                  {/* Termo de Entrega Técnica */}
+                  <div className="space-y-2">
+                    <Label>Termo de Entrega Técnica</Label>
+                    <DocumentoUpload
+                      label="Upload do Termo de Entrega Técnica (PDF)"
+                      accept="application/pdf"
+                      maxSize={5 * 1024 * 1024}
+                      required={false}
+                      onUpload={(file) => setTermoEntregaArquivo(file)}
+                      onRemove={() => setTermoEntregaArquivo(null)}
+                      currentFile={termoEntregaArquivo}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Documento de entrega técnica do equipamento
+                    </p>
+                  </div>
+
+                  {/* Plano de Carga */}
+                  <div className="space-y-2">
+                    <Label>Plano de Carga</Label>
+                    <DocumentoUpload
+                      label="Upload do Plano de Carga (PDF)"
+                      accept="application/pdf,image/*"
+                      maxSize={5 * 1024 * 1024}
+                      required={false}
+                      onUpload={(file) => setPlanoCargaArquivo(file)}
+                      onRemove={() => setPlanoCargaArquivo(null)}
+                      currentFile={planoCargaArquivo}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Plano de carga do equipamento
+                    </p>
+                  </div>
+
+                  {/* Aterramento */}
+                  <div className="space-y-2">
+                    <Label>Documento de Aterramento</Label>
+                    <DocumentoUpload
+                      label="Upload do Documento de Aterramento (PDF)"
+                      accept="application/pdf,image/*"
+                      maxSize={5 * 1024 * 1024}
+                      required={false}
+                      onUpload={(file) => setAterramentoArquivo(file)}
+                      onRemove={() => setAterramentoArquivo(null)}
+                      currentFile={aterramentoArquivo}
+                    />
+                    <p className="text-xs text-gray-500">
+                      Certificado ou documento de aterramento do equipamento
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
           {/* Aba: Responsável Técnico */}
           <TabsContent value="responsavel-tecnico" className="space-y-4" forceMount>
+            {/* Responsável da Obra (Cliente) */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <User className="w-5 h-5 text-green-600" />
-                  Responsável Técnico da Obra
+                  Responsável Técnico da Obra (Cliente)
                 </CardTitle>
                 <CardDescription>
-                  Cadastre o responsável técnico pela obra
+                  Cadastre o responsável técnico pela obra do cliente
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <ResponsavelTecnicoForm
                   responsavel={responsavelTecnico}
                   onSave={(data) => {
-                    console.log('💾 Salvando responsável técnico no estado:', data)
+                    console.log('💾 Salvando responsável técnico da obra no estado:', data)
                     setResponsavelTecnico(data)
                     toast({
                       title: "Sucesso",
-                      description: "Responsável técnico salvo com sucesso"
+                      description: "Responsável técnico da obra salvo com sucesso"
                     })
                   }}
                 />
               </CardContent>
             </Card>
-          </TabsContent>
 
-          {/* Aba: Sinaleiros */}
-          <TabsContent value="sinaleiros" className="space-y-4" forceMount>
+            {/* Responsáveis Técnicos IRBANA */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
-                  <Users className="w-5 h-5 text-purple-600" />
-                  Sinaleiros da Obra
+                  <Shield className="w-5 h-5 text-blue-600" />
+                  Responsáveis Técnicos IRBANA
                 </CardTitle>
                 <CardDescription>
-                  Cadastre os sinaleiros da obra (máximo 2: Principal + Reserva)
+                  Responsáveis técnicos da empresa IRBANA para diferentes áreas
                 </CardDescription>
               </CardHeader>
-              <CardContent>
-                <SinaleirosForm
-                  sinaleiros={sinaleiros}
-                  onSave={(data) => {
-                    console.log('💾 Salvando sinaleiros no estado:', data)
-                    setSinaleiros(data)
-                    toast({
-                      title: "Sucesso",
-                      description: "Sinaleiros salvos com sucesso"
-                    })
-                  }}
-                />
+              <CardContent className="space-y-6">
+                {/* RESP PELOS EQUIP */}
+                <div className="space-y-4 p-4 border rounded-lg bg-blue-50/50">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-blue-600" />
+                    <h3 className="font-semibold text-blue-900">Responsável pelos Equipamentos</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nome do Responsável Técnico</Label>
+                      <Input
+                        value={responsavelEquipamentos.nome}
+                        onChange={(e) => setResponsavelEquipamentos({ ...responsavelEquipamentos, nome: e.target.value })}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div>
+                      <Label>N° do CREA</Label>
+                      <Input
+                        value={responsavelEquipamentos.crea}
+                        onChange={(e) => setResponsavelEquipamentos({ ...responsavelEquipamentos, crea: e.target.value })}
+                        placeholder="Ex: 5071184591"
+                      />
+                    </div>
+                    <div>
+                      <Label>N° do CREA da Empresa</Label>
+                      <Input
+                        value="SP 2494244"
+                        disabled
+                        className="bg-gray-100"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">CREA da empresa IRBANA</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RESP PELAS MANUTEN */}
+                <div className="space-y-4 p-4 border rounded-lg bg-green-50/50">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-green-600" />
+                    <h3 className="font-semibold text-green-900">Responsável pelas Manutenções</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nome do Responsável Técnico</Label>
+                      <Input
+                        value={responsavelManutencoes.nome}
+                        onChange={(e) => setResponsavelManutencoes({ ...responsavelManutencoes, nome: e.target.value })}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div>
+                      <Label>Telefone</Label>
+                      <Input
+                        value={responsavelManutencoes.telefone}
+                        onChange={(e) => setResponsavelManutencoes({ ...responsavelManutencoes, telefone: e.target.value })}
+                        placeholder="Ex: (11) 98818-5951"
+                      />
+                    </div>
+                    <div>
+                      <Label>N° do CREA da Empresa</Label>
+                      <Input
+                        value="SP 2494244"
+                        disabled
+                        className="bg-gray-100"
+                      />
+                      <p className="text-xs text-gray-500 mt-1">CREA da empresa IRBANA</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* RESP PELA MONTG E OPER */}
+                <div className="space-y-4 p-4 border rounded-lg bg-purple-50/50">
+                  <div className="flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-purple-600" />
+                    <h3 className="font-semibold text-purple-900">Responsável pela Montagem e Operação</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <Label>Nome do Responsável Técnico</Label>
+                      <Input
+                        value={responsavelMontagemOperacao.nome}
+                        onChange={(e) => setResponsavelMontagemOperacao({ ...responsavelMontagemOperacao, nome: e.target.value })}
+                        placeholder="Nome completo"
+                      />
+                    </div>
+                    <div>
+                      <Label>N° do CREA</Label>
+                      <Input
+                        value={responsavelMontagemOperacao.crea}
+                        onChange={(e) => setResponsavelMontagemOperacao({ ...responsavelMontagemOperacao, crea: e.target.value })}
+                        placeholder="Ex: 5071184591"
+                      />
+                    </div>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -1438,6 +1982,9 @@ export default function NovaObraPage() {
                                     <Settings className="w-4 h-4" />
                                     Parâmetros Técnicos
                                   </CardTitle>
+                                  <CardDescription className="text-xs text-gray-500 mt-1">
+                                    Os dados técnicos devem ser definidos no orçamento. Estes campos são apenas para ajustes finais se necessário.
+                                  </CardDescription>
                                 </CardHeader>
                                 <CardContent>
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2115,6 +2662,33 @@ export default function NovaObraPage() {
 
           {/* Aba: Funcionários */}
           <TabsContent value="funcionarios" className="space-y-4" forceMount>
+            {/* Seção: Sinaleiros */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="w-5 h-5 text-purple-600" />
+                  Sinaleiros da Obra
+                </CardTitle>
+                <CardDescription>
+                  Cadastre os sinaleiros da obra (máximo 2: Principal + Reserva)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <SinaleirosForm
+                  sinaleiros={sinaleiros}
+                  onSave={(data) => {
+                    console.log('💾 Salvando sinaleiros no estado:', data)
+                    setSinaleiros(data)
+                    toast({
+                      title: "Sucesso",
+                      description: "Sinaleiros salvos com sucesso"
+                    })
+                  }}
+                />
+              </CardContent>
+            </Card>
+
+            {/* Seção: Funcionários */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2224,16 +2798,16 @@ export default function NovaObraPage() {
             </Card>
           </TabsContent>
 
-          {/* Aba: Custos Mensais */}
+          {/* Aba: Valores */}
           <TabsContent value="custos" className="space-y-4" forceMount>
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <DollarSign className="w-5 h-5 text-purple-600" />
-                  Custos Mensais da Obra
+                  Valores da Obra
                 </CardTitle>
                 <CardDescription>
-                  Configure os custos mensais que serão aplicados a esta obra
+                  Configure os valores que serão aplicados a esta obra
                 </CardDescription>
               </CardHeader>
               <CardContent className="">
@@ -2326,7 +2900,7 @@ export default function NovaObraPage() {
                 {/* Lista de custos mensais */}
                 {custosMensais.length > 0 && (
                   <div className="space-y-3">
-                    <h4 className="font-medium text-sm">Custos Mensais Configurados ({custosMensais.length})</h4>
+                    <h4 className="font-medium text-sm">Valores Configurados ({custosMensais.length})</h4>
                     <div className="space-y-2">
                       {custosMensais.map((custo) => (
                         <div key={custo.id} className="flex gap-2 p-3 border rounded-lg bg-purple-50">

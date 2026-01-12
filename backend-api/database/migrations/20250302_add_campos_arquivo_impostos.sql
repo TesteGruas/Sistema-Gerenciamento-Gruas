@@ -22,3 +22,4 @@ COMMENT ON COLUMN impostos.nome_arquivo IS 'Nome original do arquivo anexado';
 
 
 
+

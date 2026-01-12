@@ -35,10 +35,8 @@ import { ExportButton } from "@/components/export-button"
 import { CardLoader } from "@/components/ui/loader"
 import { OrcamentoPDFDocument } from "@/components/orcamento-pdf"
 import { pdf } from "@react-pdf/renderer"
-import { getOrcamentos, getOrcamento, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
+import { getOrcamentos, getOrcamento, aprovarOrcamento, rejeitarOrcamento, type Orcamento as OrcamentoAPI } from "@/lib/api-orcamentos"
 import { api, API_BASE_URL } from "@/lib/api"
-import { orcamentosLocacaoApi, OrcamentoLocacao } from "@/lib/api-orcamentos-locacao"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -106,29 +104,21 @@ export default function OrcamentosPage() {
   const router = useRouter()
   const { toast } = useToast()
   const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
-  const [orcamentosLocacao, setOrcamentosLocacao] = useState<OrcamentoLocacao[]>([])
   const [loading, setLoading] = useState(false)
-  const [loadingLocacao, setLoadingLocacao] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [filtroStatus, setFiltroStatus] = useState<StatusOrcamento | "todos">("todos")
-  const [activeTab, setActiveTab] = useState<'obra' | 'locacao'>('obra')
   const [selectedOrcamento, setSelectedOrcamento] = useState<Orcamento | null>(null)
-  const [selectedOrcamentoLocacao, setSelectedOrcamentoLocacao] = useState<OrcamentoLocacao | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
-  const [isViewLocacaoDialogOpen, setIsViewLocacaoDialogOpen] = useState(false)
   const [editedOrcamento, setEditedOrcamento] = useState<Orcamento | null>(null)
+  const [isRejeitarDialogOpen, setIsRejeitarDialogOpen] = useState(false)
+  const [motivoRejeicao, setMotivoRejeicao] = useState("")
+  const [orcamentoParaRejeitar, setOrcamentoParaRejeitar] = useState<Orcamento | null>(null)
   const [currentPageObra, setCurrentPageObra] = useState(1)
-  const [currentPageLocacao, setCurrentPageLocacao] = useState(1)
   const [totalPagesObra, setTotalPagesObra] = useState(1)
-  const [totalPagesLocacao, setTotalPagesLocacao] = useState(1)
   const [totalItemsObra, setTotalItemsObra] = useState(0)
-  const [totalItemsLocacao, setTotalItemsLocacao] = useState(0)
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
-  const [dadosLocacaoCarregados, setDadosLocacaoCarregados] = useState(false)
   const loadingRef = useRef(false)
-  const loadingLocacaoRef = useRef(false)
   const initialLoadDoneRef = useRef(false)
-  const initialLocacaoLoadDoneRef = useRef(false)
   const prevFiltroStatusRef = useRef(filtroStatus)
   const prevCurrentPageObraRef = useRef(currentPageObra)
 
@@ -168,7 +158,7 @@ export default function OrcamentosPage() {
     // Evitar carregamento duplo - só carregar uma vez
     if (initialLoadDoneRef.current) return
     
-    if (activeTab === 'obra' && !loadingRef.current) {
+    if (!loadingRef.current) {
       initialLoadDoneRef.current = true
       loadingRef.current = true
       loadOrcamentos().finally(() => {
@@ -177,7 +167,7 @@ export default function OrcamentosPage() {
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab])
+  }, [])
 
   useEffect(() => {
     if (!dadosIniciaisCarregados) return
@@ -194,7 +184,7 @@ export default function OrcamentosPage() {
   }, [filtroStatus, dadosIniciaisCarregados])
 
   useEffect(() => {
-    if (!dadosIniciaisCarregados || activeTab !== 'obra') return
+    if (!dadosIniciaisCarregados) return
     
     // Verificar se houve mudança real na página
     const pageChanged = prevCurrentPageObraRef.current !== currentPageObra
@@ -204,49 +194,13 @@ export default function OrcamentosPage() {
       loadOrcamentos()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPageObra, dadosIniciaisCarregados, activeTab])
-
-  useEffect(() => {
-    if (!dadosLocacaoCarregados && activeTab === 'locacao') {
-      loadingLocacaoRef.current = true
-      loadOrcamentosLocacao().finally(() => {
-        setDadosLocacaoCarregados(true)
-        loadingLocacaoRef.current = false
-      })
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dadosLocacaoCarregados, activeTab])
-
-  useEffect(() => {
-    if (filtroStatus !== "todos") {
-      setCurrentPageLocacao(1) // Resetar para primeira página ao mudar filtro
-      loadOrcamentosLocacao()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, filtroStatus])
-
-  useEffect(() => {
-    if (dadosLocacaoCarregados && activeTab === 'locacao') {
-      loadOrcamentosLocacao()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPageLocacao])
+  }, [currentPageObra, dadosIniciaisCarregados])
 
   // Debounce para pesquisa
   useEffect(() => {
     const timeoutId = setTimeout(() => {
       setCurrentPageObra(1) // Resetar para primeira página ao pesquisar
       loadOrcamentos()
-    }, 500)
-
-    return () => clearTimeout(timeoutId)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchTerm])
-
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setCurrentPageLocacao(1) // Resetar para primeira página ao pesquisar
-      loadOrcamentosLocacao()
     }, 500)
 
     return () => clearTimeout(timeoutId)
@@ -321,36 +275,6 @@ export default function OrcamentosPage() {
     }
   }
 
-  const loadOrcamentosLocacao = async () => {
-    if (loadingLocacaoRef.current) return
-    setLoadingLocacao(true)
-    try {
-      const response = await orcamentosLocacaoApi.list({
-        page: currentPageLocacao,
-        limit: 10,
-        status: filtroStatus !== "todos" ? filtroStatus : undefined,
-        search: searchTerm || undefined,
-      })
-      
-      if (response.success && response.data) {
-        setOrcamentosLocacao(response.data)
-        setTotalPagesLocacao(response.pagination.pages || 1)
-        setTotalItemsLocacao(response.pagination.total || 0)
-      }
-      
-      // Garantir que estamos usando os dados corretos da resposta
-    } catch (error: any) {
-      console.error('Erro ao carregar orçamentos de locação:', error)
-      toast({
-        title: "Erro",
-        description: error?.response?.data?.message || "Erro ao carregar orçamentos de locação",
-        variant: "destructive"
-      })
-      setOrcamentosLocacao([])
-    } finally {
-      setLoadingLocacao(false)
-    }
-  }
 
   // A filtragem já é feita pela API
   const filteredOrcamentos = orcamentos
@@ -501,34 +425,6 @@ export default function OrcamentosPage() {
     }
   }
 
-  const handleDeleteLocacao = async (id: number) => {
-    if (window.confirm("Tem certeza que deseja excluir este orçamento de locação?")) {
-      try {
-        const response = await orcamentosLocacaoApi.delete(id)
-        if (response.success) {
-          toast({
-            title: "Sucesso",
-            description: "Orçamento de locação excluído com sucesso",
-          })
-          // Recarregar lista
-          loadOrcamentosLocacao(currentPageLocacao)
-        } else {
-          toast({
-            title: "Erro",
-            description: response.message || "Erro ao excluir orçamento",
-            variant: "destructive",
-          })
-        }
-      } catch (error: any) {
-        console.error('Erro ao excluir orçamento de locação:', error)
-        toast({
-          title: "Erro",
-          description: error.response?.data?.message || "Erro ao excluir orçamento",
-          variant: "destructive",
-        })
-      }
-    }
-  }
 
   const handleCreateNovoOrcamentoObra = () => {
     // Redirecionar para criar orçamento de obra
@@ -537,12 +433,66 @@ export default function OrcamentosPage() {
     router.push('/dashboard/orcamentos/novo?tipo=obra')
   }
 
-  const handleCreateNovoOrcamentoLocacao = () => {
-    router.push('/dashboard/orcamentos/novo?tipo=locacao')
-  }
 
   const handleCreateNovoOrcamentoComplementos = () => {
     router.push('/dashboard/orcamentos/complementos')
+  }
+
+  const handleAprovarOrcamento = async (orcamento: Orcamento) => {
+    if (!window.confirm(`Deseja aprovar o orçamento ${orcamento.numero}? Após aprovar, você poderá converter em obra.`)) {
+      return
+    }
+
+    try {
+      await aprovarOrcamento(parseInt(orcamento.id))
+      toast({
+        title: "Sucesso",
+        description: "Orçamento aprovado com sucesso!",
+      })
+      loadOrcamentos()
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.response?.data?.message || "Erro ao aprovar orçamento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleRejeitarOrcamento = async () => {
+    if (!orcamentoParaRejeitar) return
+    if (!motivoRejeicao.trim()) {
+      toast({
+        title: "Atenção",
+        description: "Por favor, informe o motivo da rejeição",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      await rejeitarOrcamento(parseInt(orcamentoParaRejeitar.id), motivoRejeicao)
+      toast({
+        title: "Sucesso",
+        description: "Orçamento rejeitado com sucesso!",
+      })
+      setIsRejeitarDialogOpen(false)
+      setMotivoRejeicao("")
+      setOrcamentoParaRejeitar(null)
+      loadOrcamentos()
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.response?.data?.message || "Erro ao rejeitar orçamento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const openRejeitarDialog = (orcamento: Orcamento) => {
+    setOrcamentoParaRejeitar(orcamento)
+    setMotivoRejeicao("")
+    setIsRejeitarDialogOpen(true)
   }
 
   // Função para formatar texto em Title Case (primeira letra maiúscula)
@@ -650,119 +600,6 @@ export default function OrcamentosPage() {
     }
   }
 
-  const handleExportPDFLocacao = async (orcamento: OrcamentoLocacao | null) => {
-    if (!orcamento) return
-    
-    try {
-      // Usar axios com responseType blob para receber o PDF
-      // O interceptor do axios já adiciona o token automaticamente
-      // Usar rota específica para orçamentos de locação
-      const response = await api.get(
-        `/relatorios/orcamentos-locacao/${orcamento.id}/pdf`,
-        {
-          responseType: 'blob',
-        }
-      )
-
-      // Criar blob do PDF
-      const blob = new Blob([response.data], { type: 'application/pdf' })
-      
-      // Criar link de download
-      const url = URL.createObjectURL(blob)
-      const link = document.createElement('a')
-      link.href = url
-      const clienteNome = orcamento.clientes?.nome?.replace(/\s+/g, '-') || 'cliente'
-      link.download = `Orcamento-${orcamento.numero}-${clienteNome}-${new Date().toISOString().split('T')[0]}.pdf`
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      URL.revokeObjectURL(url)
-
-      toast({
-        title: "Sucesso",
-        description: "Orçamento exportado em PDF com sucesso!",
-      })
-    } catch (error: any) {
-      console.error('Erro ao exportar PDF:', error)
-      
-      // Tentar ler mensagem de erro do blob se for erro do servidor
-      let errorMessage = "Erro ao exportar orçamento. Tente novamente."
-      
-      if (error.response?.data instanceof Blob) {
-        try {
-          const text = await error.response.data.text()
-          const errorData = JSON.parse(text)
-          errorMessage = errorData.message || errorData.error || errorMessage
-        } catch {
-          // Se não conseguir parsear, usar mensagem padrão
-        }
-      } else if (error.response?.data?.message || error.response?.data?.error) {
-        errorMessage = error.response.data.message || error.response.data.error
-      } else if (error.message) {
-        errorMessage = error.message
-      }
-      
-      // Se for erro de token, mostrar mensagem mais específica
-      if (errorMessage.includes('Token') || errorMessage.includes('token') || errorMessage.includes('inválido') || errorMessage.includes('expirado')) {
-        toast({
-          title: "Erro de Autenticação",
-          description: "Sua sessão expirou. Por favor, faça login novamente.",
-          variant: "destructive"
-        })
-      } else {
-        toast({
-          title: "Erro",
-          description: errorMessage,
-          variant: "destructive"
-        })
-      }
-    }
-  }
-
-  const handleViewLocacao = async (orcamento: OrcamentoLocacao) => {
-    try {
-      // Buscar dados completos do orçamento com todos os relacionamentos
-      const response = await orcamentosLocacaoApi.get(orcamento.id)
-      if (response.success && response.data) {
-        setSelectedOrcamentoLocacao(response.data)
-        setIsViewLocacaoDialogOpen(true)
-      } else {
-        // Se falhar, usar dados da listagem
-        setSelectedOrcamentoLocacao(orcamento)
-        setIsViewLocacaoDialogOpen(true)
-        toast({
-          title: "Aviso",
-          description: "Alguns dados podem estar incompletos",
-          variant: "default"
-        })
-      }
-    } catch (error: any) {
-      console.error('Erro ao buscar detalhes do orçamento:', error)
-      // Se falhar, usar dados da listagem
-      setSelectedOrcamentoLocacao(orcamento)
-      setIsViewLocacaoDialogOpen(true)
-      toast({
-        title: "Aviso",
-        description: "Erro ao carregar detalhes completos. Exibindo dados disponíveis.",
-        variant: "default"
-      })
-    }
-  }
-
-  const handleEditLocacao = (id: number) => {
-    router.push(`/dashboard/orcamentos/novo?id=${id}&tipo=locacao`)
-  }
-
-  const getTipoColor = (tipo: string) => {
-    switch (tipo) {
-      case 'locacao_grua':
-        return 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
-      case 'locacao_plataforma':
-        return 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100'
-      default:
-        return 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -770,7 +607,7 @@ export default function OrcamentosPage() {
         <div>
           <h1 className="text-3xl font-bold">Orçamentos</h1>
           <p className="text-gray-600 mt-1">
-            Gerencie orçamentos de obra e locação
+            Gerencie orçamentos de obra
           </p>
         </div>
         <DropdownMenu>
@@ -785,10 +622,6 @@ export default function OrcamentosPage() {
               <Building2 className="w-4 h-4 mr-2" />
               Orçamento de Obra
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={handleCreateNovoOrcamentoLocacao}>
-              <FileText className="w-4 h-4 mr-2" />
-              Orçamento de Locação
-            </DropdownMenuItem>
             <DropdownMenuItem onClick={handleCreateNovoOrcamentoComplementos}>
               <Package className="w-4 h-4 mr-2" />
               Orçamento de Complementos
@@ -797,43 +630,19 @@ export default function OrcamentosPage() {
         </DropdownMenu>
       </div>
 
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'obra' | 'locacao')} className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="obra">
-            <Building2 className="w-4 h-4 mr-2" />
-            Orçamentos de Obra
-          </TabsTrigger>
-          <TabsTrigger value="locacao">
-            <FileText className="w-4 h-4 mr-2" />
-            Orçamentos de Locação
-          </TabsTrigger>
-        </TabsList>
-
-        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-          {activeTab === 'obra' ? (
-            <div className="flex items-start gap-3">
-              <Building2 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Obra</p>
-                <p className="text-sm text-blue-700">
-                  Orçamentos vinculados a uma <strong>obra específica</strong> com informações completas da construção.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="flex items-start gap-3">
-              <FileText className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
-              <div>
-                <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Locação</p>
-                <p className="text-sm text-blue-700">
-                  Orçamentos para <strong>locação de equipamentos</strong> sem vínculo a uma obra específica.
-                </p>
-              </div>
-            </div>
-          )}
+      <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+        <div className="flex items-start gap-3">
+          <Building2 className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-blue-900 mb-1">Orçamentos de Obra</p>
+            <p className="text-sm text-blue-700">
+              Orçamentos vinculados a uma <strong>obra específica</strong> com informações completas da construção.
+            </p>
+          </div>
         </div>
+      </div>
 
-        <TabsContent value="obra" className="space-y-4 mt-6">
+      <div className="space-y-4 mt-6">
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -916,9 +725,37 @@ export default function OrcamentosPage() {
                                 <Button variant="ghost" size="icon" onClick={() => handleDelete(orcamento.id)} title="Excluir">
                                   <Trash2 className="h-4 w-4 text-red-500" />
                                 </Button>
+                                {orcamento.status === 'enviado' && (
+                                  <>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      onClick={() => handleAprovarOrcamento(orcamento)} 
+                                      title="Aprovar Orçamento"
+                                      className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                                    >
+                                      <CheckCircle2 className="h-4 w-4" />
+                                    </Button>
+                                    <Button 
+                                      variant="ghost" 
+                                      size="icon" 
+                                      onClick={() => openRejeitarDialog(orcamento)} 
+                                      title="Rejeitar Orçamento"
+                                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    >
+                                      <XCircle className="h-4 w-4" />
+                                    </Button>
+                                  </>
+                                )}
                                 {orcamento.status === 'aprovado' && (
-                                  <Button variant="ghost" size="icon" onClick={() => handleCreateObra(orcamento)} title="Gerar Obra">
-                                    <Building2 className="h-4 w-4 text-green-600" />
+                                  <Button 
+                                    variant="ghost" 
+                                    size="icon" 
+                                    onClick={() => handleCreateObra(orcamento)} 
+                                    title="Converter em Obra"
+                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                  >
+                                    <Building2 className="h-4 w-4" />
                                   </Button>
                                 )}
                               </div>
@@ -956,130 +793,7 @@ export default function OrcamentosPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value="locacao" className="space-y-4 mt-6">
-          <Card>
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Lista de Orçamentos de Locação</CardTitle>
-                  <CardDescription>
-                    Visualize e gerencie orçamentos de locação
-                  </CardDescription>
-                </div>
-                <div className="flex gap-2">
-                  <div className="relative w-64">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                    <Input
-                      placeholder="Pesquisar..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
-                    />
-                  </div>
-                  <select
-                    value={filtroStatus}
-                    onChange={(e) => setFiltroStatus(e.target.value as StatusOrcamento | "todos")}
-                    className="px-3 py-2 border rounded-md text-sm"
-                  >
-                    <option value="todos">Todos os Status</option>
-                    <option value="rascunho">Rascunho</option>
-                    <option value="enviado">Enviado</option>
-                    <option value="aprovado">Aprovado</option>
-                    <option value="rejeitado">Rejeitado</option>
-                  </select>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              {loadingLocacao ? (
-                <CardLoader text="Carregando orçamentos de locação..." />
-              ) : (
-                <>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Nº Orçamento</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Equipamento</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Prazo</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead className="text-right">Ações</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {orcamentosLocacao.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={7} className="h-24 text-center text-muted-foreground">
-                            Nenhum orçamento de locação encontrado.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        orcamentosLocacao.map((orc) => (
-                          <TableRow key={orc.id}>
-                            <TableCell className="font-medium">{orc.numero}</TableCell>
-                            <TableCell>{orc.clientes?.nome || '-'}</TableCell>
-                            <TableCell>
-                              <Badge variant="outline" className={getTipoColor(orc.tipo_orcamento || '')}>
-                                {orc.tipo_orcamento === 'locacao_grua' ? 'Grua' : orc.tipo_orcamento === 'locacao_plataforma' ? 'Plataforma' : '-'}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>{formatCurrencyDisplay(orc.valor_total || 0)}</TableCell>
-                            <TableCell>{((orc as any).prazo_locacao_meses ? `${(orc as any).prazo_locacao_meses} meses` : orc.prazo_entrega || '-')}</TableCell>
-                            <TableCell>{getStatusBadge(orc.status as StatusOrcamento)}</TableCell>
-                            <TableCell className="text-right">
-                              <div className="flex justify-end gap-2">
-                                <Button variant="ghost" size="icon" onClick={() => handleViewLocacao(orc)} title="Visualizar">
-                                  <Eye className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleEditLocacao(orc.id)} title="Editar">
-                                  <Edit className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleExportPDFLocacao(orc)} title="PDF">
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button variant="ghost" size="icon" onClick={() => handleDeleteLocacao(orc.id)} title="Excluir">
-                                  <Trash2 className="h-4 w-4 text-red-500" />
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-
-                  <div className="mt-4">
-                    <Pagination>
-                      <PaginationContent>
-                        <PaginationItem>
-                          <PaginationPrevious 
-                            onClick={() => setCurrentPageLocacao(p => Math.max(1, p - 1))}
-                            className={currentPageLocacao === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                          />
-                        </PaginationItem>
-                        <PaginationItem>
-                          <span className="px-4 text-sm text-muted-foreground">
-                            Página {currentPageLocacao} de {totalPagesLocacao}
-                          </span>
-                        </PaginationItem>
-                        <PaginationItem>
-                          <PaginationNext 
-                            onClick={() => setCurrentPageLocacao(p => Math.min(totalPagesLocacao, p + 1))}
-                            className={currentPageLocacao === totalPagesLocacao ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
-                          />
-                        </PaginationItem>
-                      </PaginationContent>
-                    </Pagination>
-                  </div>
-                </>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Dialog para visualização de Orçamento de Obra */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
@@ -1116,39 +830,46 @@ export default function OrcamentosPage() {
           )}
         </DialogContent>
       </Dialog>
-      
-      {/* Dialog para visualização de Orçamento de Locação */}
-      <Dialog open={isViewLocacaoDialogOpen} onOpenChange={setIsViewLocacaoDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+
+      {/* Dialog para Rejeitar Orçamento */}
+      <Dialog open={isRejeitarDialogOpen} onOpenChange={setIsRejeitarDialogOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Detalhes da Locação: {selectedOrcamentoLocacao?.numero}</DialogTitle>
+            <DialogTitle>Rejeitar Orçamento</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da rejeição do orçamento {orcamentoParaRejeitar?.numero}
+            </DialogDescription>
           </DialogHeader>
-          {selectedOrcamentoLocacao && (
-             <div className="grid gap-4 py-4">
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <h3 className="font-semibold mb-2">Cliente</h3>
-                   <p className="text-sm">{selectedOrcamentoLocacao.clientes?.nome}</p>
-                 </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Equipamento</h3>
-                  <p className="text-sm capitalize">
-                    {(() => {
-                      const tipo = selectedOrcamentoLocacao?.tipo_orcamento;
-                      if (!tipo) return '-';
-                      return tipo.replace(/_/g, ' ').replace(/^locacao\s*/i, '');
-                    })()}
-                  </p>
-                </div>
-               </div>
-               <div className="flex justify-end gap-2 mt-4">
-                 <Button variant="outline" onClick={() => setIsViewLocacaoDialogOpen(false)}>Fechar</Button>
-                 <Button onClick={() => handleEditLocacao(selectedOrcamentoLocacao.id)}>Editar</Button>
-               </div>
-             </div>
-          )}
+          <div className="space-y-4 py-4">
+            <div>
+              <label className="text-sm font-medium mb-2 block">Motivo da Rejeição *</label>
+              <Textarea
+                value={motivoRejeicao}
+                onChange={(e) => setMotivoRejeicao(e.target.value)}
+                placeholder="Ex: Valores acima do orçado, prazo incompatível, etc."
+                rows={4}
+                className="w-full"
+              />
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => {
+                setIsRejeitarDialogOpen(false)
+                setMotivoRejeicao("")
+                setOrcamentoParaRejeitar(null)
+              }}>
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleRejeitarOrcamento}
+                className="bg-red-600 hover:bg-red-700"
+              >
+                Rejeitar
+              </Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
+      
     </div>
   )
 }

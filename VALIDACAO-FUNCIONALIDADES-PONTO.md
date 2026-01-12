@@ -237,3 +237,4 @@ COMMENT ON COLUMN registros_ponto.trabalho_corrido_confirmado_em IS 'Data/hora d
 
 
 
+

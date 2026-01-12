@@ -229,6 +229,39 @@ export function SinaleirosForm({
       return
     }
 
+    // Validar documentos completos para sinaleiros externos (cliente)
+    // Apenas validar se o sinaleiro já foi salvo (tem UUID válido)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    if (cliente && cliente.id && uuidRegex.test(cliente.id)) {
+      try {
+        const validacao = await sinaleirosApi.validarDocumentosCompletos(cliente.id)
+        if (!validacao.completo) {
+          const documentosFaltando = validacao.documentosFaltando || []
+          const nomesDocumentos: Record<string, string> = {
+            'rg_frente': 'RG (Frente)',
+            'rg_verso': 'RG (Verso)',
+            'comprovante_vinculo': 'Comprovante de Vínculo'
+          }
+          const nomesFaltando = documentosFaltando.map(tipo => nomesDocumentos[tipo] || tipo).join(', ')
+          
+          toast({
+            title: "Documentos Incompletos",
+            description: `O sinaleiro "${cliente.nome}" não pode ser vinculado à obra. Documentos faltando: ${nomesFaltando}. Complete o cadastro pelo RH antes de vincular à obra.`,
+            variant: "destructive"
+          })
+          return
+        }
+      } catch (error: any) {
+        // Se a validação falhar, permitir continuar mas avisar
+        console.warn('Erro ao validar documentos do sinaleiro:', error)
+        toast({
+          title: "Aviso",
+          description: "Não foi possível validar os documentos do sinaleiro. Verifique se todos os documentos obrigatórios estão completos.",
+          variant: "default"
+        })
+      }
+    }
+
     setLoading(true)
     try {
       // Converter Sinaleiro para formato do backend

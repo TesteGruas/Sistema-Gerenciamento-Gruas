@@ -117,7 +117,7 @@ export default function ObrasPage() {
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
   
-  // Tipo local para custos mensais
+  // Tipo local para valores
   interface CustoMensal {
     id: string
     obraId: string
@@ -139,7 +139,7 @@ export default function ObrasPage() {
     updatedAt: string
   }
   
-  // Estados para custos mensais
+  // Estados para valores
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
   const [isCustosDialogOpen, setIsCustosDialogOpen] = useState(false)
   const [custoForm, setCustoForm] = useState({
@@ -239,7 +239,7 @@ export default function ObrasPage() {
     }
   }
 
-  // Funções para custos mensais
+  // Funções para valores
   const adicionarCustoMensal = () => {
     const novoCusto: CustoMensal = {
       id: `cm_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -772,7 +772,7 @@ export default function ObrasPage() {
               monthlyFee: obraFormData.monthlyFee || '',
               // Dados dos funcionários selecionados
               funcionarios: funcionariosSelecionados && funcionariosSelecionados.length > 0 ? funcionariosSelecionados : [],
-              // Custos mensais - usar diretamente do estado custosMensais
+              // Valores - usar diretamente do estado custosMensais
               custos_mensais: custosMensais.map(custo => ({
                 item: custo.item,
                 descricao: custo.descricao,
@@ -797,7 +797,7 @@ export default function ObrasPage() {
 
       // Debug: Log dos dados antes da conversão
       console.log('🔍 DEBUG - Dados antes da conversão:', obraData)
-      console.log('🔍 DEBUG - Custos mensais:', custosMensais)
+      console.log('🔍 DEBUG - Valores:', custosMensais)
       console.log('🔍 DEBUG - Funcionários selecionados:', funcionariosSelecionados)
       console.log('🔍 DEBUG - Grua selecionada:', gruaSelecionada)
       console.log('🔍 DEBUG - Dados da grua no obraData:', {
@@ -806,8 +806,8 @@ export default function ObrasPage() {
         monthlyFee: obraData.monthlyFee
       })
       console.log('🔍 DEBUG - Estado completo do form:', obraFormData)
-      console.log('🔍 DEBUG - Custos mensais processados:', obraData.custos_mensais)
-      console.log('🔍 DEBUG - Quantidade de custos mensais:', custosMensais.length)
+      console.log('🔍 DEBUG - Valores processados:', obraData.custos_mensais)
+      console.log('🔍 DEBUG - Quantidade de valores:', custosMensais.length)
       console.log('🔍 DEBUG - Primeiro custo mensal:', custosMensais[0])
       
       // Debug adicional para verificar se os dados estão sendo montados corretamente
@@ -826,7 +826,7 @@ export default function ObrasPage() {
       }
       
       if (obraData.custos_mensais.length === 0 && custosMensais.length > 0) {
-        console.warn('⚠️ WARNING - Custos mensais no estado mas vazios no objeto!')
+        console.warn('⚠️ WARNING - Valores no estado mas vazios no objeto!')
         console.log('  - custosMensais.length:', custosMensais.length)
         console.log('  - obraData.custos_mensais.length:', obraData.custos_mensais.length)
       }
@@ -1039,7 +1039,7 @@ export default function ObrasPage() {
       
       console.log('✅ Funcionários carregados:', funcionarios)
 
-      // Carregar custos mensais da obra
+      // Carregar valores da obra
       console.log('📦 Resposta completa da obra:', custosResponse.data)
       const custosBackend = custosResponse.data?.custos_mensais || []
       console.log('📦 Custos do backend:', custosBackend)
@@ -1065,7 +1065,7 @@ export default function ObrasPage() {
         updatedAt: custo.updated_at || new Date().toISOString()
       }))
 
-      console.log('✅ Custos mensais formatados:', custosFormatados)
+      console.log('✅ Valores formatados:', custosFormatados)
       console.log('📊 Quantidade de custos:', custosFormatados.length)
       
       // Atualizar estados ANTES de abrir o dialog
@@ -1205,7 +1205,7 @@ export default function ObrasPage() {
         monthlyFee: obraFormData.monthlyFee ? parseFloat(obraFormData.monthlyFee) : null,
         // Funcionários
         funcionarios: funcionariosSelecionados && funcionariosSelecionados.length > 0 ? funcionariosSelecionados : [],
-        // Custos mensais
+        // Valores
         custos_mensais: custosMensais && custosMensais.length > 0 ? custosMensais.map(custo => ({
           item: custo.item,
           descricao: custo.descricao,
@@ -1226,7 +1226,7 @@ export default function ObrasPage() {
       console.log('📋 Dados preparados para o backend:', obraData)
       console.log('🏗️ Gruas selecionadas:', gruasSelecionadas)
       console.log('👥 Funcionários selecionados:', funcionariosSelecionados)
-      console.log('💰 Custos mensais:', custosMensais)
+      console.log('💰 Valores:', custosMensais)
       
       // Converter para formato do backend
       const obraBackendData = converterObraFrontendParaBackend(obraData)

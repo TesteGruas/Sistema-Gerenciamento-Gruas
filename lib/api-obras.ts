@@ -154,6 +154,7 @@ export interface ObraCreateData {
   data_inicio?: string
   data_fim?: string
   orcamento?: number
+  orcamento_id?: number // ID do orçamento aprovado vinculado à obra
   observacoes?: string
   responsavel_id?: number
   responsavel_nome?: string
@@ -829,6 +830,7 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     cliente_id: clienteIdParsed,
     endereco: obraFrontend.location || obraFrontend.endereco || '',
     cidade: obraFrontend.cidade || '',
+    orcamento_id: obraFrontend.orcamento_id || obraFrontend.orcamentoId || undefined, // ID do orçamento aprovado
     estado: obraFrontend.estado || '',
     tipo: obraFrontend.tipo || '',
     cep: obraFrontend.cep,

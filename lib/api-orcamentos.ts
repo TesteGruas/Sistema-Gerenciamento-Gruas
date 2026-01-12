@@ -262,3 +262,30 @@ export const podeAprovarOrcamento = (status: string): boolean => {
 export const podeRejeitarOrcamento = (status: string): boolean => {
   return status === 'enviado'
 }
+
+// Buscar orçamento aprovado por cliente
+export const getOrcamentoAprovadoPorCliente = async (clienteId: number): Promise<Orcamento | null> => {
+  try {
+    const response = await getOrcamentos({
+      cliente_id: clienteId,
+      status: 'aprovado',
+      limit: 1
+    })
+    
+    if (response.data && response.data.length > 0) {
+      // Retornar o mais recente
+      return response.data[0]
+    }
+    
+    return null
+  } catch (error) {
+    console.error('Erro ao buscar orçamento aprovado:', error)
+    return null
+  }
+}
+
+// Buscar orçamento por ID com todos os dados (incluindo custos mensais)
+export const getOrcamentoCompleto = async (id: number): Promise<OrcamentoResponse> => {
+  const response = await api.get(`/orcamentos/${id}`)
+  return response.data
+}

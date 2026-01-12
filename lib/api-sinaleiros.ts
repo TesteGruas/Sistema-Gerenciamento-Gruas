@@ -128,6 +128,20 @@ export const sinaleirosApi = {
       body: JSON.stringify(data),
     })
   },
+
+  // Validar se sinaleiro tem documentos completos
+  async validarDocumentosCompletos(sinaleiroId: string): Promise<{ success: boolean; completo: boolean; documentosFaltando?: string[] }> {
+    try {
+      const url = buildApiUrl(`obras/sinaleiros/${sinaleiroId}/validar-documentos`)
+      return apiRequest(url)
+    } catch (error: any) {
+      // Se o endpoint não existir, retornar como não completo
+      if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+        return { success: false, completo: false, documentosFaltando: ['rg_frente', 'rg_verso', 'comprovante_vinculo'] }
+      }
+      throw error
+    }
+  },
 }
 
 // Funções de conversão (se necessário para compatibilidade com frontend)
