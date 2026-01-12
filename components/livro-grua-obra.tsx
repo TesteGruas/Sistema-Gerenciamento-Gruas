@@ -462,12 +462,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         '6. Valores e Condições Comerciais',
         '7. Documentos e Certificações',
         '7.1. Dados da Montagem do(s) Equipamento(s)',
-        '7.2. Proprietário do Equipamento',
+        '7.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento',
         '7.3. Responsável pela Manutenção da Grua',
         '7.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)',
-        '7.5. Manual de Montagem',
-        '7.6. Entrega Técnica',
-        '7.7. Plano de Cargas',
+        '7.5. Dados Técnicos do Equipamento',
+        '7.6. Manual de Montagem',
+        '7.7. Entrega Técnica',
+        '7.8. Plano de Cargas',
         '8. Configuração e Especificações Técnicas',
         '9. Observações Gerais'
       ]
@@ -1118,7 +1119,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.2. PROPRIETÁRIO DO EQUIPAMENTO', 18, secao72Y + 6)
+      doc.text('7.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO', 18, secao72Y + 6)
       yPos = secao72Y + 12
 
       doc.setTextColor(0, 0, 0)
@@ -1268,7 +1269,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
 
       yPos += 8
 
-      // 7.5. MANUAL DE MONTAGEM
+      // 7.5. DADOS TÉCNICOS DO EQUIPAMENTO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
@@ -1280,8 +1281,40 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.5. MANUAL DE MONTAGEM', 18, secao75Y + 6)
+      doc.text('7.5. DADOS TÉCNICOS DO EQUIPAMENTO', 18, secao75Y + 6)
       yPos = secao75Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const fichaTecnica = documentos.find((doc: any) => 
+        (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('técnica')) ||
+        (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('tecnica')) ||
+        (doc.titulo?.toLowerCase().includes('dados') && doc.titulo?.toLowerCase().includes('técnicos'))
+      )
+
+      if (fichaTecnica) {
+        doc.text(`Ficha Técnica disponível: ${fichaTecnica.titulo || 'Ficha Técnica do Equipamento'}`, 18, yPos)
+      } else {
+        doc.text('Ficha técnica não cadastrada. Um arquivo em PDF estará disponível para consulta após o upload.', 18, yPos)
+      }
+      yPos += 8
+
+      // 7.6. MANUAL DE MONTAGEM
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao76Y = yPos
+      doc.setFillColor(66, 139, 202)
+      doc.roundedRect(14, secao76Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('7.6. MANUAL DE MONTAGEM', 18, secao76Y + 6)
+      yPos = secao76Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1299,19 +1332,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 8
 
-      // 7.6. ENTREGA TÉCNICA
+      // 7.7. ENTREGA TÉCNICA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao76Y = yPos
+      const secao77Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao76Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao77Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.6. ENTREGA TÉCNICA', 18, secao76Y + 6)
+      doc.text('7.7. ENTREGA TÉCNICA', 18, secao77Y + 6)
+      yPos = secao77Y + 12
       yPos = secao76Y + 12
 
       doc.setTextColor(0, 0, 0)
@@ -1373,19 +1407,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 10
 
-      // 7.7. PLANO DE CARGAS
+      // 7.8. PLANO DE CARGAS
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao77Y = yPos
+      const secao78Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao77Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao78Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.7. PLANO DE CARGAS', 18, secao77Y + 6)
+      doc.text('7.8. PLANO DE CARGAS', 18, secao78Y + 6)
+      yPos = secao78Y + 12
       yPos = secao77Y + 12
 
       doc.setTextColor(0, 0, 0)
@@ -1520,7 +1555,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Raio de Operação:`, relacaoGrua?.raio_operacao || relacaoGrua?.raio || gruaSelecionada.alcance_maximo || 'N/A'],
         [`Altura de Operação:`, gruaSelecionada.altura_maxima || relacaoGrua?.altura || 'N/A'],
         [`Manual de Operação:`, relacaoGrua?.manual_operacao || 'Vinculado à obra'],
-        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 7.5)' : 'Não informado']
+        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 7.6)' : 'Não informado']
       ]
 
       for (const [label, value] of configTecnica) {
@@ -1842,6 +1877,37 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                     {obra.startDate ? formatarData(obra.startDate) : 'Não informado'}
                     {obra.endDate && ` - ${formatarData(obra.endDate)}`}
                   </p>
+                </div>
+              </div>
+              
+              {/* Responsável Técnico da Empresa que está Locando a Grua */}
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <p className="text-xs text-gray-500 mb-3 font-semibold">Responsável Técnico da Empresa Locadora</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Responsável Técnico</p>
+                    <p className="font-medium">
+                      {obra.responsavel_tecnico?.nome || obra.responsavelTecnico?.nome || 'Não informado'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">E-mail</p>
+                    <p className="font-medium">
+                      {obra.responsavel_tecnico?.email || obra.responsavelTecnico?.email || 'Não informado'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Celular</p>
+                    <p className="font-medium">
+                      {obra.responsavel_tecnico?.telefone || obra.responsavelTecnico?.telefone || 'Não informado'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">CREA</p>
+                    <p className="font-medium">
+                      {obra.responsavel_tecnico?.crea || obra.responsavelTecnico?.crea || 'Não informado'}
+                    </p>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -2483,6 +2549,46 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
+                  <p className="text-xs text-gray-500">Tipo</p>
+                  <p className="font-medium">{gruaSelecionada.tipo || relacaoGrua?.tipo || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Altura Inicial (m)</p>
+                  <p className="font-medium">{relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial} METROS` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Altura Final (m)</p>
+                  <p className="font-medium">{relacaoGrua?.altura_final ? `${relacaoGrua.altura_final} METROS` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Comprimento da Lança (m)</p>
+                  <p className="font-medium">{gruaSelecionada.lanca || relacaoGrua?.comprimento_lanca || gruaSelecionada.comprimento_lanca ? `${gruaSelecionada.lanca || relacaoGrua?.comprimento_lanca || gruaSelecionada.comprimento_lanca} METROS` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Capacidade de Ponta (kg)</p>
+                  <p className="font-medium">{relacaoGrua?.capacidade_ponta ? `${relacaoGrua.capacidade_ponta} KG` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Capacidade Máxima / Alcance</p>
+                  <p className="font-medium">
+                    {relacaoGrua?.capacidade_maxima_raio && relacaoGrua?.raio_operacao 
+                      ? `${relacaoGrua.capacidade_maxima_raio} KG / ${relacaoGrua.raio_operacao} METROS`
+                      : relacaoGrua?.capacidade_maxima_raio 
+                        ? `${relacaoGrua.capacidade_maxima_raio} KG / ${gruaSelecionada.alcance_maximo || 'N/A'} METROS`
+                        : 'Não informado'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Marca, Modelo e Ano de Fabricação</p>
+                  <p className="font-medium">
+                    {gruaSelecionada.fabricante && gruaSelecionada.modelo && relacaoGrua?.ano_fabricacao
+                      ? `${gruaSelecionada.fabricante}, ${gruaSelecionada.modelo}, ${relacaoGrua.ano_fabricacao}`
+                      : gruaSelecionada.fabricante && gruaSelecionada.modelo
+                        ? `${gruaSelecionada.fabricante}, ${gruaSelecionada.modelo}`
+                        : 'Não informado'}
+                  </p>
+                </div>
+                <div>
                   <p className="text-xs text-gray-500">Data de Montagem</p>
                   <p className="font-medium">{relacaoGrua?.data_montagem ? formatarData(relacaoGrua.data_montagem) : relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado'}</p>
                 </div>
@@ -2495,39 +2601,43 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="font-medium">{relacaoGrua?.tipo_base || relacaoGrua?.fundacao || 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Altura Inicial (m)</p>
-                  <p className="font-medium">{relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'Não informado'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Altura Final (m)</p>
-                  <p className="font-medium">{relacaoGrua?.altura_final ? `${relacaoGrua.altura_final}m` : 'Não informado'}</p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-500">Local de Instalação</p>
                   <p className="font-medium">{relacaoGrua?.local_instalacao || obra.endereco || 'Não informado'}</p>
                 </div>
                 <div className="md:col-span-2">
-                  <p className="text-xs text-gray-500">Observações da Montagem</p>
-                  <p className="font-medium">{relacaoGrua?.observacoes_montagem || relacaoGrua?.observacoes || 'Não informado'}</p>
+                  <p className="text-xs text-gray-500">Outras Características Singulares do Equipamento</p>
+                  <p className="font-medium">{relacaoGrua?.caracteristicas_singulares || relacaoGrua?.observacoes_montagem || relacaoGrua?.observacoes || 'Não informado'}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* 7.2. PROPRIETÁRIO DO EQUIPAMENTO */}
+          {/* 7.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                7.2. Proprietário do Equipamento
+                7.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Nome/Razão Social</p>
+                  <p className="text-xs text-gray-500 mb-2">Razão Social</p>
                   <div className="p-3 bg-gray-50 rounded-md">
                     <p className="font-medium">{gruaSelecionada.proprietario_nome || obra.cliente?.nome || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Nome Fantasia</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_nome_fantasia || relacaoGrua?.nome_fantasia || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'}</p>
                   </div>
                 </div>
                 <div>
@@ -2537,21 +2647,58 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Endereço</p>
+                  <p className="text-xs text-gray-500 mb-2">E-mail</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'}</p>
+                    <p className="font-medium">{gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado'}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Telefone</p>
+                  <p className="text-xs text-gray-500 mb-2">Fone</p>
                   <div className="p-3 bg-gray-50 rounded-md">
                     <p className="font-medium">{gruaSelecionada.proprietario_telefone || obra.cliente?.telefone || 'Não informado'}</p>
                   </div>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Email</p>
+                  <p className="text-xs text-gray-500 mb-2">Fax</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado'}</p>
+                    <p className="font-medium">{gruaSelecionada.proprietario_fax || relacaoGrua?.fax || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div className="md:col-span-2">
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <p className="text-xs text-gray-500 mb-2">Responsável Técnico</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">{gruaSelecionada.proprietario_responsavel_tecnico || relacaoGrua?.responsavel_tecnico || 'Não informado'}</p>
+                      </div>
+                    </div>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="ml-4 mt-8 print:hidden"
+                      onClick={() => {
+                        toast({
+                          title: "Editar Responsável Técnico",
+                          description: "Funcionalidade de edição será implementada em breve.",
+                          variant: "default"
+                        })
+                      }}
+                    >
+                      <Settings className="w-4 h-4 mr-2" />
+                      Editar
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Nº do CREA</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_crea || relacaoGrua?.crea_responsavel || 'Não informado'}</p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">N° do CREA da Empresa</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">{gruaSelecionada.proprietario_crea_empresa || relacaoGrua?.crea_empresa || 'Não informado'}</p>
                   </div>
                 </div>
               </div>
@@ -2565,49 +2712,84 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <Wrench className="w-4 h-4" />
                 7.3. Responsável pela Manutenção da Grua
               </CardTitle>
+              <CardDescription className="text-xs text-gray-500">
+                (permanece fixo os textos)
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico')) ? (
-                  <>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Nome</p>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.nome}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Cargo</p>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.cargo}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Telefone</p>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.telefone || 'Não informado'}
-                        </p>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-xs text-gray-500 mb-2">Email</p>
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico') || f.funcionario?.cargo?.toLowerCase().includes('mecânico'))?.funcionario?.email || 'Não informado'}
-                        </p>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="md:col-span-2">
-                    <p className="text-gray-500">Não informado</p>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Razão Social</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_razao_social || 'IRBANA COPA SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'}
+                    </p>
                   </div>
-                )}
+                </div>
+                <div className="md:col-span-2">
+                  <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_endereco || 'RUA BENEVENUTO VIEIRA N.48 J AEROPORTO ITU SP'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">CNPJ</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_cnpj || '20.053.969/0001-38'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">E-mail</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_email || 'info@irbana.net'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Fone</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_fone || '(11) 98818 5951'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Fax</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_fax || 'Não informado'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Responsável Técnico</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'NESTOR ALVAREZ GONZALEZ'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Fone do Responsável</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_fone_responsavel || '(11) 98818-5951'}
+                    </p>
+                  </div>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">N° do CREA da Empresa</p>
+                  <div className="p-3 bg-gray-50 rounded-md">
+                    <p className="font-medium">
+                      {relacaoGrua?.empresa_manutencao_crea || 'SP 2494244'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </CardContent>
           </Card>
@@ -2621,7 +2803,78 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
+              <div className="space-y-6">
+                {/* Dados da Empresa */}
+                <div>
+                  <p className="text-xs text-gray-500 mb-3 font-semibold">Dados da Empresa</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Razão Social</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_razao_social || 'IRBANA COPA SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_endereco || 'RUA BENEVENUTO VIEIRA N.48 J AEROPORTO ITU SP'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">CNPJ</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_cnpj || '20.053.969/0001-38'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">E-mail</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_email || 'info@irbana.net'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Fone</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_fone || '(11) 98818 5951'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Fax</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_fax || 'Não informado'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Responsável Técnico</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_responsavel_tecnico || 'ALEX MARCELO DA SILVA NASCIMENTO'}
+                        </p>
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 mb-2">Nº do CREA</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="font-medium">
+                          {relacaoGrua?.empresa_montagem_crea || '5071184591'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Operador */}
                 <div>
                   <p className="text-xs text-gray-500 mb-2 font-semibold">Operador da Grua</p>
@@ -2679,12 +2932,82 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.5. MANUAL DE MONTAGEM */}
+          {/* 7.5. DADOS TÉCNICOS DO EQUIPAMENTO */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                7.5. Dados Técnicos do Equipamento
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-xs text-gray-500 mb-2">Ficha Técnica do Equipamento (PDF)</p>
+                  {(() => {
+                    const fichaTecnica = documentos.find((doc: any) => 
+                      (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('técnica')) ||
+                      (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('tecnica')) ||
+                      (doc.titulo?.toLowerCase().includes('dados') && doc.titulo?.toLowerCase().includes('técnicos')) ||
+                      (doc.categoria?.toLowerCase().includes('ficha') && doc.categoria?.toLowerCase().includes('técnica'))
+                    )
+                    
+                    if (fichaTecnica) {
+                      return (
+                        <div className="p-3 bg-gray-50 rounded-md">
+                          <div className="flex items-center justify-between">
+                            <div className="flex-1">
+                              <p className="font-medium">{fichaTecnica.titulo || 'Ficha Técnica do Equipamento'}</p>
+                              {fichaTecnica.descricao && <p className="text-sm text-gray-600 mt-1">{fichaTecnica.descricao}</p>}
+                            </div>
+                            {(fichaTecnica.arquivo_assinado || fichaTecnica.caminho_arquivo || fichaTecnica.arquivo_original) && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => downloadDocumento(fichaTecnica)}
+                                className="ml-4 print:hidden"
+                              >
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar PDF
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    }
+                    return (
+                      <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
+                        <p className="text-gray-500 text-sm mb-2">Nenhuma ficha técnica cadastrada.</p>
+                        <p className="text-xs text-gray-400">Um arquivo em PDF estará disponível para consulta após o upload.</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="mt-3 print:hidden"
+                          onClick={() => {
+                            toast({
+                              title: "Upload de Ficha Técnica",
+                              description: "Funcionalidade de upload será implementada em breve. Use a seção de Documentos da Obra para fazer upload.",
+                              variant: "default"
+                            })
+                          }}
+                        >
+                          <FileText className="w-4 h-4 mr-2" />
+                          Fazer Upload de PDF
+                        </Button>
+                      </div>
+                    )
+                  })()}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 7.6. MANUAL DE MONTAGEM */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <BookOpen className="w-4 h-4" />
-                7.5. Manual de Montagem
+                7.6. Manual de Montagem
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2730,12 +3053,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.6. ENTREGA TÉCNICA */}
+          {/* 7.7. ENTREGA TÉCNICA */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileCheck className="w-4 h-4" />
-                7.6. Entrega Técnica
+                7.7. Entrega Técnica
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2919,7 +3242,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="text-xs text-gray-500">Manual de Montagem</p>
                   <p className="font-medium">
                     {documentos.find((doc: any) => doc.titulo?.toLowerCase().includes('manual') && doc.titulo?.toLowerCase().includes('montagem')) 
-                      ? 'Disponível (ver seção 7.5)' 
+                      ? 'Disponível (ver seção 7.6)' 
                       : 'Não informado'}
                   </p>
                 </div>
