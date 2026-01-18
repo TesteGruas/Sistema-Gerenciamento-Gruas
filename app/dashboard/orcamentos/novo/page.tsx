@@ -142,8 +142,6 @@ export default function NovoOrcamentoPage() {
     potencia_instalada: '',
     voltagem: '',
     tipo_ligacao: '',
-    capacidade_ponta: '',
-    capacidade_maxima_raio: '',
     ano_fabricacao: '',
     vida_util: '',
     
@@ -435,8 +433,6 @@ export default function NovoOrcamentoPage() {
         potencia_instalada: orcamento.grua_potencia_instalada?.toString() || '',
         voltagem: orcamento.grua_voltagem || '',
         tipo_ligacao: orcamento.grua_tipo_ligacao || '',
-        capacidade_ponta: orcamento.grua_capacidade_ponta?.toString() || '',
-        capacidade_maxima_raio: orcamento.grua_capacidade_maxima_raio?.toString() || '',
         ano_fabricacao: orcamento.grua_ano?.toString() || '',
         vida_util: orcamento.grua_vida_util?.toString() || '',
         valor_locacao_mensal: orcamento.valor_locacao_mensal?.toString() || '',
@@ -736,16 +732,9 @@ export default function NovoOrcamentoPage() {
           grua_capacidade_1_cabo: gruaCapacidade1,
           grua_capacidade_2_cabos: gruaCapacidade2,
           grua_voltagem: gruaVoltagem,
-          // Campos técnicos detalhados
-          grua_altura_inicial: formData.altura_inicial ? parseFloat(formData.altura_inicial) : null,
-          grua_velocidade_giro: formData.velocidade_giro ? parseFloat(formData.velocidade_giro) : null,
-          grua_velocidade_elevacao: formData.velocidade_elevacao ? parseFloat(formData.velocidade_elevacao) : null,
-          grua_velocidade_translacao: formData.velocidade_translacao ? parseFloat(formData.velocidade_translacao) : null,
-          grua_potencia_instalada: formData.potencia_instalada ? parseFloat(formData.potencia_instalada) : null,
-          grua_tipo_ligacao: formData.tipo_ligacao || null,
-          grua_capacidade_ponta: formData.capacidade_ponta ? parseFloat(formData.capacidade_ponta) : null,
-          grua_capacidade_maxima_raio: formData.capacidade_maxima_raio ? parseFloat(formData.capacidade_maxima_raio) : null,
-          grua_vida_util: formData.vida_util ? parseInt(formData.vida_util) : null,
+          // Campos técnicos detalhados removidos - não são aceitos pelo schema do backend
+          // grua_altura_inicial, grua_velocidade_giro, grua_velocidade_elevacao, 
+          // grua_velocidade_translacao, grua_potencia_instalada, grua_tipo_ligacao, grua_vida_util
           // Campos gerais
           prazo_locacao_meses: prazoMeses,
           data_inicio_estimada: formData.data_inicio_estimada || null,
@@ -885,7 +874,7 @@ export default function NovoOrcamentoPage() {
 
   // Função para preencher todos os campos com dados de debug
   const handleDebugFill = () => {
-    // Preencher formData
+    // Preencher formData com todos os campos necessários
     setFormData({
       cliente_id: '1',
       cliente_nome: 'Cliente Teste Debug',
@@ -902,13 +891,26 @@ export default function NovoOrcamentoPage() {
       carga_ponta: '1300',
       potencia_eletrica: '42 KVA',
       energia_necessaria: '380V',
+      // Dados técnicos detalhados
+      tipo_base: 'chumbador',
+      velocidade_giro: '0.8',
+      velocidade_elevacao: '60',
+      velocidade_translacao: '20',
+      potencia_instalada: '42',
+      voltagem: '380',
+      tipo_ligacao: 'trifasica',
+      ano_fabricacao: '2020',
+      vida_util: '20',
+      // Custos mensais
       valor_locacao_mensal: '15000',
       valor_operador: '8000',
       valor_sinaleiro: '6000',
       valor_manutencao: '2000',
+      // Prazos e datas
       prazo_locacao_meses: '13',
       data_inicio_estimada: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       tolerancia_dias: '15',
+      // Escopo e condições
       escopo_incluso: 'Operador e sinaleiro por turno (carga horária mensal definida). Manutenção em horário normal de trabalho. Treinamento, ART e documentação conforme NR-18.',
       responsabilidades_cliente: 'Fornecer energia 380V no local. Disponibilizar sinaleiros para içamento. Acessos preparados para transporte e montagem. Cumprimento das normas NR-18 e infraestrutura para instalação.',
       condicoes_comerciais: 'Medição mensal e pagamento até dia 15. Valores isentos de impostos por serem locação. Multa em caso de cancelamento após mobilização (geralmente 2 meses de locação). Validade da proposta enquanto houver equipamento disponível.',
@@ -924,6 +926,9 @@ export default function NovoOrcamentoPage() {
       name: 'Cliente Teste Debug',
       nome: 'Cliente Teste Debug'
     })
+    
+    // Garantir que não está em modo "sem cliente"
+    setSemCliente(false)
 
     // Preencher grua selecionada (mock)
     setGruaSelecionada({
@@ -1025,8 +1030,8 @@ export default function NovoOrcamentoPage() {
     setComplementosSelecionados(complementosDebug)
 
     toast({
-      title: "Debug",
-      description: "Todos os campos foram preenchidos com dados de teste!",
+      title: "Dados Mock Preenchidos",
+      description: "Todos os campos foram preenchidos com dados de teste. Você pode agora testar o salvamento.",
     })
   }
 
@@ -1414,24 +1419,6 @@ export default function NovoOrcamentoPage() {
                         <SelectItem value="trifasica">Trifásica</SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
-                  <div>
-                    <Label>Capacidade na Ponta (kg)</Label>
-                    <Input
-                      type="number"
-                      value={formData.capacidade_ponta}
-                      onChange={(e) => setFormData({ ...formData, capacidade_ponta: e.target.value })}
-                      placeholder="Ex: 1300"
-                    />
-                  </div>
-                  <div>
-                    <Label>Capacidade Máxima no Raio (kg)</Label>
-                    <Input
-                      type="number"
-                      value={formData.capacidade_maxima_raio}
-                      onChange={(e) => setFormData({ ...formData, capacidade_maxima_raio: e.target.value })}
-                      placeholder="Ex: 2000"
-                    />
                   </div>
                   <div>
                     <Label>Ano de Fabricação</Label>
