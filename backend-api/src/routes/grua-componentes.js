@@ -37,7 +37,10 @@ const componenteSchema = Joi.object({
   data_proxima_manutencao: Joi.date().allow(null),
   observacoes: Joi.string().allow(null, ''),
   anexos: Joi.object().allow(null),
-  componente_estoque_id: Joi.number().integer().allow(null).optional() // ID do componente no estoque, se foi selecionado
+  componente_estoque_id: Joi.alternatives().try(
+    Joi.string(), // Para produtos (ex: "P0006")
+    Joi.number().integer() // Para componentes de grua (ex: 123)
+  ).allow(null).optional() // ID do componente no estoque, se foi selecionado
 })
 
 // Schema para atualização de componentes (sem grua_id obrigatório)
@@ -376,6 +379,7 @@ router.post('/', async (req, res) => {
     // Se o componente foi selecionado do estoque, fazer movimentação de saída
     if (componente_estoque_id && quantidade_total) {
       try {
+        console.log(`🔄 Processando movimentação de estoque para componente_estoque_id: ${componente_estoque_id}, quantidade: ${quantidade_total}`)
         // Obter responsavel_id (similar à rota de movimentação de estoque)
         let responsavel_id = null
         if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
@@ -426,10 +430,15 @@ router.post('/', async (req, res) => {
           }
         } else {
           // É um componente de grua - buscar por componente_id
+          // Converter para número se necessário (componentes de grua têm IDs numéricos)
+          const componenteIdNumero = typeof componente_estoque_id === 'string' 
+            ? parseInt(componente_estoque_id) 
+            : componente_estoque_id
+
           const estoqueResult = await supabaseAdmin
             .from('estoque')
             .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
-            .eq('componente_id', componente_estoque_id)
+            .eq('componente_id', componenteIdNumero)
             .single()
 
           estoqueAtual = estoqueResult.data
@@ -439,7 +448,7 @@ router.post('/', async (req, res) => {
           const { data: componenteOriginal } = await supabaseAdmin
             .from('grua_componentes')
             .select('valor_unitario')
-            .eq('id', componente_estoque_id)
+            .eq('id', componenteIdNumero)
             .single()
 
           if (componenteOriginal) {
@@ -485,6 +494,11 @@ router.post('/', async (req, res) => {
             updateEstoqueError = updateResult.error
           } else {
             // Atualizar estoque do componente
+            // Converter para número se necessário
+            const componenteIdNumero = typeof componente_estoque_id === 'string' 
+              ? parseInt(componente_estoque_id) 
+              : componente_estoque_id
+
             const updateResult = await supabaseAdmin
               .from('estoque')
               .update({
@@ -494,7 +508,7 @@ router.post('/', async (req, res) => {
                 ultima_movimentacao: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
-              .eq('componente_id', componente_estoque_id)
+              .eq('componente_id', componenteIdNumero)
             
             updateEstoqueError = updateResult.error
           }
@@ -505,9 +519,33 @@ router.post('/', async (req, res) => {
           }
 
           // Registrar movimentação de estoque
+          // Primeiro, obter o item_id do estoque para usar na movimentação
+          let itemIdEstoque = null
+          if (isProduto) {
+            const { data: estoqueItem } = await supabaseAdmin
+              .from('estoque')
+              .select('id')
+              .eq('produto_id', componente_estoque_id)
+              .single()
+            itemIdEstoque = estoqueItem?.id
+          } else {
+            // Converter para número se necessário
+            const componenteIdNumero = typeof componente_estoque_id === 'string' 
+              ? parseInt(componente_estoque_id) 
+              : componente_estoque_id
+
+            const { data: estoqueItem } = await supabaseAdmin
+              .from('estoque')
+              .select('id')
+              .eq('componente_id', componenteIdNumero)
+              .single()
+            itemIdEstoque = estoqueItem?.id
+          }
+
+          // Tentar inserir movimentação com estrutura completa primeiro
           const movimentacaoData = {
             tipo: 'Saída',
-            quantidade: quantidade_total.toString(),
+            quantidade: quantidade_total,
             valor_unitario: valorUnitario.toString(),
             valor_total: valorTotal.toString(),
             data_movimentacao: new Date().toISOString(),
@@ -519,28 +557,67 @@ router.post('/', async (req, res) => {
           }
 
           if (isProduto) {
-            movimentacaoData.produto_id = componente_estoque_id
+            movimentacaoData.produto_id = componente_estoque_id.toString()
           } else {
-            movimentacaoData.componente_id = componente_estoque_id
+            // Converter para número se necessário (componentes de grua têm IDs numéricos)
+            const componenteIdNumero = typeof componente_estoque_id === 'string' 
+              ? parseInt(componente_estoque_id) 
+              : componente_estoque_id
+            movimentacaoData.componente_id = componenteIdNumero
           }
 
-          const { error: movimentacaoError } = await supabaseAdmin
-            .from('movimentacoes_estoque')
-            .insert(movimentacaoData)
+          // Se temos item_id do estoque, adicionar também
+          if (itemIdEstoque) {
+            movimentacaoData.item_id = itemIdEstoque
+          }
 
-          if (movimentacaoError) {
-            console.error('Erro ao registrar movimentação:', movimentacaoError)
-            // Não falhar se houver erro na movimentação, apenas logar
-          } else {
-            console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
+          try {
+            const { error: movimentacaoError } = await supabaseAdmin
+              .from('movimentacoes_estoque')
+              .insert(movimentacaoData)
+
+            if (movimentacaoError) {
+              console.error('Erro ao registrar movimentação (tentativa com estrutura completa):', movimentacaoError)
+              
+              // Tentar inserir com estrutura mínima se a primeira falhar
+              if (itemIdEstoque) {
+                const movimentacaoMinima = {
+                  item_id: itemIdEstoque,
+                  tipo: 'saida',
+                  quantidade: quantidade_total,
+                  motivo: `Adição de componente à grua ${value.grua_id}`,
+                  funcionario_id: responsavel_id,
+                  data_movimentacao: new Date().toISOString(),
+                  observacoes: `Componente adicionado à grua ${value.grua_id}`
+                }
+                
+                const { error: movimentacaoMinimaError } = await supabaseAdmin
+                  .from('movimentacoes_estoque')
+                  .insert(movimentacaoMinima)
+                
+                if (movimentacaoMinimaError) {
+                  console.error('Erro ao registrar movimentação (estrutura mínima):', movimentacaoMinimaError)
+                  // Não falhar a criação do componente se houver erro na movimentação
+                } else {
+                  console.log(`✅ Movimentação registrada (estrutura mínima): ${quantidade_total} unidades`)
+                }
+              }
+            } else {
+              console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
+            }
+          } catch (error) {
+            console.error('Erro ao registrar movimentação:', error)
+            // Não falhar a criação do componente se houver erro na movimentação
           }
         } else {
           console.log(`ℹ️ ${isProduto ? 'Produto' : 'Componente'} ${componente_estoque_id} não possui registro no estoque, pulando movimentação`)
         }
       } catch (error) {
-        console.error('Erro ao decrementar estoque:', error)
+        console.error('❌ Erro ao decrementar estoque:', error)
+        console.error('Stack trace:', error.stack)
         // Não falhar a criação do componente se houver erro no estoque
-        // Apenas logar o erro
+        // Apenas logar o erro e continuar
+        // O componente já foi criado, então não vamos reverter
       }
     }
 
