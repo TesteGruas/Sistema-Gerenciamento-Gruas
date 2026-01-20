@@ -248,24 +248,31 @@ export default function ComponentesGruaPage() {
         limit: 50
       })
 
+      // Verificar se a resposta tem a estrutura esperada
+      const dados = Array.isArray(response?.data) ? response.data : []
+      
       // Filtrar componentes que correspondem ao termo de busca
-      const filtrados = response.data.filter((comp: any) => {
-        const nome = comp.nome?.toLowerCase() || ''
-        const modelo = comp.modelo?.toLowerCase() || ''
-        const fabricante = comp.fabricante?.toLowerCase() || ''
-        const tipo = comp.tipo?.toLowerCase() || ''
-        const termoLower = termo.toLowerCase()
+      // A API retorna produtos com estrutura: { id, nome, descricao, classificacao_tipo, estoque: {...} }
+      const filtrados = dados.filter((comp: any) => {
+        if (!comp) return false
+        
+        const nome = String(comp.nome || '').toLowerCase()
+        const descricao = String(comp.descricao || '').toLowerCase()
+        const categoriaNome = String(comp.categorias?.nome || '').toLowerCase()
+        const termoLower = termo.toLowerCase().trim()
         
         return nome.includes(termoLower) || 
-               modelo.includes(termoLower) || 
-               fabricante.includes(termoLower) ||
-               tipo.includes(termoLower)
+               descricao.includes(termoLower) ||
+               categoriaNome.includes(termoLower)
       })
-
+      
       setComponentesEstoque(filtrados)
+      // Sempre mostrar resultados se houver algum componente filtrado ou se não houver resultados (para mostrar mensagem)
       setMostrarResultadosBusca(true)
     } catch (error: any) {
       console.error('Erro ao buscar componentes:', error)
+      setComponentesEstoque([])
+      setMostrarResultadosBusca(false)
       toast({
         title: "Erro",
         description: "Erro ao buscar componentes do estoque",
@@ -283,36 +290,57 @@ export default function ComponentesGruaPage() {
     setMostrarResultadosBusca(false)
     
     // Obter quantidade disponível do estoque
-    const estoqueDisponivel = componente.estoque?.[0]?.quantidade_disponivel || componente.quantidade_disponivel || 0
+    // A API retorna estoque como objeto único, não array
+    const estoqueDisponivel = componente.estoque?.quantidade_disponivel ?? componente.quantidade_disponivel ?? 0
+    
+    // Extrair dimensões da descrição se disponível (formato pode variar)
+    const descricao = componente.descricao || ''
+    let dimensoes_altura: number | undefined
+    let dimensoes_largura: number | undefined
+    let dimensoes_comprimento: number | undefined
+    let dimensoes_peso: number | undefined
+    
+    // Tentar extrair dimensões da descrição (formato pode variar)
+    if (descricao) {
+      const alturaMatch = descricao.match(/Alt[ua]*[:\s]*([\d.,]+)\s*(?:m|mm|cm)/i)
+      const larguraMatch = descricao.match(/Larg[ura]*[:\s]*([\d.,]+)\s*(?:m|mm|cm)/i)
+      const comprimentoMatch = descricao.match(/Comp[rimento]*[:\s]*([\d.,]+)\s*(?:m|mm|cm)/i)
+      const pesoMatch = descricao.match(/Peso[:\s]*([\d.,]+)\s*(?:kg|g)/i)
+      
+      if (alturaMatch) dimensoes_altura = parseFloat(alturaMatch[1].replace(',', '.'))
+      if (larguraMatch) dimensoes_largura = parseFloat(larguraMatch[1].replace(',', '.'))
+      if (comprimentoMatch) dimensoes_comprimento = parseFloat(comprimentoMatch[1].replace(',', '.'))
+      if (pesoMatch) dimensoes_peso = parseFloat(pesoMatch[1].replace(',', '.'))
+    }
     
     // Preencher formulário com dados do componente selecionado
     setComponenteForm({
       nome: componente.nome || '',
-      tipo: componente.tipo || '' as ComponenteGrua['tipo'],
-      modelo: componente.modelo || '',
-      fabricante: componente.fabricante || '',
-      numero_serie: componente.numero_serie || '',
-      capacidade: componente.capacidade || '',
+      tipo: 'Estrutural' as ComponenteGrua['tipo'], // Padrão, pode ser ajustado depois
+      modelo: '', // Não disponível na API de estoque
+      fabricante: '', // Não disponível na API de estoque
+      numero_serie: '',
+      capacidade: '',
       unidade_medida: componente.unidade_medida || 'unidade',
       quantidade_total: 1, // Quantidade a adicionar (padrão 1)
-      quantidade_disponivel: 1, // Quantidade a adicionar (padrão 1)
+      quantidade_disponivel: Math.min(1, estoqueDisponivel), // Não pode exceder o disponível
       quantidade_em_uso: 0,
       quantidade_danificada: 0,
-      status: componente.status || 'Disponível' as ComponenteGrua['status'],
+      status: componente.status === 'Ativo' ? 'Disponível' as ComponenteGrua['status'] : 'Disponível' as ComponenteGrua['status'],
       localizacao: componente.localizacao || '',
-      localizacao_tipo: componente.localizacao_tipo || 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
-      obra_id: componente.obra_id,
-      dimensoes_altura: componente.dimensoes_altura,
-      dimensoes_largura: componente.dimensoes_largura,
-      dimensoes_comprimento: componente.dimensoes_comprimento,
-      dimensoes_peso: componente.dimensoes_peso,
-      vida_util_percentual: componente.vida_util_percentual || 100,
+      localizacao_tipo: componente.localizacao ? 'Almoxarifado' as ComponenteGrua['localizacao_tipo'] : 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
+      obra_id: undefined,
+      dimensoes_altura: dimensoes_altura,
+      dimensoes_largura: dimensoes_largura,
+      dimensoes_comprimento: dimensoes_comprimento,
+      dimensoes_peso: dimensoes_peso,
+      vida_util_percentual: 100,
       valor_unitario: componente.valor_unitario || 0,
-      data_instalacao: componente.data_instalacao || '',
-      data_ultima_manutencao: componente.data_ultima_manutencao || '',
-      data_proxima_manutencao: componente.data_proxima_manutencao || '',
-      observacoes: componente.observacoes || '',
-      componente_estoque_id: componente.id // Guardar ID do componente do estoque
+      data_instalacao: '',
+      data_ultima_manutencao: '',
+      data_proxima_manutencao: '',
+      observacoes: componente.descricao || '',
+      componente_estoque_id: componente.id // Guardar ID do componente do estoque (ex: "P0006")
     })
   }
 
@@ -320,8 +348,9 @@ export default function ComponentesGruaPage() {
   const handleCreateComponente = async () => {
     // Validar estoque se componente foi selecionado do estoque
     if (componenteSelecionado && componenteForm.componente_estoque_id) {
-      const estoqueDisponivel = componenteSelecionado.estoque?.[0]?.quantidade_disponivel || 
-                                 componenteSelecionado.quantidade_disponivel || 0
+      // A API retorna estoque como objeto único, não array
+      const estoqueDisponivel = componenteSelecionado.estoque?.quantidade_disponivel ?? 
+                                 componenteSelecionado.quantidade_disponivel ?? 0
       
       if (componenteForm.quantidade_total > estoqueDisponivel) {
         toast({
@@ -1077,7 +1106,7 @@ export default function ComponentesGruaPage() {
               <div className="relative">
                 <Input
                   id="busca_componente"
-                  placeholder="Digite o nome, modelo ou fabricante do componente..."
+                  placeholder="Digite o nome do componente..."
                   value={buscaComponente}
                   onChange={(e) => {
                     setBuscaComponente(e.target.value)
@@ -1096,31 +1125,33 @@ export default function ComponentesGruaPage() {
               
               {/* Lista de resultados da busca */}
               {mostrarResultadosBusca && componentesEstoque.length > 0 && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-[100] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
                   {componentesEstoque.map((comp) => (
                     <div
                       key={comp.id}
                       onClick={() => selecionarComponenteEstoque(comp)}
-                      className="p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                      className="p-3 hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-100 dark:border-gray-700 last:border-b-0"
                     >
-                      <div className="font-semibold">{comp.nome}</div>
-                      <div className="text-sm text-gray-600">
-                        {comp.tipo && <span className="mr-2">Tipo: {comp.tipo}</span>}
-                        {comp.modelo && <span className="mr-2">Modelo: {comp.modelo}</span>}
-                        {comp.fabricante && <span>Fabricante: {comp.fabricante}</span>}
+                      <div className="font-semibold text-gray-900 dark:text-gray-100">{comp.nome}</div>
+                      <div className="text-sm text-gray-600 dark:text-gray-400">
+                        {comp.categorias?.nome && <span className="mr-2">Categoria: {comp.categorias.nome}</span>}
+                        {comp.localizacao && <span className="mr-2">Localização: {comp.localizacao}</span>}
                       </div>
-                      {comp.estoque && comp.estoque.length > 0 && (
-                        <div className="text-xs text-gray-500 mt-1">
-                          Disponível: {comp.estoque[0]?.quantidade_disponivel || comp.quantidade_disponivel || 0}
+                      {comp.estoque ? (
+                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                          Disponível: {comp.estoque.quantidade_disponivel ?? 0} {comp.unidade_medida || 'unidade(s)'}
+                          {comp.valor_unitario && (
+                            <span className="ml-2">• R$ {comp.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                          )}
                         </div>
-                      )}
+                      ) : null}
                     </div>
                   ))}
                 </div>
               )}
               
               {mostrarResultadosBusca && buscaComponente.length >= 2 && componentesEstoque.length === 0 && !buscandoComponentes && (
-                <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg p-3 text-sm text-gray-500">
+                <div className="absolute z-[100] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg p-3 text-sm text-gray-500 dark:text-gray-400">
                   Nenhum componente encontrado
                 </div>
               )}
@@ -1132,7 +1163,7 @@ export default function ComponentesGruaPage() {
                   Componente selecionado: {componenteSelecionado.nome}
                 </div>
                 <div className="text-xs text-blue-700 mt-1">
-                  Estoque disponível: {componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 0} unidades
+                  Estoque disponível: {componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0} unidades
                 </div>
                 <div className="text-xs text-blue-700 mt-1">
                   Você pode editar os campos abaixo antes de adicionar
@@ -1277,7 +1308,7 @@ export default function ComponentesGruaPage() {
                   id="quantidade_total"
                   type="number"
                   min="1"
-                  max={componenteSelecionado ? (componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 1) : undefined}
+                  max={componenteSelecionado ? (componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1) : undefined}
                   value={componenteForm.quantidade_total}
                   onChange={(e) => {
                     const qtd = parseInt(e.target.value) || 1
@@ -1291,7 +1322,7 @@ export default function ComponentesGruaPage() {
                 />
                 {componenteSelecionado && (
                   <p className="text-xs text-gray-500 mt-1">
-                    Máximo: {componenteSelecionado.estoque?.[0]?.quantidade_disponivel || componenteSelecionado.quantidade_disponivel || 0}
+                    Máximo: {componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0}
                   </p>
                 )}
               </div>
