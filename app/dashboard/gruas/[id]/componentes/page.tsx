@@ -248,8 +248,12 @@ export default function ComponentesGruaPage() {
         limit: 50
       })
 
+      console.log('Resposta da API de estoque:', response)
+      
       // Verificar se a resposta tem a estrutura esperada
       const dados = Array.isArray(response?.data) ? response.data : []
+      console.log('Dados recebidos:', dados)
+      console.log('Termo de busca:', termo)
       
       // Filtrar componentes que correspondem ao termo de busca
       // A API retorna produtos com estrutura: { id, nome, descricao, classificacao_tipo, estoque: {...} }
@@ -261,10 +265,15 @@ export default function ComponentesGruaPage() {
         const categoriaNome = String(comp.categorias?.nome || '').toLowerCase()
         const termoLower = termo.toLowerCase().trim()
         
-        return nome.includes(termoLower) || 
+        const match = nome.includes(termoLower) || 
                descricao.includes(termoLower) ||
                categoriaNome.includes(termoLower)
+        
+        return match
       })
+      
+      console.log('Componentes filtrados:', filtrados)
+      console.log('Mostrar resultados:', filtrados.length > 0)
       
       setComponentesEstoque(filtrados)
       // Sempre mostrar resultados se houver algum componente filtrado ou se não houver resultados (para mostrar mensagem)
@@ -1123,6 +1132,15 @@ export default function ComponentesGruaPage() {
                 )}
               </div>
               
+              {/* Debug info - remover depois */}
+              {process.env.NODE_ENV === 'development' && (
+                <div className="text-xs text-gray-400 mt-1">
+                  Debug: mostrarResultadosBusca={mostrarResultadosBusca.toString()}, 
+                  componentesEstoque.length={componentesEstoque.length}, 
+                  buscaComponente.length={buscaComponente.length}
+                </div>
+              )}
+              
               {/* Lista de resultados da busca */}
               {mostrarResultadosBusca && componentesEstoque.length > 0 && (
                 <div className="absolute z-[100] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -1139,7 +1157,7 @@ export default function ComponentesGruaPage() {
                       </div>
                       {comp.estoque ? (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Disponível: {comp.estoque.quantidade_disponivel ?? 0} {comp.unidade_medida || 'unidade(s)'}
+                          Disponível: {comp.estoque.quantidade_disponivel ?? comp.estoque[0]?.quantidade_disponivel ?? 0} {comp.unidade_medida || 'unidade(s)'}
                           {comp.valor_unitario && (
                             <span className="ml-2">• R$ {comp.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           )}

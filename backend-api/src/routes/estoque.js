@@ -104,55 +104,6 @@ router.get('/', authenticateToken, requirePermission('estoque:visualizar'), asyn
     const offset = (page - 1) * limit
     const { categoria_id, status, tipo_item, localizacao_tipo } = req.query
 
-    // Se tipo_item for 'componente', buscar componentes
-    if (tipo_item === 'componente') {
-      let query = supabaseAdmin
-        .from('grua_componentes')
-        .select(`
-          *,
-          grua:gruas(id, name, modelo, fabricante),
-          obra:obras(id, nome),
-          estoque:estoque!estoque_componente_id_fkey(
-            quantidade_atual,
-            quantidade_reservada,
-            quantidade_disponivel,
-            valor_total,
-            ultima_movimentacao
-          )
-        `, { count: 'exact' })
-
-      if (status) {
-        query = query.eq('status', status)
-      }
-      if (localizacao_tipo) {
-        query = query.eq('localizacao_tipo', localizacao_tipo)
-      }
-
-      query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
-
-      const { data, error, count } = await query
-
-      if (error) {
-        return res.status(500).json({
-          error: 'Erro ao buscar componentes',
-          message: error.message
-        })
-      }
-
-      const totalPages = Math.ceil(count / limit)
-
-      return res.json({
-        success: true,
-        data: data || [],
-        pagination: {
-          page,
-          limit,
-          total: count,
-          pages: totalPages
-        }
-      })
-    }
-
     // Buscar produtos (comportamento padrão)
     let query = supabaseAdmin
       .from('produtos')
@@ -176,6 +127,10 @@ router.get('/', authenticateToken, requirePermission('estoque:visualizar'), asyn
     }
     if (status) {
       query = query.eq('status', status)
+    }
+    // Se tipo_item for 'componente', filtrar por classificacao_tipo
+    if (tipo_item === 'componente') {
+      query = query.eq('classificacao_tipo', 'componente')
     }
 
     query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
