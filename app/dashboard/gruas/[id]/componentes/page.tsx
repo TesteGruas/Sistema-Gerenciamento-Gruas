@@ -248,17 +248,33 @@ export default function ComponentesGruaPage() {
         limit: 50
       })
 
-      console.log('Resposta da API de estoque:', response)
-      
       // Verificar se a resposta tem a estrutura esperada
       const dados = Array.isArray(response?.data) ? response.data : []
-      console.log('Dados recebidos:', dados)
-      console.log('Termo de busca:', termo)
       
       // Filtrar componentes que correspondem ao termo de busca
       // A API retorna produtos com estrutura: { id, nome, descricao, classificacao_tipo, estoque: {...} }
       const filtrados = dados.filter((comp: any) => {
         if (!comp) return false
+        
+        // Filtrar apenas itens com estoque disponível > 0
+        // A API pode retornar estoque como objeto único ou array
+        const estoqueDisponivel = Array.isArray(comp.estoque)
+          ? comp.estoque[0]?.quantidade_disponivel ?? 0
+          : comp.estoque?.quantidade_disponivel ?? 0
+        
+        // Debug temporário
+        if (process.env.NODE_ENV === 'development' && comp.nome?.includes('Torre')) {
+          console.log('🔍 Debug estoque:', {
+            nome: comp.nome,
+            estoque: comp.estoque,
+            estoqueDisponivel,
+            isArray: Array.isArray(comp.estoque)
+          })
+        }
+        
+        if (estoqueDisponivel <= 0) {
+          return false
+        }
         
         const nome = String(comp.nome || '').toLowerCase()
         const descricao = String(comp.descricao || '').toLowerCase()
@@ -271,9 +287,6 @@ export default function ComponentesGruaPage() {
         
         return match
       })
-      
-      console.log('Componentes filtrados:', filtrados)
-      console.log('Mostrar resultados:', filtrados.length > 0)
       
       setComponentesEstoque(filtrados)
       // Sempre mostrar resultados se houver algum componente filtrado ou se não houver resultados (para mostrar mensagem)
@@ -294,13 +307,25 @@ export default function ComponentesGruaPage() {
 
   // Selecionar componente do estoque
   const selecionarComponenteEstoque = (componente: any) => {
+    // Obter quantidade disponível do estoque
+    // A API pode retornar estoque como objeto único ou array
+    const estoqueDisponivel = Array.isArray(componente.estoque) 
+      ? componente.estoque[0]?.quantidade_disponivel ?? 0
+      : componente.estoque?.quantidade_disponivel ?? componente.quantidade_disponivel ?? 0
+    
+    // Validar se há estoque disponível antes de permitir seleção
+    if (estoqueDisponivel <= 0) {
+      toast({
+        title: "Estoque indisponível",
+        description: `O componente "${componente.nome}" não possui estoque disponível (${estoqueDisponivel} unidades).`,
+        variant: "destructive"
+      })
+      return
+    }
+    
     setComponenteSelecionado(componente)
     setBuscaComponente(componente.nome)
     setMostrarResultadosBusca(false)
-    
-    // Obter quantidade disponível do estoque
-    // A API retorna estoque como objeto único, não array
-    const estoqueDisponivel = componente.estoque?.quantidade_disponivel ?? componente.quantidade_disponivel ?? 0
     
     // Extrair dimensões da descrição se disponível (formato pode variar)
     const descricao = componente.descricao || ''
@@ -357,10 +382,23 @@ export default function ComponentesGruaPage() {
   const handleCreateComponente = async () => {
     // Validar estoque se componente foi selecionado do estoque
     if (componenteSelecionado && componenteForm.componente_estoque_id) {
-      // A API retorna estoque como objeto único, não array
-      const estoqueDisponivel = componenteSelecionado.estoque?.quantidade_disponivel ?? 
-                                 componenteSelecionado.quantidade_disponivel ?? 0
+      // A API pode retornar estoque como objeto único ou array
+      const estoqueDisponivel = Array.isArray(componenteSelecionado.estoque)
+        ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
+        : componenteSelecionado.estoque?.quantidade_disponivel ?? 
+          componenteSelecionado.quantidade_disponivel ?? 0
       
+      // Validar se há estoque disponível
+      if (estoqueDisponivel <= 0) {
+        toast({
+          title: "Estoque indisponível",
+          description: `O componente "${componenteSelecionado.nome}" não possui estoque disponível. Não é possível adicionar componentes sem estoque.`,
+          variant: "destructive"
+        })
+        return
+      }
+      
+      // Validar se a quantidade solicitada não excede o estoque disponível
       if (componenteForm.quantidade_total > estoqueDisponivel) {
         toast({
           title: "Estoque insuficiente",
@@ -1132,15 +1170,6 @@ export default function ComponentesGruaPage() {
                 )}
               </div>
               
-              {/* Debug info - remover depois */}
-              {process.env.NODE_ENV === 'development' && (
-                <div className="text-xs text-gray-400 mt-1">
-                  Debug: mostrarResultadosBusca={mostrarResultadosBusca.toString()}, 
-                  componentesEstoque.length={componentesEstoque.length}, 
-                  buscaComponente.length={buscaComponente.length}
-                </div>
-              )}
-              
               {/* Lista de resultados da busca */}
               {mostrarResultadosBusca && componentesEstoque.length > 0 && (
                 <div className="absolute z-[100] w-full mt-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg max-h-60 overflow-y-auto">
@@ -1157,7 +1186,7 @@ export default function ComponentesGruaPage() {
                       </div>
                       {comp.estoque ? (
                         <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                          Disponível: {comp.estoque.quantidade_disponivel ?? comp.estoque[0]?.quantidade_disponivel ?? 0} {comp.unidade_medida || 'unidade(s)'}
+                          Disponível: {Array.isArray(comp.estoque) ? comp.estoque[0]?.quantidade_disponivel ?? 0 : comp.estoque.quantidade_disponivel ?? 0} {comp.unidade_medida || 'unidade(s)'}
                           {comp.valor_unitario && (
                             <span className="ml-2">• R$ {comp.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                           )}
@@ -1175,19 +1204,55 @@ export default function ComponentesGruaPage() {
               )}
             </div>
 
-            {componenteSelecionado && (
-              <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <div className="text-sm font-medium text-blue-900">
-                  Componente selecionado: {componenteSelecionado.nome}
+            {componenteSelecionado && (() => {
+              const estoqueDisponivel = Array.isArray(componenteSelecionado.estoque)
+                ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
+                : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0
+              
+              // Se não houver estoque, mostrar aviso e limpar seleção
+              if (estoqueDisponivel <= 0) {
+                return (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-md">
+                    <div className="text-sm font-medium text-red-900">
+                      ⚠️ Componente sem estoque disponível
+                    </div>
+                    <div className="text-xs text-red-700 mt-1">
+                      O componente "{componenteSelecionado.nome}" não possui estoque disponível ({estoqueDisponivel} unidades).
+                    </div>
+                    <div className="text-xs text-red-700 mt-1">
+                      Por favor, selecione outro componente ou busque por um item com estoque disponível.
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-2"
+                      onClick={() => {
+                        setComponenteSelecionado(null)
+                        setBuscaComponente("")
+                        resetComponenteForm()
+                      }}
+                    >
+                      Limpar seleção
+                    </Button>
+                  </div>
+                )
+              }
+              
+              return (
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                  <div className="text-sm font-medium text-blue-900">
+                    Componente selecionado: {componenteSelecionado.nome}
+                  </div>
+                  <div className="text-xs text-blue-700 mt-1">
+                    Estoque disponível: {estoqueDisponivel} unidades
+                  </div>
+                  <div className="text-xs text-blue-700 mt-1">
+                    Você pode editar os campos abaixo antes de adicionar
+                  </div>
                 </div>
-                <div className="text-xs text-blue-700 mt-1">
-                  Estoque disponível: {componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0} unidades
-                </div>
-                <div className="text-xs text-blue-700 mt-1">
-                  Você pode editar os campos abaixo antes de adicionar
-                </div>
-              </div>
-            )}
+              )
+            })()}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -1326,21 +1391,45 @@ export default function ComponentesGruaPage() {
                   id="quantidade_total"
                   type="number"
                   min="1"
-                  max={componenteSelecionado ? (componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1) : undefined}
+                  max={componenteSelecionado ? (
+                    Array.isArray(componenteSelecionado.estoque)
+                      ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 1
+                      : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1
+                  ) : undefined}
                   value={componenteForm.quantidade_total}
                   onChange={(e) => {
                     const qtd = parseInt(e.target.value) || 1
+                    const estoqueMax = componenteSelecionado ? (
+                      Array.isArray(componenteSelecionado.estoque)
+                        ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 1
+                        : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1
+                    ) : undefined
+                    const qtdFinal = estoqueMax ? Math.min(qtd, estoqueMax) : qtd
+                    
                     setComponenteForm({ 
                       ...componenteForm, 
-                      quantidade_total: qtd,
-                      quantidade_disponivel: qtd // Sincronizar quantidade disponível com total
+                      quantidade_total: qtdFinal,
+                      quantidade_disponivel: qtdFinal // Sincronizar quantidade disponível com total
                     })
+                    
+                    // Mostrar aviso se tentar exceder estoque
+                    if (estoqueMax && qtd > estoqueMax) {
+                      toast({
+                        title: "Quantidade excedida",
+                        description: `Estoque disponível: ${estoqueMax}. A quantidade foi ajustada para ${estoqueMax}.`,
+                        variant: "destructive"
+                      })
+                    }
                   }}
                   required
                 />
                 {componenteSelecionado && (
                   <p className="text-xs text-gray-500 mt-1">
-                    Máximo: {componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0}
+                    Máximo disponível: {
+                      Array.isArray(componenteSelecionado.estoque)
+                        ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
+                        : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0
+                    } {componenteSelecionado.unidade_medida || 'unidade(s)'}
                   </p>
                 )}
               </div>
@@ -1528,7 +1617,19 @@ export default function ComponentesGruaPage() {
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button type="submit">
+              <Button 
+                type="submit"
+                disabled={
+                  componenteSelecionado && componenteForm.componente_estoque_id
+                    ? (() => {
+                        const estoqueDisponivel = Array.isArray(componenteSelecionado.estoque)
+                          ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
+                          : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0
+                        return estoqueDisponivel <= 0 || componenteForm.quantidade_total > estoqueDisponivel
+                      })()
+                    : false
+                }
+              >
                 Adicionar Componente
               </Button>
             </div>

@@ -396,12 +396,56 @@ router.post('/', async (req, res) => {
           }
         }
 
-        // Buscar estoque do componente original
-        const { data: estoqueAtual, error: estoqueError } = await supabaseAdmin
-          .from('estoque')
-          .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
-          .eq('componente_id', componente_estoque_id)
-          .single()
+        // Verificar se componente_estoque_id é um produto (começa com "P") ou componente de grua (número)
+        const isProduto = typeof componente_estoque_id === 'string' && componente_estoque_id.startsWith('P')
+        
+        let estoqueAtual = null
+        let estoqueError = null
+        let valorUnitario = value.valor_unitario || 0
+
+        if (isProduto) {
+          // É um produto do estoque - buscar por produto_id
+          const { data: produto } = await supabaseAdmin
+            .from('produtos')
+            .select('id, nome, valor_unitario')
+            .eq('id', componente_estoque_id)
+            .single()
+
+          if (produto) {
+            valorUnitario = produto.valor_unitario || valorUnitario
+
+            // Buscar estoque do produto
+            const estoqueResult = await supabaseAdmin
+              .from('estoque')
+              .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
+              .eq('produto_id', componente_estoque_id)
+              .single()
+
+            estoqueAtual = estoqueResult.data
+            estoqueError = estoqueResult.error
+          }
+        } else {
+          // É um componente de grua - buscar por componente_id
+          const estoqueResult = await supabaseAdmin
+            .from('estoque')
+            .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
+            .eq('componente_id', componente_estoque_id)
+            .single()
+
+          estoqueAtual = estoqueResult.data
+          estoqueError = estoqueResult.error
+
+          // Obter dados do componente original para valor unitário
+          const { data: componenteOriginal } = await supabaseAdmin
+            .from('grua_componentes')
+            .select('valor_unitario')
+            .eq('id', componente_estoque_id)
+            .single()
+
+          if (componenteOriginal) {
+            valorUnitario = componenteOriginal.valor_unitario || valorUnitario
+          }
+        }
 
         if (!estoqueError && estoqueAtual) {
           // Verificar se há estoque disponível suficiente
@@ -421,28 +465,39 @@ router.post('/', async (req, res) => {
           // Calcular nova quantidade
           const novaQuantidade = estoqueAtual.quantidade_atual - quantidade_total
           const novaQuantidadeDisponivel = estoqueAtual.quantidade_disponivel - quantidade_total
-
-          // Obter dados do componente original para valor unitário
-          const { data: componenteOriginal } = await supabaseAdmin
-            .from('grua_componentes')
-            .select('valor_unitario')
-            .eq('id', componente_estoque_id)
-            .single()
-
-          const valorUnitario = componenteOriginal?.valor_unitario || value.valor_unitario || 0
           const valorTotal = quantidade_total * valorUnitario
 
           // Atualizar estoque
-          const { error: updateEstoqueError } = await supabaseAdmin
-            .from('estoque')
-            .update({
-              quantidade_atual: novaQuantidade,
-              quantidade_disponivel: novaQuantidadeDisponivel,
-              valor_total: novaQuantidade * valorUnitario,
-              ultima_movimentacao: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-            .eq('componente_id', componente_estoque_id)
+          let updateEstoqueError = null
+          if (isProduto) {
+            // Atualizar estoque do produto
+            const updateResult = await supabaseAdmin
+              .from('estoque')
+              .update({
+                quantidade_atual: novaQuantidade,
+                quantidade_disponivel: novaQuantidadeDisponivel,
+                valor_total: novaQuantidade * valorUnitario,
+                ultima_movimentacao: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('produto_id', componente_estoque_id)
+            
+            updateEstoqueError = updateResult.error
+          } else {
+            // Atualizar estoque do componente
+            const updateResult = await supabaseAdmin
+              .from('estoque')
+              .update({
+                quantidade_atual: novaQuantidade,
+                quantidade_disponivel: novaQuantidadeDisponivel,
+                valor_total: novaQuantidade * valorUnitario,
+                ultima_movimentacao: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .eq('componente_id', componente_estoque_id)
+            
+            updateEstoqueError = updateResult.error
+          }
 
           if (updateEstoqueError) {
             console.error('Erro ao atualizar estoque:', updateEstoqueError)
@@ -450,30 +505,37 @@ router.post('/', async (req, res) => {
           }
 
           // Registrar movimentação de estoque
+          const movimentacaoData = {
+            tipo: 'Saída',
+            quantidade: quantidade_total.toString(),
+            valor_unitario: valorUnitario.toString(),
+            valor_total: valorTotal.toString(),
+            data_movimentacao: new Date().toISOString(),
+            responsavel_id: responsavel_id,
+            observacoes: `Componente adicionado à grua ${value.grua_id}`,
+            status: 'Confirmada',
+            motivo: `Adição de componente à grua`,
+            created_at: new Date().toISOString()
+          }
+
+          if (isProduto) {
+            movimentacaoData.produto_id = componente_estoque_id
+          } else {
+            movimentacaoData.componente_id = componente_estoque_id
+          }
+
           const { error: movimentacaoError } = await supabaseAdmin
             .from('movimentacoes_estoque')
-            .insert({
-              componente_id: componente_estoque_id,
-              tipo: 'Saída',
-              quantidade: quantidade_total.toString(),
-              valor_unitario: valorUnitario.toString(),
-              valor_total: valorTotal.toString(),
-              data_movimentacao: new Date().toISOString(),
-              responsavel_id: responsavel_id,
-              observacoes: `Componente adicionado à grua ${value.grua_id}`,
-              status: 'Confirmada',
-              motivo: `Adição de componente à grua`,
-              created_at: new Date().toISOString()
-            })
+            .insert(movimentacaoData)
 
           if (movimentacaoError) {
             console.error('Erro ao registrar movimentação:', movimentacaoError)
             // Não falhar se houver erro na movimentação, apenas logar
           } else {
-            console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do componente ${componente_estoque_id}`)
+            console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
           }
         } else {
-          console.log(`ℹ️ Componente ${componente_estoque_id} não possui registro no estoque, pulando movimentação`)
+          console.log(`ℹ️ ${isProduto ? 'Produto' : 'Componente'} ${componente_estoque_id} não possui registro no estoque, pulando movimentação`)
         }
       } catch (error) {
         console.error('Erro ao decrementar estoque:', error)
