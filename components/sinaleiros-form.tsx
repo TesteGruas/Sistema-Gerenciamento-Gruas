@@ -180,13 +180,8 @@ export function SinaleirosForm({
   }
 
   const handleRemoveSinaleiro = (id: string) => {
-    const sinaleiro = sinaleiros.find(s => s.id === id)
-    // Não permitir remover nenhum sinaleiro (sempre deve ter 2)
-    toast({
-      title: "Atenção",
-      description: "Não é possível remover sinaleiros. São obrigatórios 2 sinaleiros (Interno + Cliente).",
-      variant: "destructive"
-    })
+    // Permitir remover sinaleiros (não são mais obrigatórios)
+    setSinaleiros(prevSinaleiros => prevSinaleiros.filter(s => s.id !== id))
   }
 
   const handleUpdateSinaleiro = (id: string, field: keyof Sinaleiro, value: any) => {
@@ -207,28 +202,8 @@ export function SinaleirosForm({
       e.stopPropagation()
     }
     
-    // Validar sinaleiro interno obrigatório
-    const principal = sinaleiros.find(s => s.tipo === 'principal' || s.tipo_vinculo === 'interno')
-    if (!principal || !principal.nome) {
-      toast({
-        title: "Erro",
-        description: "Sinaleiro interno é obrigatório. Selecione um funcionário.",
-        variant: "destructive"
-      })
-      return
-    }
+    // Sinaleiros não são mais obrigatórios - remover validações
     
-    // Validar sinaleiro cliente (reserva)
-    const cliente = sinaleiros.find(s => s.tipo === 'reserva' || s.tipo_vinculo === 'cliente')
-    if (!cliente || !cliente.nome || (!cliente.cpf && !cliente.rg && !cliente.rg_cpf)) {
-      toast({
-        title: "Erro",
-        description: "Sinaleiro indicado pelo cliente é obrigatório. Preencha nome e pelo menos CPF ou RG.",
-        variant: "destructive"
-      })
-      return
-    }
-
     // Validar documentos completos para sinaleiros externos (cliente)
     // Apenas validar se o sinaleiro já foi salvo (tem UUID válido)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -267,19 +242,22 @@ export function SinaleirosForm({
       // Converter Sinaleiro para formato do backend
       // Remover IDs temporários (interno_*, cliente_*, new_*) - apenas UUIDs válidos ou undefined
       const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-      const sinaleirosParaEnviar = sinaleiros.map(s => {
-        // Se o ID não é um UUID válido, enviar como undefined (criar novo)
-        const idValido = s.id && uuidRegex.test(s.id) ? s.id : undefined
-        
-        return {
-          id: idValido,
-          nome: s.nome,
-          rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-          telefone: s.telefone,
-          email: s.email,
-          tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
-        }
-      })
+      // Filtrar apenas sinaleiros com nome preenchido (sinaleiros não são mais obrigatórios, mas se preenchidos devem ter nome)
+      const sinaleirosParaEnviar = sinaleiros
+        .filter(s => s.nome && s.nome.trim() !== '') // Apenas sinaleiros com nome
+        .map(s => {
+          // Se o ID não é um UUID válido, enviar como undefined (criar novo)
+          const idValido = s.id && uuidRegex.test(s.id) ? s.id : undefined
+          
+          return {
+            id: idValido,
+            nome: s.nome,
+            rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
+            telefone: s.telefone,
+            email: s.email,
+            tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+          }
+        })
       
       console.log('📤 Enviando sinaleiros para o backend:', sinaleirosParaEnviar)
       console.log('📤 Obra ID:', obraId)
@@ -378,7 +356,7 @@ export function SinaleirosForm({
             {sinaleiro.tipo_vinculo === 'interno' && (
               <div className="space-y-2">
                 <Label className="text-sm font-medium">
-                  Buscar Funcionário (Sinaleiro) <span className="text-red-500">*</span>
+                  Buscar Funcionário (Sinaleiro)
                 </Label>
                 <FuncionarioSearch
                   onFuncionarioSelect={(funcionario) => {
@@ -449,7 +427,7 @@ export function SinaleirosForm({
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label>
-                    Nome <span className="text-red-500">*</span>
+                    Nome
                   </Label>
                   <Input
                     value={sinaleiro.nome}

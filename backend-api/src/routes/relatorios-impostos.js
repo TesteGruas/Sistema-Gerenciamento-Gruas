@@ -59,6 +59,11 @@ router.get('/:mes/:ano', authenticateToken, requirePermission('financeiro:visual
 
     // Formatar competência no padrão YYYY-MM
     const competencia = `${ano}-${mes.padStart(2, '0')}`;
+    
+    // Calcular data início e fim do mês
+    const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
+    const ultimoDia = new Date(anoNum, mesNum, 0).getDate();
+    const dataFim = `${ano}-${mes.padStart(2, '0')}-${ultimoDia}`;
 
     // Buscar impostos da tabela impostos_financeiros
     const { data: impostosFinanceiros, error: impostosError } = await supabaseAdmin
@@ -76,14 +81,91 @@ router.get('/:mes/:ano', authenticateToken, requirePermission('financeiro:visual
       });
     }
 
+    // Buscar impostos das notas fiscais do período
+    const { data: notasFiscais, error: notasError } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select(`
+        id,
+        data_emissao,
+        tipo,
+        notas_fiscais_itens (
+          valor_icms,
+          valor_ipi,
+          valor_issqn,
+          valor_inss,
+          valor_cbs,
+          preco_total
+        )
+      `)
+      .gte('data_emissao', dataInicio)
+      .lte('data_emissao', dataFim)
+      .in('status', ['pendente', 'paga']);
+
+    if (notasError) {
+      console.error('Erro ao buscar impostos das notas fiscais:', notasError);
+    }
+
+    // Agregar impostos das notas fiscais
+    const impostosNotasFiscais = {
+      ICMS: { total: 0, quantidade: 0 },
+      IPI: { total: 0, quantidade: 0 },
+      ISS: { total: 0, quantidade: 0 },
+      INSS: { total: 0, quantidade: 0 },
+      CBS: { total: 0, quantidade: 0 }
+    };
+
+    if (notasFiscais) {
+      notasFiscais.forEach(nota => {
+        if (nota.notas_fiscais_itens && Array.isArray(nota.notas_fiscais_itens)) {
+          nota.notas_fiscais_itens.forEach(item => {
+            if (item.valor_icms) {
+              impostosNotasFiscais.ICMS.total += parseFloat(item.valor_icms || 0);
+              impostosNotasFiscais.ICMS.quantidade += 1;
+            }
+            if (item.valor_ipi) {
+              impostosNotasFiscais.IPI.total += parseFloat(item.valor_ipi || 0);
+              impostosNotasFiscais.IPI.quantidade += 1;
+            }
+            if (item.valor_issqn) {
+              impostosNotasFiscais.ISS.total += parseFloat(item.valor_issqn || 0);
+              impostosNotasFiscais.ISS.quantidade += 1;
+            }
+            if (item.valor_inss) {
+              impostosNotasFiscais.INSS.total += parseFloat(item.valor_inss || 0);
+              impostosNotasFiscais.INSS.quantidade += 1;
+            }
+            if (item.valor_cbs) {
+              impostosNotasFiscais.CBS.total += parseFloat(item.valor_cbs || 0);
+              impostosNotasFiscais.CBS.quantidade += 1;
+            }
+          });
+        }
+      });
+    }
+
+    // Adicionar impostos das notas fiscais à lista de impostos
+    const impostosDasNotas = [];
+    Object.keys(impostosNotasFiscais).forEach(tipo => {
+      const dados = impostosNotasFiscais[tipo];
+      if (dados.total > 0) {
+        impostosDasNotas.push({
+          tipo,
+          descricao: `${tipo} das Notas Fiscais`,
+          valor: dados.total,
+          valor_base: dados.total, // Aproximação
+          aliquota: 0, // Será calculado se necessário
+          competencia,
+          status: 'pendente',
+          origem: 'notas_fiscais',
+          quantidade: dados.quantidade
+        });
+      }
+    });
+
     // Se não houver impostos cadastrados, calcular estimativa baseada nas vendas e serviços
     let impostosCalculados = [];
     
     if (!impostosFinanceiros || impostosFinanceiros.length === 0) {
-      // Calcular data início e fim do mês
-      const dataInicio = `${ano}-${mes.padStart(2, '0')}-01`;
-      const ultimoDia = new Date(anoNum, mesNum, 0).getDate();
-      const dataFim = `${ano}-${mes.padStart(2, '0')}-${ultimoDia}`;
 
       // Buscar vendas do mês
       const { data: vendas } = await supabaseAdmin
@@ -164,10 +246,19 @@ router.get('/:mes/:ano', authenticateToken, requirePermission('financeiro:visual
       ];
     }
 
-    // Usar dados reais da tabela se disponíveis, senão usar calculados
-    const impostos = impostosFinanceiros && impostosFinanceiros.length > 0 
-      ? impostosFinanceiros 
-      : impostosCalculados;
+    // Combinar impostos: primeiro os da tabela, depois os calculados, depois os das notas fiscais
+    const impostos = [];
+    
+    if (impostosFinanceiros && impostosFinanceiros.length > 0) {
+      impostos.push(...impostosFinanceiros);
+    } else if (impostosCalculados && impostosCalculados.length > 0) {
+      impostos.push(...impostosCalculados);
+    }
+    
+    // Adicionar impostos das notas fiscais
+    if (impostosDasNotas && impostosDasNotas.length > 0) {
+      impostos.push(...impostosDasNotas);
+    }
 
     // Agrupar por tipo de imposto
     const impostosPorTipo = {};

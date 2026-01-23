@@ -85,7 +85,7 @@ const aluguelSchema = Joi.object({
   tipo_sinal: Joi.string().valid('caucao', 'fiador', 'outros').allow(null, '').optional(),
   valor_deposito: Joi.number().min(0).allow(null).optional(),
   periodo_multa: Joi.number().integer().min(0).allow(null).optional(),
-  contrato_arquivo: Joi.string().allow(null, '').optional(),
+  // contrato_arquivo removido - arquivos são gerenciados pela tabela arquivos_alugueis
   observacoes: Joi.string().allow('', null).optional()
 })
 
@@ -643,18 +643,71 @@ router.post('/', requirePermission('rh:editar'), async (req, res) => {
 
     const userId = req.user?.id
 
-    // Criar aluguel
-    const { data: aluguel, error: aluguelError } = await supabaseAdmin
+    // Campos básicos que sempre devem existir na tabela
+    const camposBasicos = [
+      'residencia_id',
+      'funcionario_id',
+      'data_inicio',
+      'data_fim',
+      'valor_mensal',
+      'dia_vencimento',
+      'desconto_folha',
+      'porcentagem_desconto',
+      'observacoes',
+      'status'
+    ]
+
+    // Campos opcionais que podem não existir se a migration não foi executada
+    const camposOpcionais = [
+      'tipo_sinal',
+      'valor_deposito',
+      'periodo_multa'
+    ]
+
+    // Preparar dados básicos
+    const dadosBasicos = {}
+    camposBasicos.forEach(campo => {
+      if (value[campo] !== undefined) {
+        dadosBasicos[campo] = value[campo]
+      }
+    })
+
+    // Tentar inserir com todos os campos primeiro
+    let aluguelData = { ...dadosBasicos }
+    camposOpcionais.forEach(campo => {
+      if (value[campo] !== undefined) {
+        aluguelData[campo] = value[campo]
+      }
+    })
+
+    // Criar aluguel - tentar com todos os campos primeiro
+    let { data: aluguel, error: aluguelError } = await supabaseAdmin
       .from('alugueis_residencias')
       .insert({
-        ...value,
+        ...aluguelData,
         created_by: userId,
         updated_by: userId
       })
       .select()
       .single()
 
-    if (aluguelError) throw aluguelError
+    // Se der erro de coluna não encontrada, tentar novamente apenas com campos básicos
+    if (aluguelError && aluguelError.message && aluguelError.message.includes('column')) {
+      const { data: aluguelRetry, error: aluguelErrorRetry } = await supabaseAdmin
+        .from('alugueis_residencias')
+        .insert({
+          ...dadosBasicos,
+          created_by: userId,
+          updated_by: userId
+        })
+        .select()
+        .single()
+      
+      if (aluguelErrorRetry) throw aluguelErrorRetry
+      aluguel = aluguelRetry
+    } else if (aluguelError) {
+      throw aluguelError
+    }
 
     // Atualizar disponibilidade da residência
     await supabaseAdmin
@@ -711,7 +764,7 @@ router.put('/:id', requirePermission('rh:editar'), async (req, res) => {
       tipo_sinal: Joi.string().valid('caucao', 'fiador', 'outros').allow(null, '').optional(),
       valor_deposito: Joi.number().min(0).allow(null).optional(),
       periodo_multa: Joi.number().integer().min(0).allow(null).optional(),
-      contrato_arquivo: Joi.string().allow(null, '').optional(),
+      // contrato_arquivo removido - arquivos são gerenciados pela tabela arquivos_alugueis
       observacoes: Joi.string().allow('', null).optional(),
       status: Joi.string().valid('ativo', 'encerrado', 'pendente', 'cancelado').optional()
     })
@@ -728,16 +781,87 @@ router.put('/:id', requirePermission('rh:editar'), async (req, res) => {
 
     const userId = req.user?.id
 
-    const { data, error } = await supabaseAdmin
+    // Campos básicos que sempre devem existir na tabela
+    const camposBasicos = [
+      'residencia_id',
+      'funcionario_id',
+      'data_inicio',
+      'data_fim',
+      'valor_mensal',
+      'dia_vencimento',
+      'desconto_folha',
+      'porcentagem_desconto',
+      'observacoes',
+      'status'
+    ]
+
+    // Campos opcionais que podem não existir se a migration não foi executada
+    const camposOpcionais = [
+      'tipo_sinal',
+      'valor_deposito',
+      'periodo_multa'
+    ]
+
+    // Preparar dados básicos
+    const dadosBasicos = {}
+    camposBasicos.forEach(campo => {
+      if (value[campo] !== undefined) {
+        dadosBasicos[campo] = value[campo]
+      }
+    })
+
+    // Tentar atualizar com todos os campos primeiro
+    let updateData = { ...dadosBasicos }
+    camposOpcionais.forEach(campo => {
+      if (value[campo] !== undefined) {
+        updateData[campo] = value[campo]
+      }
+    })
+
+    // Atualizar aluguel - tentar com todos os campos primeiro
+    let { data, error } = await supabaseAdmin
       .from('alugueis_residencias')
       .update({
-        ...value,
+        ...updateData,
         updated_by: userId,
         updated_at: new Date().toISOString()
       })
       .eq('id', id)
       .select()
       .single()
+
+    // Se der erro de coluna não encontrada, tentar novamente apenas com campos básicos
+    if (error && error.message && error.message.includes('column')) {
+      const { data: dataRetry, error: errorRetry } = await supabaseAdmin
+        .from('alugueis_residencias')
+        .update({
+          ...dadosBasicos,
+          updated_by: userId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', id)
+        .select()
+        .single()
+      
+      if (errorRetry) {
+        if (errorRetry.code === 'PGRST116') {
+          return res.status(404).json({ 
+            success: false,
+            error: 'Aluguel não encontrado' 
+          })
+        }
+        throw errorRetry
+      }
+      data = dataRetry
+    } else if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({ 
+          success: false,
+          error: 'Aluguel não encontrado' 
+        })
+      }
+      throw error
+    }
 
     if (error) {
       if (error.code === 'PGRST116') {

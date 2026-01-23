@@ -231,7 +231,7 @@ export const AlugueisAPI = {
         tipo_sinal: aluguel.contrato.tipoSinal || null,
         valor_deposito: aluguel.contrato.valorDeposito || null,
         periodo_multa: aluguel.contrato.periodoMulta || null,
-        contrato_arquivo: aluguel.contrato.contratoArquivo || null,
+        // contrato_arquivo removido - arquivos são gerenciados pela tabela arquivos_alugueis via uploadArquivos()
         observacoes: aluguel.observacoes || null
       }
 
@@ -269,7 +269,7 @@ export const AlugueisAPI = {
       if (dados.contrato?.tipoSinal !== undefined) payload.tipo_sinal = dados.contrato.tipoSinal || null
       if (dados.contrato?.valorDeposito !== undefined) payload.valor_deposito = dados.contrato.valorDeposito || null
       if (dados.contrato?.periodoMulta !== undefined) payload.periodo_multa = dados.contrato.periodoMulta || null
-      if (dados.contrato?.contratoArquivo !== undefined) payload.contrato_arquivo = dados.contrato.contratoArquivo || null
+      // contrato_arquivo removido - arquivos são gerenciados pela tabela arquivos_alugueis via uploadArquivos()
       if (dados.status) payload.status = dados.status
       if (dados.observacoes !== undefined) payload.observacoes = dados.observacoes || null
 

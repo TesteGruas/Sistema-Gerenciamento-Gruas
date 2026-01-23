@@ -153,6 +153,13 @@ export default function NotasFiscaisPage() {
     valor_icms?: number
     percentual_ipi?: number
     valor_ipi?: number
+    // Impostos de serviços
+    base_calculo_issqn?: number
+    aliquota_issqn?: number
+    valor_issqn?: number
+    valor_inss?: number
+    valor_cbs?: number
+    valor_liquido?: number
   }
 
   const [itens, setItens] = useState<NotaFiscalItem[]>([])
@@ -163,8 +170,60 @@ export default function NotasFiscaisPage() {
     unidade: 'UN',
     quantidade: 1,
     preco_unitario: 0,
-    preco_total: 0
+    preco_total: 0,
+    base_calculo_icms: 0,
+    percentual_icms: 0,
+    valor_icms: 0,
+    percentual_ipi: 0,
+    valor_ipi: 0,
+    base_calculo_issqn: 0,
+    aliquota_issqn: 0,
+    valor_issqn: 0,
+    valor_inss: 0,
+    valor_cbs: 0,
+    valor_liquido: 0
   })
+
+  // Função para calcular impostos automaticamente
+  const calcularImpostos = (item: NotaFiscalItem): NotaFiscalItem => {
+    const novoItem = { ...item }
+    
+    // Calcular valor total
+    novoItem.preco_total = novoItem.quantidade * novoItem.preco_unitario
+    
+    // Calcular ICMS se base e percentual estiverem preenchidos
+    if (novoItem.base_calculo_icms && novoItem.percentual_icms) {
+      novoItem.valor_icms = (novoItem.base_calculo_icms * novoItem.percentual_icms) / 100
+    } else if (novoItem.percentual_icms && novoItem.preco_total) {
+      // Se não tiver base, usar o valor total como base
+      novoItem.base_calculo_icms = novoItem.preco_total
+      novoItem.valor_icms = (novoItem.preco_total * novoItem.percentual_icms) / 100
+    }
+    
+    // Calcular IPI se percentual estiver preenchido
+    if (novoItem.percentual_ipi && novoItem.preco_total) {
+      novoItem.valor_ipi = (novoItem.preco_total * novoItem.percentual_ipi) / 100
+    }
+    
+    // Calcular ISSQN se base e alíquota estiverem preenchidos
+    if (novoItem.base_calculo_issqn && novoItem.aliquota_issqn) {
+      novoItem.valor_issqn = (novoItem.base_calculo_issqn * novoItem.aliquota_issqn) / 100
+    } else if (novoItem.aliquota_issqn && novoItem.preco_total) {
+      // Se não tiver base, usar o valor total como base
+      novoItem.base_calculo_issqn = novoItem.preco_total
+      novoItem.valor_issqn = (novoItem.preco_total * novoItem.aliquota_issqn) / 100
+    }
+    
+    // Calcular valor líquido (valor total - todos os impostos)
+    const totalImpostos = (novoItem.valor_icms || 0) + 
+                         (novoItem.valor_ipi || 0) + 
+                         (novoItem.valor_issqn || 0) + 
+                         (novoItem.valor_inss || 0) + 
+                         (novoItem.valor_cbs || 0)
+    novoItem.valor_liquido = novoItem.preco_total - totalImpostos
+    
+    return novoItem
+  }
 
   useEffect(() => {
     carregarDados()
@@ -262,9 +321,30 @@ export default function NotasFiscaisPage() {
       })))
       
       // Carregar medições
-      const medicoesResponse = await medicoesMensaisApi.listar({ limit: 1000 })
-      if (medicoesResponse.success) {
-        setMedicoes(medicoesResponse.data || [])
+      try {
+        const medicoesResponse = await medicoesMensaisApi.listar({ limit: 1000 })
+        console.log('Resposta completa da API de medições:', medicoesResponse)
+        
+        if (medicoesResponse && medicoesResponse.success) {
+          // A resposta pode ter data diretamente ou dentro de data.data
+          const medicoesData = Array.isArray(medicoesResponse.data) 
+            ? medicoesResponse.data 
+            : (medicoesResponse.data?.data || [])
+          
+          console.log('Medições processadas:', medicoesData.length, 'medições encontradas')
+          setMedicoes(medicoesData)
+        } else {
+          console.warn('Resposta da API não indica sucesso:', medicoesResponse)
+          setMedicoes([])
+        }
+      } catch (error: any) {
+        console.error('Erro ao carregar medições:', error)
+        toast({
+          title: "Aviso",
+          description: "Não foi possível carregar as medições. Verifique se há medições cadastradas.",
+          variant: "default"
+        })
+        setMedicoes([])
       }
       
       // Carregar locações
@@ -316,6 +396,40 @@ export default function NotasFiscaisPage() {
     }
   }, [activeTab, currentPage, statusFilter, searchTerm, toast])
 
+  // Função helper para limpar dados antes de enviar (converter strings vazias para null)
+  const limparDadosNotaFiscal = (data: any) => {
+    const dadosLimpos: any = {}
+    
+    // Processar cada campo
+    Object.keys(data).forEach(key => {
+      const value = data[key]
+      
+      // Se for string vazia, tratar conforme o tipo de campo
+      if (value === '') {
+        // Campos de data vazios devem ser null
+        if (key.includes('data') || key.includes('vencimento') || key.includes('emissao')) {
+          dadosLimpos[key] = null
+        }
+        // Campos opcionais de texto vazios podem ser omitidos ou null
+        else if (key.includes('observacoes') || key.includes('descricao') || key.includes('serie')) {
+          dadosLimpos[key] = null
+        }
+        // Outros campos opcionais são omitidos
+        // (não adicionar ao objeto)
+      }
+      // Se for null ou undefined, manter como está
+      else if (value === null || value === undefined) {
+        dadosLimpos[key] = value
+      }
+      // Caso contrário, incluir o valor
+      else {
+        dadosLimpos[key] = value
+      }
+    })
+    
+    return dadosLimpos
+  }
+
   const handleCreate = async () => {
     try {
       // Validações obrigatórias
@@ -346,10 +460,13 @@ export default function NotasFiscaisPage() {
         return
       }
 
-      const response = await notasFiscaisApi.create({
+      // Limpar dados antes de enviar
+      const dadosLimpos = limparDadosNotaFiscal({
         ...formData,
         tipo: activeTab
       })
+
+      const response = await notasFiscaisApi.create(dadosLimpos)
       
       if (response.success && response.data?.id) {
         const notaId = response.data.id
@@ -358,10 +475,12 @@ export default function NotasFiscaisPage() {
         if (itens.length > 0) {
           try {
             for (const item of itens) {
-              await notasFiscaisApi.adicionarItem(notaId, {
+              // Limpar dados do item antes de enviar
+              const itemLimpo = limparDadosNotaFiscal({
                 ...item,
                 nota_fiscal_id: notaId
               })
+              await notasFiscaisApi.adicionarItem(notaId, itemLimpo)
             }
           } catch (itensError: any) {
             toast({
@@ -438,7 +557,10 @@ export default function NotasFiscaisPage() {
         return
       }
 
-      const response = await notasFiscaisApi.update(editingNota.id, formData)
+      // Limpar dados antes de enviar
+      const dadosLimpos = limparDadosNotaFiscal(formData)
+
+      const response = await notasFiscaisApi.update(editingNota.id, dadosLimpos)
       
       if (response.success) {
         // Atualizar itens
@@ -458,18 +580,18 @@ export default function NotasFiscaisPage() {
 
           // Adicionar ou atualizar itens
           for (const item of itens) {
+            // Limpar dados do item antes de enviar
+            const itemLimpo = limparDadosNotaFiscal({
+              ...item,
+              nota_fiscal_id: editingNota.id
+            })
+            
             if (item.id) {
               // Atualizar item existente
-              await notasFiscaisApi.atualizarItem(item.id, {
-                ...item,
-                nota_fiscal_id: editingNota.id
-              })
+              await notasFiscaisApi.atualizarItem(item.id, itemLimpo)
             } else {
               // Adicionar novo item
-              await notasFiscaisApi.adicionarItem(editingNota.id, {
-                ...item,
-                nota_fiscal_id: editingNota.id
-              })
+              await notasFiscaisApi.adicionarItem(editingNota.id, itemLimpo)
             }
           }
         } catch (itensError: any) {
@@ -574,8 +696,20 @@ export default function NotasFiscaisPage() {
           percentual_icms: item.percentual_icms ? parseFloat(item.percentual_icms) : undefined,
           valor_icms: item.valor_icms ? parseFloat(item.valor_icms) : undefined,
           percentual_ipi: item.percentual_ipi ? parseFloat(item.percentual_ipi) : undefined,
-          valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined
+          valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined,
+          base_calculo_issqn: item.base_calculo_issqn ? parseFloat(item.base_calculo_issqn) : undefined,
+          aliquota_issqn: item.aliquota_issqn ? parseFloat(item.aliquota_issqn) : undefined,
+          valor_issqn: item.valor_issqn ? parseFloat(item.valor_issqn) : undefined,
+          valor_inss: item.valor_inss ? parseFloat(item.valor_inss) : undefined,
+          valor_cbs: item.valor_cbs ? parseFloat(item.valor_cbs) : undefined,
+          valor_liquido: item.valor_liquido ? parseFloat(item.valor_liquido) : undefined
         })))
+        
+        // Recalcular valor total da nota fiscal baseado nos itens
+        const totalItens = itensResponse.data.reduce((sum: number, item: any) => {
+          return sum + parseFloat(item.preco_total || 0)
+        }, 0)
+        setFormData(prev => ({ ...prev, valor_total: totalItens }))
       }
     } catch (error) {
       console.error('Erro ao carregar itens:', error)
@@ -1333,16 +1467,27 @@ export default function NotasFiscaisPage() {
                           onValueChange={(value) => setFormData({ ...formData, medicao_id: parseInt(value) })}
                         >
                           <SelectTrigger>
-                            <SelectValue placeholder="Selecione a medição" />
+                            <SelectValue placeholder={medicoes.length === 0 ? "Nenhuma medição disponível" : "Selecione a medição"} />
                           </SelectTrigger>
                           <SelectContent>
-                            {medicoes.map(medicao => (
-                              <SelectItem key={medicao.id} value={medicao.id.toString()}>
-                                {medicao.numero} - {medicao.periodo}
-                              </SelectItem>
-                            ))}
+                            {medicoes.length === 0 ? (
+                              <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                                Nenhuma medição disponível
+                              </div>
+                            ) : (
+                              medicoes.map(medicao => (
+                                <SelectItem key={medicao.id} value={medicao.id.toString()}>
+                                  {medicao.numero} - {medicao.periodo}
+                                </SelectItem>
+                              ))
+                            )}
                           </SelectContent>
                         </Select>
+                        {medicoes.length === 0 && (
+                          <p className="text-xs text-muted-foreground mt-1">
+                            Nenhuma medição encontrada. Crie uma medição primeiro.
+                          </p>
+                        )}
                       </div>
                     )}
                     {formData.tipo_nota === 'nf_locacao' && gruaInfo && (
@@ -1480,7 +1625,18 @@ export default function NotasFiscaisPage() {
                       unidade: 'UN',
                       quantidade: 1,
                       preco_unitario: 0,
-                      preco_total: 0
+                      preco_total: 0,
+                      base_calculo_icms: 0,
+                      percentual_icms: 0,
+                      valor_icms: 0,
+                      percentual_ipi: 0,
+                      valor_ipi: 0,
+                      base_calculo_issqn: 0,
+                      aliquota_issqn: 0,
+                      valor_issqn: 0,
+                      valor_inss: 0,
+                      valor_cbs: 0,
+                      valor_liquido: 0
                     })
                     setEditingItem(null)
                     setIsItemDialogOpen(true)
@@ -1533,11 +1689,10 @@ export default function NotasFiscaisPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  setItens(itens.filter((_, i) => i !== index))
-                                  // Recalcular valor total
-                                  const novoTotal = itens
-                                    .filter((_, i) => i !== index)
-                                    .reduce((sum, item) => sum + item.preco_total, 0)
+                                  const novosItens = itens.filter((_, i) => i !== index)
+                                  setItens(novosItens)
+                                  // Recalcular valor total automaticamente
+                                  const novoTotal = novosItens.reduce((sum, item) => sum + item.preco_total, 0)
                                   setFormData({ ...formData, valor_total: novoTotal })
                                 }}
                               >
@@ -2031,8 +2186,8 @@ export default function NotasFiscaisPage() {
                   value={itemFormData.quantidade}
                   onChange={(e) => {
                     const qtd = parseFloat(e.target.value) || 0
-                    const total = qtd * itemFormData.preco_unitario
-                    setItemFormData({ ...itemFormData, quantidade: qtd, preco_total: total })
+                    const itemAtualizado = calcularImpostos({ ...itemFormData, quantidade: qtd })
+                    setItemFormData(itemAtualizado)
                   }}
                   required
                 />
@@ -2047,8 +2202,8 @@ export default function NotasFiscaisPage() {
                   value={itemFormData.preco_unitario}
                   onChange={(e) => {
                     const unit = parseFloat(e.target.value) || 0
-                    const total = itemFormData.quantidade * unit
-                    setItemFormData({ ...itemFormData, preco_unitario: unit, preco_total: total })
+                    const itemAtualizado = calcularImpostos({ ...itemFormData, preco_unitario: unit })
+                    setItemFormData(itemAtualizado)
                   }}
                   required
                 />
@@ -2089,7 +2244,7 @@ export default function NotasFiscaisPage() {
             </div>
 
             <div className="border-t pt-4">
-              <Label className="text-sm font-semibold mb-2 block">Impostos (Opcional)</Label>
+              <Label className="text-sm font-semibold mb-2 block">Impostos de Produtos (Opcional)</Label>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="item_base_calculo_icms">Base Cálculo ICMS (R$)</Label>
@@ -2099,7 +2254,10 @@ export default function NotasFiscaisPage() {
                     step="0.01"
                     min="0"
                     value={itemFormData.base_calculo_icms || ''}
-                    onChange={(e) => setItemFormData({ ...itemFormData, base_calculo_icms: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, base_calculo_icms: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
                   />
                 </div>
                 <div>
@@ -2111,7 +2269,10 @@ export default function NotasFiscaisPage() {
                     min="0"
                     max="100"
                     value={itemFormData.percentual_icms || ''}
-                    onChange={(e) => setItemFormData({ ...itemFormData, percentual_icms: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, percentual_icms: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
                   />
                 </div>
                 <div>
@@ -2121,8 +2282,9 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_icms || ''}
-                    onChange={(e) => setItemFormData({ ...itemFormData, valor_icms: parseFloat(e.target.value) || 0 })}
+                    value={itemFormData.valor_icms?.toFixed(2) || '0.00'}
+                    readOnly
+                    className="bg-muted"
                   />
                 </div>
                 <div>
@@ -2134,7 +2296,10 @@ export default function NotasFiscaisPage() {
                     min="0"
                     max="100"
                     value={itemFormData.percentual_ipi || ''}
-                    onChange={(e) => setItemFormData({ ...itemFormData, percentual_ipi: parseFloat(e.target.value) || 0 })}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, percentual_ipi: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
                   />
                 </div>
                 <div>
@@ -2144,8 +2309,98 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_ipi || ''}
-                    onChange={(e) => setItemFormData({ ...itemFormData, valor_ipi: parseFloat(e.target.value) || 0 })}
+                    value={itemFormData.valor_ipi?.toFixed(2) || '0.00'}
+                    readOnly
+                    className="bg-muted"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4">
+              <Label className="text-sm font-semibold mb-2 block">Impostos de Serviços (Opcional)</Label>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="item_base_calculo_issqn">Base Cálculo ISSQN (R$)</Label>
+                  <Input
+                    id="item_base_calculo_issqn"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.base_calculo_issqn || ''}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, base_calculo_issqn: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
+                    placeholder="Geralmente igual ao valor do serviço"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_aliquota_issqn">Alíquota ISSQN (%)</Label>
+                  <Input
+                    id="item_aliquota_issqn"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    value={itemFormData.aliquota_issqn || ''}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, aliquota_issqn: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
+                    placeholder="Ex: 5.00 para 5%"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_issqn">Valor ISSQN (R$)</Label>
+                  <Input
+                    id="item_valor_issqn"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_issqn?.toFixed(2) || '0.00'}
+                    readOnly
+                    className="bg-muted"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_inss">Valor INSS - Retenção (R$)</Label>
+                  <Input
+                    id="item_valor_inss"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_inss || ''}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, valor_inss: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_cbs">Valor CBS (R$)</Label>
+                  <Input
+                    id="item_valor_cbs"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_cbs || ''}
+                    onChange={(e) => {
+                      const itemAtualizado = calcularImpostos({ ...itemFormData, valor_cbs: parseFloat(e.target.value) || 0 })
+                      setItemFormData(itemAtualizado)
+                    }}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="item_valor_liquido">Valor Líquido (R$)</Label>
+                  <Input
+                    id="item_valor_liquido"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={itemFormData.valor_liquido?.toFixed(2) || '0.00'}
+                    readOnly
+                    className="bg-muted font-semibold"
                   />
                 </div>
               </div>
@@ -2161,7 +2416,18 @@ export default function NotasFiscaisPage() {
                 unidade: 'UN',
                 quantidade: 1,
                 preco_unitario: 0,
-                preco_total: 0
+                preco_total: 0,
+                base_calculo_icms: 0,
+                percentual_icms: 0,
+                valor_icms: 0,
+                percentual_ipi: 0,
+                valor_ipi: 0,
+                base_calculo_issqn: 0,
+                aliquota_issqn: 0,
+                valor_issqn: 0,
+                valor_inss: 0,
+                valor_cbs: 0,
+                valor_liquido: 0
               })
             }}>
               Cancelar
@@ -2176,21 +2442,24 @@ export default function NotasFiscaisPage() {
                 return
               }
 
+              // Garantir que os impostos estão calculados
+              const itemCalculado = calcularImpostos(itemFormData)
+
               if (editingItem) {
                 // Editar item existente
-                const index = itens.findIndex(item => item === editingItem)
+                const index = itens.findIndex(item => item.id === editingItem.id || item === editingItem)
                 const novosItens = [...itens]
-                novosItens[index] = itemFormData
+                novosItens[index] = itemCalculado
                 setItens(novosItens)
               } else {
                 // Adicionar novo item
-                setItens([...itens, itemFormData])
+                setItens([...itens, itemCalculado])
               }
 
-              // Recalcular valor total
+              // Recalcular valor total da nota fiscal automaticamente
               const novosItens = editingItem 
-                ? itens.map((item, i) => item === editingItem ? itemFormData : item)
-                : [...itens, itemFormData]
+                ? itens.map((item, i) => (item.id === editingItem.id || item === editingItem) ? itemCalculado : item)
+                : [...itens, itemCalculado]
               const novoTotal = novosItens.reduce((sum, item) => sum + item.preco_total, 0)
               setFormData({ ...formData, valor_total: novoTotal })
 
@@ -2201,7 +2470,18 @@ export default function NotasFiscaisPage() {
                 unidade: 'UN',
                 quantidade: 1,
                 preco_unitario: 0,
-                preco_total: 0
+                preco_total: 0,
+                base_calculo_icms: 0,
+                percentual_icms: 0,
+                valor_icms: 0,
+                percentual_ipi: 0,
+                valor_ipi: 0,
+                base_calculo_issqn: 0,
+                aliquota_issqn: 0,
+                valor_issqn: 0,
+                valor_inss: 0,
+                valor_cbs: 0,
+                valor_liquido: 0
               })
             }}>
               {editingItem ? 'Atualizar' : 'Adicionar'} Item

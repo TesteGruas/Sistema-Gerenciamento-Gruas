@@ -1,6 +1,6 @@
 import express from 'express';
 import Joi from 'joi';
-import { supabase } from '../config/supabase.js';
+import { supabase, supabaseAdmin } from '../config/supabase.js';
 
 const router = express.Router();
 
@@ -1494,6 +1494,22 @@ router.post('/:id/aprovar', async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Buscar orçamento completo antes de aprovar
+    const { data: orcamentoAntes, error: errorAntes } = await supabase
+      .from('orcamentos')
+      .select('*')
+      .eq('id', id)
+      .single();
+
+    if (errorAntes) throw errorAntes;
+    if (!orcamentoAntes) {
+      return res.status(404).json({
+        success: false,
+        message: 'Orçamento não encontrado'
+      });
+    }
+
+    // Aprovar orçamento
     const { data: orcamento, error } = await supabase
       .from('orcamentos')
       .update({ 
@@ -1506,11 +1522,122 @@ router.post('/:id/aprovar', async (req, res) => {
 
     if (error) throw error;
 
-    res.json({
+    // Tentar criar obra automaticamente se os campos obrigatórios estiverem preenchidos
+    let obraCriada = null;
+    let erroCriacaoObra = null;
+    
+    // Verificar se os campos obrigatórios para criar obra estão preenchidos
+    // Se obra_estado não estiver preenchido, tentar inferir da cidade (ex: São Paulo -> SP)
+    let obraEstado = orcamento.obra_estado;
+    if (!obraEstado || obraEstado.trim() === '') {
+      // Tentar inferir estado da cidade conhecida
+      const cidade = orcamento.obra_cidade?.trim() || '';
+      const estadosPorCidade = {
+        'São Paulo': 'SP',
+        'Rio de Janeiro': 'RJ',
+        'Belo Horizonte': 'MG',
+        'Curitiba': 'PR',
+        'Porto Alegre': 'RS',
+        'Salvador': 'BA',
+        'Brasília': 'DF',
+        'Fortaleza': 'CE',
+        'Recife': 'PE',
+        'Manaus': 'AM'
+      };
+      obraEstado = estadosPorCidade[cidade] || '';
+    }
+    
+    const temCamposObrigatorios = 
+      orcamento.obra_nome && 
+      orcamento.obra_nome.trim() !== '' &&
+      orcamento.cliente_id &&
+      orcamento.obra_endereco && 
+      orcamento.obra_endereco.trim() !== '' &&
+      orcamento.obra_cidade && 
+      orcamento.obra_cidade.trim() !== '' &&
+      obraEstado && 
+      obraEstado.trim() !== '' &&
+      obraEstado.length === 2;
+
+    if (temCamposObrigatorios) {
+      try {
+        console.log('🔧 Tentando criar obra automaticamente a partir do orçamento aprovado:', id);
+        
+        // Preparar dados da obra
+        const obraData = {
+          nome: orcamento.obra_nome.trim(),
+          cliente_id: orcamento.cliente_id,
+          endereco: orcamento.obra_endereco.trim(),
+          cidade: orcamento.obra_cidade.trim(),
+          estado: obraEstado.trim().substring(0, 2).toUpperCase(),
+          tipo: orcamento.obra_tipo || 'Residencial',
+          status: 'Planejamento',
+          data_inicio: orcamento.data_inicio_estimada || null,
+          descricao: `Obra criada automaticamente a partir do orçamento ${orcamento.numero || id}`,
+          orcamento: orcamento.valor_total || null,
+          orcamento_id: parseInt(id),
+          observacoes: `Orçamento de origem: ${orcamento.numero || id}\n${orcamento.observacoes || ''}`,
+          cep: orcamento.obra_cep || null,
+          contato_obra: orcamento.obra_contato || null,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        // Criar obra
+        const { data: obra, error: obraError } = await supabaseAdmin
+          .from('obras')
+          .insert(obraData)
+          .select()
+          .single();
+
+        if (obraError) {
+          console.error('❌ Erro ao criar obra automaticamente:', obraError);
+          erroCriacaoObra = obraError.message;
+        } else {
+          console.log('✅ Obra criada automaticamente com sucesso:', obra.id);
+          obraCriada = obra;
+          
+          // Atualizar orçamento com o obra_id criado
+          await supabase
+            .from('orcamentos')
+            .update({ obra_id: obra.id })
+            .eq('id', id);
+        }
+      } catch (criacaoError) {
+        console.error('❌ Erro ao tentar criar obra automaticamente:', criacaoError);
+        erroCriacaoObra = criacaoError.message;
+      }
+    } else {
+      console.log('⚠️ Campos obrigatórios não preenchidos. Obra não será criada automaticamente.');
+      console.log('  - obra_nome:', orcamento.obra_nome);
+      console.log('  - cliente_id:', orcamento.cliente_id);
+      console.log('  - obra_endereco:', orcamento.obra_endereco);
+      console.log('  - obra_cidade:', orcamento.obra_cidade);
+      console.log('  - obra_estado (original):', orcamento.obra_estado);
+      console.log('  - obra_estado (inferido):', obraEstado);
+    }
+
+    // Resposta de sucesso
+    const response = {
       success: true,
       data: orcamento,
       message: 'Orçamento aprovado com sucesso'
-    });
+    };
+
+    // Adicionar informações sobre a criação da obra
+    if (obraCriada) {
+      response.obra_criada = {
+        id: obraCriada.id,
+        nome: obraCriada.nome
+      };
+      response.message = 'Orçamento aprovado e obra criada automaticamente com sucesso';
+    } else if (erroCriacaoObra) {
+      response.aviso = `Obra não pôde ser criada automaticamente: ${erroCriacaoObra}. Você pode criar manualmente depois.`;
+    } else if (!temCamposObrigatorios) {
+      response.aviso = 'Obra não foi criada automaticamente porque alguns campos obrigatórios não estão preenchidos no orçamento. Você pode criar manualmente depois.';
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('Erro ao aprovar orçamento:', error);
     res.status(500).json({

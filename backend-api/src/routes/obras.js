@@ -147,11 +147,11 @@ const obraSchema = Joi.object({
   sinaleiros: Joi.array().items(
     Joi.object({
       id: Joi.string().uuid().allow(null, '').optional(),
-      nome: Joi.string().min(2).required(),
-      rg_cpf: Joi.string().required(),
+      nome: Joi.string().min(2).allow(null, '').optional(),
+      rg_cpf: Joi.string().allow(null, '').optional(),
       telefone: Joi.string().allow(null, '').optional(),
       email: Joi.string().email().allow(null, '').optional(),
-      tipo: Joi.string().valid('principal', 'reserva').required()
+      tipo: Joi.string().valid('principal', 'reserva').allow(null, '').optional()
     })
   ).allow(null).optional()
 })

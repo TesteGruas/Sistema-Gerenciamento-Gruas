@@ -73,24 +73,75 @@ export default function CriarObraFromOrcamentoPage() {
   const handleCreateObra = async () => {
     if (!orcamento) return
 
+    // Validação dos campos obrigatórios
+    if (!orcamento.obra_nome || orcamento.obra_nome.trim() === '') {
+      toast({
+        title: "Erro",
+        description: "Nome da obra é obrigatório. Por favor, preencha no orçamento antes de criar a obra.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!orcamento.cliente_id) {
+      toast({
+        title: "Erro",
+        description: "Cliente é obrigatório. Por favor, selecione um cliente no orçamento.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!orcamento.obra_endereco || orcamento.obra_endereco.trim() === '') {
+      toast({
+        title: "Erro",
+        description: "Endereço da obra é obrigatório. Por favor, preencha no orçamento antes de criar a obra.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!orcamento.obra_cidade || orcamento.obra_cidade.trim() === '') {
+      toast({
+        title: "Erro",
+        description: "Cidade da obra é obrigatória. Por favor, preencha no orçamento antes de criar a obra.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!orcamento.obra_estado || orcamento.obra_estado.trim() === '' || orcamento.obra_estado.length !== 2) {
+      toast({
+        title: "Erro",
+        description: "Estado da obra é obrigatório e deve ter 2 caracteres (ex: SP). Por favor, preencha no orçamento antes de criar a obra.",
+        variant: "destructive"
+      })
+      return
+    }
+
     setCreating(true)
     try {
       // Preparar dados da obra a partir do orçamento
       const obraData = {
-        nome: orcamento.obra_nome,
+        nome: orcamento.obra_nome.trim(),
         cliente_id: orcamento.cliente_id,
-        endereco: orcamento.obra_endereco || '',
-        cidade: orcamento.obra_cidade || '',
-        estado: orcamento.obra_estado || '',
+        endereco: orcamento.obra_endereco.trim(),
+        cidade: orcamento.obra_cidade.trim(),
+        estado: orcamento.obra_estado.trim().substring(0, 2).toUpperCase(),
         tipo: orcamento.tipo_obra || 'Residencial',
         status: 'Planejamento' as const,
-        data_inicio: orcamento.data_inicio_estimada,
+        data_inicio: orcamento.data_inicio_estimada || undefined,
         descricao: `Obra criada a partir do orçamento ${orcamento.numero}`,
-        orcamento: orcamento.total_mensal * orcamento.prazo_locacao_meses,
-        observacoes: `Orçamento de origem: ${orcamento.numero}\nEquipamento: ${orcamento.equipamento}\nPrazo: ${orcamento.prazo_locacao_meses} meses`
+        orcamento: orcamento.total_mensal && orcamento.prazo_locacao_meses ? orcamento.total_mensal * orcamento.prazo_locacao_meses : undefined,
+        observacoes: `Orçamento de origem: ${orcamento.numero}\nEquipamento: ${orcamento.equipamento || 'Não especificado'}\nPrazo: ${orcamento.prazo_locacao_meses || 'Não especificado'} meses`,
+        orcamento_id: orcamento.id ? parseInt(orcamento.id) : undefined
       }
 
       const response = await obrasApi.criarObra(obraData)
+      
+      if (!response.success || !response.data?.id) {
+        throw new Error(response.message || 'Erro ao criar obra')
+      }
       
       toast({
         title: "Sucesso",
@@ -99,10 +150,11 @@ export default function CriarObraFromOrcamentoPage() {
 
       // Redirecionar para a obra criada
       router.push(`/dashboard/obras/${response.data.id}`)
-    } catch (error) {
+    } catch (error: any) {
+      console.error('Erro ao criar obra:', error)
       toast({
         title: "Erro",
-        description: "Erro ao criar obra",
+        description: error?.message || error?.response?.data?.message || "Erro ao criar obra. Verifique se todos os campos obrigatórios estão preenchidos.",
         variant: "destructive"
       })
     } finally {

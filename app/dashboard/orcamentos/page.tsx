@@ -439,17 +439,30 @@ export default function OrcamentosPage() {
   }
 
   const handleAprovarOrcamento = async (orcamento: Orcamento) => {
-    if (!window.confirm(`Deseja aprovar o orçamento ${orcamento.numero}? Após aprovar, você poderá converter em obra.`)) {
+    if (!window.confirm(`Deseja aprovar o orçamento ${orcamento.numero}? Após aprovar, a obra será criada automaticamente se os campos obrigatórios estiverem preenchidos.`)) {
       return
     }
 
     try {
-      await aprovarOrcamento(parseInt(orcamento.id))
-      toast({
-        title: "Sucesso",
-        description: "Orçamento aprovado com sucesso!",
-      })
-      loadOrcamentos()
+      const response = await aprovarOrcamento(parseInt(orcamento.id))
+      
+      // Verificar se uma obra foi criada automaticamente
+      if (response.obra_criada && response.obra_criada.id) {
+        toast({
+          title: "Sucesso",
+          description: `Orçamento aprovado e obra criada automaticamente! Redirecionando para a obra...`,
+        })
+        // Redirecionar para a obra criada
+        setTimeout(() => {
+          router.push(`/dashboard/obras/${response.obra_criada.id}`)
+        }, 1000)
+      } else {
+        toast({
+          title: "Sucesso",
+          description: response.aviso || "Orçamento aprovado com sucesso!",
+        })
+        loadOrcamentos()
+      }
     } catch (error: any) {
       toast({
         title: "Erro",

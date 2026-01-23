@@ -423,6 +423,31 @@ router.get('/', async (req, res) => {
  *       500:
  *         description: Erro interno do servidor
  */
+// Função helper para limpar dados antes de inserir no banco (converter strings vazias para null)
+const limparDadosParaBanco = (data) => {
+  const dadosLimpos = { ...data };
+  
+  // Converter strings vazias para null em campos de data
+  Object.keys(dadosLimpos).forEach(key => {
+    if (typeof dadosLimpos[key] === 'string' && dadosLimpos[key].trim() === '') {
+      // Campos de data vazios devem ser null
+      if (key.includes('data') || key.includes('vencimento') || key.includes('emissao')) {
+        dadosLimpos[key] = null;
+      }
+      // Campos opcionais de texto podem ser null
+      else if (key.includes('observacoes') || key.includes('serie') || key.includes('chave') || key.includes('protocolo')) {
+        dadosLimpos[key] = null;
+      }
+      // Outros campos opcionais também podem ser null
+      else if (key !== 'numero_nf' && key !== 'tipo' && key !== 'status') {
+        dadosLimpos[key] = null;
+      }
+    }
+  });
+  
+  return dadosLimpos;
+};
+
 router.post('/', async (req, res) => {
   try {
     const { error: validationError, value } = notaFiscalSchema.validate(req.body);
@@ -434,9 +459,12 @@ router.post('/', async (req, res) => {
       });
     }
 
+    // Limpar dados antes de inserir no banco
+    const dadosLimpos = limparDadosParaBanco(value);
+
     const { data, error } = await supabase
       .from('notas_fiscais')
-      .insert([value])
+      .insert([dadosLimpos])
       .select()
       .single();
 
@@ -742,9 +770,12 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    // Limpar dados antes de atualizar no banco
+    const dadosLimpos = limparDadosParaBanco(value);
+
     const { data, error } = await supabase
       .from('notas_fiscais')
-      .update(value)
+      .update(dadosLimpos)
       .eq('id', id)
       .select()
       .single();
@@ -1836,11 +1867,19 @@ const notaFiscalItemSchema = Joi.object({
   preco_unitario: Joi.number().min(0).required(),
   preco_total: Joi.number().min(0).required(),
   csosn: Joi.string().max(10).allow(null, '').optional(),
+  // Impostos de produtos
   base_calculo_icms: Joi.number().min(0).allow(null).optional(),
   percentual_icms: Joi.number().min(0).max(100).allow(null).optional(),
   valor_icms: Joi.number().min(0).allow(null).optional(),
   percentual_ipi: Joi.number().min(0).max(100).allow(null).optional(),
   valor_ipi: Joi.number().min(0).allow(null).optional(),
+  // Impostos de serviços
+  base_calculo_issqn: Joi.number().min(0).allow(null).optional(),
+  aliquota_issqn: Joi.number().min(0).max(100).allow(null).optional(),
+  valor_issqn: Joi.number().min(0).allow(null).optional(),
+  valor_inss: Joi.number().min(0).allow(null).optional(),
+  valor_cbs: Joi.number().min(0).allow(null).optional(),
+  valor_liquido: Joi.number().min(0).allow(null).optional(),
   ordem: Joi.number().integer().min(1).optional()
 });
 
@@ -1906,6 +1945,34 @@ router.post('/:id/itens', async (req, res) => {
       value.preco_total = value.quantidade * value.preco_unitario;
     }
 
+    // Calcular impostos automaticamente se necessário
+    // ICMS
+    if (value.percentual_icms && !value.valor_icms) {
+      const baseICMS = value.base_calculo_icms || value.preco_total;
+      value.base_calculo_icms = baseICMS;
+      value.valor_icms = (baseICMS * value.percentual_icms) / 100;
+    }
+    
+    // IPI
+    if (value.percentual_ipi && !value.valor_ipi) {
+      value.valor_ipi = (value.preco_total * value.percentual_ipi) / 100;
+    }
+    
+    // ISSQN
+    if (value.aliquota_issqn && !value.valor_issqn) {
+      const baseISSQN = value.base_calculo_issqn || value.preco_total;
+      value.base_calculo_issqn = baseISSQN;
+      value.valor_issqn = (baseISSQN * value.aliquota_issqn) / 100;
+    }
+    
+    // Calcular valor líquido
+    const totalImpostos = (parseFloat(value.valor_icms || 0)) +
+                         (parseFloat(value.valor_ipi || 0)) +
+                         (parseFloat(value.valor_issqn || 0)) +
+                         (parseFloat(value.valor_inss || 0)) +
+                         (parseFloat(value.valor_cbs || 0));
+    value.valor_liquido = value.preco_total - totalImpostos;
+
     const { data, error } = await supabaseAdmin
       .from('notas_fiscais_itens')
       .insert([value])
@@ -1917,7 +1984,7 @@ router.post('/:id/itens', async (req, res) => {
     // Atualizar valor total da nota fiscal
     const { data: itens } = await supabaseAdmin
       .from('notas_fiscais_itens')
-      .select('valor_total')
+      .select('preco_total')
       .eq('nota_fiscal_id', id);
 
     const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
@@ -1964,14 +2031,63 @@ router.put('/itens/:itemId', async (req, res) => {
       });
     }
 
-    // Calcular preco_total se não fornecido
-    if (value.quantidade && value.preco_unitario && !value.preco_total) {
-      value.preco_total = value.quantidade * value.preco_unitario;
+    // Buscar item atual para manter valores não alterados
+    const { data: itemAtual } = await supabaseAdmin
+      .from('notas_fiscais_itens')
+      .select('*')
+      .eq('id', itemId)
+      .single();
+
+    if (!itemAtual) {
+      return res.status(404).json({
+        success: false,
+        message: 'Item não encontrado'
+      });
     }
+
+    // Mesclar dados atuais com novos
+    const itemCompleto = { ...itemAtual, ...value };
+
+    // Calcular preco_total se não fornecido
+    if (itemCompleto.quantidade && itemCompleto.preco_unitario && !itemCompleto.preco_total) {
+      itemCompleto.preco_total = itemCompleto.quantidade * itemCompleto.preco_unitario;
+    }
+
+    // Calcular impostos automaticamente se necessário
+    // ICMS
+    if (itemCompleto.percentual_icms && !itemCompleto.valor_icms) {
+      const baseICMS = itemCompleto.base_calculo_icms || itemCompleto.preco_total;
+      itemCompleto.base_calculo_icms = baseICMS;
+      itemCompleto.valor_icms = (baseICMS * itemCompleto.percentual_icms) / 100;
+    }
+    
+    // IPI
+    if (itemCompleto.percentual_ipi && !itemCompleto.valor_ipi) {
+      itemCompleto.valor_ipi = (itemCompleto.preco_total * itemCompleto.percentual_ipi) / 100;
+    }
+    
+    // ISSQN
+    if (itemCompleto.aliquota_issqn && !itemCompleto.valor_issqn) {
+      const baseISSQN = itemCompleto.base_calculo_issqn || itemCompleto.preco_total;
+      itemCompleto.base_calculo_issqn = baseISSQN;
+      itemCompleto.valor_issqn = (baseISSQN * itemCompleto.aliquota_issqn) / 100;
+    }
+    
+    // Calcular valor líquido
+    const totalImpostos = (parseFloat(itemCompleto.valor_icms || 0)) +
+                         (parseFloat(itemCompleto.valor_ipi || 0)) +
+                         (parseFloat(itemCompleto.valor_issqn || 0)) +
+                         (parseFloat(itemCompleto.valor_inss || 0)) +
+                         (parseFloat(itemCompleto.valor_cbs || 0));
+    itemCompleto.valor_liquido = itemCompleto.preco_total - totalImpostos;
+
+    // Remover campos que não devem ser atualizados diretamente
+    delete itemCompleto.id;
+    delete itemCompleto.created_at;
 
     const { data, error } = await supabaseAdmin
       .from('notas_fiscais_itens')
-      .update(value)
+      .update(itemCompleto)
       .eq('id', itemId)
       .select()
       .single();
@@ -1988,7 +2104,7 @@ router.put('/itens/:itemId', async (req, res) => {
     if (item) {
       const { data: itens } = await supabaseAdmin
         .from('notas_fiscais_itens')
-        .select('valor_total')
+        .select('preco_total')
         .eq('nota_fiscal_id', item.nota_fiscal_id);
 
       const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;

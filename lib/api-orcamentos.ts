@@ -92,6 +92,11 @@ export interface OrcamentoResponse {
   success: boolean
   data: Orcamento
   message?: string
+  obra_criada?: {
+    id: number
+    nome: string
+  }
+  aviso?: string
 }
 
 export interface OrcamentosListResponse {

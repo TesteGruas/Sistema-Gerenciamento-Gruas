@@ -63,14 +63,18 @@ export function FuncionarioSearch({
           let funcionariosConvertidos = response.data.map(converterFuncionarioBackendParaFrontend)
           console.log('🔄 Funcionários convertidos:', funcionariosConvertidos)
           
-          // Filtrar por cargos permitidos (case-insensitive)
+          // Filtrar por cargos permitidos (case-insensitive, correspondência parcial)
           if (rolesFilter.length > 0) {
             console.log('🎯 Cargos permitidos:', rolesFilter)
             console.log('🔍 Funcionários antes do filtro:', funcionariosConvertidos.map(f => ({ name: f.name, role: f.role })))
             funcionariosConvertidos = funcionariosConvertidos.filter(funcionario => {
-              const roleMatch = rolesFilter.some(allowedRole => 
-                funcionario.role?.toLowerCase() === allowedRole.toLowerCase()
-              )
+              const funcionarioRole = funcionario.role?.toLowerCase() || ''
+              const roleMatch = rolesFilter.some(allowedRole => {
+                const allowedRoleLower = allowedRole.toLowerCase()
+                // Correspondência parcial: verifica se o cargo do funcionário contém o cargo permitido
+                // ou se o cargo permitido contém o cargo do funcionário
+                return funcionarioRole.includes(allowedRoleLower) || allowedRoleLower.includes(funcionarioRole)
+              })
               console.log(`🔍 Funcionário ${funcionario.name} (${funcionario.role}) - Match: ${roleMatch}`)
               return roleMatch
             })

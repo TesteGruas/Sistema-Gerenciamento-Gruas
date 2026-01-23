@@ -349,10 +349,13 @@ export const funcionariosApi = {
 
 // Funções utilitárias para converter dados entre frontend e backend
 export const converterFuncionarioBackendParaFrontend = (funcionarioBackend: FuncionarioBackend) => {
+  // Priorizar cargo_info.nome se disponível (mais atualizado), senão usar cargo
+  const cargo = funcionarioBackend.cargo_info?.nome || funcionarioBackend.cargo || ''
+  
   return {
     id: funcionarioBackend.id.toString(),
     name: funcionarioBackend.nome,
-    role: funcionarioBackend.cargo,
+    role: cargo,
     status: funcionarioBackend.status,
     phone: funcionarioBackend.telefone || '',
     email: funcionarioBackend.email || '',
