@@ -48,49 +48,146 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
   try {
     const { status, cliente_id, data_inicio, data_fim, limite = 100, pagina = 1 } = req.query;
 
-    let query = supabaseAdmin
+    // Buscar contas a receber
+    let queryContas = supabaseAdmin
       .from('contas_receber')
       .select(`
         *,
         cliente:clientes(id, nome, cnpj),
         obra:obras(id, nome)
-      `, { count: 'exact' })
-      .order('data_vencimento', { ascending: true });
+      `);
 
-    // Aplicar filtros
+    // Aplicar filtros nas contas
     if (status) {
-      query = query.eq('status', status);
+      queryContas = queryContas.eq('status', status);
     }
     if (cliente_id) {
-      query = query.eq('cliente_id', cliente_id);
+      queryContas = queryContas.eq('cliente_id', cliente_id);
     }
     if (data_inicio) {
-      query = query.gte('data_vencimento', data_inicio);
+      queryContas = queryContas.gte('data_vencimento', data_inicio);
     }
     if (data_fim) {
-      query = query.lte('data_vencimento', data_fim);
+      queryContas = queryContas.lte('data_vencimento', data_fim);
     }
 
-    // Paginação
-    const offset = (parseInt(pagina) - 1) * parseInt(limite);
-    query = query.range(offset, offset + parseInt(limite) - 1);
+    const { data: contasData, error: contasError } = await queryContas;
 
-    const { data, error, count } = await query;
-
-    if (error) {
+    if (contasError) {
       return res.status(500).json({
         success: false,
         error: 'Erro ao buscar contas a receber',
-        message: error.message
+        message: contasError.message
       });
     }
 
+    // Buscar notas fiscais de saída
+    let queryNotas = supabaseAdmin
+      .from('notas_fiscais')
+      .select(`
+        id,
+        numero_nf,
+        serie,
+        data_emissao,
+        data_vencimento,
+        valor_total,
+        status,
+        cliente_id,
+        observacoes,
+        created_at,
+        updated_at,
+        cliente:clientes(id, nome, cnpj)
+      `)
+      .eq('tipo', 'saida')
+      .neq('status', 'cancelada');
+
+    // Aplicar filtros nas notas fiscais
+    if (status) {
+      // Mapear status de contas para status de notas
+      const statusMap = {
+        'pendente': 'pendente',
+        'pago': 'paga',
+        'vencido': 'vencida',
+        'cancelado': 'cancelada'
+      };
+      if (statusMap[status]) {
+        queryNotas = queryNotas.eq('status', statusMap[status]);
+      }
+    }
+    if (cliente_id) {
+      queryNotas = queryNotas.eq('cliente_id', cliente_id);
+    }
+
+    const { data: notasData, error: notasError } = await queryNotas;
+
+    if (notasError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar notas fiscais',
+        message: notasError.message
+      });
+    }
+
+    // Aplicar filtros de data manualmente (usando data_vencimento ou data_emissao como fallback)
+    let notasFiltradas = notasData || [];
+    if (data_inicio || data_fim) {
+      notasFiltradas = notasFiltradas.filter(nota => {
+        const dataRef = nota.data_vencimento || nota.data_emissao;
+        if (!dataRef) return false;
+        if (data_inicio && dataRef < data_inicio) return false;
+        if (data_fim && dataRef > data_fim) return false;
+        return true;
+      });
+    }
+
+    // Transformar notas fiscais em formato de contas a receber
+    const notasFormatadas = notasFiltradas.map(nota => ({
+      id: `nf_${nota.id}`, // Prefixo para identificar que é nota fiscal
+      tipo: 'nota_fiscal',
+      descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
+      valor: parseFloat(nota.valor_total),
+      data_vencimento: nota.data_vencimento || nota.data_emissao,
+      data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
+      status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
+      cliente: nota.cliente ? {
+        id: nota.cliente.id,
+        nome: nota.cliente.nome,
+        cnpj: nota.cliente.cnpj
+      } : null,
+      obra: null, // Notas fiscais podem não ter obra vinculada diretamente
+      observacoes: nota.observacoes,
+      created_at: nota.created_at,
+      updated_at: nota.updated_at,
+      // Campos específicos da nota fiscal
+      numero_nf: nota.numero_nf,
+      serie: nota.serie,
+      data_emissao: nota.data_emissao
+    }));
+
+    // Combinar contas e notas fiscais
+    const todasContas = [
+      ...(contasData || []).map(conta => ({ ...conta, tipo: 'conta_receber' })),
+      ...notasFormatadas
+    ];
+
+    // Ordenar por data de vencimento
+    todasContas.sort((a, b) => {
+      const dataA = new Date(a.data_vencimento);
+      const dataB = new Date(b.data_vencimento);
+      return dataA - dataB;
+    });
+
+    // Aplicar paginação no resultado combinado
+    const total = todasContas.length;
+    const offset = (parseInt(pagina) - 1) * parseInt(limite);
+    const dataPaginada = todasContas.slice(offset, offset + parseInt(limite));
+
     res.json({
       success: true,
-      data,
-      total: count,
+      data: dataPaginada,
+      total: total,
       pagina: parseInt(pagina),
-      total_paginas: Math.ceil(count / parseInt(limite))
+      total_paginas: Math.ceil(total / parseInt(limite))
     });
   } catch (error) {
     console.error('Erro ao listar contas a receber:', error);
@@ -231,21 +328,59 @@ router.get('/alertas', authenticateToken, requirePermission('financeiro:visualiz
       .gte('data_vencimento', hoje)
       .lte('data_vencimento', dataLimiteStr);
 
-    const totalVencidas = vencidas?.reduce((sum, c) => sum + parseFloat(c.valor), 0) || 0;
-    const totalVencendo = vencendo?.reduce((sum, c) => sum + parseFloat(c.valor), 0) || 0;
+    // Notas fiscais de saída vencidas
+    const { data: notasVencidas, error: erroNotasVencidas } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select('id, numero_nf, serie, valor_total, data_vencimento')
+      .eq('tipo', 'saida')
+      .eq('status', 'pendente')
+      .neq('status', 'cancelada')
+      .lt('data_vencimento', hoje);
+
+    // Notas fiscais de saída vencendo
+    const { data: notasVencendo, error: erroNotasVencendo } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select('id, numero_nf, serie, valor_total, data_vencimento')
+      .eq('tipo', 'saida')
+      .eq('status', 'pendente')
+      .neq('status', 'cancelada')
+      .gte('data_vencimento', hoje)
+      .lte('data_vencimento', dataLimiteStr);
+
+    // Transformar notas fiscais em formato de contas
+    const notasVencidasFormatadas = (notasVencidas || []).map(nota => ({
+      id: `nf_${nota.id}`,
+      descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
+      valor: parseFloat(nota.valor_total),
+      data_vencimento: nota.data_vencimento
+    }));
+
+    const notasVencendoFormatadas = (notasVencendo || []).map(nota => ({
+      id: `nf_${nota.id}`,
+      descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
+      valor: parseFloat(nota.valor_total),
+      data_vencimento: nota.data_vencimento
+    }));
+
+    // Combinar contas e notas fiscais
+    const todasVencidas = [...(vencidas || []), ...notasVencidasFormatadas];
+    const todasVencendo = [...(vencendo || []), ...notasVencendoFormatadas];
+
+    const totalVencidas = todasVencidas.reduce((sum, c) => sum + parseFloat(c.valor), 0);
+    const totalVencendo = todasVencendo.reduce((sum, c) => sum + parseFloat(c.valor), 0);
 
     res.json({
       success: true,
       alertas: {
         vencidas: {
-          quantidade: vencidas?.length || 0,
+          quantidade: todasVencidas.length,
           valor_total: totalVencidas,
-          contas: vencidas || []
+          contas: todasVencidas
         },
         vencendo: {
-          quantidade: vencendo?.length || 0,
+          quantidade: todasVencendo.length,
           valor_total: totalVencendo,
-          contas: vencendo || []
+          contas: todasVencendo
         }
       }
     });
