@@ -36,6 +36,7 @@ const boletoSchema = Joi.object({
   cliente_id: Joi.number().integer().positive().optional(),
   obra_id: Joi.number().integer().positive().optional(),
   medicao_id: Joi.number().integer().positive().optional(),
+  nota_fiscal_id: Joi.number().integer().positive().optional(),
   descricao: Joi.string().min(1).max(255).required(),
   valor: Joi.number().min(0).required(),
   data_emissao: Joi.date().required(),
@@ -58,7 +59,7 @@ const boletoSchema = Joi.object({
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
-    const { cliente_id, obra_id, medicao_id, status, search, page = 1, limit = 20, include_medicoes } = req.query;
+    const { cliente_id, obra_id, medicao_id, nota_fiscal_id, status, tipo, search, page = 1, limit = 20, include_medicoes } = req.query;
 
     let query = supabase
       .from('boletos')
@@ -66,6 +67,7 @@ router.get('/', authenticateToken, async (req, res) => {
         *,
         clientes(id, nome, cnpj),
         obras(id, nome),
+        notas_fiscais(id, numero_nf, serie, tipo),
         contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
       `)
       .order('data_vencimento', { ascending: false });
@@ -74,7 +76,9 @@ router.get('/', authenticateToken, async (req, res) => {
     if (cliente_id) query = query.eq('cliente_id', cliente_id);
     if (obra_id) query = query.eq('obra_id', obra_id);
     if (medicao_id) query = query.eq('medicao_id', medicao_id);
+    if (nota_fiscal_id) query = query.eq('nota_fiscal_id', nota_fiscal_id);
     if (status) query = query.eq('status', status);
+    if (tipo) query = query.eq('tipo', tipo);
     // Nota: filtro de tipo será aplicado após combinar com boletos de medições
     if (search) {
       query = query.or(`numero_boleto.ilike.%${search}%,descricao.ilike.%${search}%`);

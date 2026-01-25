@@ -28,7 +28,8 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
   try {
     const { status, fornecedor_id, categoria, data_inicio, data_fim, limite = 100, pagina = 1 } = req.query;
 
-    let query = supabaseAdmin
+    // Buscar contas a pagar
+    let queryContas = supabaseAdmin
       .from('contas_pagar')
       .select(`
         *,
@@ -36,43 +37,142 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       `, { count: 'exact' })
       .order('data_vencimento', { ascending: true });
 
-    // Aplicar filtros
+    // Aplicar filtros nas contas
     if (status) {
-      query = query.eq('status', status);
+      queryContas = queryContas.eq('status', status);
     }
     if (fornecedor_id) {
-      query = query.eq('fornecedor_id', fornecedor_id);
+      queryContas = queryContas.eq('fornecedor_id', fornecedor_id);
     }
     if (categoria) {
-      query = query.eq('categoria', categoria);
+      queryContas = queryContas.eq('categoria', categoria);
     }
     if (data_inicio) {
-      query = query.gte('data_vencimento', data_inicio);
+      queryContas = queryContas.gte('data_vencimento', data_inicio);
     }
     if (data_fim) {
-      query = query.lte('data_vencimento', data_fim);
+      queryContas = queryContas.lte('data_vencimento', data_fim);
     }
 
     // Paginação
     const offset = (parseInt(pagina) - 1) * parseInt(limite);
-    query = query.range(offset, offset + parseInt(limite) - 1);
+    queryContas = queryContas.range(offset, offset + parseInt(limite) - 1);
 
-    const { data, error, count } = await query;
+    const { data: contasData, error: contasError, count: contasCount } = await queryContas;
 
-    if (error) {
+    if (contasError) {
       return res.status(500).json({
         success: false,
         error: 'Erro ao buscar contas a pagar',
-        message: error.message
+        message: contasError.message
       });
     }
 
+    // Buscar notas fiscais de entrada
+    let queryNotas = supabaseAdmin
+      .from('notas_fiscais')
+      .select(`
+        id,
+        numero_nf,
+        serie,
+        data_emissao,
+        data_vencimento,
+        valor_total,
+        valor_liquido,
+        status,
+        fornecedor_id,
+        observacoes,
+        created_at,
+        updated_at,
+        fornecedor:fornecedores(id, nome, cnpj)
+      `)
+      .eq('tipo', 'entrada')
+      .neq('status', 'cancelada');
+
+    // Aplicar filtros nas notas fiscais
+    if (status) {
+      // Mapear status de contas para status de notas
+      const statusMap = {
+        'pendente': 'pendente',
+        'pago': 'paga',
+        'vencido': 'vencida',
+        'cancelado': 'cancelada'
+      };
+      if (statusMap[status]) {
+        queryNotas = queryNotas.eq('status', statusMap[status]);
+      }
+    }
+    if (fornecedor_id) {
+      queryNotas = queryNotas.eq('fornecedor_id', fornecedor_id);
+    }
+
+    const { data: notasData, error: notasError } = await queryNotas;
+
+    if (notasError) {
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar notas fiscais',
+        message: notasError.message
+      });
+    }
+
+    // Aplicar filtros de data manualmente nas notas fiscais
+    let notasFiltradas = notasData || [];
+    if (data_inicio || data_fim) {
+      notasFiltradas = notasFiltradas.filter(nota => {
+        const dataRef = nota.data_vencimento || nota.data_emissao;
+        if (!dataRef) return false;
+        if (data_inicio && dataRef < data_inicio) return false;
+        if (data_fim && dataRef > data_fim) return false;
+        return true;
+      });
+    }
+
+    // Transformar notas fiscais em formato de contas a pagar
+    const notasFormatadas = notasFiltradas.map(nota => ({
+      id: `nf_${nota.id}`, // Prefixo para identificar que é nota fiscal
+      tipo: 'nota_fiscal',
+      descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
+      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0), // Usar valor_liquido se disponível
+      data_vencimento: nota.data_vencimento || nota.data_emissao,
+      data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
+      status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
+      fornecedor: nota.fornecedor ? {
+        id: nota.fornecedor.id,
+        nome: nota.fornecedor.nome,
+        cnpj: nota.fornecedor.cnpj
+      } : null,
+      categoria: null,
+      observacoes: nota.observacoes,
+      created_at: nota.created_at,
+      updated_at: nota.updated_at,
+      // Campos específicos da nota fiscal
+      numero_nf: nota.numero_nf,
+      serie: nota.serie,
+      data_emissao: nota.data_emissao,
+      valor_total: parseFloat(nota.valor_total || 0),
+      valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0)
+    }));
+
+    // Combinar contas e notas fiscais
+    const todasContas = [
+      ...(contasData || []).map(conta => ({ ...conta, tipo: 'conta_pagar' })),
+      ...notasFormatadas
+    ];
+
+    // Ordenar por data de vencimento
+    todasContas.sort((a, b) => {
+      const dataA = new Date(a.data_vencimento || a.created_at).getTime();
+      const dataB = new Date(b.data_vencimento || b.created_at).getTime();
+      return dataA - dataB;
+    });
+
     res.json({
       success: true,
-      data,
-      total: count,
+      data: todasContas,
+      total: (contasCount || 0) + notasFormatadas.length,
       pagina: parseInt(pagina),
-      total_paginas: Math.ceil(count / parseInt(limite))
+      total_paginas: Math.ceil(((contasCount || 0) + notasFormatadas.length) / parseInt(limite))
     });
   } catch (error) {
     console.error('Erro ao listar contas a pagar:', error);

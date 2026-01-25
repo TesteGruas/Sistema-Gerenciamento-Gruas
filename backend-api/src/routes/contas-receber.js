@@ -91,6 +91,7 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
         data_emissao,
         data_vencimento,
         valor_total,
+        valor_liquido,
         status,
         cliente_id,
         observacoes,
@@ -145,7 +146,7 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       id: `nf_${nota.id}`, // Prefixo para identificar que é nota fiscal
       tipo: 'nota_fiscal',
       descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_total),
+      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0), // Usar valor_liquido se disponível
       data_vencimento: nota.data_vencimento || nota.data_emissao,
       data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
       status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
@@ -161,7 +162,9 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       // Campos específicos da nota fiscal
       numero_nf: nota.numero_nf,
       serie: nota.serie,
-      data_emissao: nota.data_emissao
+      data_emissao: nota.data_emissao,
+      valor_total: parseFloat(nota.valor_total || 0),
+      valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0)
     }));
 
     // Combinar contas e notas fiscais
@@ -331,16 +334,16 @@ router.get('/alertas', authenticateToken, requirePermission('financeiro:visualiz
     // Notas fiscais de saída vencidas
     const { data: notasVencidas, error: erroNotasVencidas } = await supabaseAdmin
       .from('notas_fiscais')
-      .select('id, numero_nf, serie, valor_total, data_vencimento')
+      .select('id, numero_nf, serie, valor_total, valor_liquido, data_vencimento')
       .eq('tipo', 'saida')
       .eq('status', 'pendente')
       .neq('status', 'cancelada')
       .lt('data_vencimento', hoje);
 
     // Notas fiscais de saída vencendo
-    const { data: notasVencendo, error: erroNotasVencendo } = await supabaseAdmin
+const { data: notasVencendo, error: erroNotasVencendo } = await supabaseAdmin
       .from('notas_fiscais')
-      .select('id, numero_nf, serie, valor_total, data_vencimento')
+      .select('id, numero_nf, serie, valor_total, valor_liquido, data_vencimento')
       .eq('tipo', 'saida')
       .eq('status', 'pendente')
       .neq('status', 'cancelada')
@@ -351,14 +354,14 @@ router.get('/alertas', authenticateToken, requirePermission('financeiro:visualiz
     const notasVencidasFormatadas = (notasVencidas || []).map(nota => ({
       id: `nf_${nota.id}`,
       descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_total),
+      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0),
       data_vencimento: nota.data_vencimento
     }));
 
     const notasVencendoFormatadas = (notasVencendo || []).map(nota => ({
       id: `nf_${nota.id}`,
       descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_total),
+      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0),
       data_vencimento: nota.data_vencimento
     }));
 

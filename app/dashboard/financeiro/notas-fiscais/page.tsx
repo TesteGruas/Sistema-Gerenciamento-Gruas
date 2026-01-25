@@ -137,6 +137,15 @@ export default function NotasFiscaisPage() {
   })
 
   // Itens da nota fiscal
+  interface ImpostoDinamico {
+    id: string
+    nome: string
+    tipo?: string
+    base_calculo: number
+    aliquota: number
+    valor_calculado: number
+  }
+
   interface NotaFiscalItem {
     id?: number
     codigo_produto?: string
@@ -160,6 +169,8 @@ export default function NotasFiscaisPage() {
     valor_inss?: number
     valor_cbs?: number
     valor_liquido?: number
+    // Impostos dinâmicos
+    impostos_dinamicos?: ImpostoDinamico[]
   }
 
   const [itens, setItens] = useState<NotaFiscalItem[]>([])
@@ -181,7 +192,8 @@ export default function NotasFiscaisPage() {
     valor_issqn: 0,
     valor_inss: 0,
     valor_cbs: 0,
-    valor_liquido: 0
+    valor_liquido: 0,
+    impostos_dinamicos: []
   })
 
   // Função para calcular impostos automaticamente
@@ -214,15 +226,73 @@ export default function NotasFiscaisPage() {
       novoItem.valor_issqn = (novoItem.preco_total * novoItem.aliquota_issqn) / 100
     }
     
+    // Calcular impostos dinâmicos
+    if (novoItem.impostos_dinamicos && novoItem.impostos_dinamicos.length > 0) {
+      novoItem.impostos_dinamicos = novoItem.impostos_dinamicos.map(imposto => {
+        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : novoItem.preco_total
+        const valorCalculado = (baseCalculo * imposto.aliquota) / 100
+        return {
+          ...imposto,
+          base_calculo: baseCalculo,
+          valor_calculado: valorCalculado
+        }
+      })
+    }
+    
     // Calcular valor líquido (valor total - todos os impostos)
-    const totalImpostos = (novoItem.valor_icms || 0) + 
-                         (novoItem.valor_ipi || 0) + 
-                         (novoItem.valor_issqn || 0) + 
-                         (novoItem.valor_inss || 0) + 
-                         (novoItem.valor_cbs || 0)
-    novoItem.valor_liquido = novoItem.preco_total - totalImpostos
+    const totalImpostosFixos = (novoItem.valor_icms || 0) + 
+                               (novoItem.valor_ipi || 0) + 
+                               (novoItem.valor_issqn || 0) + 
+                               (novoItem.valor_inss || 0) + 
+                               (novoItem.valor_cbs || 0)
+    
+    const totalImpostosDinamicos = novoItem.impostos_dinamicos?.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0) || 0
+    
+    novoItem.valor_liquido = novoItem.preco_total - totalImpostosFixos - totalImpostosDinamicos
     
     return novoItem
+  }
+
+  // Funções para gerenciar impostos dinâmicos
+  const adicionarImpostoDinamico = () => {
+    const novoImposto: ImpostoDinamico = {
+      id: Date.now().toString(),
+      nome: '',
+      tipo: '',
+      base_calculo: itemFormData.preco_total || 0,
+      aliquota: 0,
+      valor_calculado: 0
+    }
+    const impostosAtuais = itemFormData.impostos_dinamicos || []
+    const itemAtualizado = calcularImpostos({
+      ...itemFormData,
+      impostos_dinamicos: [...impostosAtuais, novoImposto]
+    })
+    setItemFormData(itemAtualizado)
+  }
+
+  const removerImpostoDinamico = (id: string) => {
+    const impostosAtuais = itemFormData.impostos_dinamicos || []
+    const itemAtualizado = calcularImpostos({
+      ...itemFormData,
+      impostos_dinamicos: impostosAtuais.filter(imp => imp.id !== id)
+    })
+    setItemFormData(itemAtualizado)
+  }
+
+  const atualizarImpostoDinamico = (id: string, campo: keyof ImpostoDinamico, valor: any) => {
+    const impostosAtuais = itemFormData.impostos_dinamicos || []
+    const impostosAtualizados = impostosAtuais.map(imp => {
+      if (imp.id === id) {
+        return { ...imp, [campo]: valor }
+      }
+      return imp
+    })
+    const itemAtualizado = calcularImpostos({
+      ...itemFormData,
+      impostos_dinamicos: impostosAtualizados
+    })
+    setItemFormData(itemAtualizado)
   }
 
   useEffect(() => {
@@ -681,29 +751,47 @@ export default function NotasFiscaisPage() {
     try {
       const itensResponse = await notasFiscaisApi.listarItens(nota.id)
       if (itensResponse.success && itensResponse.data) {
-        setItens(itensResponse.data.map((item: any) => ({
-          id: item.id,
-          codigo_produto: item.codigo_produto,
-          descricao: item.descricao,
-          ncm_sh: item.ncm_sh,
-          cfop: item.cfop,
-          unidade: item.unidade,
-          quantidade: parseFloat(item.quantidade),
-          preco_unitario: parseFloat(item.preco_unitario),
-          preco_total: parseFloat(item.preco_total),
-          csosn: item.csosn,
-          base_calculo_icms: item.base_calculo_icms ? parseFloat(item.base_calculo_icms) : undefined,
-          percentual_icms: item.percentual_icms ? parseFloat(item.percentual_icms) : undefined,
-          valor_icms: item.valor_icms ? parseFloat(item.valor_icms) : undefined,
-          percentual_ipi: item.percentual_ipi ? parseFloat(item.percentual_ipi) : undefined,
-          valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined,
-          base_calculo_issqn: item.base_calculo_issqn ? parseFloat(item.base_calculo_issqn) : undefined,
-          aliquota_issqn: item.aliquota_issqn ? parseFloat(item.aliquota_issqn) : undefined,
-          valor_issqn: item.valor_issqn ? parseFloat(item.valor_issqn) : undefined,
-          valor_inss: item.valor_inss ? parseFloat(item.valor_inss) : undefined,
-          valor_cbs: item.valor_cbs ? parseFloat(item.valor_cbs) : undefined,
-          valor_liquido: item.valor_liquido ? parseFloat(item.valor_liquido) : undefined
-        })))
+        setItens(itensResponse.data.map((item: any) => {
+          // Parse impostos dinâmicos se existirem
+          let impostosDinamicos: ImpostoDinamico[] = []
+          if (item.impostos_dinamicos) {
+            try {
+              if (typeof item.impostos_dinamicos === 'string') {
+                impostosDinamicos = JSON.parse(item.impostos_dinamicos)
+              } else if (Array.isArray(item.impostos_dinamicos)) {
+                impostosDinamicos = item.impostos_dinamicos
+              }
+            } catch (e) {
+              console.error('Erro ao fazer parse de impostos_dinamicos:', e)
+              impostosDinamicos = []
+            }
+          }
+          
+          return {
+            id: item.id,
+            codigo_produto: item.codigo_produto,
+            descricao: item.descricao,
+            ncm_sh: item.ncm_sh,
+            cfop: item.cfop,
+            unidade: item.unidade,
+            quantidade: parseFloat(item.quantidade),
+            preco_unitario: parseFloat(item.preco_unitario),
+            preco_total: parseFloat(item.preco_total),
+            csosn: item.csosn,
+            base_calculo_icms: item.base_calculo_icms ? parseFloat(item.base_calculo_icms) : undefined,
+            percentual_icms: item.percentual_icms ? parseFloat(item.percentual_icms) : undefined,
+            valor_icms: item.valor_icms ? parseFloat(item.valor_icms) : undefined,
+            percentual_ipi: item.percentual_ipi ? parseFloat(item.percentual_ipi) : undefined,
+            valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined,
+            base_calculo_issqn: item.base_calculo_issqn ? parseFloat(item.base_calculo_issqn) : undefined,
+            aliquota_issqn: item.aliquota_issqn ? parseFloat(item.aliquota_issqn) : undefined,
+            valor_issqn: item.valor_issqn ? parseFloat(item.valor_issqn) : undefined,
+            valor_inss: item.valor_inss ? parseFloat(item.valor_inss) : undefined,
+            valor_cbs: item.valor_cbs ? parseFloat(item.valor_cbs) : undefined,
+            valor_liquido: item.valor_liquido ? parseFloat(item.valor_liquido) : undefined,
+            impostos_dinamicos: impostosDinamicos
+          }
+        }))
         
         // Recalcular valor total da nota fiscal baseado nos itens
         const totalItens = itensResponse.data.reduce((sum: number, item: any) => {
@@ -1677,7 +1765,19 @@ export default function NotasFiscaisPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  setItemFormData(item)
+                                  // Parse impostos dinâmicos se vierem como string JSON
+                                  const itemParaEditar = { ...item }
+                                  if (itemParaEditar.impostos_dinamicos && typeof itemParaEditar.impostos_dinamicos === 'string') {
+                                    try {
+                                      itemParaEditar.impostos_dinamicos = JSON.parse(itemParaEditar.impostos_dinamicos as any)
+                                    } catch (e) {
+                                      itemParaEditar.impostos_dinamicos = []
+                                    }
+                                  } else if (!itemParaEditar.impostos_dinamicos) {
+                                    itemParaEditar.impostos_dinamicos = []
+                                  }
+                                  const itemCalculado = calcularImpostos(itemParaEditar)
+                                  setItemFormData(itemCalculado)
                                   setEditingItem(item)
                                   setIsItemDialogOpen(true)
                                 }}
@@ -2405,6 +2505,115 @@ export default function NotasFiscaisPage() {
                 </div>
               </div>
             </div>
+
+            <div className="border-t pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <Label className="text-sm font-semibold">Impostos Personalizados (Opcional)</Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={adicionarImpostoDinamico}
+                  className="h-8"
+                >
+                  <Plus className="w-4 h-4 mr-1" />
+                  Adicionar Imposto
+                </Button>
+              </div>
+              
+              {itemFormData.impostos_dinamicos && itemFormData.impostos_dinamicos.length > 0 ? (
+                <div className="space-y-3">
+                  {itemFormData.impostos_dinamicos.map((imposto) => (
+                    <div key={imposto.id} className="border rounded-lg p-4 space-y-3 bg-muted/30">
+                      <div className="flex items-center justify-between mb-2">
+                        <Label className="text-sm font-medium">Imposto: {imposto.nome || 'Sem nome'}</Label>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removerImpostoDinamico(imposto.id)}
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <Label htmlFor={`imposto_nome_${imposto.id}`} className="text-xs">Nome do Imposto *</Label>
+                          <Input
+                            id={`imposto_nome_${imposto.id}`}
+                            value={imposto.nome}
+                            onChange={(e) => atualizarImpostoDinamico(imposto.id, 'nome', e.target.value)}
+                            placeholder="Ex: PIS, COFINS, IRPJ"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`imposto_tipo_${imposto.id}`} className="text-xs">Tipo (Opcional)</Label>
+                          <Input
+                            id={`imposto_tipo_${imposto.id}`}
+                            value={imposto.tipo || ''}
+                            onChange={(e) => atualizarImpostoDinamico(imposto.id, 'tipo', e.target.value)}
+                            placeholder="Ex: Federal, Estadual"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`imposto_base_${imposto.id}`} className="text-xs">Base de Cálculo (R$)</Label>
+                          <Input
+                            id={`imposto_base_${imposto.id}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={imposto.base_calculo || ''}
+                            onChange={(e) => {
+                              const base = parseFloat(e.target.value) || 0
+                              atualizarImpostoDinamico(imposto.id, 'base_calculo', base)
+                            }}
+                            placeholder="0.00"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor={`imposto_aliquota_${imposto.id}`} className="text-xs">Alíquota (%)</Label>
+                          <Input
+                            id={`imposto_aliquota_${imposto.id}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max="100"
+                            value={imposto.aliquota || ''}
+                            onChange={(e) => {
+                              const aliquota = parseFloat(e.target.value) || 0
+                              atualizarImpostoDinamico(imposto.id, 'aliquota', aliquota)
+                            }}
+                            placeholder="0.00"
+                            className="h-8 text-sm"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <Label htmlFor={`imposto_valor_${imposto.id}`} className="text-xs">Valor Calculado (R$)</Label>
+                          <Input
+                            id={`imposto_valor_${imposto.id}`}
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={imposto.valor_calculado?.toFixed(2) || '0.00'}
+                            readOnly
+                            className="h-8 text-sm bg-muted"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  Nenhum imposto personalizado adicionado. Clique em "Adicionar Imposto" para criar um novo.
+                </p>
+              )}
+            </div>
           </div>
 
           <DialogFooter>
@@ -2427,7 +2636,8 @@ export default function NotasFiscaisPage() {
                 valor_issqn: 0,
                 valor_inss: 0,
                 valor_cbs: 0,
-                valor_liquido: 0
+                valor_liquido: 0,
+                impostos_dinamicos: []
               })
             }}>
               Cancelar
@@ -2481,7 +2691,8 @@ export default function NotasFiscaisPage() {
                 valor_issqn: 0,
                 valor_inss: 0,
                 valor_cbs: 0,
-                valor_liquido: 0
+                valor_liquido: 0,
+                impostos_dinamicos: []
               })
             }}>
               {editingItem ? 'Atualizar' : 'Adicionar'} Item

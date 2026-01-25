@@ -323,18 +323,18 @@ export default function ContasReceberPage() {
     })
   }, [medicoes, searchTerm, filterStatus, filterObra, filterPeriodo])
 
-  // Combinar todos os registros para paginação
+  // Combinar todos os registros para paginação (sem orçamentos)
   const todosRegistros = useMemo(() => {
     return [
       ...filteredReceitas.map(r => ({ tipo: 'receita' as const, data: r })),
       ...filteredMedicoes.map(m => ({ tipo: 'medicao' as const, data: m })),
-      ...filteredOrcamentos.map(o => ({ tipo: 'orcamento' as const, data: o })),
+      // Orçamentos removidos - não devem aparecer em contas a receber
       ...contas.map(c => ({ 
         tipo: (c.tipo === 'nota_fiscal' ? 'nota_fiscal' : 'conta') as const, 
         data: c 
       }))
     ]
-  }, [filteredReceitas, filteredMedicoes, filteredOrcamentos, contas])
+  }, [filteredReceitas, filteredMedicoes, contas])
 
   // Calcular paginação
   const totalRegistros = todosRegistros.length
@@ -763,8 +763,8 @@ export default function ContasReceberPage() {
           {/* Lista Unificada de Receitas e Contas a Receber */}
           <Card>
             <CardHeader>
-              <CardTitle>Contas a Receber e Medições ({filteredReceitas.length + filteredOrcamentos.length + filteredMedicoes.length + contas.length})</CardTitle>
-              <CardDescription>Lista unificada de receitas, medições, orçamentos e contas a receber</CardDescription>
+              <CardTitle>Contas a Receber e Medições ({filteredReceitas.length + filteredMedicoes.length + contas.length})</CardTitle>
+              <CardDescription>Lista unificada de receitas, medições e contas a receber</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
             {/* Filtros */}
@@ -1055,71 +1055,7 @@ export default function ContasReceberPage() {
                         )
                       }
                       
-                      // Renderizar Orçamento
-                      if (registro.tipo === 'orcamento') {
-                        const orcamento = registro.data as Orcamento
-                        const statusInfo = formatarStatusOrcamento(orcamento.status)
-                        const orcamentoAny = orcamento as any
-                        return (
-                          <TableRow key={`orcamento-${orcamento.id}`}>
-                            <TableCell>
-                              <Badge className="bg-purple-100 text-purple-800">
-                                Orçamento
-                              </Badge>
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {orcamentoAny.numero || `Orçamento #${orcamento.id}`}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4 text-gray-400" />
-                                {orcamentoAny.obras?.nome || 'N/A'}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              {orcamento.clientes?.nome || 'N/A'}
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <Calendar className="w-4 h-4 text-gray-400" />
-                                {new Date(orcamento.data_orcamento).toLocaleDateString('pt-BR')}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex items-center gap-2">
-                                <DollarSign className="w-4 h-4 text-green-600" />
-                                {formatarMoeda(orcamento.valor_total || 0)}
-                              </div>
-                            </TableCell>
-                            <TableCell>
-                              <Badge className={statusInfo.color}>
-                                {statusInfo.label}
-                              </Badge>
-                            </TableCell>
-                            <TableCell>
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    setViewingItem({ tipo: 'orcamento', data: orcamento })
-                                    setIsViewDialogOpen(true)
-                                  }}
-                                >
-                                  <Eye className="w-4 h-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => router.push(`/dashboard/orcamentos/${orcamento.id}`)}
-                                >
-                                  Abrir
-                                </Button>
-                              </div>
-                            </TableCell>
-                          </TableRow>
-                        )
-                      }
+                      // Orçamentos removidos - não devem aparecer em contas a receber
                       
                       // Renderizar Conta a Receber
                       if (registro.tipo === 'conta') {
@@ -1731,62 +1667,7 @@ export default function ContasReceberPage() {
                 </>
               )}
 
-              {viewingItem.tipo === 'orcamento' && (
-                <>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Número</Label>
-                      <p className="mt-1 text-gray-700">
-                        {(viewingItem.data as any).numero || `Orçamento #${viewingItem.data.id}`}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold">Status</Label>
-                      <p className="mt-1">
-                        <Badge className={formatarStatusOrcamento(viewingItem.data.status).color}>
-                          {formatarStatusOrcamento(viewingItem.data.status).label}
-                        </Badge>
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Cliente</Label>
-                      <p className="mt-1 text-gray-700">{viewingItem.data.clientes?.nome || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold">Obra</Label>
-                      <p className="mt-1 text-gray-700">{(viewingItem.data as any).obras?.nome || 'N/A'}</p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Data do Orçamento</Label>
-                      <p className="mt-1 text-gray-700">
-                        {new Date(viewingItem.data.data_orcamento).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold">Data de Validade</Label>
-                      <p className="mt-1 text-gray-700">
-                        {new Date(viewingItem.data.data_validade).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-semibold">Valor Total</Label>
-                    <p className="mt-1 text-lg font-bold text-green-600">
-                      {formatarMoeda(viewingItem.data.valor_total || 0)}
-                    </p>
-                  </div>
-                  {viewingItem.data.observacoes && (
-                    <div>
-                      <Label className="text-sm font-semibold">Observações</Label>
-                      <p className="mt-1 text-gray-700 whitespace-pre-wrap">{viewingItem.data.observacoes}</p>
-                    </div>
-                  )}
-                </>
-              )}
+              {/* Orçamentos removidos - não devem aparecer em contas a receber */}
 
               {viewingItem.tipo === 'conta' && (
                 <>

@@ -470,6 +470,42 @@ router.post('/', async (req, res) => {
 
     if (error) throw error;
 
+    // Criar boleto automaticamente para a nota fiscal
+    try {
+      const tipoBoleto = dadosLimpos.tipo === 'saida' ? 'receber' : 'pagar';
+      const valorBoleto = dadosLimpos.valor_liquido || dadosLimpos.valor_total || 0;
+      
+      const boletoData = {
+        numero_boleto: `NF-${data.numero_nf}${data.serie ? `-${data.serie}` : ''}`,
+        nota_fiscal_id: data.id,
+        cliente_id: dadosLimpos.cliente_id || null,
+        obra_id: dadosLimpos.obra_id || null,
+        descricao: `Boleto - Nota Fiscal ${data.numero_nf}${data.serie ? ` Série ${data.serie}` : ''}`,
+        valor: valorBoleto,
+        data_emissao: dadosLimpos.data_emissao || new Date().toISOString().split('T')[0],
+        data_vencimento: dadosLimpos.data_vencimento || dadosLimpos.data_emissao || new Date().toISOString().split('T')[0],
+        tipo: tipoBoleto,
+        status: 'pendente',
+        observacoes: `Boleto gerado automaticamente para a nota fiscal ${data.numero_nf}`
+      };
+
+      const { data: boleto, error: boletoError } = await supabaseAdmin
+        .from('boletos')
+        .insert([boletoData])
+        .select()
+        .single();
+
+      if (boletoError) {
+        console.warn('Erro ao criar boleto automaticamente:', boletoError.message);
+        // Não falhar a criação da nota fiscal se o boleto não puder ser criado
+      } else {
+        console.log(`Boleto ${boleto.numero_boleto} criado automaticamente para nota fiscal ${data.numero_nf}`);
+      }
+    } catch (boletoErr) {
+      console.warn('Erro ao criar boleto automaticamente:', boletoErr.message);
+      // Não falhar a criação da nota fiscal se o boleto não puder ser criado
+    }
+
     res.status(201).json({
       success: true,
       data,
@@ -600,7 +636,8 @@ router.get('/:id', async (req, res) => {
         clientes(nome, cnpj, telefone, email),
         fornecedores(nome, cnpj, telefone, email),
         vendas(numero_venda, data_venda),
-        compras(numero_pedido, data_pedido)
+        compras(numero_pedido, data_pedido),
+        boletos(id, numero_boleto, valor, data_vencimento, status, tipo)
       `)
       .eq('id', id)
       .single();
@@ -1855,6 +1892,16 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
 
 // ==================== ITENS DA NOTA FISCAL ====================
 
+// Schema de validação para imposto dinâmico
+const impostoDinamicoSchema = Joi.object({
+  id: Joi.string().required(),
+  nome: Joi.string().required(),
+  tipo: Joi.string().allow(null, '').optional(),
+  base_calculo: Joi.number().min(0).required(),
+  aliquota: Joi.number().min(0).max(100).required(),
+  valor_calculado: Joi.number().min(0).required()
+});
+
 // Schema de validação para item de nota fiscal
 const notaFiscalItemSchema = Joi.object({
   nota_fiscal_id: Joi.number().integer().positive().required(),
@@ -1880,6 +1927,11 @@ const notaFiscalItemSchema = Joi.object({
   valor_inss: Joi.number().min(0).allow(null).optional(),
   valor_cbs: Joi.number().min(0).allow(null).optional(),
   valor_liquido: Joi.number().min(0).allow(null).optional(),
+  // Impostos dinâmicos
+  impostos_dinamicos: Joi.alternatives().try(
+    Joi.array().items(impostoDinamicoSchema),
+    Joi.string() // Aceita também como string JSON
+  ).allow(null).optional(),
   ordem: Joi.number().integer().min(1).optional()
 });
 
@@ -1945,6 +1997,34 @@ router.post('/:id/itens', async (req, res) => {
       value.preco_total = value.quantidade * value.preco_unitario;
     }
 
+    // Processar impostos dinâmicos
+    let impostosDinamicos = [];
+    if (value.impostos_dinamicos) {
+      // Se vier como string JSON, fazer parse
+      if (typeof value.impostos_dinamicos === 'string') {
+        try {
+          impostosDinamicos = JSON.parse(value.impostos_dinamicos);
+        } catch (e) {
+          console.error('Erro ao fazer parse de impostos_dinamicos:', e);
+          impostosDinamicos = [];
+        }
+      } else if (Array.isArray(value.impostos_dinamicos)) {
+        impostosDinamicos = value.impostos_dinamicos;
+      }
+      
+      // Calcular valores dos impostos dinâmicos
+      impostosDinamicos = impostosDinamicos.map(imposto => {
+        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total;
+        const valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        return {
+          ...imposto,
+          base_calculo: baseCalculo,
+          valor_calculado: valorCalculado
+        };
+      });
+    }
+    value.impostos_dinamicos = impostosDinamicos.length > 0 ? JSON.stringify(impostosDinamicos) : null;
+
     // Calcular impostos automaticamente se necessário
     // ICMS
     if (value.percentual_icms && !value.valor_icms) {
@@ -1965,13 +2045,16 @@ router.post('/:id/itens', async (req, res) => {
       value.valor_issqn = (baseISSQN * value.aliquota_issqn) / 100;
     }
     
-    // Calcular valor líquido
-    const totalImpostos = (parseFloat(value.valor_icms || 0)) +
-                         (parseFloat(value.valor_ipi || 0)) +
-                         (parseFloat(value.valor_issqn || 0)) +
-                         (parseFloat(value.valor_inss || 0)) +
-                         (parseFloat(value.valor_cbs || 0));
-    value.valor_liquido = value.preco_total - totalImpostos;
+    // Calcular valor líquido (incluindo impostos dinâmicos)
+    const totalImpostosFixos = (parseFloat(value.valor_icms || 0)) +
+                               (parseFloat(value.valor_ipi || 0)) +
+                               (parseFloat(value.valor_issqn || 0)) +
+                               (parseFloat(value.valor_inss || 0)) +
+                               (parseFloat(value.valor_cbs || 0));
+    
+    const totalImpostosDinamicos = impostosDinamicos.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0);
+    
+    value.valor_liquido = value.preco_total - totalImpostosFixos - totalImpostosDinamicos;
 
     const { data, error } = await supabaseAdmin
       .from('notas_fiscais_itens')
@@ -1981,17 +2064,21 @@ router.post('/:id/itens', async (req, res) => {
 
     if (error) throw error;
 
-    // Atualizar valor total da nota fiscal
+    // Atualizar valor total e valor líquido da nota fiscal
     const { data: itens } = await supabaseAdmin
       .from('notas_fiscais_itens')
-      .select('preco_total')
+      .select('preco_total, valor_liquido')
       .eq('nota_fiscal_id', id);
 
     const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
+    const valorLiquido = itens?.reduce((sum, item) => sum + parseFloat(item.valor_liquido || 0), 0) || 0;
 
     await supabaseAdmin
       .from('notas_fiscais')
-      .update({ valor_total: valorTotal })
+      .update({ 
+        valor_total: valorTotal,
+        valor_liquido: valorLiquido
+      })
       .eq('id', id);
 
     res.status(201).json({
@@ -2053,6 +2140,52 @@ router.put('/itens/:itemId', async (req, res) => {
       itemCompleto.preco_total = itemCompleto.quantidade * itemCompleto.preco_unitario;
     }
 
+    // Processar impostos dinâmicos
+    let impostosDinamicos = [];
+    if (itemCompleto.impostos_dinamicos !== undefined) {
+      // Se vier como string JSON, fazer parse
+      if (typeof itemCompleto.impostos_dinamicos === 'string') {
+        try {
+          impostosDinamicos = JSON.parse(itemCompleto.impostos_dinamicos);
+        } catch (e) {
+          console.error('Erro ao fazer parse de impostos_dinamicos:', e);
+          // Se não conseguir fazer parse e já existir no banco, manter o valor atual
+          if (itemAtual.impostos_dinamicos) {
+            try {
+              impostosDinamicos = typeof itemAtual.impostos_dinamicos === 'string' 
+                ? JSON.parse(itemAtual.impostos_dinamicos) 
+                : itemAtual.impostos_dinamicos;
+            } catch (e2) {
+              impostosDinamicos = [];
+            }
+          }
+        }
+      } else if (Array.isArray(itemCompleto.impostos_dinamicos)) {
+        impostosDinamicos = itemCompleto.impostos_dinamicos;
+      } else if (itemAtual.impostos_dinamicos) {
+        // Se não foi fornecido mas existe no banco, manter
+        try {
+          impostosDinamicos = typeof itemAtual.impostos_dinamicos === 'string' 
+            ? JSON.parse(itemAtual.impostos_dinamicos) 
+            : itemAtual.impostos_dinamicos;
+        } catch (e) {
+          impostosDinamicos = [];
+        }
+      }
+      
+      // Calcular valores dos impostos dinâmicos
+      impostosDinamicos = impostosDinamicos.map(imposto => {
+        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total;
+        const valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        return {
+          ...imposto,
+          base_calculo: baseCalculo,
+          valor_calculado: valorCalculado
+        };
+      });
+      itemCompleto.impostos_dinamicos = impostosDinamicos.length > 0 ? JSON.stringify(impostosDinamicos) : null;
+    }
+
     // Calcular impostos automaticamente se necessário
     // ICMS
     if (itemCompleto.percentual_icms && !itemCompleto.valor_icms) {
@@ -2073,13 +2206,16 @@ router.put('/itens/:itemId', async (req, res) => {
       itemCompleto.valor_issqn = (baseISSQN * itemCompleto.aliquota_issqn) / 100;
     }
     
-    // Calcular valor líquido
-    const totalImpostos = (parseFloat(itemCompleto.valor_icms || 0)) +
-                         (parseFloat(itemCompleto.valor_ipi || 0)) +
-                         (parseFloat(itemCompleto.valor_issqn || 0)) +
-                         (parseFloat(itemCompleto.valor_inss || 0)) +
-                         (parseFloat(itemCompleto.valor_cbs || 0));
-    itemCompleto.valor_liquido = itemCompleto.preco_total - totalImpostos;
+    // Calcular valor líquido (incluindo impostos dinâmicos)
+    const totalImpostosFixos = (parseFloat(itemCompleto.valor_icms || 0)) +
+                               (parseFloat(itemCompleto.valor_ipi || 0)) +
+                               (parseFloat(itemCompleto.valor_issqn || 0)) +
+                               (parseFloat(itemCompleto.valor_inss || 0)) +
+                               (parseFloat(itemCompleto.valor_cbs || 0));
+    
+    const totalImpostosDinamicos = impostosDinamicos.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0);
+    
+    itemCompleto.valor_liquido = itemCompleto.preco_total - totalImpostosFixos - totalImpostosDinamicos;
 
     // Remover campos que não devem ser atualizados diretamente
     delete itemCompleto.id;
@@ -2104,14 +2240,18 @@ router.put('/itens/:itemId', async (req, res) => {
     if (item) {
       const { data: itens } = await supabaseAdmin
         .from('notas_fiscais_itens')
-        .select('preco_total')
+        .select('preco_total, valor_liquido')
         .eq('nota_fiscal_id', item.nota_fiscal_id);
 
       const valorTotal = itens?.reduce((sum, item) => sum + parseFloat(item.preco_total || 0), 0) || 0;
+      const valorLiquido = itens?.reduce((sum, item) => sum + parseFloat(item.valor_liquido || 0), 0) || 0;
 
       await supabaseAdmin
         .from('notas_fiscais')
-        .update({ valor_total: valorTotal })
+        .update({ 
+          valor_total: valorTotal,
+          valor_liquido: valorLiquido
+        })
         .eq('id', item.nota_fiscal_id);
     }
 
@@ -2122,6 +2262,44 @@ router.put('/itens/:itemId', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao atualizar item da nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/notas-fiscais/{id}/boletos:
+ *   get:
+ *     summary: Lista boletos de uma nota fiscal
+ *     tags: [Notas Fiscais]
+ */
+router.get('/:id/boletos', async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const { data, error } = await supabaseAdmin
+      .from('boletos')
+      .select(`
+        *,
+        clientes(id, nome, cnpj),
+        obras(id, nome),
+        contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
+      `)
+      .eq('nota_fiscal_id', id)
+      .order('data_vencimento', { ascending: true });
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Erro ao listar boletos da nota fiscal:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
