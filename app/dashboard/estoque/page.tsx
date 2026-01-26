@@ -1457,42 +1457,48 @@ export default function EstoquePage() {
                   </div>
                 </div>
 
-                {!editingItem && (
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
-                      <Input
-                        id="quantidade_inicial"
-                        type="number"
-                        min="0"
-                        value={formData.quantidade_inicial}
-                        onChange={(e) =>
-                          setFormData({ ...formData, quantidade_inicial: Number.parseInt(e.target.value) || 0 })
-                        }
-                        placeholder="Quantidade inicial em estoque"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Quantidade inicial do produto no estoque (será criada uma movimentação de entrada)
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
-                      <Input
-                        id="quantidade_reservada_inicial"
-                        type="number"
-                        min="0"
-                        value={formData.quantidade_reservada_inicial}
-                        onChange={(e) =>
-                          setFormData({ ...formData, quantidade_reservada_inicial: Number.parseInt(e.target.value) || 0 })
-                        }
-                        placeholder="Quantidade reservada inicial"
-                      />
-                      <p className="text-xs text-gray-500">
-                        Quantidade que será reservada inicialmente (opcional)
-                      </p>
-                    </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
+                    <Input
+                      id="quantidade_inicial"
+                      type="number"
+                      min="0"
+                      value={formData.quantidade_inicial}
+                      onChange={(e) =>
+                        setFormData({ ...formData, quantidade_inicial: Number.parseInt(e.target.value) || 0 })
+                      }
+                      placeholder="Quantidade inicial em estoque"
+                      disabled={!!editingItem}
+                    />
+                    <p className="text-xs text-gray-500">
+                      {editingItem 
+                        ? "Quantidade inicial não pode ser alterada após o cadastro"
+                        : "Quantidade inicial do produto no estoque (será criada uma movimentação de entrada)"
+                      }
+                    </p>
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
+                    <Input
+                      id="quantidade_reservada_inicial"
+                      type="number"
+                      min="0"
+                      value={formData.quantidade_reservada_inicial}
+                      onChange={(e) =>
+                        setFormData({ ...formData, quantidade_reservada_inicial: Number.parseInt(e.target.value) || 0 })
+                      }
+                      placeholder="Quantidade reservada inicial"
+                      disabled={!!editingItem}
+                    />
+                    <p className="text-xs text-gray-500">
+                      {editingItem
+                        ? "Quantidade reservada inicial não pode ser alterada após o cadastro"
+                        : "Quantidade que será reservada inicialmente (opcional)"
+                      }
+                    </p>
+                  </div>
+                </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="localizacao">Localização</Label>

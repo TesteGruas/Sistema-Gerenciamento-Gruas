@@ -1,0 +1,40 @@
+feat: Implementação de impostos dinâmicos e integração de boletos com notas fiscais
+
+Implementação completa de sistema de impostos dinâmicos para itens de notas fiscais,
+correção do cálculo de valor líquido, integração automática de boletos e ajustes nas
+contas a receber/pagar.
+
+Principais mudanças:
+
+- Sistema de impostos dinâmicos: permite criar múltiplos impostos personalizados por item
+  com cálculo automático de valores baseado em base de cálculo e alíquota
+
+- Cálculo de valor líquido: corrigido para somar valores líquidos dos itens, descontando
+  todos os impostos (fixos e dinâmicos)
+
+- Integração boletos ↔ notas fiscais: cada nota fiscal cria automaticamente um boleto
+  (tipo receber para saída, pagar para entrada) com valor igual ao valor líquido
+
+- Contas a receber/pagar: 
+  - Usa valor_liquido ao invés de valor_total
+  - Notas fiscais de entrada aparecem em contas a pagar
+  - Orçamentos removidos de contas a receber
+
+- Ajustes de interface: padding do layout financeiro ajustado para melhor espaçamento
+
+Migrations criadas:
+- 20250125_add_impostos_dinamicos_notas_fiscais_itens.sql
+- 20250125_recalcular_valor_liquido_notas_fiscais.sql  
+- 20250125_add_nota_fiscal_id_boletos.sql
+
+Scripts:
+- executar-recalcular-valor-liquido.js
+
+Arquivos modificados:
+- backend-api/src/routes/notas-fiscais.js
+- backend-api/src/routes/boletos.js
+- backend-api/src/routes/contas-receber.js
+- backend-api/src/routes/contas-pagar.js
+- app/dashboard/financeiro/notas-fiscais/page.tsx
+- app/dashboard/financeiro/contas-receber/page.tsx
+- app/dashboard/financeiro/layout.tsx

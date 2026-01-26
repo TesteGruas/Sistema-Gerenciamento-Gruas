@@ -94,6 +94,8 @@ export default function ComponentesGruaPage() {
     quantidade_disponivel: 1,
     quantidade_em_uso: 0,
     quantidade_danificada: 0,
+    quantidade_inicial: 0,
+    quantidade_reservada_inicial: 0,
     status: 'Disponível' as ComponenteGrua['status'],
     localizacao: '',
     localizacao_tipo: 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
@@ -360,6 +362,8 @@ export default function ComponentesGruaPage() {
       quantidade_disponivel: Math.min(1, estoqueDisponivel), // Não pode exceder o disponível
       quantidade_em_uso: 0,
       quantidade_danificada: 0,
+      quantidade_inicial: 0,
+      quantidade_reservada_inicial: 0,
       status: componente.status === 'Ativo' ? 'Disponível' as ComponenteGrua['status'] : 'Disponível' as ComponenteGrua['status'],
       localizacao: componente.localizacao || '',
       localizacao_tipo: componente.localizacao ? 'Almoxarifado' as ComponenteGrua['localizacao_tipo'] : 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
@@ -643,6 +647,8 @@ export default function ComponentesGruaPage() {
       quantidade_disponivel: 1,
       quantidade_em_uso: 0,
       quantidade_danificada: 0,
+      quantidade_inicial: 0,
+      quantidade_reservada_inicial: 0,
       status: 'Disponível' as ComponenteGrua['status'],
       localizacao: '',
       localizacao_tipo: 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
@@ -688,6 +694,8 @@ export default function ComponentesGruaPage() {
       tipo: componente.tipo,
       modelo: componente.modelo || '',
       fabricante: componente.fabricante || '',
+      quantidade_inicial: (componente as any).quantidade_inicial || 0,
+      quantidade_reservada_inicial: (componente as any).quantidade_reservada_inicial || 0,
       numero_serie: componente.numero_serie || '',
       capacidade: componente.capacidade || '',
       unidade_medida: componente.unidade_medida,
@@ -695,6 +703,8 @@ export default function ComponentesGruaPage() {
       quantidade_disponivel: componente.quantidade_disponivel,
       quantidade_em_uso: componente.quantidade_em_uso,
       quantidade_danificada: componente.quantidade_danificada,
+      quantidade_inicial: (componente as any).quantidade_inicial || 0,
+      quantidade_reservada_inicial: (componente as any).quantidade_reservada_inicial || 0,
       status: componente.status,
       localizacao: componente.localizacao || '',
       localizacao_tipo: componente.localizacao_tipo || 'Almoxarifado',
@@ -1466,6 +1476,37 @@ export default function ComponentesGruaPage() {
               </div>
             </div>
 
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
+                <Input
+                  id="quantidade_inicial"
+                  type="number"
+                  min="0"
+                  value={componenteForm.quantidade_inicial}
+                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_inicial: parseInt(e.target.value) || 0 })}
+                  placeholder="Quantidade inicial em estoque"
+                />
+                <p className="text-xs text-gray-500">
+                  Quantidade inicial do componente no estoque (será criada uma movimentação de entrada)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
+                <Input
+                  id="quantidade_reservada_inicial"
+                  type="number"
+                  min="0"
+                  value={componenteForm.quantidade_reservada_inicial}
+                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_reservada_inicial: parseInt(e.target.value) || 0 })}
+                  placeholder="Quantidade reservada inicial"
+                />
+                <p className="text-xs text-gray-500">
+                  Quantidade que será reservada inicialmente (opcional)
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <div>
                 <Label htmlFor="vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
@@ -1781,6 +1822,37 @@ export default function ComponentesGruaPage() {
                   value={componenteForm.quantidade_em_uso}
                   onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
                 />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit_quantidade_inicial">Quantidade Inicial</Label>
+                <Input
+                  id="edit_quantidade_inicial"
+                  type="number"
+                  min="0"
+                  value={componenteForm.quantidade_inicial}
+                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_inicial: parseInt(e.target.value) || 0 })}
+                  placeholder="Quantidade inicial em estoque"
+                />
+                <p className="text-xs text-gray-500">
+                  Quantidade inicial do componente no estoque (será criada uma movimentação de entrada)
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit_quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
+                <Input
+                  id="edit_quantidade_reservada_inicial"
+                  type="number"
+                  min="0"
+                  value={componenteForm.quantidade_reservada_inicial}
+                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_reservada_inicial: parseInt(e.target.value) || 0 })}
+                  placeholder="Quantidade reservada inicial"
+                />
+                <p className="text-xs text-gray-500">
+                  Quantidade que será reservada inicialmente (opcional)
+                </p>
               </div>
             </div>
 

@@ -18,7 +18,9 @@ const produtoSchema = Joi.object({
   localizacao: Joi.string().allow('').optional(),
   status: Joi.string().valid('Ativo', 'Inativo').default('Ativo'),
   classificacao_tipo: Joi.string().valid('componente', 'item', 'ativo', 'complemento').optional(),
-  subcategoria_ativo: Joi.string().valid('grua', 'equipamento_grua', 'ferramenta', 'ar_condicionado', 'camera', 'auto', 'pc').allow('').optional()
+  subcategoria_ativo: Joi.string().valid('grua', 'equipamento_grua', 'ferramenta', 'ar_condicionado', 'camera', 'auto', 'pc').allow('').optional(),
+  quantidade_inicial: Joi.number().integer().min(0).optional().strip(), // Campo apenas para criação, não é salvo no produto
+  quantidade_reservada_inicial: Joi.number().integer().min(0).optional().strip() // Campo apenas para criação, não é salvo no produto
 }).custom((value, helpers) => {
   // Validar se estoque_maximo > estoque_minimo quando ambos estão definidos
   if (value.estoque_maximo && value.estoque_maximo <= value.estoque_minimo) {
