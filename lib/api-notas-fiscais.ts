@@ -7,6 +7,7 @@ export interface NotaFiscal {
   data_emissao: string
   data_vencimento?: string
   valor_total: number
+  valor_liquido?: number
   tipo: 'entrada' | 'saida'
   status: 'pendente' | 'paga' | 'vencida' | 'cancelada'
   cliente_id?: number

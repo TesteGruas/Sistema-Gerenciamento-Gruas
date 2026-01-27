@@ -40,7 +40,8 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  AlertTriangle
+  AlertTriangle,
+  Zap
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 import { clientesApi } from "@/lib/api-clientes"
@@ -936,6 +937,116 @@ export default function NotasFiscaisPage() {
     setGruaInfo(null)
   }
 
+  // Função para preencher dados de teste do item
+  const preencherDadosItemTeste = () => {
+    const precoUnitario = 1000
+    const quantidade = 1
+    const precoTotal = precoUnitario * quantidade
+    
+    const itemTeste: NotaFiscalItem = {
+      descricao: 'Serviço de Locação de Guindaste',
+      unidade: 'MES',
+      quantidade: quantidade,
+      preco_unitario: precoUnitario,
+      preco_total: precoTotal,
+      codigo_produto: 'SRV001',
+      ncm_sh: '8425.20.00',
+      cfop: '5102',
+      csosn: '101',
+      base_calculo_icms: precoTotal,
+      percentual_icms: 12,
+      valor_icms: 0, // Será calculado
+      percentual_ipi: 0,
+      valor_ipi: 0,
+      base_calculo_issqn: precoTotal,
+      aliquota_issqn: 5,
+      valor_issqn: 0, // Será calculado
+      valor_inss: 0,
+      valor_cbs: 0,
+      valor_liquido: 0, // Será calculado
+      impostos_dinamicos: []
+    }
+    
+    // Calcular impostos usando a função calcularImpostos
+    const itemCalculado = calcularImpostos(itemTeste)
+    setItemFormData(itemCalculado)
+    
+    toast({
+      title: "Dados de teste preenchidos",
+      description: "Os campos do item foram preenchidos com dados de exemplo",
+    })
+  }
+
+  // Função para preencher dados de teste
+  const preencherDadosTeste = () => {
+    const hoje = new Date()
+    const vencimento = new Date(hoje)
+    vencimento.setDate(vencimento.getDate() + 30) // 30 dias a partir de hoje
+    
+    // Calcular valores do item de teste
+    const precoTotal = 10000
+    const valorICMS = 1200
+    const valorIPI = 0
+    const valorISSQN = 500
+    const valorINSS = 0
+    const valorCBS = 0
+    const totalImpostosFixos = valorICMS + valorIPI + valorISSQN + valorINSS + valorCBS
+    const valorLiquido = precoTotal - totalImpostosFixos
+    
+    const dadosTeste: NotaFiscalCreate = {
+      numero_nf: `NF${Date.now().toString().slice(-8)}`,
+      serie: '001',
+      data_emissao: hoje.toISOString().split('T')[0],
+      data_vencimento: vencimento.toISOString().split('T')[0],
+      valor_total: precoTotal,
+      tipo: activeTab,
+      status: 'pendente',
+      tipo_nota: activeTab === 'saida' ? 'nf_locacao' : 'nf_servico',
+      observacoes: 'Nota fiscal de teste - dados preenchidos automaticamente',
+      cliente_id: activeTab === 'saida' && clientes.length > 0 ? clientes[0].id : undefined,
+      fornecedor_id: activeTab === 'entrada' && fornecedores.length > 0 ? fornecedores[0].id : undefined
+    }
+    
+    setFormData(dadosTeste)
+    
+    // Adicionar um item de teste com cálculo correto
+    const itemTeste: NotaFiscalItem = {
+      descricao: 'Serviço de Locação de Guindaste',
+      unidade: 'MES',
+      quantidade: 1,
+      preco_unitario: precoTotal,
+      preco_total: precoTotal,
+      codigo_produto: 'SRV001',
+      ncm_sh: '8425.20.00',
+      cfop: '5102',
+      csosn: '101',
+      base_calculo_icms: precoTotal,
+      percentual_icms: 12,
+      valor_icms: valorICMS,
+      percentual_ipi: 0,
+      valor_ipi: valorIPI,
+      base_calculo_issqn: precoTotal,
+      aliquota_issqn: 5,
+      valor_issqn: valorISSQN,
+      valor_inss: valorINSS,
+      valor_cbs: valorCBS,
+      valor_liquido: valorLiquido,
+      impostos_dinamicos: []
+    }
+    
+    // Calcular impostos do item usando a função calcularImpostos
+    const itemCalculado = calcularImpostos(itemTeste)
+    setItens([itemCalculado])
+    
+    // Atualizar valor total do formulário
+    setFormData({ ...dadosTeste, valor_total: precoTotal })
+    
+    toast({
+      title: "Dados de teste preenchidos",
+      description: "Os campos foram preenchidos com dados de exemplo",
+    })
+  }
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
@@ -1109,7 +1220,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Origem</TableHead>
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Valor Líquido</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -1153,7 +1264,9 @@ export default function NotasFiscaisPage() {
                           <TableCell>
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(nota.valor_total)}</TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency(nota.valor_liquido ?? nota.valor_total)}
+                          </TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1328,7 +1441,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Compra</TableHead>
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor Total</TableHead>
+                        <TableHead>Valor Líquido</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -1362,7 +1475,9 @@ export default function NotasFiscaisPage() {
                           <TableCell>
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(nota.valor_total)}</TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency(nota.valor_liquido ?? nota.valor_total)}
+                          </TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1486,14 +1601,31 @@ export default function NotasFiscaisPage() {
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>
-              {isEditDialogOpen ? 'Editar Nota Fiscal' : activeTab === 'saida' ? 'Nova Nota Fiscal de Saída' : 'Nova Nota Fiscal de Entrada'}
-            </DialogTitle>
-            <DialogDescription>
-              {activeTab === 'saida' 
-                ? 'Preencha os dados da nota fiscal de saída (locação, circulação de equipamentos, outros equipamentos ou medição)'
-                : 'Preencha os dados da nota fiscal de entrada (fornecedor)'}
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <DialogTitle>
+                  {isEditDialogOpen ? 'Editar Nota Fiscal' : activeTab === 'saida' ? 'Nova Nota Fiscal de Saída' : 'Nova Nota Fiscal de Entrada'}
+                </DialogTitle>
+                <DialogDescription>
+                  {activeTab === 'saida' 
+                    ? 'Preencha os dados da nota fiscal de saída (locação, circulação de equipamentos, outros equipamentos ou medição)'
+                    : 'Preencha os dados da nota fiscal de entrada (fornecedor)'}
+                </DialogDescription>
+              </div>
+              {!isEditDialogOpen && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={preencherDadosTeste}
+                  className="ml-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                  title="Preencher com dados de teste"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Preencher Dados
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           
           <div className="space-y-4">
@@ -2267,10 +2399,27 @@ export default function NotasFiscaisPage() {
       <Dialog open={isItemDialogOpen} onOpenChange={setIsItemDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Item'}</DialogTitle>
-            <DialogDescription>
-              Preencha os dados do produto ou serviço
-            </DialogDescription>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <DialogTitle>{editingItem ? 'Editar Item' : 'Adicionar Item'}</DialogTitle>
+                <DialogDescription>
+                  Preencha os dados do produto ou serviço
+                </DialogDescription>
+              </div>
+              {!editingItem && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={preencherDadosItemTeste}
+                  className="ml-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                  title="Preencher com dados de teste"
+                >
+                  <Zap className="w-4 h-4 mr-2" />
+                  Preencher Dados
+                </Button>
+              )}
+            </div>
           </DialogHeader>
           
           <div className="space-y-4">

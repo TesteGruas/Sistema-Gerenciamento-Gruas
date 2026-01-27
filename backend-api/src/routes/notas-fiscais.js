@@ -1894,12 +1894,14 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
 
 // Schema de validação para imposto dinâmico
 const impostoDinamicoSchema = Joi.object({
-  id: Joi.string().required(),
+  id: Joi.string().optional(),
   nome: Joi.string().required(),
   tipo: Joi.string().allow(null, '').optional(),
-  base_calculo: Joi.number().min(0).required(),
-  aliquota: Joi.number().min(0).max(100).required(),
-  valor_calculado: Joi.number().min(0).required()
+  tipo_calculo: Joi.string().valid('porcentagem', 'valor_fixo').default('porcentagem').optional(),
+  base_calculo: Joi.number().min(0).allow(null).optional(),
+  aliquota: Joi.number().min(0).max(100).allow(null).optional(),
+  valor_fixo: Joi.number().min(0).allow(null).optional(),
+  valor_calculado: Joi.number().min(0).allow(null).optional()
 });
 
 // Schema de validação para item de nota fiscal
@@ -1954,9 +1956,22 @@ router.get('/:id/itens', async (req, res) => {
 
     if (error) throw error;
 
+    // Parsear impostos dinâmicos de string JSON para array
+    const itensProcessados = (data || []).map(item => {
+      if (item.impostos_dinamicos && typeof item.impostos_dinamicos === 'string') {
+        try {
+          item.impostos_dinamicos = JSON.parse(item.impostos_dinamicos);
+        } catch (e) {
+          console.error('Erro ao fazer parse de impostos_dinamicos:', e);
+          item.impostos_dinamicos = [];
+        }
+      }
+      return item;
+    });
+
     res.json({
       success: true,
-      data: data || []
+      data: itensProcessados
     });
   } catch (error) {
     console.error('Erro ao listar itens da nota fiscal:', error);
@@ -2014,17 +2029,22 @@ router.post('/:id/itens', async (req, res) => {
       
       // Calcular valores dos impostos dinâmicos
       impostosDinamicos = impostosDinamicos.map(imposto => {
+        // Garantir que tipo_calculo tenha um valor padrão
+        const tipoCalculo = imposto.tipo_calculo || 'porcentagem';
         let valorCalculado = 0;
-        if (imposto.tipo_calculo === 'valor_fixo') {
+        
+        if (tipoCalculo === 'valor_fixo') {
           // Se for valor fixo, usar o valor_fixo diretamente
           valorCalculado = parseFloat(imposto.valor_fixo || 0);
         } else {
           // Se for porcentagem, calcular normalmente
           const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total;
-          valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+          const aliquota = imposto.aliquota || 0;
+          valorCalculado = (baseCalculo * aliquota) / 100;
         }
         return {
           ...imposto,
+          tipo_calculo: tipoCalculo,
           base_calculo: imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total,
           valor_calculado: valorCalculado
         };
@@ -2182,17 +2202,22 @@ router.put('/itens/:itemId', async (req, res) => {
       
       // Calcular valores dos impostos dinâmicos
       impostosDinamicos = impostosDinamicos.map(imposto => {
+        // Garantir que tipo_calculo tenha um valor padrão
+        const tipoCalculo = imposto.tipo_calculo || 'porcentagem';
         let valorCalculado = 0;
-        if (imposto.tipo_calculo === 'valor_fixo') {
+        
+        if (tipoCalculo === 'valor_fixo') {
           // Se for valor fixo, usar o valor_fixo diretamente
           valorCalculado = parseFloat(imposto.valor_fixo || 0);
         } else {
           // Se for porcentagem, calcular normalmente
           const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total;
-          valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+          const aliquota = imposto.aliquota || 0;
+          valorCalculado = (baseCalculo * aliquota) / 100;
         }
         return {
           ...imposto,
+          tipo_calculo: tipoCalculo,
           base_calculo: imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total,
           valor_calculado: valorCalculado
         };
