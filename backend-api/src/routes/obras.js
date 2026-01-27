@@ -131,6 +131,7 @@ const obraSchema = Joi.object({
   cliente_telefone: Joi.string().allow('', null).optional(),
   // Novos campos obrigatórios
   cno: Joi.string().allow(null, '').optional(),
+  cno_arquivo: Joi.string().allow(null, '').optional(),
   art_numero: Joi.string().allow(null, '').optional(),
   art_arquivo: Joi.string().allow(null, '').optional(),
   apolice_numero: Joi.string().allow(null, '').optional(),
@@ -1149,6 +1150,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       raio_permitido: value.raio_permitido || 500,
       // Campos obrigatórios (CNO, ART, Apólice)
       cno: value.cno,
+      cno_arquivo: value.cno_arquivo,
       art_numero: value.art_numero,
       art_arquivo: value.art_arquivo,
       apolice_numero: value.apolice_numero,
@@ -1767,6 +1769,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       raio_permitido: value.raio_permitido !== undefined ? value.raio_permitido : undefined,
       // Campos obrigatórios (CNO, ART, Apólice)
       cno: value.cno !== undefined ? value.cno : undefined,
+      cno_arquivo: value.cno_arquivo !== undefined ? value.cno_arquivo : undefined,
       art_numero: value.art_numero !== undefined ? value.art_numero : undefined,
       art_arquivo: value.art_arquivo !== undefined ? value.art_arquivo : undefined,
       apolice_numero: value.apolice_numero !== undefined ? value.apolice_numero : undefined,
@@ -2284,18 +2287,19 @@ router.get('/:id/responsaveis-tecnicos', authenticateToken, async (req, res) => 
 router.put('/:id/documentos', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params
-    const { cno, art_numero, art_arquivo, apolice_numero, apolice_arquivo } = req.body
+    const { cno, cno_arquivo, art_numero, art_arquivo, apolice_numero, apolice_arquivo } = req.body
 
     // Todos opcionais; valida apenas formato básico
     const schema = Joi.object({
       cno: Joi.string().allow('', null).optional(),
+      cno_arquivo: Joi.string().allow('', null).optional(),
       art_numero: Joi.string().allow('', null).optional(),
       art_arquivo: Joi.string().allow('', null).optional(),
       apolice_numero: Joi.string().allow('', null).optional(),
       apolice_arquivo: Joi.string().allow('', null).optional()
     })
 
-    const { error: validationError } = schema.validate({ cno, art_numero, art_arquivo, apolice_numero, apolice_arquivo })
+    const { error: validationError } = schema.validate({ cno, cno_arquivo, art_numero, art_arquivo, apolice_numero, apolice_arquivo })
     if (validationError) {
       return res.status(400).json({ error: validationError.details[0].message })
     }
@@ -2303,6 +2307,7 @@ router.put('/:id/documentos', authenticateToken, requirePermission('obras:editar
     // Monta update apenas com os campos presentes
     const updateData = {}
     if (cno !== undefined) updateData.cno = cno
+    if (cno_arquivo !== undefined) updateData.cno_arquivo = cno_arquivo
     if (art_numero !== undefined) updateData.art_numero = art_numero
     if (art_arquivo !== undefined) updateData.art_arquivo = art_arquivo
     if (apolice_numero !== undefined) updateData.apolice_numero = apolice_numero

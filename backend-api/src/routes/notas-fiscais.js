@@ -2014,11 +2014,18 @@ router.post('/:id/itens', async (req, res) => {
       
       // Calcular valores dos impostos dinâmicos
       impostosDinamicos = impostosDinamicos.map(imposto => {
-        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total;
-        const valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        let valorCalculado = 0;
+        if (imposto.tipo_calculo === 'valor_fixo') {
+          // Se for valor fixo, usar o valor_fixo diretamente
+          valorCalculado = parseFloat(imposto.valor_fixo || 0);
+        } else {
+          // Se for porcentagem, calcular normalmente
+          const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total;
+          valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        }
         return {
           ...imposto,
-          base_calculo: baseCalculo,
+          base_calculo: imposto.base_calculo > 0 ? imposto.base_calculo : value.preco_total,
           valor_calculado: valorCalculado
         };
       });
@@ -2175,11 +2182,18 @@ router.put('/itens/:itemId', async (req, res) => {
       
       // Calcular valores dos impostos dinâmicos
       impostosDinamicos = impostosDinamicos.map(imposto => {
-        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total;
-        const valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        let valorCalculado = 0;
+        if (imposto.tipo_calculo === 'valor_fixo') {
+          // Se for valor fixo, usar o valor_fixo diretamente
+          valorCalculado = parseFloat(imposto.valor_fixo || 0);
+        } else {
+          // Se for porcentagem, calcular normalmente
+          const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total;
+          valorCalculado = (baseCalculo * imposto.aliquota) / 100;
+        }
         return {
           ...imposto,
-          base_calculo: baseCalculo,
+          base_calculo: imposto.base_calculo > 0 ? imposto.base_calculo : itemCompleto.preco_total,
           valor_calculado: valorCalculado
         };
       });

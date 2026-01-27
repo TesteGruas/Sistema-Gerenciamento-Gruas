@@ -141,8 +141,10 @@ export default function NotasFiscaisPage() {
     id: string
     nome: string
     tipo?: string
+    tipo_calculo: 'porcentagem' | 'valor_fixo'
     base_calculo: number
     aliquota: number
+    valor_fixo?: number
     valor_calculado: number
   }
 
@@ -175,6 +177,7 @@ export default function NotasFiscaisPage() {
 
   const [itens, setItens] = useState<NotaFiscalItem[]>([])
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
+  const [isCreateFornecedorDialogOpen, setIsCreateFornecedorDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<NotaFiscalItem | null>(null)
   const [itemFormData, setItemFormData] = useState<NotaFiscalItem>({
     descricao: '',
@@ -229,11 +232,18 @@ export default function NotasFiscaisPage() {
     // Calcular impostos dinâmicos
     if (novoItem.impostos_dinamicos && novoItem.impostos_dinamicos.length > 0) {
       novoItem.impostos_dinamicos = novoItem.impostos_dinamicos.map(imposto => {
-        const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : novoItem.preco_total
-        const valorCalculado = (baseCalculo * imposto.aliquota) / 100
+        let valorCalculado = 0
+        if (imposto.tipo_calculo === 'valor_fixo') {
+          // Se for valor fixo, usar o valor_fixo diretamente
+          valorCalculado = imposto.valor_fixo || 0
+        } else {
+          // Se for porcentagem, calcular normalmente
+          const baseCalculo = imposto.base_calculo > 0 ? imposto.base_calculo : novoItem.preco_total
+          valorCalculado = (baseCalculo * imposto.aliquota) / 100
+        }
         return {
           ...imposto,
-          base_calculo: baseCalculo,
+          base_calculo: imposto.base_calculo > 0 ? imposto.base_calculo : novoItem.preco_total,
           valor_calculado: valorCalculado
         }
       })
@@ -259,8 +269,10 @@ export default function NotasFiscaisPage() {
       id: Date.now().toString(),
       nome: '',
       tipo: '',
+      tipo_calculo: 'porcentagem',
       base_calculo: itemFormData.preco_total || 0,
       aliquota: 0,
+      valor_fixo: 0,
       valor_calculado: 0
     }
     const impostosAtuais = itemFormData.impostos_dinamicos || []
@@ -1604,7 +1616,19 @@ export default function NotasFiscaisPage() {
             {activeTab === 'entrada' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="fornecedor_id">Fornecedor *</Label>
+                  <div className="flex items-center gap-2">
+                    <Label htmlFor="fornecedor_id">Fornecedor *</Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setIsCreateFornecedorDialogOpen(true)}
+                      className="h-7 text-xs"
+                    >
+                      <Plus className="w-3 h-3 mr-1" />
+                      Novo
+                    </Button>
+                  </div>
                   <Select 
                     value={formData.fornecedor_id?.toString() || ''} 
                     onValueChange={(value) => setFormData({ ...formData, fornecedor_id: parseInt(value) })}
@@ -1804,11 +1828,42 @@ export default function NotasFiscaisPage() {
                       ))}
                     </TableBody>
                   </Table>
-                  <div className="p-4 border-t bg-muted/50">
+                  <div className="p-4 border-t bg-muted/50 space-y-2">
                     <div className="flex justify-end">
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Total dos Itens:</p>
-                        <p className="text-lg font-bold">R$ {itens.reduce((sum, item) => sum + item.preco_total, 0).toFixed(2)}</p>
+                      <div className="text-right space-y-1">
+                        <div className="flex justify-between gap-8">
+                          <span className="text-sm text-muted-foreground">Total dos Itens:</span>
+                          <span className="text-sm font-medium">R$ {itens.reduce((sum, item) => sum + item.preco_total, 0).toFixed(2)}</span>
+                        </div>
+                        {(() => {
+                          const totalImpostosFixos = itens.reduce((sum, item) => 
+                            sum + (item.valor_icms || 0) + (item.valor_ipi || 0) + (item.valor_issqn || 0) + (item.valor_inss || 0) + (item.valor_cbs || 0), 0
+                          )
+                          const totalImpostosDinamicos = itens.reduce((sum, item) => {
+                            if (item.impostos_dinamicos) {
+                              const impostos = typeof item.impostos_dinamicos === 'string' 
+                                ? JSON.parse(item.impostos_dinamicos) 
+                                : item.impostos_dinamicos
+                              return sum + (impostos.reduce((impSum: number, imp: any) => impSum + (imp.valor_calculado || 0), 0))
+                            }
+                            return sum
+                          }, 0)
+                          const totalImpostos = totalImpostosFixos + totalImpostosDinamicos
+                          const totalLiquido = itens.reduce((sum, item) => sum + (item.valor_liquido || item.preco_total), 0)
+                          
+                          return (
+                            <>
+                              <div className="flex justify-between gap-8">
+                                <span className="text-sm text-muted-foreground">Total de Impostos:</span>
+                                <span className="text-sm font-medium text-red-600">R$ {totalImpostos.toFixed(2)}</span>
+                              </div>
+                              <div className="flex justify-between gap-8 border-t pt-1">
+                                <span className="text-sm font-semibold">Valor Líquido:</span>
+                                <span className="text-lg font-bold text-green-600">R$ {totalLiquido.toFixed(2)}</span>
+                              </div>
+                            </>
+                          )
+                        })()}
                       </div>
                     </div>
                   </div>
@@ -2559,39 +2614,77 @@ export default function NotasFiscaisPage() {
                             className="h-8 text-sm"
                           />
                         </div>
-                        <div>
-                          <Label htmlFor={`imposto_base_${imposto.id}`} className="text-xs">Base de Cálculo (R$)</Label>
-                          <Input
-                            id={`imposto_base_${imposto.id}`}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            value={imposto.base_calculo || ''}
-                            onChange={(e) => {
-                              const base = parseFloat(e.target.value) || 0
-                              atualizarImpostoDinamico(imposto.id, 'base_calculo', base)
+                        <div className="col-span-2">
+                          <Label htmlFor={`imposto_tipo_calculo_${imposto.id}`} className="text-xs">Tipo de Cálculo *</Label>
+                          <Select
+                            value={imposto.tipo_calculo || 'porcentagem'}
+                            onValueChange={(value: 'porcentagem' | 'valor_fixo') => {
+                              atualizarImpostoDinamico(imposto.id, 'tipo_calculo', value)
                             }}
-                            placeholder="0.00"
-                            className="h-8 text-sm"
-                          />
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="porcentagem">Porcentagem (%)</SelectItem>
+                              <SelectItem value="valor_fixo">Valor Fixo (R$)</SelectItem>
+                            </SelectContent>
+                          </Select>
                         </div>
-                        <div>
-                          <Label htmlFor={`imposto_aliquota_${imposto.id}`} className="text-xs">Alíquota (%)</Label>
-                          <Input
-                            id={`imposto_aliquota_${imposto.id}`}
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            max="100"
-                            value={imposto.aliquota || ''}
-                            onChange={(e) => {
-                              const aliquota = parseFloat(e.target.value) || 0
-                              atualizarImpostoDinamico(imposto.id, 'aliquota', aliquota)
-                            }}
-                            placeholder="0.00"
-                            className="h-8 text-sm"
-                          />
-                        </div>
+                        {imposto.tipo_calculo === 'porcentagem' ? (
+                          <>
+                            <div>
+                              <Label htmlFor={`imposto_base_${imposto.id}`} className="text-xs">Base de Cálculo (R$)</Label>
+                              <Input
+                                id={`imposto_base_${imposto.id}`}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={imposto.base_calculo || ''}
+                                onChange={(e) => {
+                                  const base = parseFloat(e.target.value) || 0
+                                  atualizarImpostoDinamico(imposto.id, 'base_calculo', base)
+                                }}
+                                placeholder="0.00"
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <Label htmlFor={`imposto_aliquota_${imposto.id}`} className="text-xs">Alíquota (%)</Label>
+                              <Input
+                                id={`imposto_aliquota_${imposto.id}`}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                                value={imposto.aliquota || ''}
+                                onChange={(e) => {
+                                  const aliquota = parseFloat(e.target.value) || 0
+                                  atualizarImpostoDinamico(imposto.id, 'aliquota', aliquota)
+                                }}
+                                placeholder="0.00"
+                                className="h-8 text-sm"
+                              />
+                            </div>
+                          </>
+                        ) : (
+                          <div className="col-span-2">
+                            <Label htmlFor={`imposto_valor_fixo_${imposto.id}`} className="text-xs">Valor Fixo (R$)</Label>
+                            <Input
+                              id={`imposto_valor_fixo_${imposto.id}`}
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={imposto.valor_fixo || ''}
+                              onChange={(e) => {
+                                const valorFixo = parseFloat(e.target.value) || 0
+                                atualizarImpostoDinamico(imposto.id, 'valor_fixo', valorFixo)
+                              }}
+                              placeholder="0.00"
+                              className="h-8 text-sm"
+                            />
+                          </div>
+                        )}
                         <div className="col-span-2">
                           <Label htmlFor={`imposto_valor_${imposto.id}`} className="text-xs">Valor Calculado (R$)</Label>
                           <Input
@@ -2700,7 +2793,307 @@ export default function NotasFiscaisPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog para criar novo fornecedor */}
+      <CreateFornecedorDialog
+        isOpen={isCreateFornecedorDialogOpen}
+        onClose={() => setIsCreateFornecedorDialogOpen(false)}
+        onSuccess={(novoFornecedor) => {
+          // Adicionar o novo fornecedor à lista
+          setFornecedores([...fornecedores, novoFornecedor])
+          // Selecionar automaticamente o novo fornecedor
+          setFormData({ ...formData, fornecedor_id: novoFornecedor.id })
+          setIsCreateFornecedorDialogOpen(false)
+          toast({
+            title: "Sucesso",
+            description: "Fornecedor cadastrado e selecionado!",
+          })
+        }}
+      />
     </div>
+  )
+}
+
+// Componente para criar novo fornecedor
+function CreateFornecedorDialog({
+  isOpen,
+  onClose,
+  onSuccess
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: (fornecedor: Fornecedor) => void
+}) {
+  const { toast } = useToast()
+  
+  const [formData, setFormData] = useState({
+    nome: '',
+    cnpj: '',
+    contato: '',
+    telefone: '',
+    email: '',
+    endereco: '',
+    cidade: '',
+    estado: '',
+    cep: '',
+    categoria: '',
+    observacoes: '',
+    status: 'ativo' as 'ativo' | 'inativo'
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // Função para formatar CNPJ
+  const formatarCNPJ = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    if (numbers.length <= 14) {
+      return numbers
+        .replace(/^(\d{2})(\d)/, '$1.$2')
+        .replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3')
+        .replace(/\.(\d{3})(\d)/, '.$1/$2')
+        .replace(/(\d{4})(\d)/, '$1-$2')
+    }
+    return value
+  }
+
+  // Função para formatar CEP
+  const formatarCEP = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    if (numbers.length <= 8) {
+      return numbers.replace(/^(\d{5})(\d)/, '$1-$2')
+    }
+    return value
+  }
+
+  // Função para formatar telefone
+  const formatarTelefone = (value: string) => {
+    const numbers = value.replace(/\D/g, '')
+    if (numbers.length <= 11) {
+      if (numbers.length <= 10) {
+        return numbers.replace(/^(\d{2})(\d{4})(\d)/, '($1) $2-$3')
+      } else {
+        return numbers.replace(/^(\d{2})(\d{5})(\d)/, '($1) $2-$3')
+      }
+    }
+    return value
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setIsSubmitting(true)
+
+    try {
+      // Validar campos obrigatórios
+      if (!formData.nome || !formData.cnpj) {
+        toast({
+          title: "Erro",
+          description: "Nome e CNPJ são obrigatórios",
+          variant: "destructive"
+        })
+        setIsSubmitting(false)
+        return
+      }
+
+      // Criar fornecedor
+      const novoFornecedor = await fornecedoresApi.create({
+        nome: formData.nome,
+        cnpj: formData.cnpj,
+        contato: formData.contato || undefined,
+        telefone: formData.telefone || undefined,
+        email: formData.email || undefined,
+        endereco: formData.endereco || undefined,
+        cidade: formData.cidade || undefined,
+        estado: formData.estado || undefined,
+        cep: formData.cep || undefined,
+        categoria: formData.categoria || undefined,
+        observacoes: formData.observacoes || undefined,
+        status: formData.status
+      })
+
+      // Limpar formulário
+      setFormData({
+        nome: '',
+        cnpj: '',
+        contato: '',
+        telefone: '',
+        email: '',
+        endereco: '',
+        cidade: '',
+        estado: '',
+        cep: '',
+        categoria: '',
+        observacoes: '',
+        status: 'ativo'
+      })
+
+      onSuccess(novoFornecedor)
+    } catch (error: any) {
+      console.error('Erro ao criar fornecedor:', error)
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || error.message || "Erro ao criar fornecedor. Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Novo Fornecedor</DialogTitle>
+          <DialogDescription>
+            Cadastre um novo fornecedor no sistema
+          </DialogDescription>
+        </DialogHeader>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="nome">Nome/Razão Social *</Label>
+              <Input
+                id="nome"
+                value={formData.nome}
+                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                required
+                placeholder="Nome completo ou razão social"
+              />
+            </div>
+            <div>
+              <Label htmlFor="cnpj">CNPJ *</Label>
+              <Input
+                id="cnpj"
+                value={formData.cnpj}
+                onChange={(e) => setFormData({ ...formData, cnpj: formatarCNPJ(e.target.value) })}
+                required
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="contato">Nome do Contato</Label>
+              <Input
+                id="contato"
+                value={formData.contato}
+                onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
+                placeholder="Nome da pessoa de contato"
+              />
+            </div>
+            <div>
+              <Label htmlFor="telefone">Telefone</Label>
+              <Input
+                id="telefone"
+                value={formData.telefone}
+                onChange={(e) => setFormData({ ...formData, telefone: formatarTelefone(e.target.value) })}
+                placeholder="(00) 00000-0000"
+                maxLength={15}
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="email">E-mail</Label>
+            <Input
+              id="email"
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              placeholder="email@exemplo.com"
+            />
+          </div>
+
+          <div>
+            <Label htmlFor="endereco">Endereço</Label>
+            <Input
+              id="endereco"
+              value={formData.endereco}
+              onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+              placeholder="Rua, número, complemento"
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <Label htmlFor="cidade">Cidade</Label>
+              <Input
+                id="cidade"
+                value={formData.cidade}
+                onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                placeholder="Cidade"
+              />
+            </div>
+            <div>
+              <Label htmlFor="estado">Estado</Label>
+              <Input
+                id="estado"
+                value={formData.estado}
+                onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
+                placeholder="UF"
+                maxLength={2}
+              />
+            </div>
+            <div>
+              <Label htmlFor="cep">CEP</Label>
+              <Input
+                id="cep"
+                value={formData.cep}
+                onChange={(e) => setFormData({ ...formData, cep: formatarCEP(e.target.value) })}
+                placeholder="00000-000"
+                maxLength={9}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <Label htmlFor="categoria">Categoria</Label>
+              <Input
+                id="categoria"
+                value={formData.categoria}
+                onChange={(e) => setFormData({ ...formData, categoria: e.target.value })}
+                placeholder="Ex: Material de construção, Equipamentos, etc."
+              />
+            </div>
+            <div>
+              <Label htmlFor="status">Status</Label>
+              <Select value={formData.status} onValueChange={(value: 'ativo' | 'inativo') => setFormData({ ...formData, status: value })}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ativo">Ativo</SelectItem>
+                  <SelectItem value="inativo">Inativo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div>
+            <Label htmlFor="observacoes">Observações</Label>
+            <Textarea
+              id="observacoes"
+              value={formData.observacoes}
+              onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              rows={3}
+              placeholder="Informações adicionais sobre o fornecedor"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? 'Salvando...' : 'Cadastrar Fornecedor'}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 

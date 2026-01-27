@@ -40,7 +40,8 @@ import { receitasApi, Receita, ReceitaCreate, ReceitaUpdate } from "@/lib/api-re
 import { receitasUtils } from "@/lib/receitas-utils"
 import apiObras from "@/lib/api-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
-import { getOrcamentos, Orcamento, formatarStatusOrcamento } from "@/lib/api-orcamentos"
+// Orçamentos removidos - não devem aparecer em contas a receber
+// import { getOrcamentos, Orcamento, formatarStatusOrcamento } from "@/lib/api-orcamentos"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 
 // Interface local para obras com campos adicionais
@@ -130,8 +131,8 @@ export default function ContasReceberPage() {
   const [alertas, setAlertas] = useState<Alertas | null>(null)
   const [filtroStatusContas, setFiltroStatusContas] = useState<string>('todos')
   
-  // Estados para Orçamentos
-  const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
+  // Estados para Orçamentos - REMOVIDO: orçamentos não devem aparecer em contas a receber
+  // const [orcamentos, setOrcamentos] = useState<Orcamento[]>([])
   
   // Estados para Medições
   const [medicoes, setMedicoes] = useState<MedicaoMensal[]>([])
@@ -190,19 +191,18 @@ export default function ContasReceberPage() {
     try {
       setLoading(true)
       
-      // Carregar receitas, obras, funcionários, orçamentos e medições em paralelo
-      const [receitasData, obrasData, funcionariosData, orcamentosData, medicoesData] = await Promise.all([
+      // Carregar receitas, obras, funcionários e medições em paralelo (orçamentos removidos)
+      const [receitasData, obrasData, funcionariosData, medicoesData] = await Promise.all([
         receitasApi.list(),
         apiObras.listarObras(),
         funcionariosApi.listarFuncionarios(),
-        getOrcamentos({ limit: 1000 }),
         medicoesMensaisApi.listar({ page: currentPage, limit: itemsPerPage })
       ])
 
       setReceitas(receitasData.receitas || [])
       setObras(obrasData.data || [])
       setFuncionarios(funcionariosData.data || [])
-      setOrcamentos(orcamentosData.data || [])
+      // setOrcamentos removido - orçamentos não devem aparecer em contas a receber
       setMedicoes(medicoesData.data || [])
       if (medicoesData.pagination) {
         setTotalItems(medicoesData.pagination.total || 0)
@@ -296,19 +296,8 @@ export default function ContasReceberPage() {
     })
   }, [receitas, searchTerm, filterStatus, filterTipo, filterObra, filterPeriodo])
 
-  // Filtrar orçamentos
-  const filteredOrcamentos = useMemo(() => {
-    return (orcamentos || []).filter(orcamento => {
-      const orcamentoAny = orcamento as any
-      const matchesSearch = (orcamentoAny.numero || `Orçamento #${orcamento.id}`).toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (orcamento.clientes?.nome || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           (orcamentoAny.obras?.nome || '').toLowerCase().includes(searchTerm.toLowerCase())
-      const matchesStatus = filterStatus === 'all' || orcamento.status === filterStatus
-      const matchesObra = filterObra === 'all' || (orcamentoAny.obra_id?.toString() === filterObra)
-      const matchesPeriodo = !filterPeriodo || (orcamento.data_orcamento || '').startsWith(filterPeriodo)
-      return matchesSearch && matchesStatus && matchesObra && matchesPeriodo
-    })
-  }, [orcamentos, searchTerm, filterStatus, filterObra, filterPeriodo])
+  // Filtrar orçamentos - REMOVIDO: orçamentos não devem aparecer em contas a receber
+  // const filteredOrcamentos = useMemo(() => { ... }, [orcamentos, searchTerm, filterStatus, filterObra, filterPeriodo])
 
   // Filtrar medições (já vem filtrado da API, mas podemos aplicar filtros adicionais no cliente se necessário)
   const filteredMedicoes = useMemo(() => {

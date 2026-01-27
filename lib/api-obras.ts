@@ -298,6 +298,7 @@ export interface ObraResponse {
 
 export interface ObraDocumentosUpdateData {
   cno?: string
+  cno_arquivo?: string
   art_numero?: string
   art_arquivo?: string
   apolice_numero?: string

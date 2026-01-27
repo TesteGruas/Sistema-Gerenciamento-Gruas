@@ -1,40 +1,34 @@
-feat: Implementação de impostos dinâmicos e integração de boletos com notas fiscais
+fix: corrige impostos, remove orçamentos de contas a receber e adiciona cadastro de fornecedor
 
-Implementação completa de sistema de impostos dinâmicos para itens de notas fiscais,
-correção do cálculo de valor líquido, integração automática de boletos e ajustes nas
-contas a receber/pagar.
+Correções implementadas:
 
-Principais mudanças:
+1. Impostos dinâmicos - Tipo de cálculo (porcentagem ou valor fixo)
+   - Adicionado campo tipo_calculo na interface ImpostoDinamico
+   - Implementada opção de cálculo por porcentagem ou valor fixo
+   - Interface atualizada com Select para escolher tipo de cálculo
+   - Campos condicionais baseados no tipo escolhido
+   - Cálculo atualizado no frontend e backend
+   - Adicionado resumo de impostos na tabela de itens (Total de Impostos e Valor Líquido)
 
-- Sistema de impostos dinâmicos: permite criar múltiplos impostos personalizados por item
-  com cálculo automático de valores baseado em base de cálculo e alíquota
+2. Orçamentos removidos de Contas a Receber
+   - Removido import de getOrcamentos
+   - Removido estado orcamentos
+   - Removido carregamento de orçamentos da API
+   - Removido filtro filteredOrcamentos
+   - Orçamentos não são mais incluídos na renderização
 
-- Cálculo de valor líquido: corrigido para somar valores líquidos dos itens, descontando
-  todos os impostos (fixos e dinâmicos)
+3. Cadastro de fornecedor na nota de entrada
+   - Adicionado botão "Novo" ao lado do campo Fornecedor
+   - Criado componente CreateFornecedorDialog completo
+   - Formulário com validações e formatação automática (CNPJ, CEP, Telefone)
+   - Após cadastro, fornecedor é adicionado à lista e selecionado automaticamente
 
-- Integração boletos ↔ notas fiscais: cada nota fiscal cria automaticamente um boleto
-  (tipo receber para saída, pagar para entrada) com valor igual ao valor líquido
-
-- Contas a receber/pagar: 
-  - Usa valor_liquido ao invés de valor_total
-  - Notas fiscais de entrada aparecem em contas a pagar
-  - Orçamentos removidos de contas a receber
-
-- Ajustes de interface: padding do layout financeiro ajustado para melhor espaçamento
-
-Migrations criadas:
-- 20250125_add_impostos_dinamicos_notas_fiscais_itens.sql
-- 20250125_recalcular_valor_liquido_notas_fiscais.sql  
-- 20250125_add_nota_fiscal_id_boletos.sql
-
-Scripts:
-- executar-recalcular-valor-liquido.js
+4. Notas de saída em Contas a Receber
+   - Validação: implementação já existente está correta
+   - Backend busca notas fiscais de saída corretamente
+   - Frontend renderiza notas fiscais na lista de contas a receber
 
 Arquivos modificados:
-- backend-api/src/routes/notas-fiscais.js
-- backend-api/src/routes/boletos.js
-- backend-api/src/routes/contas-receber.js
-- backend-api/src/routes/contas-pagar.js
 - app/dashboard/financeiro/notas-fiscais/page.tsx
 - app/dashboard/financeiro/contas-receber/page.tsx
-- app/dashboard/financeiro/layout.tsx
+- backend-api/src/routes/notas-fiscais.js

@@ -203,6 +203,7 @@ export default function NovaObraPage() {
   const [artArquivo, setArtArquivo] = useState<File | null>(null)
   const [apoliceNumero, setApoliceNumero] = useState<string>('')
   const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  const [cnoArquivo, setCnoArquivo] = useState<File | null>(null)
   // Novos documentos adicionais
   const [manualTecnicoArquivo, setManualTecnicoArquivo] = useState<File | null>(null)
   const [termoEntregaArquivo, setTermoEntregaArquivo] = useState<File | null>(null)
@@ -759,6 +760,7 @@ export default function NovaObraPage() {
       // 3. Fazer upload dos arquivos ART, Apólice e documentos adicionais
       let artArquivoUrl = ''
       let apoliceArquivoUrl = ''
+      let cnoArquivoUrl = ''
       
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
@@ -785,6 +787,11 @@ export default function NovaObraPage() {
       }
       
       try {
+        // Upload CNO
+        if (cnoArquivo) {
+          cnoArquivoUrl = await fazerUploadArquivo(cnoArquivo, 'cno')
+        }
+        
         // Upload ART
         if (artArquivo) {
           artArquivoUrl = await fazerUploadArquivo(artArquivo, 'art')
@@ -818,6 +825,7 @@ export default function NovaObraPage() {
         // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
         await obrasApi.atualizarDocumentos(obraId, {
           cno,
+          cno_arquivo: cnoArquivoUrl || undefined,
           art_numero: artNumero || undefined,
           art_arquivo: artArquivoUrl || undefined,
           apolice_numero: apoliceNumero || undefined,
@@ -1015,6 +1023,7 @@ export default function NovaObraPage() {
       funcionarios: []
     })
     setCno('')
+    setCnoArquivo(null)
     setArtNumero('')
     setArtArquivo(null)
     setApoliceNumero('')
@@ -1241,6 +1250,47 @@ export default function NovaObraPage() {
       updatedAt: new Date().toISOString()
     }
     setCustosMensais([custoTeste1, custoTeste2] as any)
+
+    // Dados de Montagem do Equipamento
+    setDadosMontagemEquipamento({
+      altura_final: '60',
+      tipo_base: 'Chumbador',
+      capacidade_1_cabo: '5000',
+      capacidade_2_cabos: '10000',
+      capacidade_ponta: '2000',
+      potencia_instalada: '25',
+      voltagem: '380V',
+      tipo_ligacao: 'Trifásica',
+      velocidade_rotacao: '0.8',
+      velocidade_elevacao: '60',
+      velocidade_translacao: '0',
+      observacoes_montagem: 'Equipamento instalado conforme especificações técnicas. Altura final de 60 metros com base tipo chumbador.'
+    })
+
+    // Responsáveis Técnicos IRBANA
+    setResponsavelEquipamentos({
+      nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+      cpf_cnpj: '12345678901',
+      crea: '5071184591',
+      email: 'alex.nascimento@irbana.com.br',
+      telefone: '(11) 98765-4321'
+    })
+
+    setResponsavelManutencoes({
+      nome: 'NESTOR ALVAREZ GONZALEZ',
+      cpf_cnpj: '98765432100',
+      crea: 'SP-987654',
+      email: 'nestor.gonzalez@irbana.com.br',
+      telefone: '(11) 98818-5951'
+    })
+
+    setResponsavelMontagemOperacao({
+      nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
+      cpf_cnpj: '12345678901',
+      crea: '5071184591',
+      email: 'alex.nascimento@irbana.com.br',
+      telefone: '(11) 98765-4321'
+    })
 
     toast({
       title: "Dados de teste preenchidos",
@@ -1752,6 +1802,19 @@ export default function NovaObraPage() {
                         onUpload={(file) => setApoliceArquivo(file)}
                         onRemove={() => setApoliceArquivo(null)}
                         currentFile={apoliceArquivo}
+                      />
+                    </div>
+
+                    {/* Upload CNO */}
+                    <div className="space-y-2">
+                      <DocumentoUpload
+                        label="Upload do Documento CNO (PDF)"
+                        accept="application/pdf"
+                        maxSize={5 * 1024 * 1024}
+                        required={false}
+                        onUpload={(file) => setCnoArquivo(file)}
+                        onRemove={() => setCnoArquivo(null)}
+                        currentFile={cnoArquivo}
                       />
                     </div>
                   </div>
@@ -2687,6 +2750,17 @@ export default function NovaObraPage() {
             Cancelar
           </Button>
           <div className="flex gap-2">
+            <Button 
+              type="button" 
+              variant="outline" 
+              onClick={preencherDadosTeste}
+              disabled={creating}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+              title="Preencher todos os campos com dados de teste"
+            >
+              <Zap className="w-4 h-4 mr-2" />
+              Preencher Todos os Dados
+            </Button>
             <DebugButton 
               onClick={preencherDadosTeste}
               disabled={creating}
