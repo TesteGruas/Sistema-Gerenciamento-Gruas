@@ -113,7 +113,7 @@ export default function RentabilidadePage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-6">
       {/* Cabeçalho */}
       <div>
         <h1 className="text-3xl font-bold">Análise de Rentabilidade por Grua</h1>

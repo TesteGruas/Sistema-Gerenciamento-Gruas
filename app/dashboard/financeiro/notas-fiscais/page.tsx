@@ -1471,10 +1471,10 @@ export default function NotasFiscaisPage() {
                               <span className="text-gray-400">-</span>
                             )}
                           </TableCell>
-                          <TableCell>{formatDate(nota.data_emissao)}</TableCell>
                           <TableCell>
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
+                          <TableCell>{formatDate(nota.data_emissao)}</TableCell>
                           <TableCell className="font-semibold">
                             {formatCurrency(nota.valor_liquido ?? nota.valor_total)}
                           </TableCell>

@@ -90,7 +90,7 @@ export default function ContasBancariasPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 space-y-6">
       {/* Cabeçalho */}
       <div className="flex justify-between items-center">
         <div>
