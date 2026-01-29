@@ -202,7 +202,29 @@ export function SinaleirosForm({
       e.stopPropagation()
     }
     
-    // Sinaleiros não são mais obrigatórios - remover validações
+    // Validar sinaleiros que foram preenchidos parcialmente
+    const sinaleirosPreenchidos = sinaleiros.filter(s => s.nome && s.nome.trim() !== '')
+    const camposFaltando: string[] = []
+    
+    for (let i = 0; i < sinaleirosPreenchidos.length; i++) {
+      const sinaleiro = sinaleirosPreenchidos[i]
+      if (!sinaleiro.nome || !sinaleiro.nome.trim()) {
+        camposFaltando.push(`Nome do sinaleiro ${i + 1}`)
+      }
+      // Se for sinaleiro cliente, validar CPF/RG
+      if (sinaleiro.tipo_vinculo === 'cliente' && !sinaleiro.cpf && !sinaleiro.rg && !sinaleiro.rg_cpf) {
+        camposFaltando.push(`CPF/RG do sinaleiro ${i + 1}`)
+      }
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
     
     // Validar documentos completos para sinaleiros externos (cliente)
     // Apenas validar se o sinaleiro já foi salvo (tem UUID válido)

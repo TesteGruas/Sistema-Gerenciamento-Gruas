@@ -496,6 +496,30 @@ export default function ClientesPage() {
   const handleCreateCliente = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!clienteFormData.nome || !clienteFormData.nome.trim()) {
+      camposFaltando.push('Nome da Empresa')
+    }
+    
+    if (!clienteFormData.cnpj || !clienteFormData.cnpj.trim()) {
+      camposFaltando.push('CNPJ')
+    }
+    
+    if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
+      camposFaltando.push('Nome do Representante')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
+    
     try {
       setIsSubmitting(true)
       
@@ -584,6 +608,30 @@ export default function ClientesPage() {
     e.preventDefault()
     
     if (!selectedCliente) return
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!clienteFormData.nome || !clienteFormData.nome.trim()) {
+      camposFaltando.push('Nome da Empresa')
+    }
+    
+    if (!clienteFormData.cnpj || !clienteFormData.cnpj.trim()) {
+      camposFaltando.push('CNPJ')
+    }
+    
+    if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
+      camposFaltando.push('Nome do Representante')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
     
     try {
       setIsSubmitting(true)

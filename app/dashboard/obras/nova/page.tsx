@@ -31,7 +31,8 @@ import {
   Truck,
   CreditCard,
   Loader2,
-  Shield
+  Shield,
+  AlertCircle
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -585,52 +586,89 @@ export default function NovaObraPage() {
     // Determinar clienteId - usar clienteSelecionado como fallback
     const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
     
-    if (!obraFormData.name || !clienteIdFinal || !obraFormData.location || !obraFormData.cidade || !obraFormData.estado || !obraFormData.tipo) {
-      toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios (Nome, Cliente, Endereço, Cidade, Estado, Tipo)",
-        variant: "destructive"
-      })
-      return
+    // Validação de campos obrigatórios - listar todos os campos faltantes
+    const camposFaltando: string[] = []
+    
+    if (!obraFormData.name || !obraFormData.name.trim()) {
+      camposFaltando.push('Nome da Obra')
     }
-
-    // Validação de orçamento aprovado obrigatório
+    
+    if (!clienteIdFinal) {
+      camposFaltando.push('Cliente')
+    }
+    
+    if (!obraFormData.location || !obraFormData.location.trim()) {
+      camposFaltando.push('Endereço')
+    }
+    
+    if (!obraFormData.cidade || !obraFormData.cidade.trim()) {
+      camposFaltando.push('Cidade')
+    }
+    
+    if (!obraFormData.estado || !obraFormData.estado.trim()) {
+      camposFaltando.push('Estado')
+    }
+    
+    if (!obraFormData.tipo || !obraFormData.tipo.trim()) {
+      camposFaltando.push('Tipo de Obra')
+    }
+    
     if (!orcamentoId || !orcamentoAprovado) {
+      camposFaltando.push('Orçamento Aprovado (selecione um cliente com orçamento aprovado)')
+    }
+    
+    if (!cno || !cno.trim()) {
+      camposFaltando.push('CNO da Obra')
+    }
+    
+    if (!artNumero || !artNumero.trim()) {
+      camposFaltando.push('Número da ART')
+    }
+    
+    if (!artArquivo) {
+      camposFaltando.push('Arquivo da ART')
+    }
+    
+    if (!apoliceNumero || !apoliceNumero.trim()) {
+      camposFaltando.push('Número da Apólice de Seguro')
+    }
+    
+    if (!apoliceArquivo) {
+      camposFaltando.push('Arquivo da Apólice de Seguro')
+    }
+    
+    if (camposFaltando.length > 0) {
+      // Prevenir o comportamento padrão do formulário (scroll automático)
+      e.preventDefault()
+      e.stopPropagation()
+      
+      // Mostrar mensagem de erro de forma mais visível
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      
       toast({
-        title: "Erro",
-        description: "É necessário ter um orçamento aprovado para criar uma obra. Selecione um cliente com orçamento aprovado.",
-        variant: "destructive"
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000, // Manter visível por mais tempo
       })
+      
+      // Também mostrar um alerta visual no topo do formulário
+      setError(camposFaltando.length === 1 
+        ? `Campo obrigatório faltando: ${camposFaltando[0]}`
+        : `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`)
+      
+      // Scroll suave para o topo da página para mostrar a mensagem de erro
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+      
       return
     }
-
-    // Validações dos novos campos obrigatórios
-    if (!cno) {
-      toast({
-        title: "Erro",
-        description: "O campo CNO da obra é obrigatório",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!artNumero || !artArquivo) {
-      toast({
-        title: "Erro",
-        description: "O número e o arquivo da ART são obrigatórios",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!apoliceNumero || !apoliceArquivo) {
-      toast({
-        title: "Erro",
-        description: "O número e o arquivo da Apólice de Seguro são obrigatórios",
-        variant: "destructive"
-      })
-      return
-    }
+    
+    // Limpar erro se tudo estiver válido
+    setError(null)
 
     // Validação do responsável técnico removida - agora é opcional na criação
     // O responsável técnico pode ser cadastrado depois de criar a obra
@@ -1319,6 +1357,26 @@ export default function NovaObraPage() {
         </div>
       </div>
 
+      {/* Mensagem de Erro */}
+      {error && (
+        <div className="bg-destructive/10 border border-destructive rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-destructive mb-1">Campos obrigatórios não preenchidos</h3>
+            <p className="text-sm text-destructive/90">{error}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setError(null)}
+            className="text-destructive hover:text-destructive"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
       {/* Formulário */}
       <form onSubmit={handleCreateObra} className="">
         <Tabs defaultValue="obra" className="w-full">
@@ -1352,7 +1410,6 @@ export default function NovaObraPage() {
                       value={obraFormData.name}
                       onChange={(e) => setObraFormData({ ...obraFormData, name: e.target.value })}
                       placeholder="Ex: Obra Residencial Jardim das Flores"
-                      required
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -1396,7 +1453,6 @@ export default function NovaObraPage() {
                       value={obraFormData.location}
                       onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
                       placeholder="Ex: Rua das Flores, 123 - Centro"
-                      required
                     />
                   </div>
                   <div className="md:col-span-4">
@@ -1422,7 +1478,6 @@ export default function NovaObraPage() {
                       value={obraFormData.cidade}
                       onChange={(e) => setObraFormData({ ...obraFormData, cidade: e.target.value })}
                       placeholder="Ex: São Paulo"
-                      required
                     />
                   </div>
                   <div>
@@ -1742,7 +1797,7 @@ export default function NovaObraPage() {
                       <CnoInput
                         value={cno}
                         onChange={setCno}
-                        label="CNO da Obra (CNPJ/Documento)"
+                        label="CNO da Obra (CNPJ/Documento) *"
                         required={true}
                       />
                       <p className="text-xs text-gray-500">
@@ -1759,7 +1814,6 @@ export default function NovaObraPage() {
                         value={artNumero}
                         onChange={(e) => setArtNumero(e.target.value)}
                         placeholder="Número da Anotação de Responsabilidade Técnica"
-                        required
                       />
                     </div>
 
@@ -1772,7 +1826,6 @@ export default function NovaObraPage() {
                         value={apoliceNumero}
                         onChange={(e) => setApoliceNumero(e.target.value)}
                         placeholder="Número da apólice de seguro"
-                        required
                       />
                     </div>
                   </div>
@@ -1782,7 +1835,7 @@ export default function NovaObraPage() {
                     {/* Upload ART */}
                     <div className="space-y-2">
                       <DocumentoUpload
-                        label="Upload do Documento ART (PDF)"
+                        label="Upload do Documento ART (PDF) *"
                         accept="application/pdf"
                         maxSize={5 * 1024 * 1024}
                         required={true}
@@ -1795,7 +1848,7 @@ export default function NovaObraPage() {
                     {/* Upload Apólice */}
                     <div className="space-y-2">
                       <DocumentoUpload
-                        label="Upload da Apólice de Seguro (PDF)"
+                        label="Upload da Apólice de Seguro (PDF) *"
                         accept="application/pdf"
                         maxSize={5 * 1024 * 1024}
                         required={true}

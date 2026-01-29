@@ -609,6 +609,35 @@ export default function FuncionarioDetalhesPage() {
   const handleSave = async () => {
     if (!funcionario) return
 
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!editFormData.nome || !editFormData.nome.trim()) {
+      camposFaltando.push('Nome')
+    }
+
+    if (!editFormData.cargo || !editFormData.cargo.trim()) {
+      camposFaltando.push('Cargo')
+    }
+
+    if (!editFormData.cpf || !editFormData.cpf.trim()) {
+      camposFaltando.push('CPF')
+    }
+
+    if (!editFormData.data_admissao || !editFormData.data_admissao.trim()) {
+      camposFaltando.push('Data de Admissão')
+    }
+
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: `Por favor, preencha os seguintes campos antes de continuar:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
       setSubmitting(true)
 
@@ -655,20 +684,37 @@ export default function FuncionarioDetalhesPage() {
   const handleSalvarSalario = async () => {
     if (!funcionario) return
 
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!salarioForm.salario || !salarioForm.salario.trim()) {
+      camposFaltando.push('Salário')
+    } else {
+      // Validar formato do salário
+      const salarioNumero = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+      if (isNaN(salarioNumero) || salarioNumero < 0) {
+        camposFaltando.push('Salário (valor inválido)')
+      }
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
       setSubmitting(true)
 
       // Converter salário para número
       const salarioNumero = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
-
-      if (isNaN(salarioNumero) || salarioNumero < 0) {
-        toast({
-          title: "Erro",
-          description: "Por favor, informe um valor de salário válido",
-          variant: "destructive"
-        })
-        return
-      }
 
       // Atualizar apenas o salário
       const response = await funcionariosApi.atualizarFuncionario(funcionario.id, {
@@ -834,16 +880,35 @@ export default function FuncionarioDetalhesPage() {
   const handleSalvarEdicaoDocumento = async () => {
     if (!documentoSelecionado) return
 
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!documentoForm.tipo || !documentoForm.tipo.trim()) {
+      camposFaltando.push('Tipo do Documento')
+    }
+
+    if (!documentoForm.nome || !documentoForm.nome.trim()) {
+      camposFaltando.push('Nome do Documento')
+    }
+
+    if (!documentoForm.numero || !documentoForm.numero.trim()) {
+      camposFaltando.push('Número do Documento')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validação básica
-      if (!documentoForm.tipo || !documentoForm.nome || !documentoForm.numero) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Tipo, Nome e Número)",
-          variant: "destructive"
-        })
-        return
-      }
 
       const funcionarioId = parseInt(params.id as string)
       let arquivoUrl: string | undefined = documentoSelecionado.arquivoUrl
@@ -942,16 +1007,31 @@ export default function FuncionarioDetalhesPage() {
   }
   
   const handleCriarBeneficio = async () => {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!beneficioForm.tipo || !beneficioForm.tipo.trim()) {
+      camposFaltando.push('Tipo de Benefício')
+    }
+
+    if (!beneficioForm.dataInicio || !beneficioForm.dataInicio.trim()) {
+      camposFaltando.push('Data de Início')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validação básica
-      if (!beneficioForm.tipo || !beneficioForm.dataInicio) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Tipo de Benefício e Data Início)",
-          variant: "destructive"
-        })
-        return
-      }
       
       const funcionarioId = parseInt(params.id as string)
       
@@ -1019,16 +1099,31 @@ export default function FuncionarioDetalhesPage() {
   const handleSalvarEdicaoBeneficio = async () => {
     if (!beneficioSelecionado) return
     
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!beneficioForm.tipo || !beneficioForm.tipo.trim()) {
+      camposFaltando.push('Tipo de Benefício')
+    }
+
+    if (!beneficioForm.dataInicio || !beneficioForm.dataInicio.trim()) {
+      camposFaltando.push('Data de Início')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validação básica
-      if (!beneficioForm.tipo || !beneficioForm.dataInicio) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Tipo de Benefício e Data Início)",
-          variant: "destructive"
-        })
-        return
-      }
       
       const funcionarioId = parseInt(params.id as string)
       
@@ -1155,16 +1250,35 @@ export default function FuncionarioDetalhesPage() {
   }
   
   const handleCriarDocumento = async () => {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!documentoForm.tipo || !documentoForm.tipo.trim()) {
+      camposFaltando.push('Tipo do Documento')
+    }
+
+    if (!documentoForm.nome || !documentoForm.nome.trim()) {
+      camposFaltando.push('Nome do Documento')
+    }
+
+    if (!documentoForm.numero || !documentoForm.numero.trim()) {
+      camposFaltando.push('Número do Documento')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validação básica
-      if (!documentoForm.tipo || !documentoForm.nome || !documentoForm.numero) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Tipo, Nome e Número)",
-          variant: "destructive"
-        })
-        return
-      }
       
       const funcionarioId = parseInt(params.id as string)
       let arquivoUrl: string | undefined = undefined

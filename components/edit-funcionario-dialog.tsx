@@ -11,6 +11,7 @@ import { Edit, Loader2, User } from "lucide-react"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
+import { useToast } from "@/hooks/use-toast"
 
 interface FuncionarioRH {
   id: number
@@ -62,6 +63,7 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
   submitting,
   funcionario,
 }: EditFuncionarioDialogProps) {
+  const { toast } = useToast()
   const { cargosAtivos, loading: loadingCargos } = useCargos()
   
   const [form, setForm] = useState({
@@ -116,6 +118,31 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!form.name || form.name.trim().length < 2) {
+      camposFaltando.push('Nome (mínimo 2 caracteres)')
+    }
+
+    if (!form.role || !form.role.trim()) {
+      camposFaltando.push('Cargo')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
     
     // Converte o salário de centavos para reais (API espera em reais)
     const salarioNumerico = form.salary ? parseFloat(form.salary) / 100 : 0
@@ -135,7 +162,7 @@ const EditFuncionarioDialog = memo(function EditFuncionarioDialog({
       salario: salarioNumerico,
       observacoes: form.observations
     })
-  }, [form, onSubmit])
+  }, [form, onSubmit, toast])
 
   // Initialize form when funcionario changes
   useEffect(() => {

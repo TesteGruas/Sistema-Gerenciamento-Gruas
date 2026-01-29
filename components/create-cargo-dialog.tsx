@@ -98,13 +98,11 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!form.nome.trim()) {
-      toast({
-        title: "Erro",
-        description: "Nome do cargo é obrigatório",
-        variant: "destructive"
-      })
-      return
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!form.nome || !form.nome.trim()) {
+      camposFaltando.push('Nome do Cargo')
     }
 
     // Validar faixa salarial
@@ -112,10 +110,18 @@ const CreateCargoDialog = memo(function CreateCargoDialog({
     const salarioMax = form.salario_maximo ? parseFloat(form.salario_maximo) : undefined
     
     if (salarioMin && salarioMax && salarioMin > salarioMax) {
+      camposFaltando.push('Salário mínimo não pode ser maior que o salário máximo')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
       toast({
-        title: "Erro",
-        description: "Salário mínimo não pode ser maior que o salário máximo",
-        variant: "destructive"
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
       })
       return
     }

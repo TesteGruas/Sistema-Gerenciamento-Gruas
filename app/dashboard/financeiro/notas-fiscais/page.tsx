@@ -514,34 +514,47 @@ export default function NotasFiscaisPage() {
   }
 
   const handleCreate = async () => {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!formData.numero_nf || !formData.numero_nf.trim()) {
+      camposFaltando.push('Número da Nota Fiscal')
+    }
+
+    if (!formData.data_emissao || !formData.data_emissao.trim()) {
+      camposFaltando.push('Data de Emissão')
+    }
+
+    if (!formData.valor_total || formData.valor_total <= 0) {
+      camposFaltando.push('Valor Total (R$)')
+    }
+
+    if (activeTab === 'saida' && !formData.cliente_id) {
+      camposFaltando.push('Cliente')
+    }
+
+    if (activeTab === 'entrada' && !formData.fornecedor_id) {
+      camposFaltando.push('Fornecedor')
+    }
+
+    if (!formData.tipo_nota || !formData.tipo_nota.trim()) {
+      camposFaltando.push('Tipo de Nota')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validações obrigatórias
-      if (activeTab === 'saida' && !formData.cliente_id) {
-        toast({
-          title: "Erro",
-          description: "Cliente é obrigatório para notas fiscais de saída",
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (activeTab === 'entrada' && !formData.fornecedor_id) {
-        toast({
-          title: "Erro",
-          description: "Fornecedor é obrigatório para notas fiscais de entrada",
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (!formData.numero_nf || !formData.data_emissao || !formData.valor_total) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Número NF, Data de Emissão, Valor Total)",
-          variant: "destructive"
-        })
-        return
-      }
 
       // Limpar dados antes de enviar
       const dadosLimpos = limparDadosNotaFiscal({
@@ -611,34 +624,47 @@ export default function NotasFiscaisPage() {
   const handleUpdate = async () => {
     if (!editingNota) return
     
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!formData.numero_nf || !formData.numero_nf.trim()) {
+      camposFaltando.push('Número da Nota Fiscal')
+    }
+
+    if (!formData.data_emissao || !formData.data_emissao.trim()) {
+      camposFaltando.push('Data de Emissão')
+    }
+
+    if (!formData.valor_total || formData.valor_total <= 0) {
+      camposFaltando.push('Valor Total (R$)')
+    }
+
+    if (formData.tipo === 'saida' && !formData.cliente_id) {
+      camposFaltando.push('Cliente')
+    }
+
+    if (formData.tipo === 'entrada' && !formData.fornecedor_id) {
+      camposFaltando.push('Fornecedor')
+    }
+
+    if (!formData.tipo_nota || !formData.tipo_nota.trim()) {
+      camposFaltando.push('Tipo de Nota')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
+
     try {
-      // Validações obrigatórias
-      if (formData.tipo === 'saida' && !formData.cliente_id) {
-        toast({
-          title: "Erro",
-          description: "Cliente é obrigatório para notas fiscais de saída",
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (formData.tipo === 'entrada' && !formData.fornecedor_id) {
-        toast({
-          title: "Erro",
-          description: "Fornecedor é obrigatório para notas fiscais de entrada",
-          variant: "destructive"
-        })
-        return
-      }
-
-      if (!formData.numero_nf || !formData.data_emissao || !formData.valor_total) {
-        toast({
-          title: "Erro",
-          description: "Preencha todos os campos obrigatórios (Número NF, Data de Emissão, Valor Total)",
-          variant: "destructive"
-        })
-        return
-      }
 
       // Limpar dados antes de enviar
       const dadosLimpos = limparDadosNotaFiscal(formData)
@@ -1636,7 +1662,6 @@ export default function NotasFiscaisPage() {
                   id="numero_nf"
                   value={formData.numero_nf}
                   onChange={(e) => setFormData({ ...formData, numero_nf: e.target.value })}
-                  required
                 />
               </div>
               <div>
@@ -1806,7 +1831,6 @@ export default function NotasFiscaisPage() {
                   type="date"
                   value={formData.data_emissao}
                   onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
-                  required
                 />
               </div>
               <div>
@@ -1827,7 +1851,6 @@ export default function NotasFiscaisPage() {
                   min="0"
                   value={formData.valor_total}
                   onChange={(e) => setFormData({ ...formData, valor_total: parseFloat(e.target.value) || 0 })}
-                  required
                 />
               </div>
             </div>
@@ -2451,7 +2474,6 @@ export default function NotasFiscaisPage() {
                 value={itemFormData.descricao}
                 onChange={(e) => setItemFormData({ ...itemFormData, descricao: e.target.value })}
                 rows={2}
-                required
                 placeholder="Descrição completa do produto ou serviço"
               />
             </div>
@@ -2493,7 +2515,6 @@ export default function NotasFiscaisPage() {
                     const itemAtualizado = calcularImpostos({ ...itemFormData, quantidade: qtd })
                     setItemFormData(itemAtualizado)
                   }}
-                  required
                 />
               </div>
               <div>
@@ -2509,7 +2530,6 @@ export default function NotasFiscaisPage() {
                     const itemAtualizado = calcularImpostos({ ...itemFormData, preco_unitario: unit })
                     setItemFormData(itemAtualizado)
                   }}
-                  required
                 />
               </div>
               <div>
@@ -2885,11 +2905,34 @@ export default function NotasFiscaisPage() {
               Cancelar
             </Button>
             <Button onClick={() => {
-              if (!itemFormData.descricao || !itemFormData.unidade || !itemFormData.quantidade || !itemFormData.preco_unitario) {
+              // Validação de campos obrigatórios
+              const camposFaltando: string[] = []
+
+              if (!itemFormData.descricao || !itemFormData.descricao.trim()) {
+                camposFaltando.push('Descrição')
+              }
+
+              if (!itemFormData.unidade || !itemFormData.unidade.trim()) {
+                camposFaltando.push('Unidade')
+              }
+
+              if (!itemFormData.quantidade || itemFormData.quantidade <= 0) {
+                camposFaltando.push('Quantidade')
+              }
+
+              if (!itemFormData.preco_unitario || itemFormData.preco_unitario <= 0) {
+                camposFaltando.push('Valor Unitário (R$)')
+              }
+
+              if (camposFaltando.length > 0) {
+                const mensagemErro = camposFaltando.length === 1 
+                  ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+                  : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
                 toast({
-                  title: "Erro",
-                  description: "Preencha todos os campos obrigatórios",
-                  variant: "destructive"
+                  title: "Campos obrigatórios não preenchidos",
+                  description: mensagemErro,
+                  variant: "destructive",
+                  duration: 10000,
                 })
                 return
               }
@@ -3028,19 +3071,35 @@ function CreateFornecedorDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     setIsSubmitting(true)
 
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!formData.nome || !formData.nome.trim()) {
+      camposFaltando.push('Nome/Razão Social')
+    }
+
+    if (!formData.cnpj || !formData.cnpj.trim()) {
+      camposFaltando.push('CNPJ')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      setIsSubmitting(false)
+      return
+    }
+
     try {
-      // Validar campos obrigatórios
-      if (!formData.nome || !formData.cnpj) {
-        toast({
-          title: "Erro",
-          description: "Nome e CNPJ são obrigatórios",
-          variant: "destructive"
-        })
-        setIsSubmitting(false)
-        return
-      }
 
       // Criar fornecedor
       const novoFornecedor = await fornecedoresApi.create({
@@ -3105,7 +3164,6 @@ function CreateFornecedorDialog({
                 id="nome"
                 value={formData.nome}
                 onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                required
                 placeholder="Nome completo ou razão social"
               />
             </div>
@@ -3115,7 +3173,6 @@ function CreateFornecedorDialog({
                 id="cnpj"
                 value={formData.cnpj}
                 onChange={(e) => setFormData({ ...formData, cnpj: formatarCNPJ(e.target.value) })}
-                required
                 placeholder="00.000.000/0000-00"
                 maxLength={18}
               />

@@ -310,6 +310,38 @@ export default function ContasPagarPage() {
   // ========== HANDLERS ==========
   // Handlers de Custos
   const handleCreateCusto = async () => {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!custoForm.obra_id || custoForm.obra_id === '') {
+      camposFaltando.push('Obra')
+    }
+    
+    if (!custoForm.tipo || !custoForm.tipo.trim()) {
+      camposFaltando.push('Tipo')
+    }
+    
+    if (!custoForm.descricao || !custoForm.descricao.trim()) {
+      camposFaltando.push('Descrição')
+    }
+    
+    if (!custoForm.valor || custoForm.valor <= 0) {
+      camposFaltando.push('Valor')
+    }
+    
+    if (!custoForm.data_custo || !custoForm.data_custo.trim()) {
+      camposFaltando.push('Data do Custo')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
+    
     try {
       const custoData: CustoCreate = {
         obra_id: parseInt(custoForm.obra_id),
@@ -355,9 +387,41 @@ export default function ContasPagarPage() {
   }
 
   const handleUpdateCusto = async () => {
-    try {
-      if (!editingCusto) return
+    if (!editingCusto) return
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!custoForm.obra_id || custoForm.obra_id === '') {
+      camposFaltando.push('Obra')
+    }
+    
+    if (!custoForm.tipo || !custoForm.tipo.trim()) {
+      camposFaltando.push('Tipo')
+    }
+    
+    if (!custoForm.descricao || !custoForm.descricao.trim()) {
+      camposFaltando.push('Descrição')
+    }
+    
+    if (!custoForm.valor || custoForm.valor <= 0) {
+      camposFaltando.push('Valor')
+    }
+    
+    if (!custoForm.data_custo || !custoForm.data_custo.trim()) {
+      camposFaltando.push('Data do Custo')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
 
+    try {
       const custoData: CustoUpdate = {
         obra_id: parseInt(custoForm.obra_id),
         tipo: custoForm.tipo,

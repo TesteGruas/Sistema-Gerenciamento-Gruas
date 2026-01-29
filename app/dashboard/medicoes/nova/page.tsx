@@ -21,7 +21,9 @@ import {
   Save,
   Check,
   ChevronsUpDown,
-  Building2
+  Building2,
+  AlertCircle,
+  X
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { gruasApi } from "@/lib/api-gruas"
@@ -66,6 +68,7 @@ export default function NovaMedicaoPage() {
   const [loadingGruas, setLoadingGruas] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [obraSearchOpen, setObraSearchOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   
   // Estados para itens de custos mensais
   const [itens, setItens] = useState<ItemCustoMensal[]>([])
@@ -410,32 +413,56 @@ export default function NovaMedicaoPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!medicaoForm.obra_id) {
-      toast({
-        title: "Erro",
-        description: "Selecione uma obra",
-        variant: "destructive"
-      })
-      return
+    // Validação de campos obrigatórios - listar todos os campos faltantes
+    const camposFaltando: string[] = []
+
+    if (!medicaoForm.obra_id || !medicaoForm.obra_id.trim()) {
+      camposFaltando.push('Obra')
     }
 
-    if (!medicaoForm.grua_id) {
-      toast({
-        title: "Erro",
-        description: "Selecione uma grua",
-        variant: "destructive"
-      })
-      return
+    if (!medicaoForm.grua_id || !medicaoForm.grua_id.trim()) {
+      camposFaltando.push('Grua')
     }
 
-    if (!medicaoForm.periodo || !medicaoForm.data_medicao) {
+    if (!medicaoForm.periodo || !medicaoForm.periodo.trim()) {
+      camposFaltando.push('Período')
+    }
+
+    if (!medicaoForm.data_medicao || !medicaoForm.data_medicao.trim()) {
+      camposFaltando.push('Data da Medição')
+    }
+
+    if (camposFaltando.length > 0) {
+      // Prevenir o comportamento padrão do formulário (scroll automático)
+      e.stopPropagation()
+      
+      // Mostrar mensagem de erro de forma mais visível
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      
       toast({
-        title: "Erro",
-        description: "Preencha período e data da medição",
-        variant: "destructive"
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000, // Manter visível por mais tempo
       })
+      
+      // Também mostrar um alerta visual no topo do formulário
+      setError(camposFaltando.length === 1 
+        ? `Campo obrigatório faltando: ${camposFaltando[0]}`
+        : `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`)
+      
+      // Scroll suave para o topo da página para mostrar a mensagem de erro
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' })
+      }, 100)
+      
       return
     }
+    
+    // Limpar erro se tudo estiver válido
+    setError(null)
 
     try {
       setSalvando(true)
@@ -537,6 +564,26 @@ export default function NovaMedicaoPage() {
         )}
       </div>
 
+      {/* Mensagem de Erro */}
+      {error && (
+        <div className="bg-destructive/10 border border-destructive rounded-lg p-4 flex items-start gap-3">
+          <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <h3 className="font-semibold text-destructive mb-1">Campos obrigatórios não preenchidos</h3>
+            <p className="text-sm text-destructive/90">{error}</p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => setError(null)}
+            className="text-destructive hover:text-destructive"
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Informações Básicas da Medição */}
         <Card>
@@ -598,7 +645,6 @@ export default function NovaMedicaoPage() {
                 <Select
                   value={medicaoForm.grua_id}
                   onValueChange={(value) => setMedicaoForm({ ...medicaoForm, grua_id: value })}
-                  required
                   disabled={!medicaoForm.obra_id || loadingGruas}
                 >
                   <SelectTrigger className="bg-white h-8 text-sm">
@@ -649,7 +695,6 @@ export default function NovaMedicaoPage() {
                     }
                   }}
                   pattern="\d{4}-\d{2}"
-                  required
                   className="bg-white h-8 text-sm"
                 />
               </div>
@@ -660,7 +705,6 @@ export default function NovaMedicaoPage() {
                   type="date"
                   value={medicaoForm.data_medicao}
                   onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
-                  required
                   className="bg-white h-8 text-sm"
                 />
               </div>
@@ -832,7 +876,6 @@ export default function NovaMedicaoPage() {
                                   }}
                                   placeholder="01.01"
                                   maxLength={20}
-                                  required
                                   className="h-8 text-sm bg-white"
                                 />
                               </div>
@@ -866,7 +909,6 @@ export default function NovaMedicaoPage() {
                                 value={novoItemForm.descricao}
                                 onChange={(e) => setNovoItemForm({ ...novoItemForm, descricao: e.target.value })}
                                 placeholder="Locação de grua..."
-                                required
                                 className="h-8 text-sm bg-white"
                               />
                             </div>

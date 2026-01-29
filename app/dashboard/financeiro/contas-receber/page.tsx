@@ -366,6 +366,38 @@ export default function ContasReceberPage() {
   // ========== HANDLERS ==========
   // Handlers de Receitas
   const handleCreateReceita = async () => {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!receitaForm.obra_id || receitaForm.obra_id === '') {
+      camposFaltando.push('Obra')
+    }
+    
+    if (!receitaForm.tipo || !receitaForm.tipo.trim()) {
+      camposFaltando.push('Tipo')
+    }
+    
+    if (!receitaForm.descricao || !receitaForm.descricao.trim()) {
+      camposFaltando.push('Descrição')
+    }
+    
+    if (!receitaForm.valor || receitaForm.valor <= 0) {
+      camposFaltando.push('Valor')
+    }
+    
+    if (!receitaForm.data_receita || !receitaForm.data_receita.trim()) {
+      camposFaltando.push('Data da Receita')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
+    
     try {
       const receitaData: ReceitaCreate = {
         obra_id: parseInt(receitaForm.obra_id),
@@ -411,9 +443,41 @@ export default function ContasReceberPage() {
   }
 
   const handleUpdateReceita = async () => {
-    try {
-      if (!editingReceita) return
+    if (!editingReceita) return
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!receitaForm.obra_id || receitaForm.obra_id === '') {
+      camposFaltando.push('Obra')
+    }
+    
+    if (!receitaForm.tipo || !receitaForm.tipo.trim()) {
+      camposFaltando.push('Tipo')
+    }
+    
+    if (!receitaForm.descricao || !receitaForm.descricao.trim()) {
+      camposFaltando.push('Descrição')
+    }
+    
+    if (!receitaForm.valor || receitaForm.valor <= 0) {
+      camposFaltando.push('Valor')
+    }
+    
+    if (!receitaForm.data_receita || !receitaForm.data_receita.trim()) {
+      camposFaltando.push('Data da Receita')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
 
+    try {
       const receitaData: ReceitaUpdate = {
         obra_id: parseInt(receitaForm.obra_id),
         tipo: receitaForm.tipo,

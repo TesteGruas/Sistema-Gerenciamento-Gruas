@@ -20,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2, Zap } from "lucide-react"
+import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2, Zap, AlertCircle, X } from "lucide-react"
 import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
@@ -43,6 +43,7 @@ export default function EstoquePage() {
   const [isMovDialogOpen, setIsMovDialogOpen] = useState(false)
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Produto | null>(null)
+  const [error, setError] = useState<string | null>(null)
   
   // Estados para filtros
   const [filtros, setFiltros] = useState({
@@ -819,6 +820,34 @@ export default function EstoquePage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!formData.nome || !formData.nome.trim()) {
+      camposFaltando.push('Nome do Item')
+    }
+    
+    if (!formData.categoria_id || formData.categoria_id === 0) {
+      camposFaltando.push('Categoria')
+    }
+    
+    if (!formData.unidade_medida || !formData.unidade_medida.trim()) {
+      camposFaltando.push('Unidade de Medida')
+    }
+    
+    if (!formData.valor_unitario || formData.valor_unitario <= 0) {
+      camposFaltando.push('Valor Unitário')
+    }
+    
+    if (!formData.classificacao_tipo || !formData.classificacao_tipo.trim()) {
+      camposFaltando.push('Classificação')
+    }
+    
+    // Se for ativo, validar subcategoria
+    if (formData.classificacao_tipo === "ativo" && (!formData.subcategoria_ativo || !formData.subcategoria_ativo.trim())) {
+      camposFaltando.push('Subcategoria do Ativo')
+    }
+    
     // Validação do estoque máximo
     if (formData.estoque_maximo && formData.estoque_maximo <= formData.estoque_minimo) {
       toast({
@@ -826,8 +855,44 @@ export default function EstoquePage() {
         description: "O estoque máximo deve ser maior que o estoque mínimo",
         variant: "destructive",
       })
+      setError("O estoque máximo deve ser maior que o estoque mínimo")
       return
     }
+    
+    if (camposFaltando.length > 0) {
+      // Prevenir o comportamento padrão do formulário (scroll automático)
+      e.stopPropagation()
+      
+      // Mostrar mensagem de erro de forma mais visível
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000, // Manter visível por mais tempo
+      })
+      
+      // Também mostrar um alerta visual no topo do formulário
+      setError(camposFaltando.length === 1 
+        ? `Campo obrigatório faltando: ${camposFaltando[0]}`
+        : `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`)
+      
+      // Scroll suave para o topo do dialog para mostrar a mensagem de erro
+      setTimeout(() => {
+        const dialogElement = document.querySelector('[role="dialog"]')
+        if (dialogElement) {
+          dialogElement.scrollTo({ top: 0, behavior: 'smooth' })
+        }
+      }, 100)
+      
+      return
+    }
+    
+    // Limpar erro se tudo estiver válido
+    setError(null)
     
     try {
       if (editingItem) {
@@ -930,6 +995,35 @@ export default function EstoquePage() {
 
   const handleMovimentacao = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!movFormData.produto_id || movFormData.produto_id === '') {
+      camposFaltando.push('Produto')
+    }
+    
+    if (!movFormData.tipo || !movFormData.tipo.trim()) {
+      camposFaltando.push('Tipo de Movimentação')
+    }
+    
+    if (!movFormData.quantidade || movFormData.quantidade <= 0) {
+      camposFaltando.push('Quantidade')
+    }
+    
+    if (!movFormData.motivo || !movFormData.motivo.trim()) {
+      camposFaltando.push('Motivo')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       await estoqueAPI.movimentarEstoque(movFormData)
       toast({
@@ -1001,6 +1095,23 @@ export default function EstoquePage() {
 
   const handleCreateCategory = async (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!categoryFormData.nome || !categoryFormData.nome.trim()) {
+      camposFaltando.push('Nome da Categoria')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive",
+      })
+      return
+    }
+    
     try {
       await estoqueAPI.criarCategoria(categoryFormData)
       toast({
@@ -1157,7 +1268,6 @@ export default function EstoquePage() {
                       onChange={(e) =>
                         setMovFormData({ ...movFormData, quantidade: Number.parseInt(e.target.value) || 0 })
                       }
-                      required
                     />
                   </div>
                 </div>
@@ -1215,7 +1325,6 @@ export default function EstoquePage() {
                     value={categoryFormData.nome}
                     onChange={(e) => setCategoryFormData({ ...categoryFormData, nome: e.target.value })}
                     placeholder="Ex: Ferramentas, Materiais de Construção"
-                    required
                   />
                 </div>
 
@@ -1257,15 +1366,42 @@ export default function EstoquePage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader>
+          <Dialog open={isDialogOpen} onOpenChange={(open) => {
+            setIsDialogOpen(open)
+            if (!open) {
+              setError(null)
+            }
+          }}>
+            <DialogContent className="max-w-2xl max-h-[95vh] flex flex-col overflow-hidden [&>button]:hidden">
+              <DialogHeader className="flex-shrink-0">
                 <DialogTitle>{editingItem ? "Editar Item" : "Cadastrar Novo Item"}</DialogTitle>
                 <DialogDescription>
                   {editingItem ? "Atualize as informações do item" : "Preencha os dados do novo item"}
                 </DialogDescription>
               </DialogHeader>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              
+              {/* Mensagem de Erro */}
+              {error && (
+                <div className="bg-destructive/10 border border-destructive rounded-lg p-4 flex items-start gap-3 flex-shrink-0">
+                  <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-destructive mb-1">Campos obrigatórios não preenchidos</h3>
+                    <p className="text-sm text-destructive/90">{error}</p>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setError(null)}
+                    className="text-destructive hover:text-destructive"
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              )}
+              
+              <div className="flex-1 overflow-y-auto pr-2 min-h-0">
+                <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="flex justify-end gap-2">
                   <Button
                     type="button"
@@ -1287,7 +1423,6 @@ export default function EstoquePage() {
                       id="nome"
                       value={formData.nome}
                       onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -1427,7 +1562,6 @@ export default function EstoquePage() {
                       onChange={(e) =>
                         setFormData({ ...formData, valor_unitario: Number.parseFloat(e.target.value) || 0 })
                       }
-                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -1439,7 +1573,6 @@ export default function EstoquePage() {
                       onChange={(e) =>
                         setFormData({ ...formData, estoque_minimo: Number.parseInt(e.target.value) || 0 })
                       }
-                      required
                     />
                   </div>
                   <div className="space-y-2">
@@ -1510,15 +1643,19 @@ export default function EstoquePage() {
                   />
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <div className="flex justify-end gap-3 pt-4 border-t sticky bottom-0 bg-background pb-2">
+                  <Button type="button" variant="outline" onClick={() => {
+                    setIsDialogOpen(false)
+                    setError(null)
+                  }}>
                     Cancelar
                   </Button>
                   <Button type="submit" className="bg-blue-600 hover:bg-blue-700">
                     {editingItem ? "Atualizar" : "Cadastrar"}
                   </Button>
                 </div>
-              </form>
+                </form>
+              </div>
             </DialogContent>
           </Dialog>
         </div>

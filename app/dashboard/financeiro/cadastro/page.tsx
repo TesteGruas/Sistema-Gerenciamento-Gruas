@@ -579,6 +579,7 @@ export default function CadastroPage() {
 }
 
 function CadastroForm({ onClose }: { onClose: () => void }) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState({
     tipo: '',
     nome: '',
@@ -592,6 +593,31 @@ function CadastroForm({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!formData.tipo || !formData.tipo.trim()) {
+      camposFaltando.push('Tipo de Cadastro')
+    }
+    
+    if (!formData.nome || !formData.nome.trim()) {
+      camposFaltando.push('Nome/Razão Social')
+    }
+    
+    if (!formData.documento || !formData.documento.trim()) {
+      camposFaltando.push('CPF/CNPJ')
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
+    
     console.log('Salvando cadastro:', formData)
     onClose()
   }

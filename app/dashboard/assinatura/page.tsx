@@ -1676,6 +1676,39 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
     e.preventDefault()
     setIsSubmitting(true)
     
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!formData.titulo || !formData.titulo.trim()) {
+      camposFaltando.push('Título')
+    }
+    
+    if (!formData.arquivo) {
+      camposFaltando.push('Arquivo')
+    }
+    
+    if (assinantes.length === 0) {
+      camposFaltando.push('Pelo menos um assinante')
+    } else {
+      // Validar assinantes
+      for (let i = 0; i < assinantes.length; i++) {
+        const assinante = assinantes[i]
+        if (!assinante.userId || !assinante.userId.toString().trim()) {
+          camposFaltando.push(`Usuário do assinante ${i + 1}`)
+        }
+      }
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      setIsSubmitting(false)
+      return
+    }
+    
     try {
       console.log('=== DEBUG CRIAÇÃO DE DOCUMENTO ===')
       console.log('Dados do formulário:', formData)
@@ -1684,18 +1717,6 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
       console.log('Tamanho do arquivo:', formData.arquivo?.size)
       console.log('Tipo do arquivo:', formData.arquivo?.type)
       console.log('Assinantes:', assinantes)
-      
-      // Validar se arquivo foi selecionado
-      if (!formData.arquivo) {
-        console.error('❌ ERRO: Nenhum arquivo selecionado!')
-        toast({
-          title: "Erro",
-          description: "Por favor, selecione um arquivo para upload",
-          variant: "destructive"
-        })
-        setIsSubmitting(false)
-        return
-      }
       
       console.log('✅ Arquivo validado:', {
         nome: formData.arquivo.name,

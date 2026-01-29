@@ -95,35 +95,44 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
 
   const handleSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     
-    // Validações no frontend antes de enviar
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
     if (!form.name || form.name.trim().length < 2) {
-      toast({
-        title: "Erro de validação",
-        description: "O nome é obrigatório e deve ter no mínimo 2 caracteres",
-        variant: "destructive"
-      })
-      return
+      camposFaltando.push('Nome Completo (mínimo 2 caracteres)')
     }
-    
-    if (!form.role) {
-      toast({
-        title: "Erro de validação",
-        description: "O cargo é obrigatório",
-        variant: "destructive"
-      })
-      return
+
+    if (!form.cpf || !form.cpf.trim()) {
+      camposFaltando.push('CPF')
     }
-    
+
+    if (!form.role || !form.role.trim()) {
+      camposFaltando.push('Cargo')
+    }
+
+    if (!form.hireDate || !form.hireDate.trim()) {
+      camposFaltando.push('Data de Admissão')
+    }
+
     if (form.criar_usuario) {
       if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        toast({
-          title: "Erro de validação",
-          description: "O email fornecido é inválido",
-          variant: "destructive"
-        })
-        return
+        camposFaltando.push('Email (formato inválido)')
       }
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
     }
     
     // Converte o salário de centavos para reais (API espera em reais)
@@ -146,7 +155,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       criar_usuario: form.criar_usuario,
       eh_supervisor: ehSupervisor
     })
-  }, [form, onSubmit])
+  }, [form, onSubmit, toast, ehSupervisor])
 
   const resetForm = useCallback(() => {
     setForm({
@@ -234,7 +243,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                 id="name"
                 value={form.name}
                 onChange={(e) => handleChange('name', e.target.value)}
-                required
               />
             </div>
 
@@ -244,7 +252,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                 id="cpf"
                 value={form.cpf}
                 onChange={(e) => handleChange('cpf', e.target.value)}
-                required
               />
             </div>
 
@@ -410,7 +417,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
                 type="date"
                 value={form.hireDate}
                 onChange={(e) => handleChange('hireDate', e.target.value)}
-                required
               />
             </div>
 

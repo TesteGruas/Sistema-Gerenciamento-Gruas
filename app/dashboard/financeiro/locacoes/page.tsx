@@ -933,11 +933,33 @@ function LocacaoForm({ onClose, clientes, funcionarios, gruas }: {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    // Validações básicas
-    if (!formData.numero || !formData.cliente_id || !formData.equipamento_id || !formData.valor_mensal) {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!formData.numero || !formData.numero.trim()) {
+      camposFaltando.push('Número da Locação')
+    }
+    
+    if (!formData.cliente_id || formData.cliente_id === '') {
+      camposFaltando.push('Cliente')
+    }
+    
+    if (!formData.equipamento_id || formData.equipamento_id === '') {
+      camposFaltando.push('Equipamento')
+    }
+    
+    if (!formData.valor_mensal || parseFloat(formData.valor_mensal) <= 0) {
+      camposFaltando.push('Valor Mensal')
+    }
+    
+    if (!formData.data_inicio || !formData.data_inicio.trim()) {
+      camposFaltando.push('Data de Início')
+    }
+    
+    if (camposFaltando.length > 0) {
       toast({
-        title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
         variant: "destructive"
       })
       return

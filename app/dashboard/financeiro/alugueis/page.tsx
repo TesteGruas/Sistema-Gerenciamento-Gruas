@@ -133,6 +133,51 @@ export default function AlugueisIntegradoPage() {
   // Cadastrar residência
   const handleCadastrarResidencia = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
+
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!nome || !nome.trim()) {
+      camposFaltando.push('Nome/Identificação')
+    }
+
+    if (!endereco || !endereco.trim()) {
+      camposFaltando.push('Endereço')
+    }
+
+    if (!cidade || !cidade.trim()) {
+      camposFaltando.push('Cidade')
+    }
+
+    if (!estado || !estado.trim()) {
+      camposFaltando.push('Estado')
+    }
+
+    if (!cep || !cep.trim()) {
+      camposFaltando.push('CEP')
+    }
+
+    if (!area || !area.trim()) {
+      camposFaltando.push('Área (m²)')
+    }
+
+    if (!valorBase || !valorBase.trim()) {
+      camposFaltando.push('Valor Base (R$)')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
 
     try {
       await ResidenciasAPI.criar({
@@ -178,12 +223,36 @@ export default function AlugueisIntegradoPage() {
   // Criar aluguel
   const handleCriarAluguel = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
 
-    if (!residenciaId || !funcionarioId || !dataInicio || !valorMensal) {
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!residenciaId || !residenciaId.trim()) {
+      camposFaltando.push('Residência')
+    }
+
+    if (!funcionarioId || !funcionarioId.trim()) {
+      camposFaltando.push('Funcionário')
+    }
+
+    if (!dataInicio || !dataInicio.trim()) {
+      camposFaltando.push('Data de Início')
+    }
+
+    if (!valorMensal || !valorMensal.trim()) {
+      camposFaltando.push('Valor Mensal (R$)')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
       toast({
-        title: 'Campos obrigatórios',
-        description: 'Por favor, preencha todos os campos obrigatórios.',
-        variant: 'destructive',
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
       })
       return
     }
@@ -333,7 +402,52 @@ export default function AlugueisIntegradoPage() {
 
   const handleEditarResidencia = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     if (!residenciaSelecionada) return
+
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!nome || !nome.trim()) {
+      camposFaltando.push('Nome/Identificação')
+    }
+
+    if (!endereco || !endereco.trim()) {
+      camposFaltando.push('Endereço')
+    }
+
+    if (!cidade || !cidade.trim()) {
+      camposFaltando.push('Cidade')
+    }
+
+    if (!estado || !estado.trim()) {
+      camposFaltando.push('Estado')
+    }
+
+    if (!cep || !cep.trim()) {
+      camposFaltando.push('CEP')
+    }
+
+    if (!area || !area.trim()) {
+      camposFaltando.push('Área (m²)')
+    }
+
+    if (!valorBase || !valorBase.trim()) {
+      camposFaltando.push('Valor Base (R$)')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
 
     try {
       await ResidenciasAPI.atualizar(residenciaSelecionada.id, {
@@ -389,7 +503,32 @@ export default function AlugueisIntegradoPage() {
 
   const handleEditarAluguel = async (e: React.FormEvent) => {
     e.preventDefault()
+    e.stopPropagation()
     if (!aluguelSelecionado) return
+
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+
+    if (!dataInicio || !dataInicio.trim()) {
+      camposFaltando.push('Data de Início')
+    }
+
+    if (!valorMensal || !valorMensal.trim()) {
+      camposFaltando.push('Valor Mensal (R$)')
+    }
+
+    if (camposFaltando.length > 0) {
+      const mensagemErro = camposFaltando.length === 1 
+        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
+        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
+      toast({
+        title: "Campos obrigatórios não preenchidos",
+        description: mensagemErro,
+        variant: "destructive",
+        duration: 10000,
+      })
+      return
+    }
 
     try {
       await AlugueisAPI.atualizar(aluguelSelecionado.id, {
@@ -608,7 +747,6 @@ export default function AlugueisIntegradoPage() {
                     placeholder="Ex: Casa Vila Nova"
                     value={nome}
                     onChange={(e) => setNome(e.target.value)}
-                    required
                   />
                 </div>
 
@@ -620,7 +758,6 @@ export default function AlugueisIntegradoPage() {
                       placeholder="Rua, número"
                       value={endereco}
                       onChange={(e) => setEndereco(e.target.value)}
-                      required
                     />
                   </div>
 
@@ -630,7 +767,6 @@ export default function AlugueisIntegradoPage() {
                       id="cidade"
                       value={cidade}
                       onChange={(e) => setCidade(e.target.value)}
-                      required
                     />
                   </div>
 
@@ -654,7 +790,6 @@ export default function AlugueisIntegradoPage() {
                       id="cep"
                       value={cep}
                       onChange={(e) => setCep(e.target.value)}
-                      required
                     />
                   </div>
                 </div>
@@ -695,7 +830,6 @@ export default function AlugueisIntegradoPage() {
                       type="number"
                       value={area}
                       onChange={(e) => setArea(e.target.value)}
-                      required
                     />
                   </div>
                 </div>
@@ -708,7 +842,6 @@ export default function AlugueisIntegradoPage() {
                     step="0.01"
                     value={valorBase}
                     onChange={(e) => setValorBase(e.target.value)}
-                    required
                   />
                 </div>
 
@@ -758,7 +891,7 @@ export default function AlugueisIntegradoPage() {
                   </h3>
                   <div className="space-y-2">
                     <Label>Selecione a Residência *</Label>
-                    <Select value={residenciaId} onValueChange={setResidenciaId} required>
+                    <Select value={residenciaId} onValueChange={setResidenciaId}>
                       <SelectTrigger>
                         <SelectValue placeholder="Escolha uma residência" />
                       </SelectTrigger>
@@ -819,7 +952,6 @@ export default function AlugueisIntegradoPage() {
                         type="date"
                         value={dataInicio}
                         onChange={(e) => setDataInicio(e.target.value)}
-                        required
                       />
                     </div>
 
@@ -831,7 +963,6 @@ export default function AlugueisIntegradoPage() {
                         step="0.01"
                         value={valorMensal}
                         onChange={(e) => setValorMensal(e.target.value)}
-                        required
                       />
                     </div>
 
@@ -1351,7 +1482,6 @@ export default function AlugueisIntegradoPage() {
                 placeholder="Ex: Casa Vila Nova"
                 value={nome}
                 onChange={(e) => setNome(e.target.value)}
-                required
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -1362,7 +1492,6 @@ export default function AlugueisIntegradoPage() {
                   placeholder="Rua, número"
                   value={endereco}
                   onChange={(e) => setEndereco(e.target.value)}
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -1371,7 +1500,6 @@ export default function AlugueisIntegradoPage() {
                   id="edit-cidade"
                   value={cidade}
                   onChange={(e) => setCidade(e.target.value)}
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -1393,7 +1521,6 @@ export default function AlugueisIntegradoPage() {
                   id="edit-cep"
                   value={cep}
                   onChange={(e) => setCep(e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -1431,7 +1558,6 @@ export default function AlugueisIntegradoPage() {
                   type="number"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
-                  required
                 />
               </div>
             </div>
@@ -1443,7 +1569,6 @@ export default function AlugueisIntegradoPage() {
                 step="0.01"
                 value={valorBase}
                 onChange={(e) => setValorBase(e.target.value)}
-                required
               />
             </div>
             <div className="flex items-center space-x-2">
@@ -1488,7 +1613,6 @@ export default function AlugueisIntegradoPage() {
                   type="date"
                   value={dataInicio}
                   onChange={(e) => setDataInicio(e.target.value)}
-                  required
                 />
               </div>
               <div className="space-y-2">
@@ -1499,7 +1623,6 @@ export default function AlugueisIntegradoPage() {
                   step="0.01"
                   value={valorMensal}
                   onChange={(e) => setValorMensal(e.target.value)}
-                  required
                 />
               </div>
               <div className="space-y-2">

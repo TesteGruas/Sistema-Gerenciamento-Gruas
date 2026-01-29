@@ -576,6 +576,7 @@ function OrcamentoForm({
   onSubmit: (data: CreateOrcamentoData) => void
   onCancel: () => void 
 }) {
+  const { toast } = useToast()
   const [formData, setFormData] = useState<CreateOrcamentoData>({
     cliente_id: orcamento?.cliente_id || 0,
     data_orcamento: orcamento?.data_orcamento || new Date().toISOString().split('T')[0],
@@ -595,6 +596,52 @@ function OrcamentoForm({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Validação de campos obrigatórios
+    const camposFaltando: string[] = []
+    
+    if (!formData.cliente_id || formData.cliente_id === 0) {
+      camposFaltando.push('Cliente')
+    }
+    
+    if (!formData.tipo_orcamento || !formData.tipo_orcamento.trim()) {
+      camposFaltando.push('Tipo de Orçamento')
+    }
+    
+    if (!formData.data_orcamento || !formData.data_orcamento.trim()) {
+      camposFaltando.push('Data do Orçamento')
+    }
+    
+    if (!formData.data_validade || !formData.data_validade.trim()) {
+      camposFaltando.push('Data de Validade')
+    }
+    
+    if (itens.length === 0) {
+      camposFaltando.push('Pelo menos um item no orçamento')
+    } else {
+      // Validar itens
+      for (let i = 0; i < itens.length; i++) {
+        const item = itens[i]
+        if (!item.produto_servico || !item.produto_servico.trim()) {
+          camposFaltando.push(`Produto/Serviço do item ${i + 1}`)
+        }
+        if (!item.quantidade || item.quantidade <= 0) {
+          camposFaltando.push(`Quantidade do item ${i + 1}`)
+        }
+        if (!item.valor_unitario || item.valor_unitario <= 0) {
+          camposFaltando.push(`Valor Unitário do item ${i + 1}`)
+        }
+      }
+    }
+    
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
+        variant: "destructive"
+      })
+      return
+    }
     
     // Calcular valor total dos itens
     const valorTotalItens = itens.reduce((total, item) => total + item.valor_total, 0)
