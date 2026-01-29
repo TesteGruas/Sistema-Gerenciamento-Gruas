@@ -88,6 +88,7 @@ import receitasRoutes from './routes/receitas.js'
 import obraGruasRoutes from './routes/obra-gruas.js'
 import rhRoutes from './routes/rh.js'
 import historicoRoutes from './routes/historico.js'
+import historicoComponentesRoutes from './routes/historico-componentes.js'
 import cargosRoutes from './routes/cargos.js'
 import feriasRoutes from './routes/ferias.js'
 import remuneracaoRoutes from './routes/remuneracao.js'
@@ -620,6 +621,7 @@ app.use('/api/receitas', receitasRoutes)
 app.use('/api/obra-gruas', obraGruasRoutes)
 app.use('/api/rh', rhRoutes)
 app.use('/api/historico', historicoRoutes)
+app.use('/api/historico-componentes', historicoComponentesRoutes)
 app.use('/api/cargos', cargosRoutes)
 app.use('/api/ferias', feriasRoutes)
 app.use('/api/remuneracao', remuneracaoRoutes)

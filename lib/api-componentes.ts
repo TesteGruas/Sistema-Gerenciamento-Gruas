@@ -15,7 +15,7 @@ export interface ComponenteGrua {
   quantidade_disponivel: number
   quantidade_em_uso: number
   quantidade_danificada: number
-  status: 'Disponível' | 'Em uso' | 'Danificado' | 'Manutenção' | 'Descontinuado'
+  status: 'Disponível' | 'Em uso' | 'Danificado' | 'Manutenção' | 'Descontinuado' | 'Devolvido'
   localizacao?: string
   localizacao_tipo?: 'Obra X' | 'Almoxarifado' | 'Oficina' | 'Em trânsito' | 'Em manutenção'
   obra_id?: number

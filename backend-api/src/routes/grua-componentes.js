@@ -24,7 +24,7 @@ const componenteSchema = Joi.object({
   quantidade_danificada: Joi.number().integer().min(0).default(0),
   quantidade_inicial: Joi.number().integer().min(0).default(0).allow(null),
   quantidade_reservada_inicial: Joi.number().integer().min(0).default(0).allow(null),
-  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado').default('Disponível'),
+  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado', 'Devolvido').default('Disponível'),
   localizacao: Joi.string().max(200).allow(null, ''),
   localizacao_tipo: Joi.string().valid('Obra X', 'Almoxarifado', 'Oficina', 'Em trânsito', 'Em manutenção').default('Almoxarifado'),
   obra_id: Joi.number().integer().allow(null),
@@ -60,7 +60,7 @@ const componenteUpdateSchema = Joi.object({
   quantidade_danificada: Joi.number().integer().min(0),
   quantidade_inicial: Joi.number().integer().min(0).allow(null),
   quantidade_reservada_inicial: Joi.number().integer().min(0).allow(null),
-  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado'),
+  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado', 'Devolvido'),
   localizacao: Joi.string().max(200).allow(null, ''),
   localizacao_tipo: Joi.string().valid('Obra X', 'Almoxarifado', 'Oficina', 'Em trânsito', 'Em manutenção'),
   obra_id: Joi.number().integer().allow(null),
@@ -114,7 +114,7 @@ const movimentacaoSchema = Joi.object({
  *         name: status
  *         schema:
  *           type: string
- *           enum: [Disponível, Em uso, Danificado, Manutenção, Descontinuado]
+ *           enum: [Disponível, Em uso, Danificado, Manutenção, Descontinuado, Devolvido]
  *         description: Status do componente
  *       - in: query
  *         name: page
@@ -360,8 +360,10 @@ router.post('/', async (req, res) => {
     }
 
     // Preparar dados para inserção (remover apenas campos que não existem na tabela)
+    // Guardar componente_estoque_id antes de remover
+    const componenteEstoqueId = value.componente_estoque_id
+    
     const { 
-      componente_estoque_id, 
       quantidade_inicial, 
       quantidade_reservada_inicial,
       ...componenteData 
@@ -374,6 +376,11 @@ router.post('/', async (req, res) => {
       ...componenteData,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
+    }
+    
+    // Incluir componente_estoque_id apenas se existir
+    if (componenteEstoqueId) {
+      dadosInsercao.componente_estoque_id = componenteEstoqueId
     }
 
     const { data, error: insertError } = await supabaseAdmin
@@ -390,9 +397,9 @@ router.post('/', async (req, res) => {
     }
 
     // Se o componente foi selecionado do estoque, fazer movimentação de saída
-    if (componente_estoque_id && quantidadeTotalParaEstoque) {
+    if (componenteEstoqueId && quantidadeTotalParaEstoque) {
       try {
-        console.log(`🔄 Processando movimentação de estoque para componente_estoque_id: ${componente_estoque_id}, quantidade: ${quantidadeTotalParaEstoque}`)
+        console.log(`🔄 Processando movimentação de estoque para componente_estoque_id: ${componenteEstoqueId}, quantidade: ${quantidadeTotalParaEstoque}`)
         // Obter responsavel_id (similar à rota de movimentação de estoque)
         let responsavel_id = null
         if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
@@ -413,8 +420,9 @@ router.post('/', async (req, res) => {
           }
         }
 
-        // Verificar se componente_estoque_id é um produto (começa com "P") ou componente de grua (número)
-        const isProduto = typeof componente_estoque_id === 'string' && componente_estoque_id.startsWith('P')
+        // Verificar se componenteEstoqueId é um produto (começa com "P") ou componente de grua (número)
+        const isProduto = typeof componenteEstoqueId === 'string' && componenteEstoqueId.startsWith('P')
+        console.log(`📦 Tipo identificado: ${isProduto ? 'Produto' : 'Componente'}, ID: ${componenteEstoqueId}`)
         
         let estoqueAtual = null
         let estoqueError = null
@@ -422,31 +430,48 @@ router.post('/', async (req, res) => {
 
         if (isProduto) {
           // É um produto do estoque - buscar por produto_id
-          const { data: produto } = await supabaseAdmin
+          const { data: produto, error: produtoError } = await supabaseAdmin
             .from('produtos')
             .select('id, nome, valor_unitario')
-            .eq('id', componente_estoque_id)
+            .eq('id', componenteEstoqueId)
             .single()
 
-          if (produto) {
+          if (produtoError) {
+            console.error(`❌ Erro ao buscar produto ${componenteEstoqueId}:`, produtoError)
+          } else if (produto) {
+            console.log(`✅ Produto encontrado: ${produto.nome}`)
             valorUnitario = produto.valor_unitario || valorUnitario
 
             // Buscar estoque do produto
             const estoqueResult = await supabaseAdmin
               .from('estoque')
               .select('quantidade_atual, quantidade_disponivel, quantidade_reservada, valor_total')
-              .eq('produto_id', componente_estoque_id)
+              .eq('produto_id', componenteEstoqueId)
               .single()
 
             estoqueAtual = estoqueResult.data
             estoqueError = estoqueResult.error
+            
+            if (estoqueError) {
+              console.error(`❌ Erro ao buscar estoque do produto ${componenteEstoqueId}:`, estoqueError)
+            } else if (estoqueAtual) {
+              console.log(`📊 Estoque atual do produto ${componenteEstoqueId}:`, {
+                quantidade_atual: estoqueAtual.quantidade_atual,
+                quantidade_disponivel: estoqueAtual.quantidade_disponivel,
+                quantidade_reservada: estoqueAtual.quantidade_reservada
+              })
+            } else {
+              console.warn(`⚠️ Produto ${componenteEstoqueId} não possui registro no estoque`)
+            }
+          } else {
+            console.warn(`⚠️ Produto ${componenteEstoqueId} não encontrado`)
           }
         } else {
           // É um componente de grua - buscar por componente_id
           // Converter para número se necessário (componentes de grua têm IDs numéricos)
-          const componenteIdNumero = typeof componente_estoque_id === 'string' 
-            ? parseInt(componente_estoque_id) 
-            : componente_estoque_id
+          const componenteIdNumero = typeof componenteEstoqueId === 'string' 
+            ? parseInt(componenteEstoqueId) 
+            : componenteEstoqueId
 
           const estoqueResult = await supabaseAdmin
             .from('estoque')
@@ -489,10 +514,19 @@ router.post('/', async (req, res) => {
           const novaQuantidadeDisponivel = estoqueAtual.quantidade_disponivel - quantidadeTotalParaEstoque
           const valorTotal = quantidadeTotalParaEstoque * valorUnitario
 
+          console.log(`📉 Calculando nova quantidade:`, {
+            quantidade_atual: estoqueAtual.quantidade_atual,
+            quantidade_disponivel: estoqueAtual.quantidade_disponivel,
+            quantidadeTotalParaEstoque,
+            novaQuantidade,
+            novaQuantidadeDisponivel
+          })
+
           // Atualizar estoque
           let updateEstoqueError = null
           if (isProduto) {
             // Atualizar estoque do produto
+            console.log(`🔄 Atualizando estoque do produto ${componenteEstoqueId}...`)
             const updateResult = await supabaseAdmin
               .from('estoque')
               .update({
@@ -502,15 +536,21 @@ router.post('/', async (req, res) => {
                 ultima_movimentacao: new Date().toISOString(),
                 updated_at: new Date().toISOString()
               })
-              .eq('produto_id', componente_estoque_id)
+              .eq('produto_id', componenteEstoqueId)
             
             updateEstoqueError = updateResult.error
+            
+            if (updateEstoqueError) {
+              console.error(`❌ Erro ao atualizar estoque do produto ${componenteEstoqueId}:`, updateEstoqueError)
+            } else {
+              console.log(`✅ Estoque do produto ${componenteEstoqueId} atualizado com sucesso! Nova quantidade disponível: ${novaQuantidadeDisponivel}`)
+            }
           } else {
             // Atualizar estoque do componente
             // Converter para número se necessário
-            const componenteIdNumero = typeof componente_estoque_id === 'string' 
-              ? parseInt(componente_estoque_id) 
-              : componente_estoque_id
+            const componenteIdNumero = typeof componenteEstoqueId === 'string' 
+              ? parseInt(componenteEstoqueId) 
+              : componenteEstoqueId
 
             const updateResult = await supabaseAdmin
               .from('estoque')
@@ -538,14 +578,14 @@ router.post('/', async (req, res) => {
             const { data: estoqueItem } = await supabaseAdmin
               .from('estoque')
               .select('id')
-              .eq('produto_id', componente_estoque_id)
+              .eq('produto_id', componenteEstoqueId)
               .single()
             itemIdEstoque = estoqueItem?.id
           } else {
             // Converter para número se necessário
-            const componenteIdNumero = typeof componente_estoque_id === 'string' 
-              ? parseInt(componente_estoque_id) 
-              : componente_estoque_id
+            const componenteIdNumero = typeof componenteEstoqueId === 'string' 
+              ? parseInt(componenteEstoqueId) 
+              : componenteEstoqueId
 
             const { data: estoqueItem } = await supabaseAdmin
               .from('estoque')
@@ -570,12 +610,12 @@ router.post('/', async (req, res) => {
           }
 
           if (isProduto) {
-            movimentacaoData.produto_id = componente_estoque_id.toString()
+            movimentacaoData.produto_id = componenteEstoqueId.toString()
           } else {
             // Converter para número se necessário (componentes de grua têm IDs numéricos)
-            const componenteIdNumero = typeof componente_estoque_id === 'string' 
-              ? parseInt(componente_estoque_id) 
-              : componente_estoque_id
+            const componenteIdNumero = typeof componenteEstoqueId === 'string' 
+              ? parseInt(componenteEstoqueId) 
+              : componenteEstoqueId
             movimentacaoData.componente_id = componenteIdNumero
           }
 
@@ -616,14 +656,14 @@ router.post('/', async (req, res) => {
                 }
               }
             } else {
-              console.log(`✅ Estoque decrementado: ${quantidadeTotalParaEstoque} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
+              console.log(`✅ Estoque decrementado: ${quantidadeTotalParaEstoque} unidades do ${isProduto ? 'produto' : 'componente'} ${componenteEstoqueId}`)
             }
           } catch (error) {
             console.error('Erro ao registrar movimentação:', error)
             // Não falhar a criação do componente se houver erro na movimentação
           }
         } else {
-          console.log(`ℹ️ ${isProduto ? 'Produto' : 'Componente'} ${componente_estoque_id} não possui registro no estoque, pulando movimentação`)
+          console.log(`ℹ️ ${isProduto ? 'Produto' : 'Componente'} ${componenteEstoqueId} não possui registro no estoque, pulando movimentação`)
         }
       } catch (error) {
         console.error('❌ Erro ao decrementar estoque:', error)
@@ -696,10 +736,10 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se o componente existe
+    // Verificar se o componente existe e obter dados atuais
     const { data: componenteExistente, error: checkError } = await supabaseAdmin
       .from('grua_componentes')
-      .select('id')
+      .select('id, componente_estoque_id, quantidade_em_uso')
       .eq('id', id)
       .single()
 
@@ -716,6 +756,25 @@ router.put('/:id', async (req, res) => {
       quantidade_reservada_inicial,
       ...updateData 
     } = value
+    
+    // Se quantidade_em_uso está sendo atualizada para 0 e o componente tem componente_estoque_id,
+    // mudar status para "Devolvido"
+    if (updateData.quantidade_em_uso !== undefined && 
+        updateData.quantidade_em_uso === 0 && 
+        componenteExistente.componente_estoque_id) {
+      // Verificar se a observação contém "Devolução" para confirmar que é uma devolução
+      const observacoes = updateData.observacoes || value.observacoes || ''
+      if (observacoes.includes('Devolução') || observacoes.includes('Devolução') || !updateData.status) {
+        // Se não foi especificado um status ou se é uma devolução, mudar para "Devolvido"
+        updateData.status = 'Devolvido'
+      }
+    } else if (updateData.quantidade_em_uso !== undefined && 
+               updateData.quantidade_em_uso === 0 && 
+               !componenteExistente.componente_estoque_id &&
+               !updateData.status) {
+      // Se não tem componente_estoque_id mas quantidade_em_uso = 0, status = "Disponível"
+      updateData.status = 'Disponível'
+    }
     
     updateData.updated_at = new Date().toISOString()
 

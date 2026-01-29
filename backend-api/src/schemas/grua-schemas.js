@@ -54,8 +54,8 @@ export const componenteSchema = Joi.object({
     'number.integer': 'Quantidade danificada deve ser um número inteiro',
     'number.min': 'Quantidade danificada não pode ser negativa'
   }),
-  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado').default('Disponível').messages({
-    'any.only': 'Status deve ser: Disponível, Em uso, Danificado, Manutenção ou Descontinuado'
+  status: Joi.string().valid('Disponível', 'Em uso', 'Danificado', 'Manutenção', 'Descontinuado', 'Devolvido').default('Disponível').messages({
+    'any.only': 'Status deve ser: Disponível, Em uso, Danificado, Manutenção, Descontinuado ou Devolvido'
   }),
   localizacao: Joi.string().max(200).allow(null, '').messages({
     'string.max': 'Localização deve ter no máximo 200 caracteres'

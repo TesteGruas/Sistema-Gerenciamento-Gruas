@@ -208,7 +208,7 @@ export default function ComponentesGruaPage() {
       // Carregar componentes da grua com filtros aplicados
       const componentesResponse = await apiComponentes.buscarPorGrua(gruaId, {
         page: 1,
-        limit: 10, // Aumentar limite para carregar todos os componentes
+        limit: 100, // Aumentar limite para carregar todos os componentes
         search: searchTerm || undefined,
         status: filterStatus !== 'all' ? filterStatus : undefined,
         tipo: filterTipo !== 'all' ? filterTipo : undefined
@@ -362,12 +362,12 @@ export default function ComponentesGruaPage() {
       capacidade: '',
       unidade_medida: componente.unidade_medida || 'unidade',
       quantidade_total: quantidadeInicial, // Quantidade a adicionar (padrão 1)
-      quantidade_disponivel: quantidadeInicial, // Sincronizar com quantidade_total
-      quantidade_em_uso: 0,
+      quantidade_disponivel: 0, // Quando alocado do estoque, não fica disponível na grua
+      quantidade_em_uso: quantidadeInicial, // Quando alocado do estoque, fica em uso na grua
       quantidade_danificada: 0,
       quantidade_inicial: 0, // Não criar movimentação de entrada quando vem do estoque
       quantidade_reservada_inicial: 0,
-      status: componente.status === 'Ativo' ? 'Disponível' as ComponenteGrua['status'] : 'Disponível' as ComponenteGrua['status'],
+      status: componente.status === 'Ativo' ? 'Em uso' as ComponenteGrua['status'] : 'Em uso' as ComponenteGrua['status'], // Quando alocado, fica em uso
       localizacao: componente.localizacao || '',
       localizacao_tipo: componente.localizacao ? 'Almoxarifado' as ComponenteGrua['localizacao_tipo'] : 'Almoxarifado' as ComponenteGrua['localizacao_tipo'],
       obra_id: undefined,
@@ -387,6 +387,16 @@ export default function ComponentesGruaPage() {
 
   // Handlers
   const handleCreateComponente = async () => {
+    // Validar se um componente do estoque foi selecionado
+    if (!componenteSelecionado || !componenteForm.componente_estoque_id) {
+      toast({
+        title: "Componente não selecionado",
+        description: "Por favor, selecione um componente do estoque para continuar.",
+        variant: "destructive"
+      })
+      return
+    }
+
     // Validar estoque se componente foi selecionado do estoque
     if (componenteSelecionado && componenteForm.componente_estoque_id) {
       // A API pode retornar estoque como objeto único ou array
@@ -751,6 +761,7 @@ export default function ComponentesGruaPage() {
       case 'Manutenção': return 'bg-yellow-500'
       case 'Danificado': return 'bg-red-500'
       case 'Descontinuado': return 'bg-gray-500'
+      case 'Devolvido': return 'bg-purple-500'
       default: return 'bg-gray-500'
     }
   }
@@ -872,19 +883,36 @@ export default function ComponentesGruaPage() {
           </Button>
           <Button 
             variant="default"
-            onClick={() => {
-              // Inicializar devoluções para todos os componentes (mas só os com quantidade em uso podem ser devolvidos)
-              const devolucoesIniciais: Record<number, { tipo: 'completa' | 'parcial' | null, quantidade_devolvida?: number }> = {}
-              componentes.forEach(comp => {
-                if (comp.quantidade_em_uso > 0) {
+            onClick={async () => {
+              // Recarregar todos os componentes antes de abrir o modal (sem filtros de quantidade)
+              try {
+                const componentesResponse = await apiComponentes.buscarPorGrua(gruaId, {
+                  page: 1,
+                  limit: 100, // Carregar todos os componentes
+                  search: undefined,
+                  status: undefined,
+                  tipo: undefined
+                })
+                setComponentes(componentesResponse.data)
+                
+                // Inicializar devoluções para todos os componentes
+                const devolucoesIniciais: Record<number, { tipo: 'completa' | 'parcial' | null, quantidade_devolvida?: number }> = {}
+                componentesResponse.data.forEach(comp => {
                   devolucoesIniciais[comp.id] = {
                     tipo: null,
-                    quantidade_devolvida: comp.quantidade_em_uso
+                    quantidade_devolvida: comp.quantidade_em_uso || 0
                   }
-                }
-              })
-              setDevolucoesItens(devolucoesIniciais)
-              setIsDevolucaoItensDialogOpen(true)
+                })
+                setDevolucoesItens(devolucoesIniciais)
+                setIsDevolucaoItensDialogOpen(true)
+              } catch (error: any) {
+                console.error('Erro ao carregar componentes para devolução:', error)
+                toast({
+                  title: "Erro",
+                  description: "Erro ao carregar componentes para devolução",
+                  variant: "destructive"
+                })
+              }
             }}
             className="bg-green-600 hover:bg-green-700"
           >
@@ -1069,6 +1097,13 @@ export default function ComponentesGruaPage() {
                         {componente.quantidade_danificada > 0 && (
                           <div className="text-red-600"><strong>Danificado:</strong> {componente.quantidade_danificada}</div>
                         )}
+                        {componente.status === 'Devolvido' && (
+                          <div className="mt-1">
+                            <Badge variant="outline" className="bg-purple-50 text-purple-700 border-purple-200 text-xs">
+                              ✓ Devolvido ao estoque original
+                            </Badge>
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell>
@@ -1149,6 +1184,9 @@ export default function ComponentesGruaPage() {
         setIsCreateDialogOpen(open)
         if (!open) {
           resetComponenteForm()
+          setComponenteSelecionado(null)
+          setBuscaComponente("")
+          setComponentesEstoque([])
         }
       }}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -1307,7 +1345,9 @@ export default function ComponentesGruaPage() {
                             setComponenteForm({ 
                               ...componenteForm, 
                               quantidade_total: qtdFinal,
-                              quantidade_disponivel: qtdFinal
+                              quantidade_disponivel: 0, // Quando alocado do estoque, não fica disponível na grua
+                              quantidade_em_uso: qtdFinal, // Quando alocado do estoque, fica em uso na grua
+                              status: qtdFinal > 0 ? 'Em uso' as ComponenteGrua['status'] : 'Disponível' as ComponenteGrua['status'] // Atualizar status baseado na quantidade
                             })
                             
                             // Mostrar aviso se tentar exceder estoque
@@ -1340,362 +1380,10 @@ export default function ComponentesGruaPage() {
               )
             })()}
 
-            {/* Mostrar campos completos apenas se nenhum componente do estoque foi selecionado */}
             {!componenteSelecionado && (
-              <>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="nome">Nome do Componente *</Label>
-                    <Input
-                      id="nome"
-                      value={componenteForm.nome}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, nome: e.target.value })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="tipo">Tipo *</Label>
-                    <Select 
-                      value={componenteForm.tipo} 
-                      onValueChange={(value) => setComponenteForm({ ...componenteForm, tipo: value as ComponenteGrua['tipo'] })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Estrutural">Estrutural</SelectItem>
-                        <SelectItem value="Hidráulico">Hidráulico</SelectItem>
-                        <SelectItem value="Elétrico">Elétrico</SelectItem>
-                        <SelectItem value="Mecânico">Mecânico</SelectItem>
-                        <SelectItem value="Segurança">Segurança</SelectItem>
-                        <SelectItem value="Outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="modelo">Modelo</Label>
-                    <Input
-                      id="modelo"
-                      value={componenteForm.modelo}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, modelo: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="fabricante">Fabricante</Label>
-                    <Input
-                      id="fabricante"
-                      value={componenteForm.fabricante}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, fabricante: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="numero_serie">Número de Série</Label>
-                    <Input
-                      id="numero_serie"
-                      value={componenteForm.numero_serie}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, numero_serie: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="capacidade">Capacidade</Label>
-                    <Input
-                      id="capacidade"
-                      value={componenteForm.capacidade}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, capacidade: e.target.value })}
-                      placeholder="Ex: 5 toneladas"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="unidade_medida">Unidade de Medida</Label>
-                    <Select 
-                      value={componenteForm.unidade_medida} 
-                      onValueChange={(value) => setComponenteForm({ ...componenteForm, unidade_medida: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="unidade">Unidade</SelectItem>
-                        <SelectItem value="metro">Metro</SelectItem>
-                        <SelectItem value="quilograma">Quilograma</SelectItem>
-                        <SelectItem value="tonelada">Tonelada</SelectItem>
-                        <SelectItem value="metro_quadrado">Metro Quadrado</SelectItem>
-                        <SelectItem value="metro_cubico">Metro Cúbico</SelectItem>
-                        <SelectItem value="litro">Litro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="localizacao_tipo">Localização *</Label>
-                    <Select 
-                      value={componenteForm.localizacao_tipo} 
-                      onValueChange={(value) => setComponenteForm({ ...componenteForm, localizacao_tipo: value as ComponenteGrua['localizacao_tipo'], obra_id: value !== 'Obra X' ? undefined : componenteForm.obra_id })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Obra X">Obra X</SelectItem>
-                        <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
-                        <SelectItem value="Oficina">Oficina</SelectItem>
-                        <SelectItem value="Em trânsito">Em trânsito</SelectItem>
-                        <SelectItem value="Em manutenção">Em manutenção</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                {componenteForm.localizacao_tipo === 'Obra X' && (
-                  <div>
-                    <Label htmlFor="obra_id">Selecione a Obra *</Label>
-                    <Select 
-                      value={componenteForm.obra_id?.toString() || ''} 
-                      onValueChange={(value) => setComponenteForm({ ...componenteForm, obra_id: parseInt(value) })}
-                      disabled={loadingObras}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder={loadingObras ? "Carregando obras..." : "Selecione a obra"} />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {obras.map((obra) => (
-                          <SelectItem key={obra.id} value={obra.id.toString()}>
-                            {obra.nome || obra.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <Label htmlFor="quantidade_total">Quantidade Total *</Label>
-                    <Input
-                      id="quantidade_total"
-                      type="number"
-                      min="1"
-                      value={componenteForm.quantidade_total}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_total: parseInt(e.target.value) || 1 })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="quantidade_disponivel">Disponível *</Label>
-                    <Input
-                      id="quantidade_disponivel"
-                      type="number"
-                      min="0"
-                      value={componenteForm.quantidade_disponivel}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_disponivel: parseInt(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="quantidade_em_uso">Em Uso</Label>
-                    <Input
-                      id="quantidade_em_uso"
-                      type="number"
-                      min="0"
-                      value={componenteForm.quantidade_em_uso}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="quantidade_danificada">Danificada</Label>
-                    <Input
-                      id="quantidade_danificada"
-                      type="number"
-                      min="0"
-                      value={componenteForm.quantidade_danificada}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
-                    <Input
-                      id="quantidade_inicial"
-                      type="number"
-                      min="0"
-                      value={componenteForm.quantidade_inicial}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_inicial: parseInt(e.target.value) || 0 })}
-                      placeholder="Quantidade inicial em estoque"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Quantidade inicial do componente no estoque (será criada uma movimentação de entrada)
-                    </p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
-                    <Input
-                      id="quantidade_reservada_inicial"
-                      type="number"
-                      min="0"
-                      value={componenteForm.quantidade_reservada_inicial}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_reservada_inicial: parseInt(e.target.value) || 0 })}
-                      placeholder="Quantidade reservada inicial"
-                    />
-                    <p className="text-xs text-gray-500">
-                      Quantidade que será reservada inicialmente (opcional)
-                    </p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
-                    <div className="flex items-center gap-4 mt-2">
-                      <Slider
-                        value={[componenteForm.vida_util_percentual]}
-                        onValueChange={(value) => setComponenteForm({ ...componenteForm, vida_util_percentual: value[0] })}
-                        min={0}
-                        max={100}
-                        step={1}
-                        className="flex-1"
-                      />
-                      <Input
-                        id="vida_util_percentual"
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={componenteForm.vida_util_percentual}
-                        onChange={(e) => {
-                          const val = parseInt(e.target.value) || 0
-                          setComponenteForm({ ...componenteForm, vida_util_percentual: Math.min(100, Math.max(0, val)) })
-                        }}
-                        className="w-20"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label>Dimensões (opcional)</Label>
-                  <div className="grid grid-cols-4 gap-4">
-                    <div>
-                      <Label htmlFor="dimensoes_altura">Altura (m)</Label>
-                      <Input
-                        id="dimensoes_altura"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={componenteForm.dimensoes_altura || ''}
-                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_altura: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="dimensoes_largura">Largura (m)</Label>
-                      <Input
-                        id="dimensoes_largura"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={componenteForm.dimensoes_largura || ''}
-                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_largura: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="dimensoes_comprimento">Comprimento (m)</Label>
-                      <Input
-                        id="dimensoes_comprimento"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={componenteForm.dimensoes_comprimento || ''}
-                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_comprimento: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="0.00"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="dimensoes_peso">Peso (kg)</Label>
-                      <Input
-                        id="dimensoes_peso"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value={componenteForm.dimensoes_peso || ''}
-                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_peso: e.target.value ? parseFloat(e.target.value) : undefined })}
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="valor_unitario">Valor Unitário (R$) *</Label>
-                    <Input
-                      id="valor_unitario"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={componenteForm.valor_unitario}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, valor_unitario: parseFloat(e.target.value) || 0 })}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="status">Status</Label>
-                    <Select 
-                      value={componenteForm.status} 
-                      onValueChange={(value) => setComponenteForm({ ...componenteForm, status: value as ComponenteGrua['status'] })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Disponível">Disponível</SelectItem>
-                        <SelectItem value="Em uso">Em uso</SelectItem>
-                        <SelectItem value="Manutenção">Manutenção</SelectItem>
-                        <SelectItem value="Danificado">Danificado</SelectItem>
-                        <SelectItem value="Descontinuado">Descontinuado</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="data_ultima_manutencao">Última Manutenção</Label>
-                    <Input
-                      id="data_ultima_manutencao"
-                      type="date"
-                      value={componenteForm.data_ultima_manutencao}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, data_ultima_manutencao: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="data_proxima_manutencao">Próxima Manutenção</Label>
-                    <Input
-                      id="data_proxima_manutencao"
-                      type="date"
-                      value={componenteForm.data_proxima_manutencao}
-                      onChange={(e) => setComponenteForm({ ...componenteForm, data_proxima_manutencao: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="observacoes">Observações</Label>
-                  <Textarea
-                    id="observacoes"
-                    value={componenteForm.observacoes}
-                    onChange={(e) => setComponenteForm({ ...componenteForm, observacoes: e.target.value })}
-                    rows={3}
-                    placeholder="Informações adicionais sobre o componente..."
-                  />
-                </div>
-              </>
+              <div className="p-4 bg-yellow-50 border border-yellow-200 rounded-md text-sm text-yellow-800">
+                Por favor, selecione um componente do estoque para continuar.
+              </div>
             )}
 
             <div className="flex justify-end gap-2">
@@ -1705,14 +1393,14 @@ export default function ComponentesGruaPage() {
               <Button 
                 type="submit"
                 disabled={
-                  componenteSelecionado && componenteForm.componente_estoque_id
-                    ? (() => {
+                  !componenteSelecionado || !componenteForm.componente_estoque_id
+                    ? true
+                    : (() => {
                         const estoqueDisponivel = Array.isArray(componenteSelecionado.estoque)
                           ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
                           : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0
                         return estoqueDisponivel <= 0 || componenteForm.quantidade_total > estoqueDisponivel
                       })()
-                    : false
                 }
               >
                 Adicionar Componente
@@ -2432,14 +2120,13 @@ export default function ComponentesGruaPage() {
                             <Button
                               size="sm"
                               variant={isParcial ? "destructive" : "outline"}
-                              disabled={!podeDevolver}
                               onClick={() => {
                                 if (!isParcial) {
                                   setDevolucoesItens({
                                     ...devolucoesItens,
                                     [componente.id]: {
                                       tipo: 'parcial',
-                                      quantidade_devolvida: 0
+                                      quantidade_devolvida: componente.quantidade_em_uso > 0 ? 0 : 0
                                     }
                                   })
                                 } else {
@@ -2461,7 +2148,7 @@ export default function ComponentesGruaPage() {
                               <Input
                                 type="number"
                                 min="0"
-                                max={componente.quantidade_em_uso}
+                                max={componente.quantidade_em_uso > 0 ? componente.quantidade_em_uso : undefined}
                                 value={devolucao.quantidade_devolvida || 0}
                                 onChange={(e) => {
                                   const qtd = parseInt(e.target.value) || 0
@@ -2474,7 +2161,6 @@ export default function ComponentesGruaPage() {
                                   })
                                 }}
                                 className="w-24"
-                                disabled={!podeDevolver}
                               />
                             ) : (
                               <span className="text-sm text-gray-500">
@@ -2525,21 +2211,91 @@ export default function ComponentesGruaPage() {
                     let quantidadeDevolver = 0
                     if (dev.tipo === 'completa') {
                       quantidadeDevolver = componente.quantidade_em_uso
-                    } else if (dev.tipo === 'parcial' && dev.quantidade_devolvida) {
+                    } else if (dev.tipo === 'parcial' && dev.quantidade_devolvida !== undefined) {
                       quantidadeDevolver = dev.quantidade_devolvida
                     }
 
-                    if (quantidadeDevolver > 0 && quantidadeDevolver <= componente.quantidade_em_uso) {
-                      // Atualizar componente: diminuir quantidade_em_uso e aumentar quantidade_disponivel
-                      const novaQuantidadeEmUso = componente.quantidade_em_uso - quantidadeDevolver
+                    // Validar devolução completa: só permite se quantidade_em_uso > 0
+                    if (dev.tipo === 'completa' && componente.quantidade_em_uso === 0) {
+                      toast({
+                        title: "Atenção",
+                        description: `Componente "${componente.nome}": não é possível fazer devolução completa quando não há unidades em uso`,
+                        variant: "destructive"
+                      })
+                      continue
+                    }
+
+                    // Validar devolução parcial: permite mesmo quando quantidade_em_uso é 0 (para correção)
+                    // mas valida que não seja maior que quantidade_em_uso quando quantidade_em_uso > 0
+                    if (dev.tipo === 'parcial') {
+                      if (quantidadeDevolver <= 0) {
+                        toast({
+                          title: "Atenção",
+                          description: `Componente "${componente.nome}": informe uma quantidade maior que zero para devolução parcial`,
+                          variant: "destructive"
+                        })
+                        continue
+                      }
+                      if (componente.quantidade_em_uso > 0 && quantidadeDevolver > componente.quantidade_em_uso) {
+                        toast({
+                          title: "Atenção",
+                          description: `Componente "${componente.nome}": quantidade a devolver (${quantidadeDevolver}) é maior que a quantidade em uso (${componente.quantidade_em_uso})`,
+                          variant: "destructive"
+                        })
+                        continue
+                      }
+                    }
+
+                    if (quantidadeDevolver > 0) {
+                      // Calcular novas quantidades
+                      // Se quantidade_em_uso é 0, apenas adicionar ao disponível (correção de dados)
+                      const novaQuantidadeEmUso = componente.quantidade_em_uso > 0 
+                        ? Math.max(0, componente.quantidade_em_uso - quantidadeDevolver)
+                        : 0
                       const novaQuantidadeDisponivel = componente.quantidade_disponivel + quantidadeDevolver
+
+                      // Se o componente foi alocado do estoque (tem componente_estoque_id), incrementar o estoque do produto original
+                      const componenteEstoqueId = (componente as any).componente_estoque_id
+                      if (componenteEstoqueId && novaQuantidadeEmUso === 0) {
+                        // Quando devolve tudo (quantidade_em_uso = 0), incrementar estoque do produto original
+                        try {
+                          // Verificar se é um produto (começa com "P")
+                          const isProduto = typeof componenteEstoqueId === 'string' && componenteEstoqueId.startsWith('P')
+                          
+                          if (isProduto) {
+                            // Usar a API de estoque para criar movimentação de entrada
+                            await estoqueAPI.movimentarEstoque({
+                              produto_id: componenteEstoqueId,
+                              tipo: 'Entrada',
+                              quantidade: quantidadeDevolver,
+                              motivo: `Devolução de componente da grua ${componente.grua_id}`,
+                              observacoes: `Devolução automática: ${quantidadeDevolver} unidade(s) do componente "${componente.nome}" devolvidas ao estoque`
+                            })
+                            
+                            console.log(`✅ Estoque do produto ${componenteEstoqueId} incrementado em ${quantidadeDevolver} unidades`)
+                          }
+                        } catch (estoqueError) {
+                          console.warn('Erro ao incrementar estoque do produto original (não crítico):', estoqueError)
+                          // Não falhar a devolução se houver erro ao incrementar estoque
+                        }
+                      }
+
+                      // Determinar o novo status
+                      let novoStatus: ComponenteGrua['status'] = componente.status
+                      if (componenteEstoqueId && novaQuantidadeEmUso === 0) {
+                        // Se foi devolvido ao estoque original, status = "Devolvido"
+                        novoStatus = 'Devolvido'
+                      } else if (novaQuantidadeEmUso === 0) {
+                        // Se não tem componente_estoque_id mas quantidade_em_uso = 0, status = "Disponível"
+                        novoStatus = 'Disponível'
+                      }
 
                       // Atualizar o componente diretamente
                       await apiComponentes.atualizar(parseInt(componente_id), {
                         quantidade_em_uso: novaQuantidadeEmUso,
                         quantidade_disponivel: novaQuantidadeDisponivel,
-                        status: novaQuantidadeEmUso === 0 ? 'Disponível' : componente.status,
-                        observacoes: `${componente.observacoes || ''}\nDevolução: ${quantidadeDevolver} unidade(s) ao estoque em ${new Date().toLocaleString('pt-BR')}`
+                        status: novoStatus,
+                        observacoes: `${componente.observacoes || ''}\nDevolução: ${quantidadeDevolver} unidade(s) ao estoque em ${new Date().toLocaleString('pt-BR')}${componente.quantidade_em_uso === 0 ? ' (correção de dados)' : ''}${componenteEstoqueId && novaQuantidadeEmUso === 0 ? ' - Devolvido ao estoque original' : ''}`
                       })
 
                       // Registrar no histórico diretamente na tabela (opcional, não crítico)
@@ -2562,7 +2318,7 @@ export default function ComponentesGruaPage() {
                             motivo: dev.tipo === 'completa' ? 'Devolução completa ao estoque' : 'Devolução parcial ao estoque',
                             observacoes: dev.tipo === 'completa' 
                               ? 'Devolução automática via modal de devolução de itens' 
-                              : `Devolvido ${quantidadeDevolver} de ${componente.quantidade_em_uso} unidades`
+                              : `Devolvido ${quantidadeDevolver} de ${componente.quantidade_em_uso} unidades${componente.quantidade_em_uso === 0 ? ' (correção de dados)' : ''}`
                           })
                         })
                         
@@ -2573,12 +2329,6 @@ export default function ComponentesGruaPage() {
                         // Se der erro no histórico, apenas logar mas não falhar
                         console.warn('Erro ao registrar no histórico (não crítico):', histError)
                       }
-                    } else if (quantidadeDevolver > componente.quantidade_em_uso) {
-                      toast({
-                        title: "Atenção",
-                        description: `Componente "${componente.nome}": quantidade a devolver (${quantidadeDevolver}) é maior que a quantidade em uso (${componente.quantidade_em_uso})`,
-                        variant: "destructive"
-                      })
                     }
                   }
 

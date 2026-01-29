@@ -794,10 +794,10 @@ function DashboardLayoutContent({
                 Sistema de Gerenciamento de Gruas
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                Versão: 1.3
+                Versão: 1.4
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                06/01/2026
+                29/01/2026
               </div>
             </div>
           </div>
