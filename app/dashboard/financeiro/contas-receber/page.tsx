@@ -686,18 +686,24 @@ export default function ContasReceberPage() {
   const getTipoColor = receitasUtils.getTipoColor
   const getTipoLabel = receitasUtils.getTipoLabel
 
-  const formatarMoeda = (valor: number) => {
+  const formatarMoeda = (valor: number | null | undefined) => {
+    if (valor === null || valor === undefined || isNaN(valor)) {
+      return 'R$ 0,00'
+    }
     return new Intl.NumberFormat('pt-BR', {
       style: 'currency',
       currency: 'BRL'
     }).format(valor)
   }
 
-  const formatarData = (data: string) => {
+  const formatarData = (data: string | null | undefined) => {
+    if (!data) return 'N/A'
     try {
-      return new Date(data + 'T00:00:00').toLocaleDateString('pt-BR')
+      const date = new Date(data + 'T00:00:00')
+      if (isNaN(date.getTime())) return 'Data inválida'
+      return date.toLocaleDateString('pt-BR')
     } catch {
-      return data
+      return 'Data inválida'
     }
   }
 
