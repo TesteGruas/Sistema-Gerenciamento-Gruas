@@ -350,6 +350,9 @@ export default function ComponentesGruaPage() {
     }
     
     // Preencher formulário com dados do componente selecionado
+    // Quando selecionado do estoque, preencher automaticamente todos os campos disponíveis
+    const quantidadeInicial = 1 // Quantidade padrão a ser alocada
+    
     setComponenteForm({
       nome: componente.nome || '',
       tipo: 'Estrutural' as ComponenteGrua['tipo'], // Padrão, pode ser ajustado depois
@@ -358,11 +361,11 @@ export default function ComponentesGruaPage() {
       numero_serie: '',
       capacidade: '',
       unidade_medida: componente.unidade_medida || 'unidade',
-      quantidade_total: 1, // Quantidade a adicionar (padrão 1)
-      quantidade_disponivel: Math.min(1, estoqueDisponivel), // Não pode exceder o disponível
+      quantidade_total: quantidadeInicial, // Quantidade a adicionar (padrão 1)
+      quantidade_disponivel: quantidadeInicial, // Sincronizar com quantidade_total
       quantidade_em_uso: 0,
       quantidade_danificada: 0,
-      quantidade_inicial: 0,
+      quantidade_inicial: 0, // Não criar movimentação de entrada quando vem do estoque
       quantidade_reservada_inicial: 0,
       status: componente.status === 'Ativo' ? 'Disponível' as ComponenteGrua['status'] : 'Disponível' as ComponenteGrua['status'],
       localizacao: componente.localizacao || '',
@@ -1250,409 +1253,450 @@ export default function ComponentesGruaPage() {
               }
               
               return (
-                <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                  <div className="text-sm font-medium text-blue-900">
-                    Componente selecionado: {componenteSelecionado.nome}
+                <div className="p-4 bg-green-50 border border-green-200 rounded-md space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-green-900">
+                        ✓ Componente selecionado: {componenteSelecionado.nome}
+                      </div>
+                      <div className="text-xs text-green-700 mt-1 space-y-1">
+                        {componenteSelecionado.categorias?.nome && (
+                          <div>Categoria: {componenteSelecionado.categorias.nome}</div>
+                        )}
+                        {componenteSelecionado.localizacao && (
+                          <div>Localização: {componenteSelecionado.localizacao}</div>
+                        )}
+                        <div className="font-medium">
+                          Estoque disponível: {estoqueDisponivel} {componenteSelecionado.unidade_medida || 'unidade(s)'}
+                        </div>
+                        {componenteSelecionado.valor_unitario > 0 && (
+                          <div>Valor unitário: R$ {componenteSelecionado.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+                        )}
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setComponenteSelecionado(null)
+                        setBuscaComponente("")
+                        resetComponenteForm()
+                      }}
+                    >
+                      Alterar
+                    </Button>
                   </div>
-                  <div className="text-xs text-blue-700 mt-1">
-                    Estoque disponível: {estoqueDisponivel} unidades
-                  </div>
-                  <div className="text-xs text-blue-700 mt-1">
-                    Você pode editar os campos abaixo antes de adicionar
+                  <div className="pt-2 border-t border-green-200">
+                    <div className="text-xs font-medium text-green-900 mb-2">
+                      Informe a quantidade que será alocada para esta grua:
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="quantidade_alocar">Quantidade a Alocar *</Label>
+                        <Input
+                          id="quantidade_alocar"
+                          type="number"
+                          min="1"
+                          max={estoqueDisponivel}
+                          value={componenteForm.quantidade_total}
+                          onChange={(e) => {
+                            const qtd = parseInt(e.target.value) || 1
+                            const qtdFinal = Math.min(Math.max(1, qtd), estoqueDisponivel)
+                            
+                            setComponenteForm({ 
+                              ...componenteForm, 
+                              quantidade_total: qtdFinal,
+                              quantidade_disponivel: qtdFinal
+                            })
+                            
+                            // Mostrar aviso se tentar exceder estoque
+                            if (qtd > estoqueDisponivel) {
+                              toast({
+                                title: "Quantidade excedida",
+                                description: `Estoque disponível: ${estoqueDisponivel}. A quantidade foi ajustada para ${estoqueDisponivel}.`,
+                                variant: "destructive"
+                              })
+                            }
+                          }}
+                          required
+                          className="text-lg font-semibold"
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Máximo: {estoqueDisponivel} {componenteSelecionado.unidade_medida || 'unidade(s)'}
+                        </p>
+                      </div>
+                      <div className="flex items-end">
+                        <div className="p-3 bg-white rounded-md border border-green-200 w-full">
+                          <div className="text-xs text-gray-500">Estoque após alocação</div>
+                          <div className="text-lg font-semibold text-green-700">
+                            {Math.max(0, estoqueDisponivel - componenteForm.quantidade_total)} {componenteSelecionado.unidade_medida || 'unidade(s)'}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )
             })()}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="nome">Nome do Componente *</Label>
-                <Input
-                  id="nome"
-                  value={componenteForm.nome}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, nome: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="tipo">Tipo *</Label>
-                <Select 
-                  value={componenteForm.tipo} 
-                  onValueChange={(value) => setComponenteForm({ ...componenteForm, tipo: value as ComponenteGrua['tipo'] })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Estrutural">Estrutural</SelectItem>
-                    <SelectItem value="Hidráulico">Hidráulico</SelectItem>
-                    <SelectItem value="Elétrico">Elétrico</SelectItem>
-                    <SelectItem value="Mecânico">Mecânico</SelectItem>
-                    <SelectItem value="Segurança">Segurança</SelectItem>
-                    <SelectItem value="Outro">Outro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            {/* Mostrar campos completos apenas se nenhum componente do estoque foi selecionado */}
+            {!componenteSelecionado && (
+              <>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="nome">Nome do Componente *</Label>
+                    <Input
+                      id="nome"
+                      value={componenteForm.nome}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, nome: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="tipo">Tipo *</Label>
+                    <Select 
+                      value={componenteForm.tipo} 
+                      onValueChange={(value) => setComponenteForm({ ...componenteForm, tipo: value as ComponenteGrua['tipo'] })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Estrutural">Estrutural</SelectItem>
+                        <SelectItem value="Hidráulico">Hidráulico</SelectItem>
+                        <SelectItem value="Elétrico">Elétrico</SelectItem>
+                        <SelectItem value="Mecânico">Mecânico</SelectItem>
+                        <SelectItem value="Segurança">Segurança</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="modelo">Modelo</Label>
-                <Input
-                  id="modelo"
-                  value={componenteForm.modelo}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, modelo: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="fabricante">Fabricante</Label>
-                <Input
-                  id="fabricante"
-                  value={componenteForm.fabricante}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, fabricante: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="numero_serie">Número de Série</Label>
-                <Input
-                  id="numero_serie"
-                  value={componenteForm.numero_serie}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, numero_serie: e.target.value })}
-                />
-              </div>
-            </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="modelo">Modelo</Label>
+                    <Input
+                      id="modelo"
+                      value={componenteForm.modelo}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, modelo: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="fabricante">Fabricante</Label>
+                    <Input
+                      id="fabricante"
+                      value={componenteForm.fabricante}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, fabricante: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="numero_serie">Número de Série</Label>
+                    <Input
+                      id="numero_serie"
+                      value={componenteForm.numero_serie}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, numero_serie: e.target.value })}
+                    />
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="capacidade">Capacidade</Label>
-                <Input
-                  id="capacidade"
-                  value={componenteForm.capacidade}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, capacidade: e.target.value })}
-                  placeholder="Ex: 5 toneladas"
-                />
-              </div>
-              <div>
-                <Label htmlFor="unidade_medida">Unidade de Medida</Label>
-                <Select 
-                  value={componenteForm.unidade_medida} 
-                  onValueChange={(value) => setComponenteForm({ ...componenteForm, unidade_medida: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="unidade">Unidade</SelectItem>
-                    <SelectItem value="metro">Metro</SelectItem>
-                    <SelectItem value="quilograma">Quilograma</SelectItem>
-                    <SelectItem value="tonelada">Tonelada</SelectItem>
-                    <SelectItem value="metro_quadrado">Metro Quadrado</SelectItem>
-                    <SelectItem value="metro_cubico">Metro Cúbico</SelectItem>
-                    <SelectItem value="litro">Litro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="localizacao_tipo">Localização *</Label>
-                <Select 
-                  value={componenteForm.localizacao_tipo} 
-                  onValueChange={(value) => setComponenteForm({ ...componenteForm, localizacao_tipo: value as ComponenteGrua['localizacao_tipo'], obra_id: value !== 'Obra X' ? undefined : componenteForm.obra_id })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Obra X">Obra X</SelectItem>
-                    <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
-                    <SelectItem value="Oficina">Oficina</SelectItem>
-                    <SelectItem value="Em trânsito">Em trânsito</SelectItem>
-                    <SelectItem value="Em manutenção">Em manutenção</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="capacidade">Capacidade</Label>
+                    <Input
+                      id="capacidade"
+                      value={componenteForm.capacidade}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, capacidade: e.target.value })}
+                      placeholder="Ex: 5 toneladas"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="unidade_medida">Unidade de Medida</Label>
+                    <Select 
+                      value={componenteForm.unidade_medida} 
+                      onValueChange={(value) => setComponenteForm({ ...componenteForm, unidade_medida: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unidade">Unidade</SelectItem>
+                        <SelectItem value="metro">Metro</SelectItem>
+                        <SelectItem value="quilograma">Quilograma</SelectItem>
+                        <SelectItem value="tonelada">Tonelada</SelectItem>
+                        <SelectItem value="metro_quadrado">Metro Quadrado</SelectItem>
+                        <SelectItem value="metro_cubico">Metro Cúbico</SelectItem>
+                        <SelectItem value="litro">Litro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label htmlFor="localizacao_tipo">Localização *</Label>
+                    <Select 
+                      value={componenteForm.localizacao_tipo} 
+                      onValueChange={(value) => setComponenteForm({ ...componenteForm, localizacao_tipo: value as ComponenteGrua['localizacao_tipo'], obra_id: value !== 'Obra X' ? undefined : componenteForm.obra_id })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Obra X">Obra X</SelectItem>
+                        <SelectItem value="Almoxarifado">Almoxarifado</SelectItem>
+                        <SelectItem value="Oficina">Oficina</SelectItem>
+                        <SelectItem value="Em trânsito">Em trânsito</SelectItem>
+                        <SelectItem value="Em manutenção">Em manutenção</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
 
-            {componenteForm.localizacao_tipo === 'Obra X' && (
-              <div>
-                <Label htmlFor="obra_id">Selecione a Obra *</Label>
-                <Select 
-                  value={componenteForm.obra_id?.toString() || ''} 
-                  onValueChange={(value) => setComponenteForm({ ...componenteForm, obra_id: parseInt(value) })}
-                  disabled={loadingObras}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingObras ? "Carregando obras..." : "Selecione a obra"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {obras.map((obra) => (
-                      <SelectItem key={obra.id} value={obra.id.toString()}>
-                        {obra.nome || obra.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            <div className="grid grid-cols-4 gap-4">
-              <div>
-                <Label htmlFor="quantidade_total">Quantidade Total *</Label>
-                <Input
-                  id="quantidade_total"
-                  type="number"
-                  min="1"
-                  max={componenteSelecionado ? (
-                    Array.isArray(componenteSelecionado.estoque)
-                      ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 1
-                      : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1
-                  ) : undefined}
-                  value={componenteForm.quantidade_total}
-                  onChange={(e) => {
-                    const qtd = parseInt(e.target.value) || 1
-                    const estoqueMax = componenteSelecionado ? (
-                      Array.isArray(componenteSelecionado.estoque)
-                        ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 1
-                        : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 1
-                    ) : undefined
-                    const qtdFinal = estoqueMax ? Math.min(qtd, estoqueMax) : qtd
-                    
-                    setComponenteForm({ 
-                      ...componenteForm, 
-                      quantidade_total: qtdFinal,
-                      quantidade_disponivel: qtdFinal // Sincronizar quantidade disponível com total
-                    })
-                    
-                    // Mostrar aviso se tentar exceder estoque
-                    if (estoqueMax && qtd > estoqueMax) {
-                      toast({
-                        title: "Quantidade excedida",
-                        description: `Estoque disponível: ${estoqueMax}. A quantidade foi ajustada para ${estoqueMax}.`,
-                        variant: "destructive"
-                      })
-                    }
-                  }}
-                  required
-                />
-                {componenteSelecionado && (
-                  <p className="text-xs text-gray-500 mt-1">
-                    Máximo disponível: {
-                      Array.isArray(componenteSelecionado.estoque)
-                        ? componenteSelecionado.estoque[0]?.quantidade_disponivel ?? 0
-                        : componenteSelecionado.estoque?.quantidade_disponivel ?? componenteSelecionado.quantidade_disponivel ?? 0
-                    } {componenteSelecionado.unidade_medida || 'unidade(s)'}
-                  </p>
+                {componenteForm.localizacao_tipo === 'Obra X' && (
+                  <div>
+                    <Label htmlFor="obra_id">Selecione a Obra *</Label>
+                    <Select 
+                      value={componenteForm.obra_id?.toString() || ''} 
+                      onValueChange={(value) => setComponenteForm({ ...componenteForm, obra_id: parseInt(value) })}
+                      disabled={loadingObras}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder={loadingObras ? "Carregando obras..." : "Selecione a obra"} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {obras.map((obra) => (
+                          <SelectItem key={obra.id} value={obra.id.toString()}>
+                            {obra.nome || obra.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 )}
-              </div>
-              <div>
-                <Label htmlFor="quantidade_disponivel">Disponível *</Label>
-                <Input
-                  id="quantidade_disponivel"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_disponivel}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_disponivel: parseInt(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="quantidade_em_uso">Em Uso</Label>
-                <Input
-                  id="quantidade_em_uso"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_em_uso}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="quantidade_danificada">Danificada</Label>
-                <Input
-                  id="quantidade_danificada"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_danificada}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
-                />
-              </div>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
-                <Input
-                  id="quantidade_inicial"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_inicial}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_inicial: parseInt(e.target.value) || 0 })}
-                  placeholder="Quantidade inicial em estoque"
-                />
-                <p className="text-xs text-gray-500">
-                  Quantidade inicial do componente no estoque (será criada uma movimentação de entrada)
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
-                <Input
-                  id="quantidade_reservada_inicial"
-                  type="number"
-                  min="0"
-                  value={componenteForm.quantidade_reservada_inicial}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_reservada_inicial: parseInt(e.target.value) || 0 })}
-                  placeholder="Quantidade reservada inicial"
-                />
-                <p className="text-xs text-gray-500">
-                  Quantidade que será reservada inicialmente (opcional)
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
-                <div className="flex items-center gap-4 mt-2">
-                  <Slider
-                    value={[componenteForm.vida_util_percentual]}
-                    onValueChange={(value) => setComponenteForm({ ...componenteForm, vida_util_percentual: value[0] })}
-                    min={0}
-                    max={100}
-                    step={1}
-                    className="flex-1"
-                  />
-                  <Input
-                    id="vida_util_percentual"
-                    type="number"
-                    min="0"
-                    max="100"
-                    value={componenteForm.vida_util_percentual}
-                    onChange={(e) => {
-                      const val = parseInt(e.target.value) || 0
-                      setComponenteForm({ ...componenteForm, vida_util_percentual: Math.min(100, Math.max(0, val)) })
-                    }}
-                    className="w-20"
-                  />
+                <div className="grid grid-cols-4 gap-4">
+                  <div>
+                    <Label htmlFor="quantidade_total">Quantidade Total *</Label>
+                    <Input
+                      id="quantidade_total"
+                      type="number"
+                      min="1"
+                      value={componenteForm.quantidade_total}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_total: parseInt(e.target.value) || 1 })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantidade_disponivel">Disponível *</Label>
+                    <Input
+                      id="quantidade_disponivel"
+                      type="number"
+                      min="0"
+                      value={componenteForm.quantidade_disponivel}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_disponivel: parseInt(e.target.value) || 0 })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantidade_em_uso">Em Uso</Label>
+                    <Input
+                      id="quantidade_em_uso"
+                      type="number"
+                      min="0"
+                      value={componenteForm.quantidade_em_uso}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_em_uso: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="quantidade_danificada">Danificada</Label>
+                    <Input
+                      id="quantidade_danificada"
+                      type="number"
+                      min="0"
+                      value={componenteForm.quantidade_danificada}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_danificada: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
                 </div>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Dimensões (opcional)</Label>
-              <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="quantidade_inicial">Quantidade Inicial</Label>
+                    <Input
+                      id="quantidade_inicial"
+                      type="number"
+                      min="0"
+                      value={componenteForm.quantidade_inicial}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_inicial: parseInt(e.target.value) || 0 })}
+                      placeholder="Quantidade inicial em estoque"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Quantidade inicial do componente no estoque (será criada uma movimentação de entrada)
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="quantidade_reservada_inicial">Quantidade Reservada Inicial</Label>
+                    <Input
+                      id="quantidade_reservada_inicial"
+                      type="number"
+                      min="0"
+                      value={componenteForm.quantidade_reservada_inicial}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, quantidade_reservada_inicial: parseInt(e.target.value) || 0 })}
+                      placeholder="Quantidade reservada inicial"
+                    />
+                    <p className="text-xs text-gray-500">
+                      Quantidade que será reservada inicialmente (opcional)
+                    </p>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div>
+                    <Label htmlFor="vida_util_percentual">Vida Útil: {componenteForm.vida_util_percentual}%</Label>
+                    <div className="flex items-center gap-4 mt-2">
+                      <Slider
+                        value={[componenteForm.vida_util_percentual]}
+                        onValueChange={(value) => setComponenteForm({ ...componenteForm, vida_util_percentual: value[0] })}
+                        min={0}
+                        max={100}
+                        step={1}
+                        className="flex-1"
+                      />
+                      <Input
+                        id="vida_util_percentual"
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={componenteForm.vida_util_percentual}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value) || 0
+                          setComponenteForm({ ...componenteForm, vida_util_percentual: Math.min(100, Math.max(0, val)) })
+                        }}
+                        className="w-20"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Dimensões (opcional)</Label>
+                  <div className="grid grid-cols-4 gap-4">
+                    <div>
+                      <Label htmlFor="dimensoes_altura">Altura (m)</Label>
+                      <Input
+                        id="dimensoes_altura"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={componenteForm.dimensoes_altura || ''}
+                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_altura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dimensoes_largura">Largura (m)</Label>
+                      <Input
+                        id="dimensoes_largura"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={componenteForm.dimensoes_largura || ''}
+                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_largura: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dimensoes_comprimento">Comprimento (m)</Label>
+                      <Input
+                        id="dimensoes_comprimento"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={componenteForm.dimensoes_comprimento || ''}
+                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_comprimento: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="dimensoes_peso">Peso (kg)</Label>
+                      <Input
+                        id="dimensoes_peso"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={componenteForm.dimensoes_peso || ''}
+                        onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_peso: e.target.value ? parseFloat(e.target.value) : undefined })}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="valor_unitario">Valor Unitário (R$) *</Label>
+                    <Input
+                      id="valor_unitario"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={componenteForm.valor_unitario}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, valor_unitario: parseFloat(e.target.value) || 0 })}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="status">Status</Label>
+                    <Select 
+                      value={componenteForm.status} 
+                      onValueChange={(value) => setComponenteForm({ ...componenteForm, status: value as ComponenteGrua['status'] })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Disponível">Disponível</SelectItem>
+                        <SelectItem value="Em uso">Em uso</SelectItem>
+                        <SelectItem value="Manutenção">Manutenção</SelectItem>
+                        <SelectItem value="Danificado">Danificado</SelectItem>
+                        <SelectItem value="Descontinuado">Descontinuado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="data_ultima_manutencao">Última Manutenção</Label>
+                    <Input
+                      id="data_ultima_manutencao"
+                      type="date"
+                      value={componenteForm.data_ultima_manutencao}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, data_ultima_manutencao: e.target.value })}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="data_proxima_manutencao">Próxima Manutenção</Label>
+                    <Input
+                      id="data_proxima_manutencao"
+                      type="date"
+                      value={componenteForm.data_proxima_manutencao}
+                      onChange={(e) => setComponenteForm({ ...componenteForm, data_proxima_manutencao: e.target.value })}
+                    />
+                  </div>
+                </div>
+
                 <div>
-                  <Label htmlFor="dimensoes_altura">Altura (m)</Label>
-                  <Input
-                    id="dimensoes_altura"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={componenteForm.dimensoes_altura || ''}
-                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_altura: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    placeholder="0.00"
+                  <Label htmlFor="observacoes">Observações</Label>
+                  <Textarea
+                    id="observacoes"
+                    value={componenteForm.observacoes}
+                    onChange={(e) => setComponenteForm({ ...componenteForm, observacoes: e.target.value })}
+                    rows={3}
+                    placeholder="Informações adicionais sobre o componente..."
                   />
                 </div>
-                <div>
-                  <Label htmlFor="dimensoes_largura">Largura (m)</Label>
-                  <Input
-                    id="dimensoes_largura"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={componenteForm.dimensoes_largura || ''}
-                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_largura: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="dimensoes_comprimento">Comprimento (m)</Label>
-                  <Input
-                    id="dimensoes_comprimento"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={componenteForm.dimensoes_comprimento || ''}
-                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_comprimento: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    placeholder="0.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="dimensoes_peso">Peso (kg)</Label>
-                  <Input
-                    id="dimensoes_peso"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={componenteForm.dimensoes_peso || ''}
-                    onChange={(e) => setComponenteForm({ ...componenteForm, dimensoes_peso: e.target.value ? parseFloat(e.target.value) : undefined })}
-                    placeholder="0.00"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="valor_unitario">Valor Unitário (R$) *</Label>
-                <Input
-                  id="valor_unitario"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={componenteForm.valor_unitario}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, valor_unitario: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="status">Status</Label>
-                <Select 
-                  value={componenteForm.status} 
-                  onValueChange={(value) => setComponenteForm({ ...componenteForm, status: value as ComponenteGrua['status'] })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Disponível">Disponível</SelectItem>
-                    <SelectItem value="Em uso">Em uso</SelectItem>
-                    <SelectItem value="Manutenção">Manutenção</SelectItem>
-                    <SelectItem value="Danificado">Danificado</SelectItem>
-                    <SelectItem value="Descontinuado">Descontinuado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="data_ultima_manutencao">Última Manutenção</Label>
-                <Input
-                  id="data_ultima_manutencao"
-                  type="date"
-                  value={componenteForm.data_ultima_manutencao}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, data_ultima_manutencao: e.target.value })}
-                />
-              </div>
-              <div>
-                <Label htmlFor="data_proxima_manutencao">Próxima Manutenção</Label>
-                <Input
-                  id="data_proxima_manutencao"
-                  type="date"
-                  value={componenteForm.data_proxima_manutencao}
-                  onChange={(e) => setComponenteForm({ ...componenteForm, data_proxima_manutencao: e.target.value })}
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={componenteForm.observacoes}
-                onChange={(e) => setComponenteForm({ ...componenteForm, observacoes: e.target.value })}
-                rows={3}
-                placeholder="Informações adicionais sobre o componente..."
-              />
-            </div>
+              </>
+            )}
 
             <div className="flex justify-end gap-2">
               <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>

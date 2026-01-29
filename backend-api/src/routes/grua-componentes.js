@@ -359,8 +359,17 @@ router.post('/', async (req, res) => {
       })
     }
 
-    // Preparar dados para inserção (remover componente_estoque_id se existir)
-    const { componente_estoque_id, quantidade_total, ...componenteData } = value
+    // Preparar dados para inserção (remover apenas campos que não existem na tabela)
+    const { 
+      componente_estoque_id, 
+      quantidade_inicial, 
+      quantidade_reservada_inicial,
+      ...componenteData 
+    } = value
+    
+    // Guardar quantidade_total antes de inserir (será usado para decrementar estoque)
+    const quantidadeTotalParaEstoque = componenteData.quantidade_total
+    
     const dadosInsercao = {
       ...componenteData,
       created_at: new Date().toISOString(),
@@ -381,9 +390,9 @@ router.post('/', async (req, res) => {
     }
 
     // Se o componente foi selecionado do estoque, fazer movimentação de saída
-    if (componente_estoque_id && quantidade_total) {
+    if (componente_estoque_id && quantidadeTotalParaEstoque) {
       try {
-        console.log(`🔄 Processando movimentação de estoque para componente_estoque_id: ${componente_estoque_id}, quantidade: ${quantidade_total}`)
+        console.log(`🔄 Processando movimentação de estoque para componente_estoque_id: ${componente_estoque_id}, quantidade: ${quantidadeTotalParaEstoque}`)
         // Obter responsavel_id (similar à rota de movimentação de estoque)
         let responsavel_id = null
         if (typeof req.user.id === 'number' || !isNaN(parseInt(req.user.id))) {
@@ -462,7 +471,7 @@ router.post('/', async (req, res) => {
 
         if (!estoqueError && estoqueAtual) {
           // Verificar se há estoque disponível suficiente
-          if (estoqueAtual.quantidade_disponivel < quantidade_total) {
+          if (estoqueAtual.quantidade_disponivel < quantidadeTotalParaEstoque) {
             // Se não há estoque suficiente, remover o componente criado e retornar erro
             await supabaseAdmin
               .from('grua_componentes')
@@ -471,14 +480,14 @@ router.post('/', async (req, res) => {
 
             return res.status(400).json({
               error: 'Estoque insuficiente',
-              message: `Estoque disponível: ${estoqueAtual.quantidade_disponivel}, quantidade solicitada: ${quantidade_total}`
+              message: `Estoque disponível: ${estoqueAtual.quantidade_disponivel}, quantidade solicitada: ${quantidadeTotalParaEstoque}`
             })
           }
 
           // Calcular nova quantidade
-          const novaQuantidade = estoqueAtual.quantidade_atual - quantidade_total
-          const novaQuantidadeDisponivel = estoqueAtual.quantidade_disponivel - quantidade_total
-          const valorTotal = quantidade_total * valorUnitario
+          const novaQuantidade = estoqueAtual.quantidade_atual - quantidadeTotalParaEstoque
+          const novaQuantidadeDisponivel = estoqueAtual.quantidade_disponivel - quantidadeTotalParaEstoque
+          const valorTotal = quantidadeTotalParaEstoque * valorUnitario
 
           // Atualizar estoque
           let updateEstoqueError = null
@@ -549,7 +558,7 @@ router.post('/', async (req, res) => {
           // Tentar inserir movimentação com estrutura completa primeiro
           const movimentacaoData = {
             tipo: 'Saída',
-            quantidade: quantidade_total,
+            quantidade: quantidadeTotalParaEstoque,
             valor_unitario: valorUnitario.toString(),
             valor_total: valorTotal.toString(),
             data_movimentacao: new Date().toISOString(),
@@ -588,7 +597,7 @@ router.post('/', async (req, res) => {
                 const movimentacaoMinima = {
                   item_id: itemIdEstoque,
                   tipo: 'saida',
-                  quantidade: quantidade_total,
+                  quantidade: quantidadeTotalParaEstoque,
                   motivo: `Adição de componente à grua ${value.grua_id}`,
                   funcionario_id: responsavel_id,
                   data_movimentacao: new Date().toISOString(),
@@ -603,11 +612,11 @@ router.post('/', async (req, res) => {
                   console.error('Erro ao registrar movimentação (estrutura mínima):', movimentacaoMinimaError)
                   // Não falhar a criação do componente se houver erro na movimentação
                 } else {
-                  console.log(`✅ Movimentação registrada (estrutura mínima): ${quantidade_total} unidades`)
+                  console.log(`✅ Movimentação registrada (estrutura mínima): ${quantidadeTotalParaEstoque} unidades`)
                 }
               }
             } else {
-              console.log(`✅ Estoque decrementado: ${quantidade_total} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
+              console.log(`✅ Estoque decrementado: ${quantidadeTotalParaEstoque} unidades do ${isProduto ? 'produto' : 'componente'} ${componente_estoque_id}`)
             }
           } catch (error) {
             console.error('Erro ao registrar movimentação:', error)
@@ -701,11 +710,14 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Preparar dados para atualização
-    const updateData = {
-      ...value,
-      updated_at: new Date().toISOString()
-    }
+    // Preparar dados para atualização (remover campos que não existem na tabela)
+    const { 
+      quantidade_inicial, 
+      quantidade_reservada_inicial,
+      ...updateData 
+    } = value
+    
+    updateData.updated_at = new Date().toISOString()
 
     const { data, error: updateError } = await supabaseAdmin
       .from('grua_componentes')
