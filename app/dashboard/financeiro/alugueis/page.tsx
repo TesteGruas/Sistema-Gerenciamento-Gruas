@@ -22,6 +22,7 @@ import {
   Edit,
   X,
   Download,
+  AlertTriangle,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -57,6 +58,48 @@ import {
 } from '@/lib/api-alugueis-residencias'
 import { FuncionarioSearch } from '@/components/funcionario-search'
 import { useToast } from '@/hooks/use-toast'
+import { NotificacoesAPI } from '@/lib/api-notificacoes'
+
+// Função para calcular a próxima data de vencimento
+const calcularProximaDataVencimento = (diaVencimento: number, dataInicio: string): Date => {
+  const hoje = new Date()
+  const [ano, mes, dia] = dataInicio.split('-').map(Number)
+  const dataInicioContrato = new Date(ano, mes - 1, dia)
+  
+  // Calcular o próximo vencimento
+  let proximoVencimento = new Date(hoje.getFullYear(), hoje.getMonth(), diaVencimento)
+  
+  // Se o dia de vencimento já passou neste mês, considerar o próximo mês
+  if (proximoVencimento < hoje) {
+    proximoVencimento = new Date(hoje.getFullYear(), hoje.getMonth() + 1, diaVencimento)
+  }
+  
+  return proximoVencimento
+}
+
+// Função para verificar se o vencimento está próximo (dentro de 7 dias)
+const isVencimentoProximo = (diaVencimento: number, dataInicio: string, diasAntecedencia: number = 7): boolean => {
+  const proximoVencimento = calcularProximaDataVencimento(diaVencimento, dataInicio)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  proximoVencimento.setHours(0, 0, 0, 0)
+  
+  const diffTime = proximoVencimento.getTime() - hoje.getTime()
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+  
+  return diffDays >= 0 && diffDays <= diasAntecedencia
+}
+
+// Função para calcular dias até o vencimento
+const calcularDiasAteVencimento = (diaVencimento: number, dataInicio: string): number => {
+  const proximoVencimento = calcularProximaDataVencimento(diaVencimento, dataInicio)
+  const hoje = new Date()
+  hoje.setHours(0, 0, 0, 0)
+  proximoVencimento.setHours(0, 0, 0, 0)
+  
+  const diffTime = proximoVencimento.getTime() - hoje.getTime()
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+}
 
 export default function AlugueisIntegradoPage() {
   const [alugueis, setAlugueis] = useState<AluguelResidencia[]>([])
@@ -115,6 +158,9 @@ export default function AlugueisIntegradoPage() {
       ])
       setAlugueis(alugueisData)
       setResidencias(residenciasData)
+      
+      // Criar notificações para aluguéis com vencimento próximo
+      await criarNotificacoesVencimentoProximo(alugueisData)
     } catch (error) {
       toast({
         title: 'Erro ao carregar dados',
@@ -123,6 +169,102 @@ export default function AlugueisIntegradoPage() {
       })
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Função para criar notificações de vencimento próximo
+  const criarNotificacoesVencimentoProximo = async (alugueis: AluguelResidencia[]) => {
+    try {
+      // Buscar notificações existentes de hoje para evitar duplicatas
+      const hoje = new Date().toISOString().split('T')[0]
+      const notificacoesExistentes = await NotificacoesAPI.listar({ 
+        tipo: 'financeiro',
+        limit: 50 
+      })
+      
+      // Verificar se já existe notificação de vencimento hoje
+      const jaExisteNotificacaoHoje = notificacoesExistentes.data.some(notif => {
+        const dataNotif = notif.data ? new Date(notif.data).toISOString().split('T')[0] : null
+        return dataNotif === hoje && notif.titulo?.includes('Vencimento próximo')
+      })
+
+      if (jaExisteNotificacaoHoje) {
+        return // Já existe notificação de hoje, não criar novamente
+      }
+
+      // Filtrar aluguéis com vencimento próximo
+      const alugueisParaNotificar = alugueis.filter(aluguel => {
+        if (aluguel.status !== 'ativo' || !aluguel.contrato.dataInicio) {
+          return false
+        }
+        return isVencimentoProximo(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio)
+      })
+
+      if (alugueisParaNotificar.length === 0) {
+        return // Nenhum aluguel com vencimento próximo
+      }
+
+      // Criar uma notificação consolidada
+      if (alugueisParaNotificar.length === 1) {
+        // Se houver apenas um, criar notificação específica
+        const aluguel = alugueisParaNotificar[0]
+        const diasAteVencimento = calcularDiasAteVencimento(
+          aluguel.contrato.diaVencimento,
+          aluguel.contrato.dataInicio
+        )
+        
+        const proximaDataVencimento = calcularProximaDataVencimento(
+          aluguel.contrato.diaVencimento,
+          aluguel.contrato.dataInicio
+        )
+
+        const mensagemVencimento = diasAteVencimento === 0
+          ? 'Vence hoje!'
+          : diasAteVencimento === 1
+          ? 'Vence amanhã!'
+          : `Vence em ${diasAteVencimento} dias`
+
+        await NotificacoesAPI.criar({
+          titulo: `Vencimento próximo - ${aluguel.residencia.nome}`,
+          mensagem: `Residência: ${aluguel.residencia.nome}\nFuncionário: ${aluguel.funcionario.nome}\nValor: ${formatarMoeda(aluguel.contrato.valorMensal)}\n${mensagemVencimento}\nData: ${proximaDataVencimento.toLocaleDateString('pt-BR')}`,
+          tipo: 'financeiro',
+          link: '/dashboard/financeiro/alugueis',
+          icone: '⚠️',
+          destinatarios: [{ tipo: 'geral' }]
+        })
+      } else {
+        // Se houver múltiplos, criar notificação consolidada
+        const listaAlugueis = alugueisParaNotificar.map(aluguel => {
+          const diasAteVencimento = calcularDiasAteVencimento(
+            aluguel.contrato.diaVencimento,
+            aluguel.contrato.dataInicio
+          )
+          const proximaDataVencimento = calcularProximaDataVencimento(
+            aluguel.contrato.diaVencimento,
+            aluguel.contrato.dataInicio
+          )
+          
+          const mensagemVencimento = diasAteVencimento === 0
+            ? 'Vence hoje'
+            : diasAteVencimento === 1
+            ? 'Vence amanhã'
+            : `Vence em ${diasAteVencimento} dias`
+
+          return `• ${aluguel.residencia.nome} - ${aluguel.funcionario.nome} (${mensagemVencimento} - ${proximaDataVencimento.toLocaleDateString('pt-BR')})`
+        }).join('\n')
+
+        await NotificacoesAPI.criar({
+          titulo: `${alugueisParaNotificar.length} aluguéis com vencimento próximo`,
+          mensagem: `Os seguintes aluguéis estão com vencimento próximo:\n\n${listaAlugueis}\n\nAcesse a página de aluguéis para mais detalhes.`,
+          tipo: 'financeiro',
+          link: '/dashboard/financeiro/alugueis',
+          icone: '⚠️',
+          destinatarios: [{ tipo: 'geral' }]
+        })
+      }
+    } catch (error) {
+      // Não mostrar erro ao usuário, apenas logar
+      console.error('Erro ao criar notificações de vencimento:', error)
     }
   }
 
@@ -1278,10 +1420,33 @@ export default function AlugueisIntegradoPage() {
                             </div>
                           </td>
                           <td className="px-6 py-4">
-                            <p className="text-sm">Dia {aluguel.contrato.diaVencimento}</p>
-                            <p className="text-xs text-gray-500">
-                              {aluguel.contrato.dataInicio ? new Date(aluguel.contrato.dataInicio).toLocaleDateString('pt-BR') : '-'}
-                            </p>
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm">Dia {aluguel.contrato.diaVencimento}</p>
+                                {aluguel.contrato.dataInicio && aluguel.status === 'ativo' && isVencimentoProximo(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio) && (
+                                  <AlertTriangle className="h-3.5 w-3.5 text-red-500" />
+                                )}
+                              </div>
+                              {aluguel.contrato.dataInicio && aluguel.status === 'ativo' && (
+                                <div>
+                                  <p className="text-xs text-gray-500">
+                                    Próximo vencimento: {calcularProximaDataVencimento(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio).toLocaleDateString('pt-BR')}
+                                  </p>
+                                  {isVencimentoProximo(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio) && (
+                                    <p className="text-xs text-red-600 mt-0.5">
+                                      {calcularDiasAteVencimento(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio) === 0 
+                                        ? 'Vence hoje' 
+                                        : calcularDiasAteVencimento(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio) === 1
+                                        ? 'Vence amanhã'
+                                        : `Vence em ${calcularDiasAteVencimento(aluguel.contrato.diaVencimento, aluguel.contrato.dataInicio)} dias`}
+                                    </p>
+                                  )}
+                                </div>
+                              )}
+                              {!aluguel.contrato.dataInicio && (
+                                <p className="text-xs text-gray-500">-</p>
+                              )}
+                            </div>
                           </td>
                           <td className="px-6 py-4">
                             <div className="space-y-1">
