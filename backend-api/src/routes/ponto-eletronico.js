@@ -1074,7 +1074,7 @@ router.post('/registros/calcular', async (req, res) => {
  *         name: ano
  *         schema:
  *           type: integer
- *         description: Ano (ex: 2025)
+ *         description: "Ano (ex: 2025)"
  *     responses:
  *       200:
  *         description: Resumo de horas extras por dia da semana

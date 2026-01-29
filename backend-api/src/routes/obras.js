@@ -1847,6 +1847,20 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
             console.error('❌ Erro ao inserir funcionário:', funcionarioObraError)
           } else {
             console.log('✅ Funcionário inserido:', funcionarioObraResult)
+            
+            // Atualizar obra_atual_id do funcionário quando vinculado a uma obra ativa
+            if (funcionarioObraData.status === 'ativo') {
+              const { error: updateError } = await supabaseAdmin
+                .from('funcionarios')
+                .update({ obra_atual_id: parseInt(id) })
+                .eq('id', parseInt(funcionario.userId))
+
+              if (updateError) {
+                console.error('❌ Erro ao atualizar obra_atual_id:', updateError)
+              } else {
+                console.log('✅ obra_atual_id atualizado para funcionário:', funcionario.userId)
+              }
+            }
           }
           }
         }

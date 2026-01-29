@@ -271,6 +271,21 @@ router.post('/', async (req, res) => {
       throw error
     }
 
+    // Atualizar obra_atual_id do funcionário quando vinculado a uma obra ativa
+    if (data.status === 'ativo') {
+      const { error: updateError } = await supabaseAdmin
+        .from('funcionarios')
+        .update({ obra_atual_id: data.obra_id })
+        .eq('id', data.funcionario_id)
+
+      if (updateError) {
+        console.error('[FUNCIONARIOS-OBRAS] Erro ao atualizar obra_atual_id:', updateError)
+        // Não falhar a criação da alocação se a atualização falhar
+      } else {
+        console.log('[FUNCIONARIOS-OBRAS] obra_atual_id atualizado para funcionário:', data.funcionario_id)
+      }
+    }
+
     // Debug: verificar o que foi salvo
     console.log('[FUNCIONARIOS-OBRAS] Dados salvos:', {
       id: data.id,
@@ -326,6 +341,13 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    // Buscar alocação atual antes de atualizar para obter funcionario_id e obra_id
+    const { data: alocacaoAtual } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select('funcionario_id, obra_id')
+      .eq('id', id)
+      .single()
+
     const { data, error } = await supabaseAdmin
       .from('funcionarios_obras')
       .update(value)
@@ -334,6 +356,25 @@ router.put('/:id', async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Atualizar obra_atual_id do funcionário se status for 'ativo'
+    if (value.status === 'ativo' || (!value.status && data.status === 'ativo')) {
+      const obraId = value.obra_id || data.obra_id || alocacaoAtual?.obra_id
+      const funcionarioId = alocacaoAtual?.funcionario_id || data.funcionario_id
+
+      if (obraId && funcionarioId) {
+        const { error: updateError } = await supabaseAdmin
+          .from('funcionarios')
+          .update({ obra_atual_id: obraId })
+          .eq('id', funcionarioId)
+
+        if (updateError) {
+          console.error('[FUNCIONARIOS-OBRAS] Erro ao atualizar obra_atual_id:', updateError)
+        } else {
+          console.log('[FUNCIONARIOS-OBRAS] obra_atual_id atualizado para funcionário:', funcionarioId)
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -366,6 +407,13 @@ router.post('/:id/finalizar', async (req, res) => {
       })
     }
 
+    // Buscar funcionario_id antes de finalizar
+    const { data: alocacaoAtual } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select('funcionario_id, obra_id')
+      .eq('id', id)
+      .single()
+
     const { data, error } = await supabaseAdmin
       .from('funcionarios_obras')
       .update({
@@ -377,6 +425,43 @@ router.post('/:id/finalizar', async (req, res) => {
       .single()
 
     if (error) throw error
+
+    // Remover obra_atual_id do funcionário quando a alocação é finalizada
+    if (alocacaoAtual?.funcionario_id) {
+      // Verificar se o funcionário ainda tem outras alocações ativas
+      const { data: outrasAlocacoes } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('obra_id')
+        .eq('funcionario_id', alocacaoAtual.funcionario_id)
+        .eq('status', 'ativo')
+        .neq('id', id)
+        .limit(1)
+        .single()
+
+      if (outrasAlocacoes) {
+        // Se tem outras alocações ativas, atualizar para a primeira encontrada
+        const { error: updateError } = await supabaseAdmin
+          .from('funcionarios')
+          .update({ obra_atual_id: outrasAlocacoes.obra_id })
+          .eq('id', alocacaoAtual.funcionario_id)
+
+        if (updateError) {
+          console.error('[FUNCIONARIOS-OBRAS] Erro ao atualizar obra_atual_id:', updateError)
+        }
+      } else {
+        // Se não tem outras alocações ativas, remover obra_atual_id
+        const { error: updateError } = await supabaseAdmin
+          .from('funcionarios')
+          .update({ obra_atual_id: null })
+          .eq('id', alocacaoAtual.funcionario_id)
+
+        if (updateError) {
+          console.error('[FUNCIONARIOS-OBRAS] Erro ao remover obra_atual_id:', updateError)
+        } else {
+          console.log('[FUNCIONARIOS-OBRAS] obra_atual_id removido do funcionário:', alocacaoAtual.funcionario_id)
+        }
+      }
+    }
 
     res.json({
       success: true,
@@ -443,6 +528,18 @@ router.post('/:id/transferir', async (req, res) => {
 
     if (createError) throw createError
 
+    // Atualizar obra_atual_id do funcionário para a nova obra
+    const { error: updateError } = await supabaseAdmin
+      .from('funcionarios')
+      .update({ obra_atual_id: nova_obra_id })
+      .eq('id', alocacaoAtual.funcionario_id)
+
+    if (updateError) {
+      console.error('[FUNCIONARIOS-OBRAS] Erro ao atualizar obra_atual_id na transferência:', updateError)
+    } else {
+      console.log('[FUNCIONARIOS-OBRAS] obra_atual_id atualizado na transferência para funcionário:', alocacaoAtual.funcionario_id)
+    }
+
     res.json({
       success: true,
       data: novaAlocacao,
@@ -469,7 +566,7 @@ router.delete('/:id', async (req, res) => {
     // Verificar se alocação existe
     const { data: alocacao } = await supabaseAdmin
       .from('funcionarios_obras')
-      .select('id, status')
+      .select('id, status, funcionario_id, obra_id')
       .eq('id', id)
       .single()
 
@@ -494,6 +591,42 @@ router.delete('/:id', async (req, res) => {
       .eq('id', id)
 
     if (error) throw error
+
+    // Se a alocação deletada era ativa, atualizar obra_atual_id do funcionário
+    if (alocacao.status === 'ativo' && alocacao.funcionario_id) {
+      // Verificar se o funcionário ainda tem outras alocações ativas
+      const { data: outrasAlocacoes } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('obra_id')
+        .eq('funcionario_id', alocacao.funcionario_id)
+        .eq('status', 'ativo')
+        .limit(1)
+        .single()
+
+      if (outrasAlocacoes) {
+        // Se tem outras alocações ativas, atualizar para a primeira encontrada
+        const { error: updateError } = await supabaseAdmin
+          .from('funcionarios')
+          .update({ obra_atual_id: outrasAlocacoes.obra_id })
+          .eq('id', alocacao.funcionario_id)
+
+        if (updateError) {
+          console.error('[FUNCIONARIOS-OBRAS] Erro ao atualizar obra_atual_id:', updateError)
+        }
+      } else {
+        // Se não tem outras alocações ativas, remover obra_atual_id
+        const { error: updateError } = await supabaseAdmin
+          .from('funcionarios')
+          .update({ obra_atual_id: null })
+          .eq('id', alocacao.funcionario_id)
+
+        if (updateError) {
+          console.error('[FUNCIONARIOS-OBRAS] Erro ao remover obra_atual_id:', updateError)
+        } else {
+          console.log('[FUNCIONARIOS-OBRAS] obra_atual_id removido do funcionário:', alocacao.funcionario_id)
+        }
+      }
+    }
 
     res.json({
       success: true,

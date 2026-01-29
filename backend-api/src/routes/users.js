@@ -114,16 +114,46 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
     const offset = (page - 1) * limit
     const { status, search } = req.query
 
-    // Primeiro buscar usuários
+    let usuarios = []
+    let count = 0
+
+    // Se houver busca, verificar se o termo corresponde a algum cliente (email, nome, contato_email, CNPJ)
+    let usuarioIdsAdicionais = []
+    if (search) {
+      const searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
+      console.log('🔍 [DEBUG] Buscando clientes com termo:', searchTerm)
+      
+      // Buscar clientes que tenham esse termo em qualquer campo relevante
+      const { data: clientesEncontrados, error: errorClientes } = await supabaseAdmin
+        .from('clientes')
+        .select('contato_usuario_id, email, nome, contato_email, cnpj')
+        .or(`email.ilike.%${searchTerm}%,nome.ilike.%${searchTerm}%,contato_email.ilike.%${searchTerm}%,cnpj.ilike.%${searchTerm}%`)
+        .not('contato_usuario_id', 'is', null)
+
+      if (errorClientes) {
+        console.error('❌ [DEBUG] Erro ao buscar clientes:', errorClientes)
+      }
+
+      if (clientesEncontrados && clientesEncontrados.length > 0) {
+        console.log('✅ [DEBUG] Clientes encontrados:', clientesEncontrados.length, clientesEncontrados.map(c => ({ id: c.contato_usuario_id, nome: c.nome, email: c.email })))
+        usuarioIdsAdicionais = clientesEncontrados
+          .map(c => c.contato_usuario_id)
+          .filter(id => id !== null)
+        // Remover duplicatas
+        usuarioIdsAdicionais = [...new Set(usuarioIdsAdicionais)]
+        console.log('✅ [DEBUG] IDs de usuários únicos a buscar:', usuarioIdsAdicionais)
+      } else {
+        console.log('ℹ️ [DEBUG] Nenhum cliente encontrado com esse termo')
+      }
+    }
+
+    // Buscar usuários por nome ou email
     let query = supabaseAdmin
       .from('usuarios')
       .select('*', { count: 'exact' })
 
-    // Aplicar filtro de busca por nome ou email
     if (search) {
-      // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
-      let searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
-      // Usar ilike corretamente - o padrão deve ser passado sem % no método or()
+      const searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
       query = query.or(`nome.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
     }
 
@@ -131,20 +161,82 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       query = query.eq('status', status)
     }
 
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    const { data: usuariosPorNomeEmail, error: error1, count: count1 } = await query
 
-    const { data: usuarios, error, count } = await query
-
-    if (error) {
+    if (error1) {
       return res.status(500).json({
         error: 'Erro ao buscar usuários',
-        message: error.message
+        message: error1.message
       })
     }
 
-    // Buscar perfis para cada usuário
+    // Se encontramos usuários associados a clientes, buscar também por esses IDs
+    if (usuarioIdsAdicionais.length > 0) {
+      console.log('🔍 [DEBUG] Buscando usuários por IDs:', usuarioIdsAdicionais)
+      let queryPorIds = supabaseAdmin
+        .from('usuarios')
+        .select('*', { count: 'exact' })
+        .in('id', usuarioIdsAdicionais)
+
+      if (status) {
+        queryPorIds = queryPorIds.eq('status', status)
+      }
+
+      const { data: usuariosPorIds, error: error2 } = await queryPorIds
+
+      if (error2) {
+        console.error('❌ [DEBUG] Erro ao buscar usuários por IDs:', error2)
+      }
+
+      if (!error2 && usuariosPorIds) {
+        if (usuariosPorIds.length > 0) {
+          console.log('✅ [DEBUG] Usuários encontrados por IDs:', usuariosPorIds.length, usuariosPorIds.map(u => ({ id: u.id, email: u.email })))
+        } else {
+          console.log('ℹ️ [DEBUG] Nenhum usuário encontrado por IDs (pode ser filtro de status)')
+        }
+        
+        // Combinar resultados, removendo duplicatas
+        const usuariosMap = new Map()
+        
+        // Adicionar usuários encontrados por nome/email
+        if (usuariosPorNomeEmail && usuariosPorNomeEmail.length > 0) {
+          console.log('✅ [DEBUG] Usuários encontrados por nome/email:', usuariosPorNomeEmail.length)
+          usuariosPorNomeEmail.forEach(u => usuariosMap.set(u.id, u))
+        } else {
+          console.log('ℹ️ [DEBUG] Nenhum usuário encontrado por nome/email')
+        }
+        
+        // Adicionar usuários encontrados por ID (associados a clientes)
+        if (usuariosPorIds.length > 0) {
+          usuariosPorIds.forEach(u => usuariosMap.set(u.id, u))
+        }
+        
+        usuarios = Array.from(usuariosMap.values())
+        count = usuariosMap.size
+        console.log('✅ [DEBUG] Total de usuários após combinação:', count)
+      } else if (error2) {
+        console.error('❌ [DEBUG] Erro ao buscar usuários por IDs, usando apenas busca por nome/email')
+        usuarios = usuariosPorNomeEmail || []
+        count = count1 || 0
+      } else {
+        // Se não encontrou por IDs mas encontrou por nome/email, usar apenas esses
+        usuarios = usuariosPorNomeEmail || []
+        count = count1 || 0
+      }
+    } else {
+      usuarios = usuariosPorNomeEmail || []
+      count = count1 || 0
+    }
+
+    // Aplicar paginação manualmente já que combinamos resultados
+    const usuariosPaginados = usuarios
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+      .slice(offset, offset + limit)
+
+    // Buscar perfis e clientes relacionados para cada usuário paginado
     const usuariosComPerfis = await Promise.all(
-      (usuarios || []).map(async (usuario) => {
+      (usuariosPaginados || []).map(async (usuario) => {
+        // Buscar perfil do usuário
         const { data: perfilData } = await supabaseAdmin
           .from('usuario_perfis')
           .select(`
@@ -163,14 +255,31 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
           .eq('status', 'Ativa')
           .single()
 
+        // Buscar cliente relacionado (se o usuário for contato de algum cliente)
+        const { data: clienteData } = await supabaseAdmin
+          .from('clientes')
+          .select(`
+            id,
+            nome,
+            email,
+            cnpj,
+            telefone,
+            contato,
+            contato_email,
+            contato_telefone
+          `)
+          .eq('contato_usuario_id', usuario.id)
+          .maybeSingle()
+
         return {
           ...usuario,
-          usuario_perfis: perfilData
+          usuario_perfis: perfilData,
+          cliente: clienteData || null
         }
       })
     )
 
-    const totalPages = Math.ceil((count || 0) / limit)
+    const totalPages = Math.ceil(count / limit)
 
     res.json({
       success: true,
@@ -178,7 +287,7 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       pagination: {
         page,
         limit,
-        total: count || 0,
+        total: count,
         pages: totalPages
       }
     })
@@ -255,9 +364,26 @@ router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), 
       .eq('status', 'Ativa')
       .single()
 
+    // Buscar cliente relacionado (se o usuário for contato de algum cliente)
+    const { data: clienteData } = await supabaseAdmin
+      .from('clientes')
+      .select(`
+        id,
+        nome,
+        email,
+        cnpj,
+        telefone,
+        contato,
+        contato_email,
+        contato_telefone
+      `)
+      .eq('contato_usuario_id', id)
+      .maybeSingle()
+
     const data = {
       ...usuario,
-      usuario_perfis: perfilData
+      usuario_perfis: perfilData,
+      cliente: clienteData || null
     }
 
     res.json({

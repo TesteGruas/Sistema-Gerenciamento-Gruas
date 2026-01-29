@@ -309,99 +309,131 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
     // Iniciar transação
     let usuarioId = null
     let senhaTemporaria = null
+    let usuarioJaExistia = false
 
-    // Criar usuário se solicitado
-    if (criar_usuario && value.contato && value.contato_email) {
+    // Criar usuário se solicitado (padrão: true se houver contato e contato_email)
+    const deveCriarUsuario = criar_usuario !== false && value.contato && value.contato_email
+    
+    if (deveCriarUsuario) {
       try {
         // Verificar se já existe um usuário com este email
         const { data: existingUser } = await supabaseAdmin
           .from('usuarios')
-          .select('id')
+          .select('id, nome')
           .eq('email', value.contato_email)
-          .single()
+          .maybeSingle()
 
         if (existingUser) {
-          return res.status(400).json({
-            error: 'Email já cadastrado',
-            message: 'Já existe um usuário cadastrado com este email'
-          })
-        }
-
-        // Gerar senha temporária
-        senhaTemporaria = generateSecurePassword()
-
-        // 1. Criar usuário no Supabase Auth primeiro
-        const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-          email: value.contato_email,
-          password: senhaTemporaria,
-          email_confirm: true, // Confirmar email automaticamente
-          user_metadata: {
-            nome: value.contato,
-            tipo: 'cliente'
-          }
-        })
-
-        if (authError) {
-          return res.status(500).json({
-            error: 'Erro ao criar usuário no sistema de autenticação',
-            message: authError.message
-          })
-        }
-
-        // 2. Criar usuário na tabela
-        const usuarioData = {
-          nome: value.contato,
-          email: value.contato_email,
-          cpf: value.contato_cpf || null,
-          telefone: value.contato_telefone || null,
-          endereco: value.endereco || null,
-          cidade: value.cidade || null,
-          estado: value.estado || null,
-          cep: value.cep || null,
-          status: 'Ativo',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-
-        const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
-          .from('usuarios')
-          .insert(usuarioData)
-          .select()
-          .single()
-
-        if (usuarioError) {
-          // Se falhou ao criar na tabela, remover do Auth
-          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+          // Usuário já existe, apenas vincular ao cliente
+          console.log(`ℹ️ Usuário já existe com email ${value.contato_email}, vinculando ao cliente`)
+          usuarioId = existingUser.id
+          usuarioJaExistia = true
           
-          return res.status(500).json({
-            error: 'Erro ao criar usuário',
-            message: usuarioError.message
+          // Verificar se o usuário já tem perfil de cliente, se não tiver, adicionar
+          const { data: perfilExistente } = await supabaseAdmin
+            .from('usuario_perfis')
+            .select('id')
+            .eq('usuario_id', usuarioId)
+            .eq('perfil_id', 6) // ID do perfil "Cliente"
+            .eq('status', 'Ativa')
+            .maybeSingle()
+          
+          if (!perfilExistente) {
+            // Adicionar perfil de cliente ao usuário existente
+            const { error: perfilError } = await supabaseAdmin
+              .from('usuario_perfis')
+              .insert({
+                usuario_id: usuarioId,
+                perfil_id: 6, // ID do perfil "Cliente"
+                status: 'Ativa',
+                data_atribuicao: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+            
+            if (perfilError) {
+              console.error('Erro ao atribuir perfil de cliente ao usuário existente:', perfilError)
+            }
+          }
+        } else {
+          // Usuário não existe, criar novo
+
+          // Gerar senha temporária (usar a fornecida ou gerar uma nova)
+          senhaTemporaria = usuario_senha || generateSecurePassword()
+
+          // 1. Criar usuário no Supabase Auth primeiro
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: value.contato_email,
+            password: senhaTemporaria,
+            email_confirm: true, // Confirmar email automaticamente
+            user_metadata: {
+              nome: value.contato,
+              tipo: 'cliente'
+            }
           })
-        }
 
-        usuarioId = novoUsuario.id
+          if (authError) {
+            return res.status(500).json({
+              error: 'Erro ao criar usuário no sistema de autenticação',
+              message: authError.message
+            })
+          }
 
-        // Atribuir perfil de cliente ao usuário
-        const { error: perfilError } = await supabaseAdmin
-          .from('usuario_perfis')
-          .insert({
-            usuario_id: usuarioId,
-            perfil_id: 6, // ID do perfil "Cliente"
-            status: 'Ativa',
-            data_atribuicao: new Date().toISOString(),
+          // 2. Criar usuário na tabela
+          const usuarioData = {
+            nome: value.contato,
+            email: value.contato_email,
+            cpf: value.contato_cpf || null,
+            telefone: value.contato_telefone || null,
+            endereco: value.endereco || null,
+            cidade: value.cidade || null,
+            estado: value.estado || null,
+            cep: value.cep || null,
+            status: 'Ativo',
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
-          })
+          }
 
-        if (perfilError) {
-          console.error('Erro ao atribuir perfil ao usuário:', perfilError)
-          // Não falhar a criação do cliente por causa disso
+          const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+            .from('usuarios')
+            .insert(usuarioData)
+            .select()
+            .single()
+
+          if (usuarioError) {
+            // Se falhou ao criar na tabela, remover do Auth
+            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+            
+            return res.status(500).json({
+              error: 'Erro ao criar usuário',
+              message: usuarioError.message
+            })
+          }
+
+          usuarioId = novoUsuario.id
+
+          // Atribuir perfil de cliente ao usuário
+          const { error: perfilError } = await supabaseAdmin
+            .from('usuario_perfis')
+            .insert({
+              usuario_id: usuarioId,
+              perfil_id: 6, // ID do perfil "Cliente"
+              status: 'Ativa',
+              data_atribuicao: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+
+          if (perfilError) {
+            console.error('Erro ao atribuir perfil ao usuário:', perfilError)
+            // Não falhar a criação do cliente por causa disso
+          }
         }
 
       } catch (usuarioError) {
-        console.error('Erro ao criar usuário:', usuarioError)
+        console.error('Erro ao criar/vincular usuário:', usuarioError)
         return res.status(500).json({
-          error: 'Erro ao criar usuário',
+          error: 'Erro ao criar/vincular usuário',
           message: usuarioError.message
         })
       }
@@ -422,8 +454,8 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
       .single()
 
     if (insertError) {
-      // Se falhou ao criar cliente, remover usuário do Auth e da tabela
-      if (usuarioId && criar_usuario) {
+      // Se falhou ao criar cliente, remover usuário do Auth e da tabela (apenas se foi criado novo, não se já existia)
+      if (usuarioId && deveCriarUsuario && !usuarioJaExistia) {
         // Buscar authData
         try {
           const { data: { users } } = await supabaseAdmin.auth.admin.listUsers()
@@ -450,11 +482,12 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
     const responseData = {
       ...data,
       usuario_criado: !!usuarioId,
+      usuario_vinculado: usuarioJaExistia,
       usuario_id: usuarioId
     }
 
-    // Enviar email e WhatsApp se criou usuário (não bloquear criação se falhar)
-    if (criar_usuario && usuarioId && senhaTemporaria && value.contato_email) {
+    // Enviar email e WhatsApp se criou novo usuário (não enviar se apenas vinculou existente)
+    if (deveCriarUsuario && usuarioId && !usuarioJaExistia && senhaTemporaria && value.contato_email) {
       // Enviar email de boas-vindas
       console.log('📧 Tentando enviar email de boas-vindas para cliente...')
       console.log('📧 Dados:', { nome: value.contato, email: value.contato_email, senha: '***' })
@@ -487,12 +520,19 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
       }
     }
 
+    let mensagemSucesso = 'Cliente criado com sucesso'
+    if (usuarioId) {
+      if (usuarioJaExistia) {
+        mensagemSucesso = 'Cliente criado e usuário existente vinculado com sucesso'
+      } else {
+        mensagemSucesso = 'Cliente e usuário criados com sucesso. Email e WhatsApp com senha temporária enviados.'
+      }
+    }
+
     res.status(201).json({
       success: true,
       data: responseData,
-      message: usuarioId 
-        ? 'Cliente e usuário criados com sucesso. Email e WhatsApp com senha temporária enviados.' 
-        : 'Cliente criado com sucesso'
+      message: mensagemSucesso
     })
   } catch (error) {
     console.error('Erro ao criar cliente:', error)

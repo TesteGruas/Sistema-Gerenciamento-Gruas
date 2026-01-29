@@ -1713,7 +1713,7 @@ router.post('/upload/livro-grua/:livroGruaId', authenticateToken, upload.single(
  *         required: true
  *         schema:
  *           type: string
- *         description: Tipo da entidade (ex: cliente, usuario, obra)
+ *         description: "Tipo da entidade (ex: cliente, usuario, obra)"
  *       - in: query
  *         name: entidade_id
  *         required: true
@@ -1724,7 +1724,7 @@ router.post('/upload/livro-grua/:livroGruaId', authenticateToken, upload.single(
  *         name: modulo
  *         schema:
  *           type: string
- *         description: Módulo do sistema (ex: clientes, usuarios, obras)
+ *         description: "Módulo do sistema (ex: clientes, usuarios, obras)"
  *     responses:
  *       200:
  *         description: Lista de arquivos da entidade

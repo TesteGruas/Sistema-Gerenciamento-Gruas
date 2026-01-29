@@ -35,12 +35,12 @@ import {
   ChevronsLeft,
   ChevronsRight,
   File,
-  Image
+  Image,
+  Zap
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { apiArquivos } from "@/lib/api-arquivos"
-import { DebugButton } from "@/components/debug-button"
 
 export default function ClientesPage() {
   const router = useRouter()
@@ -1344,8 +1344,18 @@ function ClienteForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-2">
-      <div className="flex justify-end" style={{ marginBottom: '0px' }}>
-        <DebugButton onClick={preencherDadosDebug} disabled={isSubmitting} />
+      <div className="flex justify-end mb-4">
+        <Button
+          type="button"
+          variant="outline"
+          onClick={preencherDadosDebug}
+          disabled={isSubmitting}
+          className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+          title="Preencher todos os campos com dados de exemplo"
+        >
+          <Zap className="w-4 h-4 mr-2" />
+          Preencher Todos os Dados
+        </Button>
       </div>
       {/* Informações Básicas */}
       <div className="space-y-4">

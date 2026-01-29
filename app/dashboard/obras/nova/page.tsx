@@ -471,11 +471,7 @@ export default function NovaObraPage() {
           } else {
             setOrcamentoAprovado(null)
             setOrcamentoId(null)
-            toast({
-              title: "Atenção",
-              description: "Nenhum orçamento aprovado encontrado para este cliente. É necessário ter um orçamento aprovado para criar uma obra.",
-              variant: "destructive"
-            })
+            // Orçamento não é obrigatório - obra pode ser criada sem orçamento
           }
         }
       } catch (error) {
@@ -613,9 +609,7 @@ export default function NovaObraPage() {
       camposFaltando.push('Tipo de Obra')
     }
     
-    if (!orcamentoId || !orcamentoAprovado) {
-      camposFaltando.push('Orçamento Aprovado (selecione um cliente com orçamento aprovado)')
-    }
+    // Orçamento não é obrigatório - obra pode ser criada sem orçamento
     
     if (!cno || !cno.trim()) {
       camposFaltando.push('CNO da Obra')
