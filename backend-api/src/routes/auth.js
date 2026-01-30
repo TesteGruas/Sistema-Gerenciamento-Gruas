@@ -5,7 +5,7 @@ import { authenticateToken } from '../middleware/auth.js'
 import { generateToken, hashToken, isTokenExpired, getTokenExpiry } from '../utils/token.js'
 import { sendResetPasswordEmail, sendPasswordChangedEmail } from '../services/email.service.js'
 import { enviarMensagemForgotPassword } from '../services/whatsapp-service.js'
-import { getRolePermissions, getRoleLevel } from '../config/roles.js'
+import { getRolePermissions, getRoleLevel, normalizeRoleName } from '../config/roles.js'
 
 const router = express.Router()
 
@@ -175,11 +175,34 @@ router.post('/login', async (req, res) => {
 
     const { email, password } = value
 
-    // Fazer login no Supabase
-    const { data, error: authError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    })
+    // Fazer login no Supabase com retry automático para "Too many requests"
+    let authData = null
+    let authError = null
+    let retryCount = 0
+    const maxRetries = 3
+    
+    while (retryCount <= maxRetries) {
+      const result = await supabase.auth.signInWithPassword({
+        email,
+        password
+      })
+      
+      authData = result.data
+      authError = result.error
+      
+      // Se não houve erro ou não é erro de "Too many requests", sair do loop
+      if (!authError || !authError.message.includes('Too many requests')) {
+        break
+      }
+      
+      // Se é erro de "Too many requests", aguardar e tentar novamente
+      retryCount++
+      if (retryCount <= maxRetries) {
+        const waitTime = Math.min(1000 * Math.pow(2, retryCount - 1), 5000) // Backoff exponencial, máximo 5s
+        console.log(`⚠️ Rate limit do Supabase detectado, aguardando ${waitTime}ms antes de tentar novamente (tentativa ${retryCount}/${maxRetries})`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+      }
+    }
 
     if (authError) {
       // Traduzir erros específicos do Supabase
@@ -193,8 +216,9 @@ router.post('/login', async (req, res) => {
         userMessage = 'Email não confirmado'
         description = 'Verifique sua caixa de entrada e confirme seu email'
       } else if (authError.message.includes('Too many requests')) {
-        userMessage = 'Muitas tentativas de login'
-        description = 'Aguarde alguns minutos antes de tentar novamente'
+        // Mesmo após retries, ainda está dando erro - tratar como erro genérico
+        userMessage = 'Erro ao fazer login'
+        description = 'Tente novamente em alguns instantes'
       } else if (authError.message.includes('User not found')) {
         userMessage = 'Usuário não encontrado'
         description = 'Verifique se o email está correto'
@@ -243,19 +267,21 @@ router.post('/login', async (req, res) => {
         .single()
 
       if (perfilUsuario && !perfilError) {
-        const roleName = perfilUsuario.perfis.nome
+        const roleNameFromDB = perfilUsuario.perfis.nome
+        // Normalizar o role name (ex: "Visualizador" -> "Clientes")
+        const normalizedRole = normalizeRoleName(roleNameFromDB) || roleNameFromDB
         
         perfilData = {
           id: perfilUsuario.perfil_id,
-          nome: roleName,
+          nome: roleNameFromDB, // Manter nome original do banco no perfil
           nivel_acesso: perfilUsuario.perfis.nivel_acesso,
           descricao: perfilUsuario.perfis.descricao
         }
 
-        // Obter permissões hardcoded baseadas no role (v2.0)
-        role = roleName
-        level = getRoleLevel(roleName)
-        const rolePermissions = getRolePermissions(roleName)
+        // Obter permissões hardcoded baseadas no role normalizado (v2.0)
+        role = normalizedRole // Usar role normalizado na resposta
+        level = getRoleLevel(roleNameFromDB) // getRoleLevel já normaliza internamente
+        const rolePermissions = getRolePermissions(roleNameFromDB) // getRolePermissions já normaliza internamente
         
         // Converter para formato compatível com frontend antigo (transição)
         permissoes = rolePermissions.map((permissao, index) => {
@@ -269,7 +295,7 @@ router.post('/login', async (req, res) => {
           }
         })
 
-        console.log(`✓ Login bem-sucedido: ${email} (${roleName}, nível ${level}, ${rolePermissions.length} permissões)`)
+        console.log(`✓ Login bem-sucedido: ${email} (${roleNameFromDB} -> ${normalizedRole}, nível ${level}, ${rolePermissions.length} permissões)`)
       } else {
         console.warn(`⚠️  Usuário sem perfil ativo: ${email}`)
       }
@@ -278,15 +304,15 @@ router.post('/login', async (req, res) => {
     res.json({
       success: true,
       data: {
-        user: data.user,
-        session: data.session,
+        user: authData.user,
+        session: authData.session,
         profile: profile,
         perfil: perfilData,
         role: role, // Nome do role (v2.0)
         level: level, // Nível de acesso (v2.0)
         permissoes: permissoes,
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token
+        access_token: authData.session.access_token,
+        refresh_token: authData.session.refresh_token
       },
       message: 'Login realizado com sucesso'
     })
@@ -546,19 +572,21 @@ router.get('/me', authenticateToken, async (req, res) => {
         .maybeSingle()
 
       if (perfilUsuario && !perfilError) {
-        const roleName = perfilUsuario.perfis.nome
+        const roleNameFromDB = perfilUsuario.perfis.nome
+        // Normalizar o role name (ex: "Visualizador" -> "Clientes")
+        const normalizedRole = normalizeRoleName(roleNameFromDB) || roleNameFromDB
         
         perfilData = {
           id: perfilUsuario.perfil_id,
-          nome: roleName,
+          nome: roleNameFromDB, // Manter nome original do banco no perfil
           nivel_acesso: perfilUsuario.perfis.nivel_acesso,
           descricao: perfilUsuario.perfis.descricao
         }
 
-        // Obter permissões hardcoded baseadas no role (v2.0) - mesmo sistema usado no login
-        role = roleName
-        level = getRoleLevel(roleName)
-        const rolePermissions = getRolePermissions(roleName)
+        // Obter permissões hardcoded baseadas no role normalizado (v2.0) - mesmo sistema usado no login
+        role = normalizedRole // Usar role normalizado na resposta
+        level = getRoleLevel(roleNameFromDB) // getRoleLevel já normaliza internamente
+        const rolePermissions = getRolePermissions(roleNameFromDB) // getRolePermissions já normaliza internamente
         
         // Converter para formato compatível com frontend antigo (transição)
         permissoes = rolePermissions.map((permissao, index) => {
@@ -572,7 +600,7 @@ router.get('/me', authenticateToken, async (req, res) => {
           }
         })
 
-        console.log(`✓ Dados do usuário carregados: ${req.user.email} (${roleName}, nível ${level}, ${rolePermissions.length} permissões)`)
+        console.log(`✓ Dados do usuário carregados: ${req.user.email} (${roleNameFromDB} -> ${normalizedRole}, nível ${level}, ${rolePermissions.length} permissões)`)
       } else {
         console.warn(`⚠️  Usuário sem perfil ativo: ${req.user.email}`)
       }

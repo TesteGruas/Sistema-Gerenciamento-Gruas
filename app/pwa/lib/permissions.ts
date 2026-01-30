@@ -223,6 +223,9 @@ export function getPWAHomePage(roleName: RoleName): string {
     case 'Gestores':
       return '/pwa' // Dashboard principal do PWA
     
+    case 'Supervisores':
+      return '/pwa/aprovacoes' // Supervisores vão direto para aprovações
+    
     case 'Clientes':
       return '/pwa/aprovacoes' // Clientes vão direto para aprovações (supervisão das horas)
     
@@ -245,14 +248,14 @@ export function getPWARoleDescription(roleName: RoleName): string {
     case 'Gestores':
       return 'Acesso completo com gerenciamento de equipes e aprovações'
     
+    case 'Supervisores':
+      return 'Mesmo acesso do Cliente: visualização de obras, documentos e assinaturas dos pontos dos funcionários'
+    
     case 'Clientes':
-      return 'Visualização de obras, documentos e supervisão das horas dos funcionários atrelados às gruas'
+      return 'Vê os funcionários da obra, pode ver documentos da obra e assinaturas dos pontos dos funcionários'
     
     case 'Operários':
-      return 'Registro de ponto e visualização de documentos'
-    
-    case 'Clientes':
-      return 'Visualização de gruas, medições e aprovação de medições'
+      return 'Todas as funções de ponto (se atrelado a uma obra), documentos, holerites e obras'
     
     default:
       return 'Acesso limitado'
@@ -287,9 +290,21 @@ export const PWA_FEATURES: Record<RoleName, string[]> = {
     'Notificações',
     'Configurações avançadas'
   ],
+  'Supervisores': [
+    'Visualização de obras',
+    'Visualização de gruas',
+    'Visualização de funcionários da obra',
+    'Visualização de ponto dos funcionários',
+    'Aprovação de horas extras dos funcionários',
+    'Visualização de documentos',
+    'Gerenciamento de documentos',
+    'Assinatura de documentos',
+    'Notificações'
+  ],
   'Clientes': [
     'Visualização de obras',
     'Visualização de gruas',
+    'Visualização de funcionários da obra',
     'Visualização de ponto dos funcionários',
     'Aprovação de horas extras dos funcionários',
     'Visualização de documentos',
@@ -300,16 +315,12 @@ export const PWA_FEATURES: Record<RoleName, string[]> = {
   'Operários': [
     'Registro de ponto',
     'Visualização de espelho de ponto',
+    'Visualização de obras',
     'Visualização de documentos',
     'Assinatura de documentos',
-    'Notificações'
-  ],
-  'Clientes': [
-    'Visualização de gruas',
-    'Visualização de medições',
-    'Aprovação de medições',
-    'Visualização de documentos',
-    'Assinatura de documentos',
+    'Visualização de holerites',
+    'Download de holerites',
+    'Assinatura de holerites',
     'Notificações'
   ]
 }

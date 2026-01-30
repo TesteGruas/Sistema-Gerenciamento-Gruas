@@ -495,7 +495,7 @@ app.use(compression({
 app.use(express.json({ limit: '10mb' }))
 app.use(express.urlencoded({ extended: true }))
 
-// Rate limiting (permissivo) - Excluindo rotas de configurações e admin@admin.com
+// Rate limiting (permissivo) - Excluindo rotas de configurações e login
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000,
@@ -507,8 +507,8 @@ const limiter = rateLimit({
     if (req.path.startsWith('/api/configuracoes')) {
       return true
     }
-    // Excluir admin@admin.com do rate limit no endpoint de login
-    if (req.path === '/api/auth/login' && req.method === 'POST' && req.body && req.body.email === 'admin@admin.com') {
+    // Excluir endpoint de login do rate limit global (rate limit do Supabase já é suficiente)
+    if (req.path === '/api/auth/login' && req.method === 'POST') {
       return true
     }
     return false

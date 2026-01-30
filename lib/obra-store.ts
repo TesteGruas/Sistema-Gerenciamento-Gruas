@@ -38,6 +38,7 @@ interface ObraStore {
   totalCustos?: number
   // Campos obrigatórios (CNO, ART, Apólice)
   cno?: string
+  cno_arquivo?: string
   art_numero?: string
   art_arquivo?: string
   apolice_numero?: string
@@ -135,6 +136,12 @@ export const useObraStore = create<ObraState>()(
 
       // Carregar obra principal
       carregarObra: async (obraId: string) => {
+        const currentObra = get().obra
+        // Evitar recarregamento se já está carregando ou se a obra já está carregada
+        if (get().loading || (currentObra && currentObra.id === obraId && !get().error)) {
+          return
+        }
+        
         set({ 
           loading: true, 
           error: null,
@@ -147,14 +154,23 @@ export const useObraStore = create<ObraState>()(
           if (response.success && response.data) {
             const obraConvertida = converterObraBackendParaFrontend(response.data)
             
-            set({ 
-              obra: obraConvertida,
-              loading: false,
-              lastUpdated: new Date().toISOString()
-            })
+            // Só atualizar se o ID for diferente ou se houver mudanças significativas
+            const shouldUpdate = !currentObra || 
+                                 currentObra.id !== obraConvertida.id ||
+                                 currentObra.updatedAt !== obraConvertida.updatedAt
             
-            // Carregar custos mensais automaticamente
-            await get().carregarCustosMensais(obraId)
+            if (shouldUpdate) {
+              set({ 
+                obra: obraConvertida,
+                loading: false,
+                lastUpdated: new Date().toISOString()
+              })
+              
+              // Carregar custos mensais automaticamente
+              await get().carregarCustosMensais(obraId)
+            } else {
+              set({ loading: false })
+            }
             
           } else {
             set({ 
@@ -172,6 +188,11 @@ export const useObraStore = create<ObraState>()(
 
       // Carregar custos mensais
       carregarCustosMensais: async (obraId: string) => {
+        // Evitar recarregamento se já está carregando
+        if (get().loadingCustos) {
+          return
+        }
+        
         set({ 
           loadingCustos: true, 
           errorCustos: null,
@@ -182,11 +203,25 @@ export const useObraStore = create<ObraState>()(
           const response = await custosMensaisApi.listarPorObra(parseInt(obraId))
           
           if (response.success && response.data) {
-            set({ 
-              custosMensais: response.data,
-              loadingCustos: false,
-              lastCustosUpdated: new Date().toISOString()
-            })
+            const currentCustos = get().custosMensais
+            const novosCustos = response.data
+            
+            // Comparar se os dados realmente mudaram (comparação simples por tamanho e IDs)
+            const custosMudaram = !currentCustos || 
+                                 currentCustos.length !== novosCustos.length ||
+                                 currentCustos.some((custo, index) => 
+                                   !novosCustos[index] || custo.id !== novosCustos[index].id
+                                 )
+            
+            if (custosMudaram) {
+              set({ 
+                custosMensais: novosCustos,
+                loadingCustos: false,
+                lastCustosUpdated: new Date().toISOString()
+              })
+            } else {
+              set({ loadingCustos: false })
+            }
             
           } else {
             set({ 

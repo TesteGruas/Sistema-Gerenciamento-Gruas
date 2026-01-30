@@ -45,7 +45,8 @@ import {
   Shield,
   Calculator,
   XCircle,
-  Check
+  Check,
+  Loader2
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -105,8 +106,17 @@ function ObraDetailsPageContent() {
   // Estados locais para dados não armazenados no store
   const [documentos, setDocumentos] = useState<any[]>([])
   const [arquivos, setArquivos] = useState<any[]>([])
+  const [documentosAdicionaisEquipamento, setDocumentosAdicionaisEquipamento] = useState<{
+    manual_tecnico?: any
+    termo_entrega_tecnica?: any
+    plano_carga?: any
+    aterramento?: any
+  }>({})
   const [loadingDocumentos, setLoadingDocumentos] = useState(false)
   const [loadingArquivos, setLoadingArquivos] = useState(false)
+  const [loadingDocumentosAdicionais, setLoadingDocumentosAdicionais] = useState(false)
+  const documentosAdicionaisCarregadosRef = useRef(false)
+  const obraCarregadaRef = useRef<string | null>(null)
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
   const [notificandoEnvolvidos, setNotificandoEnvolvidos] = useState(false)
@@ -149,6 +159,8 @@ function ObraDetailsPageContent() {
   // Refs para rastrear se os dados já foram carregados (evita loops quando arrays estão vazios)
   const medicoesCarregadasRef = useRef(false)
   const sinaleirosCarregadosRef = useRef(false)
+  const gruasCarregadasRef = useRef<string | null>(null)
+  const funcionariosCarregadosRef = useRef<string | null>(null)
   const [devolucoes, setDevolucoes] = useState<Record<number, {
     tipo: 'completa' | 'parcial' | null
     quantidade_devolvida?: number
@@ -163,6 +175,7 @@ function ObraDetailsPageContent() {
   const [saving, setSaving] = useState(false)
   const [artArquivo, setArtArquivo] = useState<File | null>(null)
   const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  const [cnoArquivo, setCnoArquivo] = useState<File | null>(null)
   const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
   
   // Estado para diálogo de criação manual de medição
@@ -234,6 +247,7 @@ function ObraDetailsPageContent() {
     setEditingData({})
     setArtArquivo(null)
     setApoliceArquivo(null)
+    setCnoArquivo(null)
     setResponsavelSelecionado(null)
     setIsEditing(false)
   }
@@ -248,8 +262,9 @@ function ObraDetailsPageContent() {
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       let artArquivoUrl = obra?.art_arquivo || ''
       let apoliceArquivoUrl = obra?.apolice_arquivo || ''
+      let cnoArquivoUrl = obra?.cno_arquivo || ''
       
-      // 1. Fazer upload dos arquivos ART e Apólice se houver novos arquivos
+      // 1. Fazer upload dos arquivos ART, Apólice e CNO se houver novos arquivos
       if (artArquivo) {
         try {
           const formDataArt = new FormData()
@@ -296,6 +311,29 @@ function ObraDetailsPageContent() {
         }
       }
       
+      if (cnoArquivo) {
+        try {
+          const formDataCno = new FormData()
+          formDataCno.append('arquivo', cnoArquivo)
+          formDataCno.append('categoria', 'cno')
+          
+          const uploadCnoResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataCno
+          })
+          
+          if (uploadCnoResponse.ok) {
+            const uploadCnoResult = await uploadCnoResponse.json()
+            cnoArquivoUrl = uploadCnoResult.data?.caminho || uploadCnoResult.data?.arquivo || ''
+          }
+        } catch (uploadError) {
+          console.error('Erro ao fazer upload do CNO:', uploadError)
+        }
+      }
+      
       // 2. Converter dados para formato do backend
       // Campos obrigatórios devem sempre ser enviados
       const updateData: any = {
@@ -326,6 +364,9 @@ function ObraDetailsPageContent() {
       }
       if (apoliceArquivoUrl) {
         updateData.apolice_arquivo = apoliceArquivoUrl
+      }
+      if (cnoArquivoUrl) {
+        updateData.cno_arquivo = cnoArquivoUrl
       }
       
       // Remover apenas campos opcionais vazios (manter obrigatórios mesmo se vazios)
@@ -784,6 +825,69 @@ function ObraDetailsPageContent() {
       setErrorArquivos('Erro ao carregar arquivos')
     } finally {
       setLoadingArquivos(false)
+    }
+  }
+
+  const carregarDocumentosAdicionaisEquipamento = async () => {
+    if (!obraId) {
+      console.log('⚠️ [Documentos Adicionais] obraId não encontrado')
+      return
+    }
+    
+    // Evitar carregamento duplicado
+    if (documentosAdicionaisCarregadosRef.current) {
+      console.log('⚠️ [Documentos Adicionais] Já carregado, pulando...')
+      return
+    }
+    
+    console.log('🔍 [Documentos Adicionais] Iniciando carregamento para obra:', obraId)
+    documentosAdicionaisCarregadosRef.current = true
+    setLoadingDocumentosAdicionais(true)
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      const categorias = ['manual_tecnico', 'termo_entrega_tecnica', 'plano_carga', 'aterramento']
+      const documentos: any = {}
+      
+      await Promise.all(
+        categorias.map(async (categoria) => {
+          try {
+            const url = `${apiUrl}/api/arquivos/obra/${obraId}?categoria=${categoria}`
+            console.log(`📡 [Documentos Adicionais] Buscando ${categoria} em:`, url)
+            
+            const response = await fetch(url, {
+              headers: {
+                'Authorization': `Bearer ${token}`
+              }
+            })
+            
+            if (response.ok) {
+              const data = await response.json()
+              console.log(`✅ [Documentos Adicionais] Resposta para ${categoria}:`, data)
+              if (data.success && data.data && data.data.length > 0) {
+                documentos[categoria] = data.data[0] // Pegar o primeiro arquivo de cada categoria
+                console.log(`✅ [Documentos Adicionais] ${categoria} encontrado:`, documentos[categoria])
+              } else {
+                console.log(`⚠️ [Documentos Adicionais] ${categoria} não encontrado ou vazio`)
+              }
+            } else {
+              console.error(`❌ [Documentos Adicionais] Erro na resposta para ${categoria}:`, response.status, response.statusText)
+            }
+          } catch (error) {
+            console.error(`❌ [Documentos Adicionais] Erro ao carregar ${categoria}:`, error)
+          }
+        })
+      )
+      
+      console.log('📦 [Documentos Adicionais] Documentos carregados:', documentos)
+      setDocumentosAdicionaisEquipamento(documentos)
+    } catch (error) {
+      console.error('❌ [Documentos Adicionais] Erro ao carregar documentos adicionais:', error)
+      documentosAdicionaisCarregadosRef.current = false // Resetar em caso de erro
+    } finally {
+      setLoadingDocumentosAdicionais(false)
     }
   }
   
@@ -2774,6 +2878,15 @@ function ObraDetailsPageContent() {
 
   // Verificar autenticação e carregar obra na inicialização
   useEffect(() => {
+    // Evitar carregamento duplicado para o mesmo obraId
+    if (obraCarregadaRef.current === obraId) {
+      return
+    }
+    
+    // Resetar flag de carregamento quando obraId mudar
+    documentosAdicionaisCarregadosRef.current = false
+    obraCarregadaRef.current = obraId
+    
     const init = async () => {
       const isAuth = await ensureAuthenticated()
       if (isAuth) {
@@ -2782,60 +2895,74 @@ function ObraDetailsPageContent() {
         // Carregar documentos e arquivos em paralelo
         await Promise.all([
           carregarDocumentos(),
-          carregarArquivos()
+          carregarArquivos(),
+          carregarDocumentosAdicionaisEquipamento()
         ])
       }
     }
     init()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [obraId])
+
 
   // Carregar gruas quando a obra for carregada
   useEffect(() => {
-    if (obra) {
+    if (obra?.id && gruasCarregadasRef.current !== obra.id) {
+      gruasCarregadasRef.current = obra.id
       carregarGruasVinculadas()
     }
-  }, [obra])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obra?.id])
 
   // Carregar funcionários quando a obra for carregada
   useEffect(() => {
-    if (obra) {
+    if (obra?.id && funcionariosCarregadosRef.current !== obra.id) {
+      funcionariosCarregadosRef.current = obra.id
       carregarFuncionariosVinculados()
     }
-  }, [obra])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obra?.id])
 
 
   // Definir mês padrão após carregar custos
   useEffect(() => {
-    if (custosMensais && custosMensais.length > 0) {
+    if (custosMensais && custosMensais.length > 0 && !mesSelecionado) {
       // Obter todos os meses disponíveis e ordenar
       const mesesDisponiveis = [...new Set(custosMensais.map(custo => custo.mes))].sort()
-      // Definir o último mês como padrão
+      // Definir o último mês como padrão apenas se não houver mês selecionado
       const ultimoMes = mesesDisponiveis[mesesDisponiveis.length - 1]
-      setMesSelecionado(ultimoMes)
+      if (ultimoMes) {
+        setMesSelecionado(ultimoMes)
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [custosMensais])
 
   // Resetar flags quando a obra mudar
   useEffect(() => {
     medicoesCarregadasRef.current = false
     sinaleirosCarregadosRef.current = false
+    gruasCarregadasRef.current = null
+    funcionariosCarregadosRef.current = null
   }, [obraId])
 
   // Carregar medições mensais quando a aba for ativada
   useEffect(() => {
-    if (activeTab === 'medicoes-mensais' && obra && !loadingMedicoes && !medicoesCarregadasRef.current) {
+    if (activeTab === 'medicoes-mensais' && obra?.id && !loadingMedicoes && !medicoesCarregadasRef.current) {
       medicoesCarregadasRef.current = true // Marcar antes para evitar chamadas múltiplas
       carregarMedicoesMensais()
     }
-  }, [activeTab, obra, loadingMedicoes])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, obra?.id, loadingMedicoes])
 
   // Carregar sinaleiros quando a aba for ativada
   useEffect(() => {
-    if (activeTab === 'sinaleiros' && obra && !loadingSinaleiros && !sinaleirosCarregadosRef.current) {
+    if (activeTab === 'sinaleiros' && obra?.id && !loadingSinaleiros && !sinaleirosCarregadosRef.current) {
       sinaleirosCarregadosRef.current = true // Marcar antes para evitar chamadas múltiplas
       carregarSinaleiros()
     }
-  }, [activeTab, obra, loadingSinaleiros])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, obra?.id, loadingSinaleiros])
   
   // Carregar componentes para devolução quando a aba for ativada
 
@@ -3508,17 +3635,78 @@ useEffect(() => {
               </CardHeader>
               <CardContent className="space-y-4">
                 {/* CNO */}
-                <div className="space-y-1">
+                <div className="space-y-3">
                   <Label className="text-sm font-medium text-gray-700">CNO:</Label>
                   {isEditing ? (
-                    <Input
-                      value={editingData.cno || ''}
-                      onChange={(e) => setEditingData({ ...editingData, cno: e.target.value })}
-                      placeholder="Número do CNO"
-                      className="mt-1"
-                    />
+                    <div className="space-y-3">
+                      <Input
+                        value={editingData.cno || ''}
+                        onChange={(e) => setEditingData({ ...editingData, cno: e.target.value })}
+                        placeholder="Número do CNO"
+                        className="mt-1"
+                      />
+                      <DocumentoUpload
+                        label="Upload do Documento CNO (PDF)"
+                        accept="application/pdf"
+                        maxSize={10 * 1024 * 1024} // 10MB
+                        onUpload={(file) => setCnoArquivo(file)}
+                        onRemove={() => setCnoArquivo(null)}
+                        currentFile={cnoArquivo}
+                        fileUrl={obra?.cno_arquivo || null}
+                      />
+                    </div>
                   ) : (
-                    <span className="text-sm block mt-1">{obra?.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
+                    <>
+                      <div className="flex items-center gap-2 mt-1">
+                        {obra?.cno ? (
+                          <span className="text-sm">{obra.cno}</span>
+                        ) : (
+                          <span className="text-sm text-gray-400 italic">Não informado</span>
+                        )}
+                      </div>
+                      {obra?.cno_arquivo && (
+                        <div className="flex justify-end mt-1">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                // Gerar URL assinada usando o endpoint do backend
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.cno_arquivo || '')}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  } else {
+                                    throw new Error('URL não retornada')
+                                  }
+                                } else {
+                                  throw new Error('Erro ao gerar URL')
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar CNO:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo do CNO",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar CNO
+                          </Button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
 
@@ -3673,6 +3861,212 @@ useEffect(() => {
                     </>
                   )}
                 </div>
+              </CardContent>
+            </Card>
+
+            {/* Documentos Adicionais do Equipamento */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Documentos Adicionais do Equipamento
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {loadingDocumentosAdicionais ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm text-gray-500">Carregando documentos...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Debug: Mostrar estado atual */}
+                    {process.env.NODE_ENV === 'development' && (
+                      <div className="text-xs text-gray-400 mb-2">
+                        Debug: {JSON.stringify(Object.keys(documentosAdicionaisEquipamento))}
+                      </div>
+                    )}
+                    {/* Manual Técnico */}
+                    <div className="space-y-3">
+                      <Label className="text-sm font-medium text-gray-700">Manual Técnico do Equipamento</Label>
+                      {documentosAdicionaisEquipamento.manual_tecnico ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{documentosAdicionaisEquipamento.manual_tecnico.nome_original}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.manual_tecnico.caminho)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  }
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar Manual Técnico:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar Manual Técnico
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+
+                    {/* Termo de Entrega Técnica */}
+                    <div className="space-y-3 border-t pt-3">
+                      <Label className="text-sm font-medium text-gray-700">Termo de Entrega Técnica</Label>
+                      {documentosAdicionaisEquipamento.termo_entrega_tecnica ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{documentosAdicionaisEquipamento.termo_entrega_tecnica.nome_original}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.termo_entrega_tecnica.caminho)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  }
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar Termo de Entrega:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar Termo de Entrega
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+
+                    {/* Plano de Carga */}
+                    <div className="space-y-3 border-t pt-3">
+                      <Label className="text-sm font-medium text-gray-700">Plano de Carga</Label>
+                      {documentosAdicionaisEquipamento.plano_carga ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{documentosAdicionaisEquipamento.plano_carga.nome_original}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.plano_carga.caminho)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  }
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar Plano de Carga:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar Plano de Carga
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+
+                    {/* Documento de Aterramento */}
+                    <div className="space-y-3 border-t pt-3">
+                      <Label className="text-sm font-medium text-gray-700">Documento de Aterramento</Label>
+                      {documentosAdicionaisEquipamento.aterramento ? (
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm">{documentosAdicionaisEquipamento.aterramento.nome_original}</span>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                
+                                const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.aterramento.caminho)}`, {
+                                  headers: {
+                                    'Authorization': `Bearer ${token}`
+                                  }
+                                })
+                                
+                                if (urlResponse.ok) {
+                                  const urlData = await urlResponse.json()
+                                  if (urlData.success && urlData.data?.url) {
+                                    window.open(urlData.data.url, '_blank')
+                                  }
+                                }
+                              } catch (error) {
+                                console.error('Erro ao baixar Documento de Aterramento:', error)
+                                toast({
+                                  title: "Erro",
+                                  description: "Não foi possível baixar o arquivo",
+                                  variant: "destructive"
+                                })
+                              }
+                            }}
+                          >
+                            <Download className="w-3 h-3 mr-1" />
+                            Baixar Aterramento
+                          </Button>
+                        </div>
+                      ) : (
+                        <span className="text-sm text-gray-400 italic">Não informado</span>
+                      )}
+                    </div>
+                  </>
+                )}
               </CardContent>
             </Card>
 

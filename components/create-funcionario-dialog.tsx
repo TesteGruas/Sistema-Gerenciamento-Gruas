@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { Plus, Loader2, User } from "lucide-react"
+import { Plus, Loader2, User, Sparkles } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
@@ -198,17 +198,34 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       return `${num1}.${num2}.${num3}-${dig}`
     }
     
-    // Gerar telefone aleatório
+    // Gerar telefone aleatório formatado (celular com 9 dígitos)
     const gerarTelefone = () => {
       const ddd = Math.floor(Math.random() * 90) + 10
-      const num1 = Math.floor(Math.random() * 9000) + 1000
-      const num2 = Math.floor(Math.random() * 9000) + 1000
-      return `${ddd}${num1}${num2}`
+      const num1 = Math.floor(Math.random() * 90000) + 10000 // 5 dígitos
+      const num2 = Math.floor(Math.random() * 9000) + 1000   // 4 dígitos
+      return `(${ddd}) 9${num1}-${num2}`
     }
     
+    // Nomes aleatórios para teste
+    const nomes = [
+      "JOÃO SILVA SANTOS",
+      "MARIA OLIVEIRA COSTA",
+      "CARLOS ALMEIDA PEREIRA",
+      "ANA PAULA FERREIRA",
+      "PEDRO HENRIQUE LIMA",
+      "JULIANA SOUZA RODRIGUES",
+      "RICARDO MARTINS BARBOSA",
+      "FERNANDA ALVES GOMES"
+    ]
+    const nomeAleatorio = nomes[Math.floor(Math.random() * nomes.length)]
+    
+    // Emails baseados no nome
+    const emailBase = nomeAleatorio.toLowerCase().replace(/\s+/g, '.')
+    const email = `${emailBase}@empresa.com.br`
+    
     setForm({
-      name: "SAMUEL LINKON GUEDES FIGUEIREDO",
-      email: "samuellinkon@gmail.com",
+      name: nomeAleatorio,
+      email: email,
       phone: gerarTelefone(),
       cpf: gerarCPF(),
       role: cargosAtivos.length > 0 ? cargosAtivos[0].nome : "Operador de Grua",
@@ -216,11 +233,17 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       turno: "Diurno",
       salary: "500000", // R$ 5.000,00 em centavos
       hireDate: dataAdmissao.toISOString().split('T')[0],
-      observations: "Funcionário experiente com 5 anos de experiência em operação de gruas. Certificado NR-11 e NR-12.",
+      observations: "Funcionário experiente com 5 anos de experiência em operação de gruas. Certificado NR-11 e NR-12. Bom relacionamento interpessoal e comprometido com a segurança.",
       criar_usuario: true
     })
     setEhSupervisor(false)
-  }, [cargosAtivos])
+    
+    toast({
+      title: "Dados preenchidos",
+      description: "Todos os campos foram preenchidos com dados de teste.",
+      variant: "default"
+    })
+  }, [cargosAtivos, toast])
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -233,7 +256,17 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex justify-end">
+          <div className="flex justify-between items-center">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={preencherDadosDebug}
+              disabled={submitting}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+            >
+              <Sparkles className="w-4 h-4 mr-2" />
+              Preencher Todos os Dados
+            </Button>
             <DebugButton onClick={preencherDadosDebug} disabled={submitting} />
           </div>
           <div className="grid grid-cols-2 gap-4">

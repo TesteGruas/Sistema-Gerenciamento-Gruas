@@ -105,7 +105,7 @@ const refreshToken = async (): Promise<string | null> => {
 export const refreshAuthToken = refreshToken
 
 // Função utilitária para interceptar requisições fetch com refresh token
-export const fetchWithAuth = async (url: string, options: RequestInit = {}): Promise<Response> => {
+export const fetchWithAuth = async (url: string, options: RequestInit = {}, retryCount = 0): Promise<Response> => {
   const token = localStorage.getItem('access_token')
   
   if (!token) {
@@ -132,6 +132,19 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}): Pro
 
     // Interceptar resposta com auth interceptor
     await authInterceptor.interceptFetchResponse(response, url)
+
+    // Tratar erro 429 (Too Many Requests) com retry com backoff
+    if (response.status === 429 && retryCount < 3) {
+      const retryAfter = response.headers.get('Retry-After')
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.min(1000 * Math.pow(2, retryCount), 15000)
+      
+      console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+      
+      await new Promise(resolve => setTimeout(resolve, waitTime))
+      
+      // Tentar novamente
+      return fetchWithAuth(url, options, retryCount + 1)
+    }
 
     // Verificar se é endpoint de login - não aplicar refresh token
     const isLoginEndpoint = url.includes('/auth/login') || url.includes('/auth/refresh')
@@ -181,6 +194,25 @@ api.interceptors.response.use(
     // Verificar se é endpoint de login - não aplicar refresh token
     const isLoginEndpoint = originalRequest.url?.includes('/auth/login') || 
                            originalRequest.url?.includes('/auth/refresh')
+
+    // Tratar erro 429 (Too Many Requests) com retry com backoff
+    if (error.response?.status === 429 && originalRequest && !originalRequest._retry429) {
+      const retryAfter = error.response.headers['retry-after']
+      const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.min(1000 * Math.pow(2, originalRequest._retry429Count || 0), 15000)
+      
+      if ((originalRequest._retry429Count || 0) < 3) {
+        originalRequest._retry429 = true
+        originalRequest._retry429Count = (originalRequest._retry429Count || 0) + 1
+        
+        console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+        
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+        
+        // Resetar flag e tentar novamente
+        originalRequest._retry429 = false
+        return api(originalRequest)
+      }
+    }
 
     // Verificar se é erro de token inválido/expirado (401 ou 403) e não é login
     const isAuthError = (error.response?.status === 401 || error.response?.status === 403) && 

@@ -27,13 +27,17 @@ import {
   Download,
   Eye,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Edit
 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
 import { gruaObraApi } from "@/lib/api-grua-obra"
 import { usePermissions } from "@/hooks/use-permissions"
+import { DocumentoUpload } from "@/components/documento-upload"
+import { Label } from "@/components/ui/label"
+import { Input } from "@/components/ui/input"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
 import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
@@ -47,18 +51,27 @@ export default function PWAObraDetalhesPage() {
   const params = useParams()
   const router = useRouter()
   const obraId = Number(params.id)
-  const { isSupervisor } = usePermissions()
+  const { isSupervisor, isClient } = usePermissions()
 
   // Estados
   const [obra, setObra] = useState<Obra | null>(null)
   const [gruas, setGruas] = useState<any[]>([])
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [documentos, setDocumentos] = useState<DocumentoObra[]>([])
+  const [documentosAdicionaisEquipamento, setDocumentosAdicionaisEquipamento] = useState<{
+    manual_tecnico?: any
+    termo_entrega_tecnica?: any
+    plano_carga?: any
+    aterramento?: any
+  }>({})
+  const [loadingDocumentosAdicionais, setLoadingDocumentosAdicionais] = useState(false)
+  const documentosAdicionaisCarregadosRef = useRef(false)
   const [livrosGruas, setLivrosGruas] = useState<Record<string, any[]>>({})
   const [loadingLivros, setLoadingLivros] = useState<Record<string, boolean>>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState(true)
+  const carregandoObraRef = useRef(false)
   const [funcionarioModal, setFuncionarioModal] = useState<any>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
@@ -73,6 +86,18 @@ export default function PWAObraDetalhesPage() {
   const [gruaSelecionadaManutencao, setGruaSelecionadaManutencao] = useState<string>("")
   const [isInformacoesObraExpanded, setIsInformacoesObraExpanded] = useState(true)
   const [livroGruaObraData, setLivroGruaObraData] = useState<any>(null)
+  
+  // Estados para edição de documentos obrigatórios
+  const [isEditingCNO, setIsEditingCNO] = useState(false)
+  const [isEditingART, setIsEditingART] = useState(false)
+  const [isEditingApolice, setIsEditingApolice] = useState(false)
+  const [cnoArquivo, setCnoArquivo] = useState<File | null>(null)
+  const [artArquivo, setArtArquivo] = useState<File | null>(null)
+  const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
+  const [cnoNumero, setCnoNumero] = useState<string>('')
+  const [artNumero, setArtNumero] = useState<string>('')
+  const [apoliceNumero, setApoliceNumero] = useState<string>('')
+  const [salvandoDocumentos, setSalvandoDocumentos] = useState(false)
 
   // Verificar status de conexão
   useEffect(() => {
@@ -91,6 +116,14 @@ export default function PWAObraDetalhesPage() {
 
   // Carregar dados da obra
   const carregarObra = async () => {
+    // Evitar múltiplas chamadas simultâneas
+    if (carregandoObraRef.current) {
+      console.warn('⚠️ [PWA Obras] Carregamento já em andamento, ignorando chamada duplicada')
+      return
+    }
+    
+    carregandoObraRef.current = true
+    
     try {
       setLoading(true)
       setError(null)
@@ -148,20 +181,29 @@ export default function PWAObraDetalhesPage() {
         console.error('❌ [PWA Obras] Erro ao buscar gruas da obra:', error)
       }
 
-      // Carregar documentos (apenas para supervisor)
-      if (isSupervisor()) {
-        try {
-          const documentosResponse = await obrasDocumentosApi.listarPorObra(obraId)
-          if (documentosResponse.success) {
-            const docs = Array.isArray(documentosResponse.data) 
-              ? documentosResponse.data 
-              : [documentosResponse.data]
-            setDocumentos(docs)
-          }
-        } catch (err) {
-          console.error('Erro ao carregar documentos:', err)
+      // Carregar documentos da obra (para supervisor e cliente)
+      try {
+        const documentosResponse = await obrasDocumentosApi.listarPorObra(obraId)
+        console.log('🔍 [PWA Obras] Documentos carregados:', documentosResponse)
+        if (documentosResponse.success) {
+          const docs = Array.isArray(documentosResponse.data) 
+            ? documentosResponse.data 
+            : documentosResponse.data 
+              ? [documentosResponse.data]
+              : []
+          console.log('🔍 [PWA Obras] Documentos processados:', docs)
+          setDocumentos(docs)
+        } else {
+          console.warn('⚠️ [PWA Obras] Resposta de documentos não foi bem-sucedida:', documentosResponse)
+          setDocumentos([])
         }
+      } catch (err) {
+        console.error('❌ [PWA Obras] Erro ao carregar documentos:', err)
+        setDocumentos([])
       }
+
+      // Carregar documentos adicionais do equipamento
+      await carregarDocumentosAdicionaisEquipamento()
 
     } catch (err) {
       console.error('Erro ao carregar obra:', err)
@@ -175,6 +217,7 @@ export default function PWAObraDetalhesPage() {
       }
     } finally {
       setLoading(false)
+      carregandoObraRef.current = false
     }
   }
 
@@ -198,6 +241,69 @@ export default function PWAObraDetalhesPage() {
       console.error(`Erro ao carregar livro da grua ${gruaId}:`, err)
     } finally {
       setLoadingLivros(prev => ({ ...prev, [gruaId]: false }))
+    }
+  }
+
+  // Função para carregar documentos adicionais do equipamento
+  const carregarDocumentosAdicionaisEquipamento = async () => {
+    if (!obraId || documentosAdicionaisCarregadosRef.current) {
+      return
+    }
+    
+    documentosAdicionaisCarregadosRef.current = true
+    setLoadingDocumentosAdicionais(true)
+    
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      if (!token) {
+        console.warn('Token não encontrado para carregar documentos adicionais')
+        return
+      }
+      
+      const categorias = ['manual_tecnico', 'termo_entrega_tecnica', 'plano_carga', 'aterramento']
+      const documentos: any = {}
+      
+      // Processar categorias sequencialmente com delay para evitar rate limiting
+      for (const categoria of categorias) {
+        try {
+          const url = `${apiUrl}/api/arquivos/obra/${obraId}?categoria=${categoria}`
+          const response = await fetch(url, {
+            headers: {
+              'Authorization': `Bearer ${token}`
+            }
+          })
+          
+          // Tratar erro 429
+          if (response.status === 429) {
+            console.warn(`Rate limit atingido para ${categoria}, aguardando...`)
+            await new Promise(resolve => setTimeout(resolve, 2000)) // Aguardar 2 segundos
+            continue // Pular esta categoria por enquanto
+          }
+          
+          if (response.ok) {
+            const data = await response.json()
+            if (data.success && data.data && data.data.length > 0) {
+              documentos[categoria] = data.data[0]
+            }
+          }
+          
+          // Pequeno delay entre requisições para evitar rate limiting
+          await new Promise(resolve => setTimeout(resolve, 200))
+        } catch (error: any) {
+          // Ignorar erros 429 silenciosamente
+          if (!error.message?.includes('429') && !error.message?.includes('Muitas tentativas')) {
+            console.error(`Erro ao carregar ${categoria}:`, error)
+          }
+        }
+      }
+      
+      setDocumentosAdicionaisEquipamento(documentos)
+    } catch (error) {
+      console.error('Erro ao carregar documentos adicionais:', error)
+    } finally {
+      setLoadingDocumentosAdicionais(false)
     }
   }
 
@@ -391,12 +497,179 @@ export default function PWAObraDetalhesPage() {
     carregarObra()
   }
 
+  // Função para salvar documentos obrigatórios
+  const handleSalvarDocumentos = async () => {
+    if (!obra) return
+
+    setSalvandoDocumentos(true)
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      
+      let cnoArquivoUrl = obra.cno_arquivo || ''
+      let artArquivoUrl = obra.art_arquivo || ''
+      let apoliceArquivoUrl = obra.apolice_arquivo || ''
+
+      // Fazer upload dos arquivos se houver novos
+      if (cnoArquivo) {
+        try {
+          const formDataCno = new FormData()
+          formDataCno.append('arquivo', cnoArquivo)
+          formDataCno.append('categoria', 'cno')
+          
+          const uploadCnoResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataCno
+          })
+          
+          if (uploadCnoResponse.ok) {
+            const uploadCnoResult = await uploadCnoResponse.json()
+            cnoArquivoUrl = uploadCnoResult.data?.caminho || uploadCnoResult.data?.arquivo || ''
+          }
+        } catch (error) {
+          console.error('Erro ao fazer upload do CNO:', error)
+        }
+      }
+
+      if (artArquivo) {
+        try {
+          const formDataArt = new FormData()
+          formDataArt.append('arquivo', artArquivo)
+          formDataArt.append('categoria', 'art')
+          
+          const uploadArtResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataArt
+          })
+          
+          if (uploadArtResponse.ok) {
+            const uploadArtResult = await uploadArtResponse.json()
+            artArquivoUrl = uploadArtResult.data?.caminho || uploadArtResult.data?.arquivo || ''
+          }
+        } catch (error) {
+          console.error('Erro ao fazer upload da ART:', error)
+        }
+      }
+
+      if (apoliceArquivo) {
+        try {
+          const formDataApolice = new FormData()
+          formDataApolice.append('arquivo', apoliceArquivo)
+          formDataApolice.append('categoria', 'apolice')
+          
+          const uploadApoliceResponse = await fetch(`${apiUrl}/api/arquivos/upload/${obra.id}`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`
+            },
+            body: formDataApolice
+          })
+          
+          if (uploadApoliceResponse.ok) {
+            const uploadApoliceResult = await uploadApoliceResponse.json()
+            apoliceArquivoUrl = uploadApoliceResult.data?.caminho || uploadApoliceResult.data?.arquivo || ''
+          }
+        } catch (error) {
+          console.error('Erro ao fazer upload da Apólice:', error)
+        }
+      }
+
+      // Atualizar obra com os novos dados
+      const updateData: any = {}
+      
+      if (cnoNumero || cnoArquivoUrl) {
+        updateData.cno = cnoNumero || obra.cno || ''
+        if (cnoArquivoUrl) updateData.cno_arquivo = cnoArquivoUrl
+      }
+      
+      if (artNumero || artArquivoUrl) {
+        updateData.art_numero = artNumero || obra.art_numero || ''
+        if (artArquivoUrl) updateData.art_arquivo = artArquivoUrl
+      }
+      
+      if (apoliceNumero || apoliceArquivoUrl) {
+        updateData.apolice_numero = apoliceNumero || obra.apolice_numero || ''
+        if (apoliceArquivoUrl) updateData.apolice_arquivo = apoliceArquivoUrl
+      }
+
+      if (Object.keys(updateData).length > 0) {
+        const response = await obrasApi.atualizarObra(obra.id, updateData)
+        
+        if (response.success) {
+          toast({
+            title: "Sucesso",
+            description: "Documentos atualizados com sucesso.",
+          })
+          
+          // Resetar estados de edição
+          setIsEditingCNO(false)
+          setIsEditingART(false)
+          setIsEditingApolice(false)
+          setCnoArquivo(null)
+          setArtArquivo(null)
+          setApoliceArquivo(null)
+          setCnoNumero('')
+          setArtNumero('')
+          setApoliceNumero('')
+          
+          // Recarregar obra
+          await carregarObra()
+        } else {
+          throw new Error('Erro ao atualizar documentos')
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao salvar documentos:', error)
+      toast({
+        title: "Erro",
+        description: "Não foi possível salvar os documentos",
+        variant: "destructive"
+      })
+    } finally {
+      setSalvandoDocumentos(false)
+    }
+  }
+
   // Carregar dados na inicialização
   useEffect(() => {
-    if (obraId) {
-      carregarObra()
+    if (!obraId) return
+    
+    // Evitar múltiplas chamadas simultâneas
+    let cancelled = false
+    
+    const loadData = async () => {
+      documentosAdicionaisCarregadosRef.current = false // Resetar ref quando obraId mudar
+      
+      try {
+        await carregarObra()
+      } catch (error) {
+        if (!cancelled) {
+          console.error('Erro ao carregar obra:', error)
+        }
+      }
     }
-  }, [obraId, isOnline])
+    
+    loadData()
+    
+    return () => {
+      cancelled = true
+    }
+  }, [obraId]) // Remover isOnline das dependências para evitar recarregamentos desnecessários
+
+  // Inicializar valores dos campos quando a obra for carregada
+  useEffect(() => {
+    if (obra && !isEditingCNO && !isEditingART && !isEditingApolice) {
+      setCnoNumero(obra.cno || '')
+      setArtNumero(obra.art_numero || '')
+      setApoliceNumero(obra.apolice_numero || '')
+    }
+  }, [obra])
 
   // Loading
   if (loading) {
@@ -544,6 +817,659 @@ export default function PWAObraDetalhesPage() {
             Você está offline. Os dados serão sincronizados quando a conexão for restabelecida.
           </AlertDescription>
         </Alert>
+      )}
+
+      {/* Documentos Obrigatórios da Obra */}
+      {obra && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                Documentos Obrigatórios da Obra
+              </CardTitle>
+              {isClient() && (
+                <div className="flex gap-2">
+                  {(isEditingCNO || isEditingART || isEditingApolice) ? (
+                    <>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setIsEditingCNO(false)
+                          setIsEditingART(false)
+                          setIsEditingApolice(false)
+                          setCnoArquivo(null)
+                          setArtArquivo(null)
+                          setApoliceArquivo(null)
+                          setCnoNumero(obra.cno || '')
+                          setArtNumero(obra.art_numero || '')
+                          setApoliceNumero(obra.apolice_numero || '')
+                        }}
+                        disabled={salvandoDocumentos}
+                      >
+                        Cancelar
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={handleSalvarDocumentos}
+                        disabled={salvandoDocumentos || !isOnline}
+                      >
+                        {salvandoDocumentos ? 'Salvando...' : 'Salvar'}
+                      </Button>
+                    </>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setIsEditingCNO(true)
+                        setIsEditingART(true)
+                        setIsEditingApolice(true)
+                        setCnoNumero(obra.cno || '')
+                        setArtNumero(obra.art_numero || '')
+                        setApoliceNumero(obra.apolice_numero || '')
+                      }}
+                      disabled={!isOnline}
+                    >
+                      <Edit className="w-3 h-3 mr-1" />
+                      Editar Documentos
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* CNO */}
+            <div className="space-y-1 border-b pb-3">
+              <p className="text-xs text-gray-600 mb-1">CNO (Cadastro Nacional de Obras)</p>
+              {isClient() && isEditingCNO ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm">Número do CNO</Label>
+                    <Input
+                      value={cnoNumero}
+                      onChange={(e) => setCnoNumero(e.target.value)}
+                      placeholder="Digite o número do CNO"
+                      className="mt-1"
+                    />
+                  </div>
+                  <DocumentoUpload
+                    label="Upload do Documento CNO (PDF)"
+                    accept="application/pdf"
+                    maxSize={10 * 1024 * 1024}
+                    onUpload={(file) => setCnoArquivo(file)}
+                    onRemove={() => setCnoArquivo(null)}
+                    currentFile={cnoArquivo}
+                    fileUrl={obra.cno_arquivo || null}
+                    disabled={!isOnline}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{obra.cno || <span className="text-gray-400 italic">Não informado</span>}</span>
+                  {obra.cno_arquivo && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                          
+                          const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.cno_arquivo || '')}`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          })
+                          
+                          if (urlResponse.ok) {
+                            const urlData = await urlResponse.json()
+                            if (urlData.success && urlData.data?.url) {
+                              window.open(urlData.data.url, '_blank')
+                            } else {
+                              throw new Error('URL não retornada')
+                            }
+                          } else {
+                            throw new Error('Erro ao gerar URL')
+                          }
+                        } catch (error) {
+                          console.error('Erro ao baixar CNO:', error)
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível baixar o arquivo do CNO",
+                            variant: "destructive"
+                          })
+                        }
+                      }}
+                      disabled={!isOnline}
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Baixar CNO
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ART */}
+            <div className="space-y-1 border-b pb-3">
+              <p className="text-xs text-gray-600 mb-1">ART (Anotação de Responsabilidade Técnica)</p>
+              {isClient() && isEditingART ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm">Número da ART</Label>
+                    <Input
+                      value={artNumero}
+                      onChange={(e) => setArtNumero(e.target.value)}
+                      placeholder="Digite o número da ART"
+                      className="mt-1"
+                    />
+                  </div>
+                  <DocumentoUpload
+                    label="Upload do Documento ART (PDF)"
+                    accept="application/pdf"
+                    maxSize={10 * 1024 * 1024}
+                    onUpload={(file) => setArtArquivo(file)}
+                    onRemove={() => setArtArquivo(null)}
+                    currentFile={artArquivo}
+                    fileUrl={obra.art_arquivo || null}
+                    disabled={!isOnline}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{obra.art_numero || <span className="text-gray-400 italic">Não informado</span>}</span>
+                  {obra.art_arquivo && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                          
+                          const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.art_arquivo || '')}`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          })
+                          
+                          if (urlResponse.ok) {
+                            const urlData = await urlResponse.json()
+                            if (urlData.success && urlData.data?.url) {
+                              window.open(urlData.data.url, '_blank')
+                            } else {
+                              throw new Error('URL não retornada')
+                            }
+                          } else {
+                            throw new Error('Erro ao gerar URL')
+                          }
+                        } catch (error) {
+                          console.error('Erro ao baixar ART:', error)
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível baixar o arquivo da ART",
+                            variant: "destructive"
+                          })
+                        }
+                      }}
+                      disabled={!isOnline}
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Baixar ART
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Apólice */}
+            <div className="space-y-1">
+              <p className="text-xs text-gray-600 mb-1">Apólice de Seguro</p>
+              {isClient() && isEditingApolice ? (
+                <div className="space-y-3">
+                  <div>
+                    <Label className="text-sm">Número da Apólice</Label>
+                    <Input
+                      value={apoliceNumero}
+                      onChange={(e) => setApoliceNumero(e.target.value)}
+                      placeholder="Digite o número da Apólice"
+                      className="mt-1"
+                    />
+                  </div>
+                  <DocumentoUpload
+                    label="Upload da Apólice de Seguro (PDF)"
+                    accept="application/pdf"
+                    maxSize={10 * 1024 * 1024}
+                    onUpload={(file) => setApoliceArquivo(file)}
+                    onRemove={() => setApoliceArquivo(null)}
+                    currentFile={apoliceArquivo}
+                    fileUrl={obra.apolice_arquivo || null}
+                    disabled={!isOnline}
+                  />
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium">{obra.apolice_numero || <span className="text-gray-400 italic">Não informado</span>}</span>
+                  {obra.apolice_arquivo && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                          
+                          const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.apolice_arquivo || '')}`, {
+                            headers: {
+                              'Authorization': `Bearer ${token}`
+                            }
+                          })
+                          
+                          if (urlResponse.ok) {
+                            const urlData = await urlResponse.json()
+                            if (urlData.success && urlData.data?.url) {
+                              window.open(urlData.data.url, '_blank')
+                            } else {
+                              throw new Error('URL não retornada')
+                            }
+                          } else {
+                            throw new Error('Erro ao gerar URL')
+                          }
+                        } catch (error) {
+                          console.error('Erro ao baixar Apólice:', error)
+                          toast({
+                            title: "Erro",
+                            description: "Não foi possível baixar o arquivo da Apólice",
+                            variant: "destructive"
+                          })
+                        }
+                      }}
+                      disabled={!isOnline}
+                    >
+                      <Download className="w-3 h-3 mr-1" />
+                      Baixar Apólice
+                    </Button>
+                  )}
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Documentos Adicionais do Equipamento */}
+      {obra && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              Documentos Adicionais do Equipamento
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Documentos técnicos e de entrega do equipamento
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {loadingDocumentosAdicionais ? (
+              <div className="flex items-center justify-center py-4">
+                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                <span className="ml-2 text-sm text-gray-500">Carregando documentos...</span>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {/* Manual Técnico */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-gray-700">Manual Técnico do Equipamento</label>
+                  {documentosAdicionaisEquipamento.manual_tecnico ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{documentosAdicionaisEquipamento.manual_tecnico.nome_original}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.manual_tecnico.caminho)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar Manual Técnico:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                        disabled={!isOnline}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar Manual Técnico
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Não informado</span>
+                  )}
+                </div>
+
+                {/* Termo de Entrega Técnica */}
+                <div className="space-y-3 border-t pt-3">
+                  <label className="text-sm font-medium text-gray-700">Termo de Entrega Técnica</label>
+                  {documentosAdicionaisEquipamento.termo_entrega_tecnica ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{documentosAdicionaisEquipamento.termo_entrega_tecnica.nome_original}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.termo_entrega_tecnica.caminho)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar Termo de Entrega:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                        disabled={!isOnline}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar Termo de Entrega
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Não informado</span>
+                  )}
+                </div>
+
+                {/* Plano de Carga */}
+                <div className="space-y-3 border-t pt-3">
+                  <label className="text-sm font-medium text-gray-700">Plano de Carga</label>
+                  {documentosAdicionaisEquipamento.plano_carga ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{documentosAdicionaisEquipamento.plano_carga.nome_original}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.plano_carga.caminho)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar Plano de Carga:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                        disabled={!isOnline}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar Plano de Carga
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Não informado</span>
+                  )}
+                </div>
+
+                {/* Documento de Aterramento */}
+                <div className="space-y-3 border-t pt-3">
+                  <label className="text-sm font-medium text-gray-700">Documento de Aterramento</label>
+                  {documentosAdicionaisEquipamento.aterramento ? (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm">{documentosAdicionaisEquipamento.aterramento.nome_original}</span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                          try {
+                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                            
+                            const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.aterramento.caminho)}`, {
+                              headers: {
+                                'Authorization': `Bearer ${token}`
+                              }
+                            })
+                            
+                            if (urlResponse.ok) {
+                              const urlData = await urlResponse.json()
+                              if (urlData.success && urlData.data?.url) {
+                                window.open(urlData.data.url, '_blank')
+                              }
+                            }
+                          } catch (error) {
+                            console.error('Erro ao baixar Documento de Aterramento:', error)
+                            toast({
+                              title: "Erro",
+                              description: "Não foi possível baixar o arquivo",
+                              variant: "destructive"
+                            })
+                          }
+                        }}
+                        disabled={!isOnline}
+                      >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar Aterramento
+                      </Button>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400 italic">Não informado</span>
+                  )}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Documentos da Obra - Documentos Adicionais */}
+      {obra && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm flex items-center gap-2">
+              <FileText className="w-4 h-4 text-blue-600" />
+              Documentos Adicionais da Obra
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Documentos adicionais relacionados à obra (contratos, anexos, etc.)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {documentos.length === 0 ? (
+              <div className="text-center py-8">
+                <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-sm text-gray-500">Nenhum documento adicional encontrado</p>
+                <p className="text-xs text-gray-400 mt-1">Os documentos adicionais aparecerão aqui quando forem adicionados à obra</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {documentos.map((documento) => (
+                  <div
+                    key={documento.id}
+                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-sm text-gray-900 mb-1">
+                          {documento.titulo || `Documento ${documento.id}`}
+                        </h4>
+                        {documento.descricao && (
+                          <p className="text-xs text-gray-600 mb-2">{documento.descricao}</p>
+                        )}
+                        <div className="flex items-center gap-4 text-xs text-gray-500">
+                          <span className="flex items-center gap-1">
+                            <Clock className="w-3 h-3" />
+                            {new Date(documento.created_at).toLocaleDateString('pt-BR')}
+                          </span>
+                          <Badge
+                            variant={
+                              documento.status === 'assinado'
+                                ? 'default'
+                                : documento.status === 'aguardando_assinatura'
+                                ? 'secondary'
+                                : 'outline'
+                            }
+                            className="text-xs"
+                          >
+                            {documento.status === 'assinado'
+                              ? 'Assinado'
+                              : documento.status === 'aguardando_assinatura'
+                              ? 'Aguardando'
+                              : documento.status === 'em_assinatura'
+                              ? 'Em Assinatura'
+                              : documento.status === 'rejeitado'
+                              ? 'Rejeitado'
+                              : 'Rascunho'}
+                          </Badge>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 ml-4">
+                        {documento.caminho_arquivo && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                  
+                                  const urlResponse = await fetch(
+                                    `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
+                                    {
+                                      headers: {
+                                        'Authorization': `Bearer ${token}`
+                                      }
+                                    }
+                                  )
+                                  
+                                  if (urlResponse.ok) {
+                                    const urlData = await urlResponse.json()
+                                    if (urlData.success && urlData.data?.url) {
+                                      window.open(urlData.data.url, '_blank')
+                                    } else {
+                                      throw new Error('URL não retornada')
+                                    }
+                                  } else {
+                                    throw new Error('Erro ao gerar URL')
+                                  }
+                                } catch (error) {
+                                  console.error('Erro ao visualizar documento:', error)
+                                  toast({
+                                    title: "Erro",
+                                    description: "Não foi possível visualizar o documento",
+                                    variant: "destructive"
+                                  })
+                                }
+                              }}
+                              disabled={!isOnline}
+                            >
+                              <Eye className="w-3 h-3 mr-1" />
+                              Visualizar
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                                  
+                                  const urlResponse = await fetch(
+                                    `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
+                                    {
+                                      headers: {
+                                        'Authorization': `Bearer ${token}`
+                                      }
+                                    }
+                                  )
+                                  
+                                  if (urlResponse.ok) {
+                                    const urlData = await urlResponse.json()
+                                    if (urlData.success && urlData.data?.url) {
+                                      const link = document.createElement('a')
+                                      link.href = urlData.data.url
+                                      link.download = documento.arquivo_original || `documento_${documento.id}.pdf`
+                                      document.body.appendChild(link)
+                                      link.click()
+                                      document.body.removeChild(link)
+                                    } else {
+                                      throw new Error('URL não retornada')
+                                    }
+                                  } else {
+                                    throw new Error('Erro ao gerar URL')
+                                  }
+                                } catch (error) {
+                                  console.error('Erro ao baixar documento:', error)
+                                  toast({
+                                    title: "Erro",
+                                    description: "Não foi possível baixar o documento",
+                                    variant: "destructive"
+                                  })
+                                }
+                              }}
+                              disabled={!isOnline}
+                            >
+                              <Download className="w-3 h-3 mr-1" />
+                              Baixar
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {/* Tabs para Livro Gruas, Checklist, Manutenções, Funcionários e Documentos */}

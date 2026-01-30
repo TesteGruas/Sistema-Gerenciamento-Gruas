@@ -57,17 +57,46 @@ const getAuthToken = (): string | null => {
   return null
 }
 
-// Função para fazer requisições autenticadas
-const apiRequest = async (url: string, options: RequestInit = {}) => {
+// Cache simples para evitar requisições repetidas
+const requestCache = new Map<string, { data: any; timestamp: number }>()
+const CACHE_TTL = 5000 // 5 segundos
+
+// Função para fazer requisições autenticadas com tratamento de erro 429
+const apiRequest = async (url: string, options: RequestInit = {}, useCache = true) => {
   try {
+    // Verificar cache para GET requests
+    if (useCache && (!options.method || options.method === 'GET')) {
+      const cacheKey = `${url}-${JSON.stringify(options)}`
+      const cached = requestCache.get(cacheKey)
+      if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+        return cached.data
+      }
+    }
+
     const response = await fetchWithAuth(url, options);
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `Erro ${response.status}: ${response.statusText}`);
+      
+      // Tratar erro 429 especificamente
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After')
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : 15000
+        throw new Error(`Muitas tentativas. Tente novamente em ${Math.ceil(waitTime / 1000 / 60)} minutos.`)
+      }
+      
+      throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`);
     }
     
-    return await response.json();
+    const data = await response.json();
+    
+    // Armazenar no cache para GET requests
+    if (useCache && (!options.method || options.method === 'GET')) {
+      const cacheKey = `${url}-${JSON.stringify(options)}`
+      requestCache.set(cacheKey, { data, timestamp: Date.now() })
+    }
+    
+    return data;
   } catch (error) {
     console.error('API request error:', error);
     throw error;

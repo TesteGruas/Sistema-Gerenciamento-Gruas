@@ -175,34 +175,12 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
       registroPonto = registroExistente;
       console.log('[whatsapp-test] Usando registro de ponto existente:', registroPonto.id);
     } else {
-      // Criar novo registro
-      const registroId = gerarIdRegistro('TEST');
-      const { data: novoRegistro, error: registroError } = await supabaseAdmin
-        .from('registros_ponto')
-        .insert({
-          id: registroId,
-          funcionario_id: funcionarioId,
-          data: hoje,
-          entrada: '08:00',
-          saida: '19:00',
-          horas_trabalhadas: 11,
-          horas_extras: 3,
-          status: 'Pendente Aprovação',
-          observacoes: 'Registro de teste criado automaticamente para validação do sistema WhatsApp'
-        })
-        .select()
-        .single();
-
-      if (registroError) {
-        console.error('[whatsapp-test] Erro ao criar registro de ponto:', registroError);
-        return res.status(500).json({
-          success: false,
-          message: `Erro ao criar registro de ponto de teste: ${registroError.message || registroError.details || 'Erro desconhecido'}`,
-          error: registroError
-        });
-      }
-
-      registroPonto = novoRegistro;
+      // Não criar mais registros de teste automaticamente
+      // O registro deve ser criado manualmente ou através do sistema de ponto eletrônico
+      return res.status(400).json({
+        success: false,
+        message: 'Não é possível criar registro de teste automaticamente. Crie o registro de ponto manualmente primeiro.'
+      });
     }
 
     // Criar aprovação de teste

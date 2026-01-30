@@ -439,10 +439,41 @@ router.get('/', authenticateToken, async (req, res) => {
     console.log(`[FUNCIONARIOS] - Funcionários da tabela funcionarios: ${funcionariosData?.length || 0}`)
     console.log(`[FUNCIONARIOS] - Usuários sem funcionario_id: ${usuariosSemFuncionario.length}`)
 
+    // Buscar registros de ponto eletrônico para verificar quais funcionários têm registros
+    const funcionarioIds = todosFuncionarios.map(f => f.id).filter(id => id != null)
+    let funcionariosComRegistrosPonto = new Set() // Set de funcionario_ids que têm registros de ponto
+    
+    if (funcionarioIds.length > 0) {
+      try {
+        const { data: registrosPonto, error: pontoError } = await supabaseAdmin
+          .from('registros_ponto')
+          .select('funcionario_id')
+          .in('funcionario_id', funcionarioIds)
+        
+        if (!pontoError && registrosPonto) {
+          // Criar Set de funcionários que têm pelo menos um registro de ponto
+          registrosPonto.forEach(registro => {
+            funcionariosComRegistrosPonto.add(registro.funcionario_id)
+          })
+        }
+      } catch (error) {
+        console.error('[FUNCIONARIOS] Erro ao buscar registros de ponto:', error)
+      }
+    }
+
     // Adicionar informações sobre usuário existente e obra atual para cada funcionário
     const funcionariosComUsuario = todosFuncionarios.map(funcionario => {
       const alocacoesAtivas = funcionario.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
-      const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
+      
+      // obra_atual só aparece se o funcionário tiver pelo menos um registro de ponto eletrônico
+      // e tiver uma alocação ativa
+      const temRegistrosPonto = funcionariosComRegistrosPonto.has(funcionario.id)
+      const obraAtual = (temRegistrosPonto && alocacoesAtivas.length > 0) 
+        ? alocacoesAtivas[0].obras 
+        : null
+      
+      // obras_vinculadas só inclui obras se houver registros de ponto
+      const obrasVinculadas = temRegistrosPonto ? alocacoesAtivas : []
       
       // Popular campo cargo com o nome do cargo do cargo_info
       if (funcionario.cargo_info && !funcionario.cargo) {
@@ -454,7 +485,7 @@ router.get('/', authenticateToken, async (req, res) => {
         usuario_existe: funcionario.usuario_existe ?? !!funcionario.usuario,
         usuario_criado: funcionario.usuario_criado ?? !!funcionario.usuario,
         obra_atual: obraAtual,
-        obras_vinculadas: alocacoesAtivas
+        obras_vinculadas: obrasVinculadas // Apenas se houver registros de ponto
       }
     })
 
@@ -605,15 +636,127 @@ router.get('/buscar', async (req, res) => {
  * Listar documentos de obras onde o funcionário é assinante
  * IMPORTANTE: Esta rota deve vir ANTES de /:id para evitar conflito
  */
-router.get('/:id/documentos', async (req, res) => {
+router.get('/:id/documentos', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const funcionarioId = parseInt(id);
+    const user = req.user;
+    const userRole = user?.role?.toLowerCase() || '';
+    const isCliente = userRole.includes('cliente') || user?.level === 1;
+    
+    // Se for cliente, buscar documentos das obras desse cliente
+    if (isCliente) {
+      // Buscar cliente vinculado ao usuário
+      const { data: cliente, error: clienteError } = await supabaseAdmin
+        .from('clientes')
+        .select('id, nome')
+        .eq('contato_usuario_id', user.id)
+        .single();
 
-    if (isNaN(funcionarioId)) {
+      if (clienteError || !cliente) {
+        return res.status(404).json({
+          success: false,
+          message: 'Cliente não encontrado para este usuário'
+        });
+      }
+
+      // Buscar obras do cliente
+      const { data: obras, error: obrasError } = await supabaseAdmin
+        .from('obras')
+        .select('id, nome')
+        .eq('cliente_id', cliente.id);
+
+      if (obrasError) {
+        console.error('Erro ao buscar obras do cliente:', obrasError);
+        throw obrasError;
+      }
+
+      const obraIds = obras?.map(o => o.id) || [];
+
+      if (obraIds.length === 0) {
+        return res.json({
+          success: true,
+          data: [],
+          cliente: cliente.nome,
+          total: 0
+        });
+      }
+
+      // Buscar documentos das obras do cliente
+      const { data: documentos, error: documentosError } = await supabaseAdmin
+        .from('obras_documentos')
+        .select('id, titulo, descricao, arquivo_original, caminho_arquivo, tipo, status, obra_id, created_at, updated_at')
+        .in('obra_id', obraIds)
+        .order('created_at', { ascending: false });
+
+      if (documentosError) {
+        console.error('Erro ao buscar documentos das obras:', documentosError);
+        throw documentosError;
+      }
+
+      // Buscar assinaturas dos documentos onde o cliente é assinante
+      const documentoIds = documentos?.map(doc => doc.id) || [];
+      let assinaturas = [];
+
+      if (documentoIds.length > 0) {
+        // Buscar assinaturas do cliente (pode ser UUID do auth ou ID numérico)
+        const userIdString = user.id?.toString() || '';
+        
+        // Buscar assinaturas com o UUID do usuário
+        const { data: assinaturasData, error: assinaturasError } = await supabaseAdmin
+          .from('obras_documento_assinaturas')
+          .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
+          .in('documento_id', documentoIds)
+          .eq('user_id', userIdString)
+          .order('created_at', { ascending: false });
+
+        if (!assinaturasError && assinaturasData) {
+          assinaturas = assinaturasData;
+        }
+      }
+
+      // Criar mapa de obras para acesso rápido
+      const obrasMap = new Map((obras || []).map(obra => [obra.id, obra.nome]));
+
+      // Combinar documentos com suas assinaturas
+      const documentosComAssinaturas = (documentos || []).map(doc => {
+        const assinaturaDoCliente = assinaturas.find(a => a.documento_id === doc.id);
+        
+        return {
+          ...doc,
+          assinatura: assinaturaDoCliente || null,
+          obra_nome: obrasMap.get(doc.obra_id) || null
+        };
+      });
+
+      return res.json({
+        success: true,
+        data: documentosComAssinaturas,
+        cliente: cliente.nome,
+        total: documentosComAssinaturas.length
+      });
+    }
+
+    // Se não for cliente, tratar como funcionário
+    // Verificar se o ID é um UUID formatado (ex: "00000000-0000-0000-0000-000000000144")
+    // Se for UUID, extrair o número do final
+    let funcionarioId;
+    const uuidPattern = /^00000000-0000-0000-0000-(\d+)$/;
+    const uuidMatch = id.match(uuidPattern);
+    
+    if (uuidMatch) {
+      // Extrair o número do UUID formatado
+      funcionarioId = parseInt(uuidMatch[1], 10);
+    } else {
+      // Tentar converter diretamente para número
+      funcionarioId = parseInt(id, 10);
+    }
+    
+    // Validar se o ID é um número válido
+    if (isNaN(funcionarioId) || funcionarioId <= 0) {
       return res.status(400).json({
         success: false,
-        message: 'ID do funcionário inválido'
+        message: 'ID do funcionário inválido',
+        error: 'O ID deve ser um número inteiro positivo ou UUID formatado'
       });
     }
 
@@ -702,7 +845,7 @@ router.get('/:id/documentos', async (req, res) => {
     }
 
     // Buscar os documentos relacionados
-    const documentoIds = assinaturas.map(a => a.documento_id);
+    const documentoIds = assinaturas.map(a => a.documento_id).filter(id => id != null);
     
     if (documentoIds.length === 0) {
       return res.json({
@@ -714,9 +857,10 @@ router.get('/:id/documentos', async (req, res) => {
     }
     
     // Buscar documentos sem join para evitar problemas de tipo
+    // Garantir que documentoIds são UUIDs válidos (não inteiros)
     const { data: documentos, error: documentosError } = await supabaseAdmin
       .from('obras_documentos')
-      .select('*')
+      .select('id, titulo, descricao, arquivo_original, caminho_arquivo, tipo, status, obra_id, created_at, updated_at')
       .in('id', documentoIds)
       .order('created_at', { ascending: false });
 
@@ -726,11 +870,55 @@ router.get('/:id/documentos', async (req, res) => {
     }
 
     // Buscar informações das obras separadamente
-    const obraIds = [...new Set(documentos.map(doc => doc.obra_id))];
+    // Filtrar apenas IDs válidos (números inteiros)
+    const obraIds = [...new Set(documentos.map(doc => doc.obra_id).filter(id => {
+      if (!id) return false;
+      // Tentar converter para número
+      const parsed = parseInt(id, 10);
+      return !isNaN(parsed) && parsed > 0;
+    }))];
+    
+    if (obraIds.length === 0) {
+      return res.json({
+        success: true,
+        data: documentos.map(doc => ({
+          ...doc,
+          assinatura: assinaturas.find(a => a.documento_id === doc.id) || null,
+          obra_nome: null
+        })),
+        funcionario: funcionario.nome,
+        total: documentos.length
+      });
+    }
+    
+    // Garantir que todos os IDs de obras são inteiros válidos
+    const obraIdsInteiros = obraIds
+      .map(id => {
+        // Se já é número, usar diretamente
+        if (typeof id === 'number') return id;
+        // Tentar converter string para número
+        const parsed = parseInt(String(id), 10);
+        return isNaN(parsed) ? null : parsed;
+      })
+      .filter(id => id != null && id > 0);
+    
+    if (obraIdsInteiros.length === 0) {
+      return res.json({
+        success: true,
+        data: documentos.map(doc => ({
+          ...doc,
+          assinatura: assinaturas.find(a => a.documento_id === doc.id) || null,
+          obra_nome: null
+        })),
+        funcionario: funcionario.nome,
+        total: documentos.length
+      });
+    }
+    
     const { data: obras, error: obrasError } = await supabaseAdmin
       .from('obras')
       .select('id, nome')
-      .in('id', obraIds);
+      .in('id', obraIdsInteiros);
 
     if (obrasError) {
       console.error('Erro ao buscar obras:', obrasError);
@@ -806,6 +994,16 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
+    // Validar se o ID é um número válido
+    const funcionarioId = parseInt(id, 10)
+    if (isNaN(funcionarioId) || funcionarioId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID inválido',
+        message: 'O ID do funcionário deve ser um número inteiro positivo'
+      })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('funcionarios')
       .select(`
@@ -845,7 +1043,7 @@ router.get('/:id', async (req, res) => {
           )
         )
       `)
-      .eq('id', id)
+      .eq('id', funcionarioId)
       .maybeSingle()
 
     if (error) {
@@ -864,7 +1062,20 @@ router.get('/:id', async (req, res) => {
 
     // Filtrar apenas alocações ativas
     const alocacoesAtivas = data.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
-    const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
+    
+    // Verificar se o funcionário tem registros de ponto eletrônico
+    const { data: registrosPonto, error: pontoError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id')
+      .eq('funcionario_id', funcionarioId)
+      .limit(1)
+    
+    const temRegistrosPonto = !pontoError && registrosPonto && registrosPonto.length > 0
+    
+    // obra_atual só aparece se houver pelo menos um registro de ponto eletrônico
+    const obraAtual = (temRegistrosPonto && alocacoesAtivas.length > 0) 
+      ? alocacoesAtivas[0].obras 
+      : null
 
     // Adicionar todas as obras (incluindo finalizadas) para histórico completo
     const todasObras = data.funcionarios_obras || []
@@ -880,7 +1091,7 @@ router.get('/:id', async (req, res) => {
       usuario_existe: !!data.usuario,
       usuario_criado: !!data.usuario,
       obra_atual: obraAtual,
-      obras_vinculadas: alocacoesAtivas,
+      obras_vinculadas: temRegistrosPonto ? alocacoesAtivas : [], // Apenas se houver registros de ponto
       historico_obras: todasObras // Todas as obras, incluindo finalizadas
     }
 
@@ -1339,6 +1550,16 @@ router.put('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
+    // Validar se o ID é um número válido
+    const funcionarioId = parseInt(id, 10)
+    if (isNaN(funcionarioId) || funcionarioId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID inválido',
+        message: 'O ID do funcionário deve ser um número inteiro positivo'
+      })
+    }
+
     // Validar dados
     const { error, value } = funcionarioUpdateSchema.validate(req.body, {
       abortEarly: false,
@@ -1382,7 +1603,7 @@ router.put('/:id', async (req, res) => {
       const { data: funcionarioAtual } = await supabaseAdmin
         .from('funcionarios')
         .select('cargo_id')
-        .eq('id', id)
+        .eq('id', funcionarioId)
         .single()
 
       const { data: cargoExiste, error: cargoError } = await supabaseAdmin
@@ -1426,7 +1647,7 @@ router.put('/:id', async (req, res) => {
         .from('funcionarios')
         .select('id')
         .eq('cpf', value.cpf)
-        .neq('id', id)
+        .neq('id', funcionarioId)
         .single()
 
       if (existingFuncionario) {
@@ -1444,7 +1665,7 @@ router.put('/:id', async (req, res) => {
         ...funcionarioData,
         updated_at: new Date().toISOString()
       })
-      .eq('id', id)
+      .eq('id', funcionarioId)
       .select()
       .single()
 
@@ -1527,7 +1748,7 @@ router.put('/:id', async (req, res) => {
           descricao
         )
       `)
-      .eq('id', id)
+      .eq('id', funcionarioId)
       .single()
 
     // Popular campo cargo com o nome do cargo do cargo_info
@@ -1581,11 +1802,21 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params
 
+    // Validar se o ID é um número válido
+    const funcionarioId = parseInt(id, 10)
+    if (isNaN(funcionarioId) || funcionarioId <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID inválido',
+        message: 'O ID do funcionário deve ser um número inteiro positivo'
+      })
+    }
+
     // Verificar se funcionário existe
     const { data: funcionario, error: checkError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome')
-      .eq('id', id)
+      .eq('id', funcionarioId)
       .single()
 
     if (checkError) {
@@ -1681,7 +1912,7 @@ router.delete('/:id', async (req, res) => {
     const { error: deleteError } = await supabaseAdmin
       .from('funcionarios')
       .delete()
-      .eq('id', id)
+      .eq('id', funcionarioId)
 
     if (deleteError) {
       return res.status(500).json({

@@ -35,9 +35,32 @@ export function ChatIa({ floating = true, className }: ChatIaProps) {
   const inputRef = useRef<HTMLInputElement>(null)
   const { toast } = useToast()
 
-  // Verificar disponibilidade ao montar
+  // Verificar disponibilidade ao montar (com debounce)
   useEffect(() => {
-    verificarDisponibilidade()
+    let cancelled = false
+    
+    const checkAvailability = async () => {
+      try {
+        await verificarDisponibilidade()
+      } catch (error: any) {
+        // Ignorar erros 429 silenciosamente
+        if (!error.message?.includes('429') && !error.message?.includes('Muitas tentativas')) {
+          console.error('Erro ao verificar disponibilidade:', error)
+        }
+      }
+    }
+    
+    // Pequeno delay para evitar múltiplas chamadas simultâneas
+    const timeoutId = setTimeout(() => {
+      if (!cancelled) {
+        checkAvailability()
+      }
+    }, 500)
+    
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+    }
   }, [])
 
   // Debug: verificar se componente está sendo renderizado
@@ -78,7 +101,13 @@ export function ChatIa({ floating = true, className }: ChatIaProps) {
     try {
       const response = await chatIaApi.verificarDisponibilidade()
       setIsAvailable(response.data.configured && response.data.available)
-    } catch (error) {
+    } catch (error: any) {
+      // Tratar erro 429 especificamente
+      if (error.message?.includes('429') || error.message?.includes('Muitas tentativas')) {
+        console.warn('Rate limit atingido na verificação de disponibilidade')
+        // Manter estado atual em vez de definir como false
+        return
+      }
       console.error('Erro ao verificar disponibilidade:', error)
       setIsAvailable(false)
     }

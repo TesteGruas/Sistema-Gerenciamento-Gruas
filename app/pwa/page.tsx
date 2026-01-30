@@ -562,6 +562,16 @@ export default function PWAMainPage() {
       borderColor: "border-cyan-100"
     },
     {
+      title: "Documentos da Obra",
+      description: "Documentos das obras",
+      icon: FileText,
+      href: "/pwa/obras",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-100",
+      requiresObra: true // Requer obra ativa
+    },
+    {
       title: "Config",
       description: "Configurações",
       icon: Settings,
@@ -1264,6 +1274,28 @@ export default function PWAMainPage() {
                   // Em caso de erro, verificar por role como fallback
                   const roleLower = (userRole || '').toLowerCase()
                   const podeVerObras = roleLower.includes('operador') || 
+                                      roleLower.includes('operário') || 
+                                      roleLower.includes('operario')
+                  return podeVerObras
+                }
+              }
+              
+              // "Documentos da Obra" deve ser mostrada baseado apenas em permissões
+              if (action.title === "Documentos da Obra") {
+                // Verificar permissão usando o hook
+                try {
+                  const podeVerObras = hasPermission('obras:visualizar') || canAccessModule('obras')
+                  if (!podeVerObras) {
+                    return false
+                  }
+                  // Se tem permissão, mostrar independente de temObraAtiva
+                  return true
+                } catch (e) {
+                  // Em caso de erro, verificar por role como fallback
+                  const roleLower = (userRole || '').toLowerCase()
+                  const podeVerObras = roleLower.includes('cliente') || 
+                                      roleLower.includes('supervisor') ||
+                                      roleLower.includes('operador') || 
                                       roleLower.includes('operário') || 
                                       roleLower.includes('operario')
                   return podeVerObras
