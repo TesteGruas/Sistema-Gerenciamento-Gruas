@@ -43,13 +43,13 @@ export default function GruaSearch({
           return
         }
         
-        // Se showResults está true, buscar todas as gruas disponíveis
+        // Se showResults está true, buscar todas as gruas
         try {
           setLoading(true)
           setError(null)
           
-          // Buscar gruas disponíveis
-          const response = await gruasApi.listarGruas({ status: 'disponivel' })
+          // Buscar todas as gruas (sem filtro de status)
+          const response = await gruasApi.listarGruas()
           
           if (response.success) {
             let gruasConvertidas = response.data
@@ -88,8 +88,9 @@ export default function GruaSearch({
         setLoading(true)
         setError(null)
         
-        // Buscar gruas disponíveis
-        const response = await gruasApi.listarGruas({ status: 'disponivel' })
+        // Quando há termo de busca, buscar TODAS as gruas (sem filtro de status)
+        // para permitir encontrar gruas mesmo que estejam em obra ou outro status
+        const response = await gruasApi.listarGruas()
         
         if (response.success) {
           let gruasConvertidas = response.data
@@ -99,7 +100,8 @@ export default function GruaSearch({
             (grua.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (grua.modelo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
             (grua.fabricante || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-            (grua.capacidade || '').toLowerCase().includes(searchTerm.toLowerCase())
+            (grua.capacidade || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (grua.id || '').toLowerCase().includes(searchTerm.toLowerCase())
           )
           
           // Filtrar apenas disponíveis se solicitado
@@ -208,8 +210,8 @@ export default function GruaSearch({
                 setLoading(true)
                 setError(null)
                 
-                // Buscar gruas disponíveis
-                const response = await gruasApi.listarGruas({ status: 'disponivel' })
+                // Buscar todas as gruas (sem filtro de status)
+                const response = await gruasApi.listarGruas()
                 
                 if (response.success) {
                   let gruasConvertidas = response.data

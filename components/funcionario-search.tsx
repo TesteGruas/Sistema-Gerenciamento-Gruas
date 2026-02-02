@@ -11,7 +11,7 @@ import { InlineLoader } from "@/components/ui/loader"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
 // Array padrão de cargos permitidos (fora do componente para evitar recriação)
-const DEFAULT_ALLOWED_ROLES = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']
+const DEFAULT_ALLOWED_ROLES = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras', 'Auxiliar Operacional']
 
 interface FuncionarioSearchProps {
   onFuncionarioSelect: (funcionario: any) => void
@@ -30,8 +30,10 @@ export function FuncionarioSearch({
   onlyActive = true,
   allowedRoles
 }: FuncionarioSearchProps) {
-  // Usar array padrão se não fornecido
-  const rolesFilter = allowedRoles || DEFAULT_ALLOWED_ROLES
+  // Se allowedRoles não for fornecido ou for undefined, não filtrar por cargo (mostrar todos)
+  // Se for um array vazio [], também não filtrar
+  // Se for fornecido com valores, usar esses valores para filtrar
+  const rolesFilter = allowedRoles !== undefined ? allowedRoles : null
   const [searchTerm, setSearchTerm] = useState("")
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -63,22 +65,28 @@ export function FuncionarioSearch({
           let funcionariosConvertidos = response.data.map(converterFuncionarioBackendParaFrontend)
           console.log('🔄 Funcionários convertidos:', funcionariosConvertidos)
           
-          // Filtrar por cargos permitidos (case-insensitive, correspondência parcial)
-          if (rolesFilter.length > 0) {
+          // Filtrar por cargos permitidos apenas se rolesFilter for fornecido e não vazio
+          // Se rolesFilter for null ou array vazio, mostrar todos os funcionários
+          if (rolesFilter !== null && rolesFilter.length > 0) {
             console.log('🎯 Cargos permitidos:', rolesFilter)
             console.log('🔍 Funcionários antes do filtro:', funcionariosConvertidos.map(f => ({ name: f.name, role: f.role })))
             funcionariosConvertidos = funcionariosConvertidos.filter(funcionario => {
-              const funcionarioRole = funcionario.role?.toLowerCase() || ''
+              const funcionarioRole = (funcionario.role?.toLowerCase() || '').trim()
               const roleMatch = rolesFilter.some(allowedRole => {
-                const allowedRoleLower = allowedRole.toLowerCase()
-                // Correspondência parcial: verifica se o cargo do funcionário contém o cargo permitido
+                const allowedRoleLower = allowedRole.toLowerCase().trim()
+                // Correspondência exata ou parcial: verifica se o cargo do funcionário contém o cargo permitido
                 // ou se o cargo permitido contém o cargo do funcionário
-                return funcionarioRole.includes(allowedRoleLower) || allowedRoleLower.includes(funcionarioRole)
+                // Também verifica correspondência exata após normalização
+                return funcionarioRole === allowedRoleLower || 
+                       funcionarioRole.includes(allowedRoleLower) || 
+                       allowedRoleLower.includes(funcionarioRole)
               })
               console.log(`🔍 Funcionário ${funcionario.name} (${funcionario.role}) - Match: ${roleMatch}`)
               return roleMatch
             })
             console.log('✅ Funcionários após filtro:', funcionariosConvertidos)
+          } else {
+            console.log('✅ Mostrando todos os funcionários (sem filtro de cargo)')
           }
           
           setFuncionarios(funcionariosConvertidos)

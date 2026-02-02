@@ -302,21 +302,45 @@ export default function RHPage() {
     }
     
     try {
-      // TODO: Implementar método deletarFuncionario na API
-      toast({
-        title: "Aviso",
-        description: "Funcionalidade em desenvolvimento",
-        variant: "default"
-      })
+      setLoading(true)
+      const response = await funcionariosApi.excluirFuncionario(id)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: response.message || "Funcionário excluído com sucesso!",
+        })
+        
+        // Recarregar lista
+        await carregarFuncionarios()
+      } else {
+        toast({
+          title: "Erro",
+          description: "Erro ao excluir funcionário",
+          variant: "destructive"
+        })
+      }
     } catch (error: any) {
       console.error('Erro ao excluir funcionário:', error)
+      
+      // Extrair mensagem de erro mais amigável
+      let mensagemErro = "Erro ao excluir funcionário. Tente novamente."
+      
+      if (error.message) {
+        mensagemErro = error.message
+      } else if (error.error) {
+        mensagemErro = error.error
+      }
+      
       toast({
         title: "Erro",
-        description: error.message || "Erro ao excluir funcionário",
+        description: mensagemErro,
         variant: "destructive"
       })
+    } finally {
+      setLoading(false)
     }
-  }, [toast])
+  }, [toast, carregarFuncionarios])
 
   // Função para carregar cargos
   const carregarCargosLista = useCallback(async () => {

@@ -618,10 +618,17 @@ export const obrasApi = {
     })
   },
 
+  // Listar supervisores terceirizados existentes
+  async listarSupervisores(search?: string): Promise<{ success: boolean; data: any[] }> {
+    const url = buildApiUrl(`obras/supervisores${search ? `?search=${encodeURIComponent(search)}` : ''}`)
+    return apiRequest(url)
+  },
+
   // Adicionar supervisor terceirizado à obra
   async adicionarSupervisorTerceirizado(obraId: number, data: {
-    nome: string
-    email: string
+    supervisor_id?: number
+    nome?: string
+    email?: string
     telefone?: string
     observacoes?: string
     data_inicio?: string

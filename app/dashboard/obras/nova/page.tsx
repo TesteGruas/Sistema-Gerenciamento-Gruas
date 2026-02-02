@@ -575,6 +575,16 @@ export default function NovaObraPage() {
     }
   }
 
+  // Função para remover responsável selecionado
+  const handleRemoveResponsavel = () => {
+    setResponsavelSelecionado(null)
+    setObraFormData({ 
+      ...obraFormData, 
+      responsavelId: '',
+      responsavelName: ''
+    })
+  }
+
   // Função para criar obra
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -932,9 +942,18 @@ export default function NovaObraPage() {
               email: s.email || '',
               tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
             }))
-            console.log('📤 Enviando sinaleiros:', sinaleirosParaEnviar)
+            console.log('📤 Enviando sinaleiros para obra ID:', obraId)
+            console.log('📤 Dados dos sinaleiros:', JSON.stringify(sinaleirosParaEnviar, null, 2))
             const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
-            console.log('✅ Sinaleiros salvos:', response)
+            console.log('✅ Sinaleiros salvos com sucesso:', response)
+            
+            if (!response.success) {
+              throw new Error(response.error || 'Erro ao salvar sinaleiros')
+            }
+            
+            if (!response.data || response.data.length === 0) {
+              console.warn('⚠️ Nenhum sinaleiro foi retornado na resposta')
+            }
             
             // Validar documentos completos para sinaleiros externos (clientes)
             // Conforme especificação: "CASO ESSE NÃO ESTEJA COM OS DOCUMENTOS COMPLETOS, O SISTEMA NÃO PERMITE ATRELAR A OBRA"
@@ -992,19 +1011,39 @@ export default function NovaObraPage() {
                 setError(mensagemErro)
               }
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error('❌ Erro ao salvar sinaleiros:', error)
+            console.error('❌ Detalhes do erro:', {
+              message: error?.message,
+              error: error?.error,
+              details: error?.details,
+              obraId: obraId,
+              sinaleirosEnviados: sinaleirosParaEnviar
+            })
             
             // Se o erro for sobre documentos incompletos, propagar
-            if (error instanceof Error && error.message.includes('documentos completos')) {
+            if (error instanceof Error && (
+              error.message.includes('documentos completos') ||
+              error.message.includes('Documentos incompletos') ||
+              error.message.includes('documentos faltando')
+            )) {
               throw error
             }
             
-            toast({
-              title: "Aviso",
-              description: "Obra criada, mas houve erro ao salvar os sinaleiros. Você pode editá-los depois.",
-              variant: "destructive"
-            })
+            // Se o erro for sobre obra não encontrada, pode ser que a obra não foi criada corretamente
+            if (error?.message?.includes('não encontrada') || error?.message?.includes('404')) {
+              toast({
+                title: "Erro",
+                description: `Erro ao vincular sinaleiros: ${error.message || 'Obra não encontrada'}. Verifique se a obra foi criada corretamente.`,
+                variant: "destructive"
+              })
+            } else {
+              toast({
+                title: "Aviso",
+                description: `Obra criada, mas houve erro ao salvar os sinaleiros: ${error?.message || 'Erro desconhecido'}. Você pode editá-los depois.`,
+                variant: "destructive"
+              })
+            }
           }
         } else {
           console.warn('⚠️ Nenhum sinaleiro válido para salvar')
@@ -1978,6 +2017,13 @@ export default function NovaObraPage() {
                       description: "Responsável técnico da obra salvo com sucesso"
                     })
                   }}
+                  onRemove={() => {
+                    setResponsavelTecnico(null)
+                    toast({
+                      title: "Removido",
+                      description: "Responsável técnico removido"
+                    })
+                  }}
                 />
               </CardContent>
             </Card>
@@ -2112,6 +2158,7 @@ export default function NovaObraPage() {
                     onGruaSelect={handleGruaSelect}
                     placeholder="Buscar grua por nome ou modelo..."
                     className="mt-1"
+                    onlyAvailable={false}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou modelo da grua para buscar
@@ -2557,7 +2604,6 @@ export default function NovaObraPage() {
                     placeholder="Buscar funcionário por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou cargo do funcionário para buscar
@@ -2627,16 +2673,27 @@ export default function NovaObraPage() {
                     placeholder="Buscar responsável por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Supervisor', 'Engenheiro', 'Chefe de Obras','Operador']}
                   />
                   {responsavelSelecionado && (
                     <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-center gap-2">
-                        <User className="w-4 h-4 text-blue-600" />
-                        <div>
-                          <p className="font-medium text-blue-900">{responsavelSelecionado.name}</p>
-                          <p className="text-sm text-blue-700">{responsavelSelecionado.role}</p>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2">
+                          <User className="w-4 h-4 text-blue-600" />
+                          <div>
+                            <p className="font-medium text-blue-900">{responsavelSelecionado.name}</p>
+                            <p className="text-sm text-blue-700">{responsavelSelecionado.role}</p>
+                          </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={handleRemoveResponsavel}
+                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                          title="Remover responsável"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
                       </div>
                     </div>
                   )}

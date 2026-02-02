@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { X } from "lucide-react"
+import { X, User } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { responsavelTecnicoApi, type ResponsavelTecnicoBackend } from "@/lib/api-responsavel-tecnico"
 
@@ -23,6 +23,7 @@ interface ResponsavelTecnicoFormProps {
   responsavel?: ResponsavelTecnicoData | null
   onSave: (data: ResponsavelTecnicoData) => void
   onCancel?: () => void
+  onRemove?: () => void
   readOnly?: boolean
 }
 
@@ -31,6 +32,7 @@ export function ResponsavelTecnicoForm({
   responsavel,
   onSave,
   onCancel,
+  onRemove,
   readOnly = false
 }: ResponsavelTecnicoFormProps) {
   const { toast } = useToast()
@@ -150,8 +152,43 @@ export function ResponsavelTecnicoForm({
     }
   }
 
+  // Verificar se há um responsável selecionado
+  const hasResponsavel = responsavel && (responsavel.funcionario_id || (responsavel.nome && responsavel.cpf_cnpj))
+
   return (
     <div className="space-y-4">
+        {/* Mostrar responsável selecionado se houver */}
+        {hasResponsavel && (
+          <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <User className="w-4 h-4 text-green-600" />
+                <div>
+                  <p className="font-medium text-green-900">{responsavel.nome}</p>
+                  {responsavel.funcionario_id && (
+                    <p className="text-sm text-green-700">Funcionário vinculado</p>
+                  )}
+                  {responsavel.cpf_cnpj && (
+                    <p className="text-sm text-green-700">CPF/CNPJ: {responsavel.cpf_cnpj}</p>
+                  )}
+                </div>
+              </div>
+              {onRemove && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRemove}
+                  className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                  title="Remover responsável técnico"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Formulário */}
         <div className="grid grid-cols-2 gap-4">
           <div>

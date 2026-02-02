@@ -189,10 +189,8 @@ router.get('/', authenticateToken, async (req, res) => {
         )
       `, { count: 'exact' })
 
-    // Excluir supervisores (são terceirizados do cliente, não funcionários)
-    // Usar apenas eh_supervisor como filtro principal, pois alguns funcionários podem ter cargo NULL
-    // (quando usam apenas cargo_id, o campo cargo pode ser NULL)
-    query = query.eq('eh_supervisor', false)
+    // Filtrar apenas funcionários não deletados (soft delete)
+    query = query.is('deleted_at', null)
 
     // Aplicar filtros
     if (req.query.status) {
@@ -306,6 +304,7 @@ router.get('/', authenticateToken, async (req, res) => {
           )
         `)
         .is('funcionario_id', null)
+        .is('deleted_at', null) // Filtrar apenas usuários não deletados (soft delete)
       
       // Aplicar filtro de status se fornecido
       if (req.query.status) {
@@ -375,12 +374,7 @@ router.get('/', authenticateToken, async (req, res) => {
           }
         
           // Converter usuários para formato de funcionário
-          // Excluir supervisores (são terceirizados do cliente, não funcionários)
           usuariosSemFuncionario = usuariosData
-            .filter(usuario => {
-              const cargo = usuario.cargo || null
-              return cargo !== 'Supervisor'
-            })
             .map(usuario => {
               const perfil = usuario.usuario_perfis?.[0]?.perfis
               return {
@@ -595,11 +589,8 @@ router.get('/buscar', async (req, res) => {
       .from('funcionarios')
       .select('id, nome, cargo, status')
       .or(`nome.ilike.%${q}%,cargo.ilike.%${q}%`)
+      .is('deleted_at', null) // Filtrar apenas funcionários não deletados (soft delete)
       .limit(20)
-
-    // Excluir supervisores (são terceirizados do cliente, não funcionários)
-    query = query.neq('cargo', 'Supervisor')
-    query = query.eq('eh_supervisor', false)
 
     // Aplicar filtros adicionais
     if (cargo) {
@@ -760,11 +751,12 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
       });
     }
 
-    // Verificar se funcionário existe
+    // Verificar se funcionário existe e não foi deletado
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome')
       .eq('id', funcionarioId)
+      .is('deleted_at', null) // Filtrar apenas funcionários não deletados (soft delete)
       .single();
 
     if (funcionarioError || !funcionario) {
@@ -1044,6 +1036,7 @@ router.get('/:id', async (req, res) => {
         )
       `)
       .eq('id', funcionarioId)
+      .is('deleted_at', null) // Filtrar apenas funcionários não deletados (soft delete)
       .maybeSingle()
 
     if (error) {
@@ -1812,11 +1805,12 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
-    // Verificar se funcionário existe
+    // Verificar se funcionário existe e não foi deletado
     const { data: funcionario, error: checkError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome')
       .eq('id', funcionarioId)
+      .is('deleted_at', null) // Filtrar apenas funcionários não deletados (soft delete)
       .single()
 
     if (checkError) {
@@ -1866,16 +1860,20 @@ router.delete('/:id', async (req, res) => {
       .single()
 
     if (usuarioAssociado) {
-      console.log(`🔧 Funcionário ${funcionario.nome} possui usuário associado (${usuarioAssociado.email}). Excluindo usuário...`)
+      console.log(`🔧 Funcionário ${funcionario.nome} possui usuário associado (${usuarioAssociado.email}). Fazendo deleção lógica do usuário...`)
       
-      // Excluir usuário associado
+      // Fazer deleção lógica do usuário (soft delete)
       const { error: deleteUsuarioError } = await supabaseAdmin
         .from('usuarios')
-        .delete()
+        .update({ 
+          deleted_at: new Date().toISOString(),
+          status: 'Inativo' // Também marcar como inativo
+        })
         .eq('funcionario_id', id)
+        .is('deleted_at', null) // Apenas se ainda não foi deletado
 
       if (deleteUsuarioError) {
-        console.error('❌ Erro ao excluir usuário do funcionário:', deleteUsuarioError)
+        console.error('❌ Erro ao fazer deleção lógica do usuário do funcionário:', deleteUsuarioError)
         return res.status(500).json({
           error: 'Erro ao excluir usuário',
           message: 'Erro ao excluir usuário associado ao funcionário',
@@ -1883,7 +1881,7 @@ router.delete('/:id', async (req, res) => {
         })
       }
 
-      console.log(`✅ Usuário ${usuarioAssociado.email} do funcionário ${funcionario.nome} excluído com sucesso`)
+      console.log(`✅ Usuário ${usuarioAssociado.email} do funcionário ${funcionario.nome} marcado como deletado (soft delete)`)
     }
 
     if (associacoes && associacoes.length > 0) {
@@ -1908,11 +1906,15 @@ router.delete('/:id', async (req, res) => {
       console.log(`✅ ${associacoes.length} associação(ões) do funcionário ${funcionario.nome} excluída(s) com sucesso`)
     }
 
-    // Excluir funcionário
+    // Fazer deleção lógica do funcionário (soft delete)
     const { error: deleteError } = await supabaseAdmin
       .from('funcionarios')
-      .delete()
+      .update({ 
+        deleted_at: new Date().toISOString(),
+        status: 'Inativo' // Também marcar como inativo
+      })
       .eq('id', funcionarioId)
+      .is('deleted_at', null) // Apenas se ainda não foi deletado
 
     if (deleteError) {
       return res.status(500).json({

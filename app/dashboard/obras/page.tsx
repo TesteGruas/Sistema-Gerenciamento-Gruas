@@ -1877,7 +1877,6 @@ export default function ObrasPage() {
                     placeholder="Buscar funcionário por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
-                    allowedRoles={['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras']}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou cargo do funcionário para buscar

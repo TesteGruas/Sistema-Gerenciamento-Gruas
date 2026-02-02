@@ -111,72 +111,48 @@ export function SinaleirosForm({
     }
   }
 
-  // Garantir que sempre existam 2 sinaleiros: interno e cliente
-  // IMPORTANTE: Só executar se não houver initialSinaleiros (para não sobrescrever dados salvos)
-  useEffect(() => {
-    // Se houver initialSinaleiros, não criar sinaleiros vazios (eles já vêm do estado salvo)
-    if (initialSinaleiros && initialSinaleiros.length > 0) {
-      return
-    }
-    
-    const temInterno = sinaleiros.some(s => s.tipo_vinculo === 'interno')
-    const temCliente = sinaleiros.some(s => s.tipo_vinculo === 'cliente')
-    
-    if (temInterno && temCliente) {
-      return // Já tem ambos, não precisa fazer nada
-    }
-    
-    const novos: Sinaleiro[] = [...sinaleiros]
-    
-    if (!temInterno) {
-      novos.push({
-        id: `interno_${Date.now()}`,
-        obra_id: obraId || 0,
-        nome: '',
-        rg_cpf: '',
-        cpf: '',
-        rg: '',
-        telefone: '',
-        email: '',
-        tipo: 'principal',
-        tipo_vinculo: 'interno',
-        cliente_informou: false,
-        documentos: [],
-        certificados: []
-      })
-    }
-    
-    if (!temCliente) {
-      novos.push({
-        id: `cliente_${Date.now()}`,
-        obra_id: obraId || 0,
-        nome: '',
-        rg_cpf: '',
-        cpf: '',
-        rg: '',
-        telefone: '',
-        email: '',
-        tipo: 'reserva',
-        tipo_vinculo: 'cliente',
-        cliente_informou: true,
-        documentos: [],
-        certificados: []
-      })
-    }
-    
-    setSinaleiros(novos)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [obraId, initialSinaleiros])
+  // Não forçar criação de sinaleiros - permitir que o usuário adicione quando necessário
+  // Os sinaleiros são opcionais: pode ter apenas interno, apenas cliente, ambos ou nenhum
 
-  const handleAddSinaleiro = () => {
-    if (sinaleiros.length >= 2) {
+  const handleAddSinaleiro = (tipo: 'interno' | 'cliente') => {
+    // Verificar se já existe um sinaleiro deste tipo
+    const jaExiste = sinaleiros.some(s => s.tipo_vinculo === tipo)
+    if (jaExiste) {
       toast({
-        title: "Limite atingido",
-        description: "Apenas 2 sinaleiros permitidos (Interno + Indicado pelo Cliente)",
+        title: "Sinaleiro já existe",
+        description: `Já existe um sinaleiro ${tipo === 'interno' ? 'interno' : 'indicado pelo cliente'}`,
         variant: "destructive"
       })
       return
     }
+
+    // Verificar limite máximo de 2 sinaleiros
+    if (sinaleiros.length >= 2) {
+      toast({
+        title: "Limite atingido",
+        description: "Apenas 2 sinaleiros permitidos (máximo: 1 Interno + 1 Indicado pelo Cliente)",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const novoSinaleiro: Sinaleiro = {
+      id: `${tipo}_${Date.now()}`,
+      obra_id: obraId || 0,
+      nome: '',
+      rg_cpf: '',
+      cpf: '',
+      rg: '',
+      telefone: '',
+      email: '',
+      tipo: tipo === 'interno' ? 'principal' : 'reserva',
+      tipo_vinculo: tipo,
+      cliente_informou: tipo === 'cliente',
+      documentos: [],
+      certificados: []
+    }
+
+    setSinaleiros([...sinaleiros, novoSinaleiro])
   }
 
   const handleRemoveSinaleiro = (id: string) => {
@@ -229,9 +205,13 @@ export function SinaleirosForm({
     // Validar documentos completos para sinaleiros externos (cliente)
     // Apenas validar se o sinaleiro já foi salvo (tem UUID válido)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (cliente && cliente.id && uuidRegex.test(cliente.id)) {
+    const sinaleirosCliente = sinaleirosPreenchidos.filter(s => 
+      s.tipo_vinculo === 'cliente' && s.id && uuidRegex.test(s.id)
+    )
+    
+    for (const sinaleiroCliente of sinaleirosCliente) {
       try {
-        const validacao = await sinaleirosApi.validarDocumentosCompletos(cliente.id)
+        const validacao = await sinaleirosApi.validarDocumentosCompletos(sinaleiroCliente.id)
         if (!validacao.completo) {
           const documentosFaltando = validacao.documentosFaltando || []
           const nomesDocumentos: Record<string, string> = {
@@ -243,7 +223,7 @@ export function SinaleirosForm({
           
           toast({
             title: "Documentos Incompletos",
-            description: `O sinaleiro "${cliente.nome}" não pode ser vinculado à obra. Documentos faltando: ${nomesFaltando}. Complete o cadastro pelo RH antes de vincular à obra.`,
+            description: `O sinaleiro "${sinaleiroCliente.nome}" não pode ser vinculado à obra. Documentos faltando: ${nomesFaltando}. Complete o cadastro pelo RH antes de vincular à obra.`,
             variant: "destructive"
           })
           return
@@ -253,7 +233,7 @@ export function SinaleirosForm({
         console.warn('Erro ao validar documentos do sinaleiro:', error)
         toast({
           title: "Aviso",
-          description: "Não foi possível validar os documentos do sinaleiro. Verifique se todos os documentos obrigatórios estão completos.",
+          description: `Não foi possível validar os documentos do sinaleiro "${sinaleiroCliente.nome}". Verifique se todos os documentos obrigatórios estão completos.`,
           variant: "default"
         })
       }
@@ -352,13 +332,50 @@ export function SinaleirosForm({
 
   const canEdit = !readOnly && (clientePodeEditar || true)
 
-  if (!sinaleiros || sinaleiros.length === 0) {
-    return <div className="space-y-4">Carregando sinaleiros...</div>
-  }
+  const temInterno = sinaleiros.some(s => s.tipo_vinculo === 'interno')
+  const temCliente = sinaleiros.some(s => s.tipo_vinculo === 'cliente')
 
   return (
     <div className="space-y-4">
-      {sinaleiros.map((sinaleiro, index) => (
+      {/* Botões para adicionar sinaleiros */}
+      {!readOnly && (
+        <div className="flex gap-2 pb-4 border-b">
+          {!temInterno && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleAddSinaleiro('interno')}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar Sinaleiro Interno
+            </Button>
+          )}
+          {!temCliente && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleAddSinaleiro('cliente')}
+              className="flex items-center gap-2"
+            >
+              <Plus className="w-4 h-4" />
+              Adicionar Sinaleiro do Cliente
+            </Button>
+          )}
+        </div>
+      )}
+
+      {sinaleiros.length === 0 ? (
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Nenhum sinaleiro adicionado.</p>
+          {!readOnly && (
+            <p className="text-xs mt-1">Use os botões acima para adicionar sinaleiros.</p>
+          )}
+        </div>
+      ) : (
+        sinaleiros.map((sinaleiro, index) => (
         <div key={sinaleiro.id} className="space-y-4">
           {/* Cabeçalho do sinaleiro */}
           <div className="flex items-center justify-between pb-3 border-b">
@@ -371,6 +388,17 @@ export function SinaleirosForm({
                 {sinaleiro.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'}
               </Badge>
             </div>
+            {!readOnly && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => handleRemoveSinaleiro(sinaleiro.id)}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
 
           <div className="space-y-4">
@@ -429,9 +457,8 @@ export function SinaleirosForm({
                       })
                     }
                   }}
-                  allowedRoles={['Sinaleiro']}
                   onlyActive={true}
-                  placeholder="Buscar funcionário com cargo Sinaleiro..."
+                  placeholder="Buscar funcionário..."
                   className="w-full"
                 />
               </div>
@@ -570,7 +597,8 @@ export function SinaleirosForm({
             })()}
           </div>
         </div>
-      ))}
+        ))
+      )}
     </div>
   )
 }

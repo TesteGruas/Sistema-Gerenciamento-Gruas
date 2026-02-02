@@ -1262,7 +1262,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
                   status: 'ativo',
                   horas_trabalhadas: 0,
                   is_supervisor: true,
-                  observacoes: `Cliente ${clienteCompleto.nome} vinculado automaticamente como supervisor da obra`
+                  observacoes: `Contato técnico do cliente ${clienteCompleto.nome} vinculado automaticamente como supervisor da obra`
                 })
                 .select()
                 .single()
@@ -1357,70 +1357,11 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('  - Length:', value.sinaleiros?.length || 0)
     console.log('  - Conteúdo:', JSON.stringify(value.sinaleiros, null, 2))
     
+    // NOTA: Sinaleiros não são mais processados aqui durante a criação da obra
+    // Eles devem ser salvos separadamente via endpoint POST /api/obras/:id/sinaleiros
+    // Isso evita duplicação e permite validação adequada de documentos
     if (value.sinaleiros && Array.isArray(value.sinaleiros) && value.sinaleiros.length > 0) {
-      console.log('🔧 Processando sinaleiros...')
-      try {
-        const sinaleirosValidos = value.sinaleiros.filter(s => {
-          const temNome = !!s.nome
-          const temDocumento = !!(s.rg_cpf || s.cpf || s.rg)
-          console.log(`  - Sinaleiro: nome=${temNome}, documento=${temDocumento}`, s)
-          return temNome && temDocumento
-        })
-        
-        console.log(`🔍 DEBUG - Sinaleiros válidos encontrados: ${sinaleirosValidos.length} de ${value.sinaleiros.length}`)
-        
-        if (sinaleirosValidos.length > 0) {
-          for (const sinaleiro of sinaleirosValidos) {
-            const { id: sinaleiroId, ...sinaleiroData } = sinaleiro
-            
-            // Garantir que rg_cpf está presente
-            if (!sinaleiroData.rg_cpf && (sinaleiro.cpf || sinaleiro.rg)) {
-              sinaleiroData.rg_cpf = sinaleiro.cpf || sinaleiro.rg
-            }
-            
-            // Garantir que tipo está presente
-            if (!sinaleiroData.tipo) {
-              sinaleiroData.tipo = sinaleiro.tipo_vinculo === 'interno' ? 'principal' : 'reserva'
-            }
-            
-            console.log('📝 Inserindo sinaleiro:', {
-              obra_id: data.id,
-              ...sinaleiroData
-            })
-            
-            const { data: sinaleiroCriado, error: errSinaleiro } = await supabaseAdmin
-              .from('sinaleiros_obra')
-              .insert({
-                obra_id: data.id,
-                nome: sinaleiroData.nome,
-                rg_cpf: sinaleiroData.rg_cpf,
-                telefone: sinaleiroData.telefone || null,
-                email: sinaleiroData.email || null,
-                tipo: sinaleiroData.tipo
-              })
-              .select()
-              .single()
-
-            if (errSinaleiro) {
-              console.error('❌ Erro ao criar sinaleiro:', errSinaleiro)
-              console.error('❌ Dados que causaram erro:', {
-                obra_id: data.id,
-                ...sinaleiroData
-              })
-            } else {
-              console.log('✅ Sinaleiro criado com sucesso:', sinaleiroCriado)
-            }
-          }
-        } else {
-          console.warn('⚠️ Nenhum sinaleiro válido encontrado após filtro')
-        }
-      } catch (sinaleirosError) {
-        console.error('❌ Erro ao processar sinaleiros:', sinaleirosError)
-        console.error('❌ Stack trace:', sinaleirosError.stack)
-        // Não falhar a criação da obra por causa dos sinaleiros
-      }
-    } else {
-      console.log('⚠️ Sinaleiros não fornecidos ou array vazio')
+      console.log('ℹ️ Sinaleiros fornecidos na criação da obra serão processados separadamente via endpoint específico')
     }
 
     // Processar dados das gruas se fornecidos
@@ -2092,6 +2033,33 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
   try {
     const { id } = req.params
 
+    // Verificar se há orçamentos vinculados à obra
+    const { data: orcamentos, error: orcamentosError } = await supabaseAdmin
+      .from('orcamentos')
+      .select('id, numero, status')
+      .eq('obra_id', id)
+
+    if (orcamentosError) {
+      console.error('Erro ao verificar orçamentos:', orcamentosError)
+    }
+
+    // Se houver orçamentos vinculados, desvincular antes de excluir
+    if (orcamentos && orcamentos.length > 0) {
+      const { error: updateError } = await supabaseAdmin
+        .from('orcamentos')
+        .update({ obra_id: null })
+        .eq('obra_id', id)
+
+      if (updateError) {
+        console.error('Erro ao desvincular orçamentos:', updateError)
+        return res.status(500).json({
+          error: 'Erro ao excluir obra',
+          message: `Não foi possível desvincular ${orcamentos.length} orçamento(s) vinculado(s). Erro: ${updateError.message}`
+        })
+      }
+    }
+
+    // Excluir obra
     const { error } = await supabaseAdmin
       .from('obras')
       .delete()
@@ -2106,7 +2074,9 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
 
     res.json({
       success: true,
-      message: 'Obra excluída com sucesso'
+      message: orcamentos && orcamentos.length > 0
+        ? `Obra excluída com sucesso. ${orcamentos.length} orçamento(s) foram desvinculados.`
+        : 'Obra excluída com sucesso'
     })
   } catch (error) {
     console.error('Erro ao excluir obra:', error)
@@ -2391,7 +2361,7 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
           email: Joi.string().email().max(255).trim().allow(null, '').optional(),
           tipo: Joi.string().valid('principal', 'reserva').required()
         })
-      ).min(1).max(2).required()
+      ).min(0).max(2).required()
     })
 
     const { error: validationError, value: validatedData } = schema.validate({ sinaleiros })
@@ -2407,15 +2377,22 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
     const sinaleirosValidados = validatedData.sinaleiros
 
     // Validar documentos completos para sinaleiros externos (reserva) antes de vincular
+    // IMPORTANTE: Apenas validar se o sinaleiro já existe (tem ID) e é do tipo reserva
+    // Sinaleiros novos (sem ID) serão criados e podem ter documentos adicionados depois
     for (const sinaleiroData of sinaleirosValidados) {
       if (sinaleiroData.tipo === 'reserva' && sinaleiroData.id) {
+        console.log(`🔍 Validando documentos do sinaleiro existente (ID: ${sinaleiroData.id})`)
+        
         // Verificar se o sinaleiro já existe e tem documentos completos
         const { data: documentos, error: documentosError } = await supabaseAdmin
           .from('documentos_sinaleiro')
           .select('tipo, status')
           .eq('sinaleiro_id', sinaleiroData.id)
 
-        if (!documentosError && documentos) {
+        if (documentosError) {
+          console.error('❌ Erro ao buscar documentos do sinaleiro:', documentosError)
+          // Continuar mesmo se houver erro na busca de documentos
+        } else if (documentos && documentos.length > 0) {
           const documentosObrigatorios = ['rg_frente', 'rg_verso', 'comprovante_vinculo']
           const documentosEncontrados = documentos.map(d => d.tipo)
           const documentosFaltando = documentosObrigatorios.filter(tipo => !documentosEncontrados.includes(tipo))
@@ -2433,48 +2410,96 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
             }
             const nomesFaltando = documentosFaltando.map(tipo => nomesDocumentos[tipo] || tipo).join(', ')
             
+            console.warn(`⚠️ Sinaleiro "${sinaleiroData.nome}" não pode ser vinculado - documentos incompletos: ${nomesFaltando}`)
+            
             return res.status(400).json({ 
               error: 'Documentos incompletos',
               message: `O sinaleiro "${sinaleiroData.nome}" não pode ser vinculado à obra. Documentos faltando ou não aprovados: ${nomesFaltando || 'Documentos não aprovados'}. Complete o cadastro pelo RH antes de vincular à obra.`,
               documentosFaltando
             })
           }
+        } else {
+          console.log(`ℹ️ Sinaleiro "${sinaleiroData.nome}" não possui documentos cadastrados ainda - permitindo criação`)
         }
+      } else if (sinaleiroData.tipo === 'reserva' && !sinaleiroData.id) {
+        console.log(`ℹ️ Criando novo sinaleiro reserva "${sinaleiroData.nome}" - documentos podem ser adicionados depois`)
       }
     }
 
     // Verificar se já existem sinaleiros para esta obra
-    const { data: existing } = await supabaseAdmin
+    console.log(`🔍 Verificando sinaleiros existentes para obra ID: ${obraId}`)
+    const { data: existing, error: existingError } = await supabaseAdmin
       .from('sinaleiros_obra')
-      .select('id, tipo')
-      .eq('obra_id', id)
+      .select('id, tipo, nome, rg_cpf')
+      .eq('obra_id', obraId)
 
-    const existingMap = new Map(existing?.map(s => [s.tipo, s.id]) || [])
+    if (existingError) {
+      console.error('❌ Erro ao verificar sinaleiros existentes:', existingError)
+      throw existingError
+    }
+    
+    console.log(`📋 Sinaleiros existentes encontrados: ${existing?.length || 0}`)
+
+    // Criar mapas para verificação de duplicatas:
+    // 1. Por tipo (para atualização quando ID é fornecido)
+    const existingByType = new Map(existing?.map(s => [s.tipo, s]) || [])
+    // 2. Por nome + rg_cpf (para evitar duplicatas reais)
+    const existingByNomeRgCpf = new Map(
+      existing?.map(s => [`${s.nome}_${s.rg_cpf}`, s]) || []
+    )
 
     const results = []
     for (const sinaleiro of sinaleirosValidados) {
       const { id: sinaleiroId, ...data } = sinaleiro
+      const chaveNomeRgCpf = `${data.nome}_${data.rg_cpf}`
 
-      if (sinaleiroId && existingMap.has(sinaleiro.tipo)) {
-        // Atualizar existente
+      // Verificar se já existe um sinaleiro com mesmo nome e rg_cpf
+      const sinaleiroExistente = existingByNomeRgCpf.get(chaveNomeRgCpf)
+      
+      if (sinaleiroExistente) {
+        // Se já existe, atualizar ao invés de criar duplicata
+        console.log(`🔄 Sinaleiro já existe (${data.nome}), atualizando...`)
         const { data: updated, error } = await supabaseAdmin
           .from('sinaleiros_obra')
           .update(data)
-          .eq('id', sinaleiroId)
+          .eq('id', sinaleiroExistente.id)
+          .eq('obra_id', obraId)
+          .select()
+          .single()
+
+        if (error) throw error
+        results.push(updated)
+      } else if (sinaleiroId && existingByType.has(sinaleiro.tipo)) {
+        // Atualizar existente por tipo (quando ID é fornecido)
+        const existentePorTipo = existingByType.get(sinaleiro.tipo)
+        const { data: updated, error } = await supabaseAdmin
+          .from('sinaleiros_obra')
+          .update(data)
+          .eq('id', existentePorTipo.id)
+          .eq('obra_id', obraId)
           .select()
           .single()
 
         if (error) throw error
         results.push(updated)
       } else {
-        // Criar novo
+        // Criar novo - garantir que obra_id está sendo passado corretamente
+        const dadosInsert = { obra_id: obraId, ...data }
+        console.log(`📤 Criando sinaleiro para obra ${obraId}:`, dadosInsert)
+        
         const { data: created, error } = await supabaseAdmin
           .from('sinaleiros_obra')
-          .insert({ obra_id: id, ...data })
+          .insert(dadosInsert)
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error('❌ Erro ao criar sinaleiro:', error)
+          console.error('❌ Dados do sinaleiro:', dadosInsert)
+          console.error('❌ Obra ID (tipo):', typeof obraId, obraId)
+          throw error
+        }
+        console.log('✅ Sinaleiro criado com sucesso:', created)
         results.push(created)
       }
     }
@@ -2493,11 +2518,20 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
 router.get('/:id/sinaleiros', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params
+    
+    // Validar ID da obra
+    const obraId = parseInt(id)
+    if (isNaN(obraId) || obraId <= 0) {
+      return res.status(400).json({ 
+        error: 'ID de obra inválido',
+        message: 'O ID da obra deve ser um número inteiro positivo'
+      })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('sinaleiros_obra')
       .select('*')
-      .eq('obra_id', id)
+      .eq('obra_id', obraId)
       .order('tipo', { ascending: true })
 
     if (error) throw error
@@ -2767,12 +2801,13 @@ router.get('/alertas/fim-proximo', authenticateToken, async (req, res) => {
  * Adicionar supervisor terceirizado à obra
  */
 const supervisorTerceirizadoSchema = Joi.object({
-  nome: Joi.string().min(2).required(),
-  email: Joi.string().email().required(),
+  supervisor_id: Joi.number().integer().optional(), // ID do supervisor existente para vincular
+  nome: Joi.string().min(2).optional(), // Obrigatório apenas se não fornecer supervisor_id
+  email: Joi.string().email().optional(), // Obrigatório apenas se não fornecer supervisor_id
   telefone: Joi.string().allow('', null).optional(),
   observacoes: Joi.string().allow('', null).optional(),
   data_inicio: Joi.date().optional()
-})
+}).or('supervisor_id', 'nome', 'email') // Pelo menos supervisor_id OU (nome E email)
 
 router.post('/:id/supervisores', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
@@ -2799,6 +2834,89 @@ router.post('/:id/supervisores', authenticateToken, requirePermission('obras:edi
         success: false,
         error: 'Obra não encontrada',
         message: 'A obra especificada não existe'
+      })
+    }
+
+    // Se supervisor_id foi fornecido, apenas vincular o supervisor existente à obra
+    if (value.supervisor_id) {
+      // Verificar se o supervisor existe e é realmente um supervisor
+      const { data: supervisor, error: supervisorError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome, email, telefone, cargo, status')
+        .eq('id', value.supervisor_id)
+        .eq('cargo', 'Supervisor')
+        .single()
+
+      if (supervisorError || !supervisor) {
+        return res.status(404).json({
+          success: false,
+          error: 'Supervisor não encontrado',
+          message: 'O supervisor especificado não existe ou não é um supervisor válido'
+        })
+      }
+
+      // Verificar se já está vinculado a esta obra
+      const { data: jaVinculado } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('id')
+        .eq('funcionario_id', value.supervisor_id)
+        .eq('obra_id', id)
+        .eq('status', 'ativo')
+        .maybeSingle()
+
+      if (jaVinculado) {
+        return res.status(409).json({
+          success: false,
+          error: 'Supervisor já vinculado',
+          message: 'Este supervisor já está vinculado a esta obra'
+        })
+      }
+
+      // Vincular supervisor à obra
+      const { data: funcionarioObra, error: vincularError } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .insert({
+          funcionario_id: value.supervisor_id,
+          obra_id: parseInt(id),
+          data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
+          status: 'ativo',
+          horas_trabalhadas: 0,
+          is_supervisor: true,
+          observacoes: value.observacoes || `Supervisor ${supervisor.nome} vinculado à obra`
+        })
+        .select(`
+          *,
+          funcionarios(id, nome, email, telefone, cargo)
+        `)
+        .single()
+
+      if (vincularError) {
+        console.error('Erro ao vincular supervisor:', vincularError)
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao vincular supervisor',
+          message: vincularError.message
+        })
+      }
+
+      return res.json({
+        success: true,
+        data: {
+          funcionario_obra: funcionarioObra,
+          funcionario: funcionarioObra.funcionarios,
+          obra: obra
+        },
+        message: 'Supervisor vinculado à obra com sucesso'
+      })
+    }
+
+    // Se não forneceu supervisor_id, criar novo supervisor (comportamento antigo)
+    // Validar que nome e email foram fornecidos
+    if (!value.nome || !value.email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        message: 'Nome e email são obrigatórios quando não fornece supervisor_id'
       })
     }
 
@@ -3197,6 +3315,101 @@ router.put('/:obra_id/supervisores/:id', authenticateToken, requirePermission('o
     })
   } catch (error) {
     console.error('Erro ao atualizar supervisor:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/obras/supervisores
+ * Listar todos os supervisores terceirizados existentes
+ * IMPORTANTE: Este endpoint deve vir ANTES de /:obra_id/supervisores/:id para evitar conflito de rotas
+ */
+router.get('/supervisores', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { search } = req.query
+
+    // Buscar funcionários que são supervisores terceirizados
+    // Supervisores terceirizados são funcionários com cargo 'Supervisor' que têm is_supervisor=true em funcionarios_obras
+    let query = supabaseAdmin
+      .from('funcionarios')
+      .select(`
+        id,
+        nome,
+        email,
+        telefone,
+        cargo,
+        status,
+        funcionarios_obras!inner(
+          id,
+          obra_id,
+          is_supervisor,
+          status,
+          obras(id, nome)
+        )
+      `)
+      .eq('cargo', 'Supervisor')
+      .eq('status', 'Ativo')
+      .eq('funcionarios_obras.is_supervisor', true)
+
+    // Se houver busca, filtrar por nome ou email
+    if (search) {
+      query = query.or(`nome.ilike.%${search}%,email.ilike.%${search}%`)
+    }
+
+    const { data: funcionarios, error } = await query
+
+    if (error) {
+      console.error('Erro ao buscar supervisores:', error)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar supervisores',
+        message: error.message
+      })
+    }
+
+    // Agrupar por funcionário e incluir obras vinculadas
+    const supervisoresMap = new Map()
+    
+    funcionarios?.forEach((func) => {
+      if (!supervisoresMap.has(func.id)) {
+        supervisoresMap.set(func.id, {
+          id: func.id,
+          nome: func.nome,
+          email: func.email,
+          telefone: func.telefone,
+          cargo: func.cargo,
+          status: func.status,
+          obras: []
+        })
+      }
+      
+      // Adicionar obra à lista de obras do supervisor
+      if (func.funcionarios_obras && Array.isArray(func.funcionarios_obras)) {
+        func.funcionarios_obras.forEach((fo) => {
+          if (fo.obras && !supervisoresMap.get(func.id).obras.find((o) => o.id === fo.obras.id)) {
+            supervisoresMap.get(func.id).obras.push(fo.obras)
+          }
+        })
+      } else if (func.funcionarios_obras?.obras) {
+        const obra = func.funcionarios_obras.obras
+        if (!supervisoresMap.get(func.id).obras.find((o) => o.id === obra.id)) {
+          supervisoresMap.get(func.id).obras.push(obra)
+        }
+      }
+    })
+
+    const supervisores = Array.from(supervisoresMap.values())
+
+    res.json({
+      success: true,
+      data: supervisores
+    })
+  } catch (error) {
+    console.error('Erro ao listar supervisores:', error)
     res.status(500).json({
       success: false,
       error: 'Erro interno do servidor',

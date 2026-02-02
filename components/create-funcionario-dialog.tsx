@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useCallback, memo } from "react"
+import { useState, useCallback, memo, useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -13,7 +13,6 @@ import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 import { useToast } from "@/hooks/use-toast"
-import { DebugButton } from "@/components/debug-button"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -47,6 +46,8 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     observations: "",
     criar_usuario: true
   })
+  
+  const previousOpenRef = useRef<boolean>(false)
 
   const handleChange = useCallback((field: string, value: any) => {
     setForm(prev => ({ ...prev, [field]: value }))
@@ -157,32 +158,9 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     })
   }, [form, onSubmit, toast, ehSupervisor])
 
-  const resetForm = useCallback(() => {
-    setForm({
-      name: "",
-      email: "",
-      phone: "",
-      cpf: "",
-      role: "",
-      status: "Ativo",
-      turno: "Diurno",
-      salary: "",
-      hireDate: "",
-      observations: "",
-      criar_usuario: true
-    })
-    setMostrarInputNovoCargo(false)
-    setNovoCargo("")
-    setEhSupervisor(false)
-  }, [])
-
-  // Reset form when dialog opens
   const handleOpenChange = useCallback((open: boolean) => {
-    if (open) {
-      resetForm()
-    }
     onOpenChange(open)
-  }, [onOpenChange, resetForm])
+  }, [onOpenChange])
 
   // Função para preencher dados de debug
   const preencherDadosDebug = useCallback(() => {
@@ -245,6 +223,32 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     })
   }, [cargosAtivos, toast])
 
+  // Reset form when dialog opens (only when transitioning from closed to open)
+  useEffect(() => {
+    const wasOpen = previousOpenRef.current
+    previousOpenRef.current = open
+    
+    if (open && !wasOpen) {
+      // Reset form apenas quando o diálogo muda de fechado para aberto
+      setForm({
+        name: "",
+        email: "",
+        phone: "",
+        cpf: "",
+        role: "",
+        status: "Ativo" as const,
+        turno: "Diurno" as const,
+        salary: "",
+        hireDate: "",
+        observations: "",
+        criar_usuario: true
+      })
+      setMostrarInputNovoCargo(false)
+      setNovoCargo("")
+      setEhSupervisor(false)
+    }
+  }, [open])
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -256,19 +260,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
         </DialogHeader>
         
         <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex justify-between items-center">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={preencherDadosDebug}
-              disabled={submitting}
-              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-            >
-              <Sparkles className="w-4 h-4 mr-2" />
-              Preencher Todos os Dados
-            </Button>
-            <DebugButton onClick={preencherDadosDebug} disabled={submitting} />
-          </div>
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="name">Nome Completo *</Label>
@@ -514,28 +505,40 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
             </div>
           )}
 
-          <div className="flex justify-end gap-2 pt-4">
+          <div className="flex justify-between items-center pt-4 border-t">
             <Button
               type="button"
               variant="outline"
-              onClick={() => onOpenChange(false)}
+              onClick={preencherDadosDebug}
               disabled={submitting}
+              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300 hover:border-yellow-400"
             >
-              Cancelar
+              <Sparkles className="w-4 h-4 mr-2" />
+              Preencher Dados
             </Button>
-            <Button type="submit" disabled={submitting}>
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Criando...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Criar Funcionário
-                </>
-              )}
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                disabled={submitting}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Criando...
+                  </>
+                ) : (
+                  <>
+                    <Plus className="w-4 h-4 mr-2" />
+                    Criar Funcionário
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </form>
       </DialogContent>

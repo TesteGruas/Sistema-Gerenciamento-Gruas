@@ -81,6 +81,7 @@ import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils } from "@/lib/medicoes-utils"
 import { getOrcamentos } from "@/lib/api-orcamentos"
 import FuncionarioSearch from "@/components/funcionario-search"
+import { SupervisorSearch } from "@/components/supervisor-search"
 import { sinaleirosApi, type SinaleiroBackend, type DocumentoSinaleiroBackend } from "@/lib/api-sinaleiros"
 import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
 
@@ -913,6 +914,7 @@ function ObraDetailsPageContent() {
   const [isAdicionarSupervisorOpen, setIsAdicionarSupervisorOpen] = useState(false)
   const [isEditarSupervisorOpen, setIsEditarSupervisorOpen] = useState(false)
   const [supervisorEditando, setSupervisorEditando] = useState<any>(null)
+  const [supervisorSelecionado, setSupervisorSelecionado] = useState<any>(null)
   const [novoSupervisorData, setNovoSupervisorData] = useState({
     nome: '',
     email: '',
@@ -1910,6 +1912,13 @@ function ObraDetailsPageContent() {
 
   // Função auxiliar para verificar se é supervisor
   const isSupervisor = (funcionario: any): boolean => {
+    // Não considerar como supervisor se foi criado automaticamente como contato técnico do cliente
+    if (funcionario.observacoes && (
+      funcionario.observacoes.includes('vinculado automaticamente como supervisor') ||
+      funcionario.observacoes.includes('Contato técnico do cliente')
+    )) {
+      return false
+    }
     return funcionario.isSupervisor === true || 
            funcionario.isSupervisor === 'true' || 
            funcionario.isSupervisor === 1 ||
@@ -2034,10 +2043,10 @@ function ObraDetailsPageContent() {
   const handleAdicionarSupervisorTerceirizado = async (e: React.FormEvent) => {
     e.preventDefault()
     
-    if (!novoSupervisorData.nome || !novoSupervisorData.email) {
+    if (!supervisorSelecionado) {
       toast({
         title: "Erro",
-        description: "Nome e email são obrigatórios",
+        description: "Selecione um supervisor existente",
         variant: "destructive"
       })
       return
@@ -2053,7 +2062,7 @@ function ObraDetailsPageContent() {
           const formData = new FormData()
           formData.append('arquivo', arquivoSupervisor)
           formData.append('categoria', 'supervisores')
-          formData.append('descricao', `Documento do supervisor ${novoSupervisorData.nome}`)
+          formData.append('descricao', `Documento do supervisor ${supervisorSelecionado.nome}`)
           
           const uploadResponse = await fetch(buildApiUrl(`arquivos/upload/${obraId}`), {
             method: 'POST',
@@ -2074,9 +2083,7 @@ function ObraDetailsPageContent() {
       }
       
       const response = await obrasApi.adicionarSupervisorTerceirizado(parseInt(obraId), {
-        nome: novoSupervisorData.nome,
-        email: novoSupervisorData.email,
-        telefone: novoSupervisorData.telefone || undefined,
+        supervisor_id: supervisorSelecionado.id,
         observacoes: novoSupervisorData.observacoes || (arquivoUrl ? `Documento: ${arquivoUrl}` : undefined),
         data_inicio: novoSupervisorData.dataInicio || undefined
       })
@@ -2084,11 +2091,12 @@ function ObraDetailsPageContent() {
       if (response.success) {
         toast({
           title: "Sucesso",
-          description: "Supervisor terceirizado adicionado com sucesso! Email com credenciais enviado.",
+          description: "Supervisor vinculado à obra com sucesso!",
         })
         
         // Fechar modal e limpar dados
         setIsAdicionarSupervisorOpen(false)
+        setSupervisorSelecionado(null)
         setNovoSupervisorData({
           nome: '',
           email: '',
@@ -2104,7 +2112,7 @@ function ObraDetailsPageContent() {
     } catch (error: any) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao adicionar supervisor terceirizado",
+        description: error.message || "Erro ao vincular supervisor à obra",
         variant: "destructive"
       })
     } finally {
@@ -2114,6 +2122,7 @@ function ObraDetailsPageContent() {
 
   const handleCancelarAdicionarSupervisor = () => {
     setIsAdicionarSupervisorOpen(false)
+    setSupervisorSelecionado(null)
     setNovoSupervisorData({
       nome: '',
       email: '',
@@ -2955,9 +2964,9 @@ function ObraDetailsPageContent() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, obra?.id, loadingMedicoes])
 
-  // Carregar sinaleiros quando a aba for ativada
+  // Carregar sinaleiros quando a aba de funcionários for ativada (onde os sinaleiros são exibidos)
   useEffect(() => {
-    if (activeTab === 'sinaleiros' && obra?.id && !loadingSinaleiros && !sinaleirosCarregadosRef.current) {
+    if (activeTab === 'funcionarios' && obra?.id && !loadingSinaleiros && !sinaleirosCarregadosRef.current) {
       sinaleirosCarregadosRef.current = true // Marcar antes para evitar chamadas múltiplas
       carregarSinaleiros()
     }
@@ -4562,6 +4571,44 @@ useEffect(() => {
                 <CardLoader text="Carregando funcionários vinculados..." />
               ) : (
                 <div className="space-y-6">
+                  {/* Seção de Contato Técnico da Obra */}
+                  {(obra?.contato_obra || obra?.telefone_obra || obra?.email_obra) && (
+                    <div>
+                      <div className="flex items-center gap-2 mb-4">
+                        <Users className="w-5 h-5 text-purple-600" />
+                        <h3 className="font-semibold text-base">Contato Técnico da Obra</h3>
+                        <Badge variant="outline" className="ml-2 bg-purple-50 text-purple-700 border-purple-200">
+                          Atrelado ao Cliente
+                        </Badge>
+                      </div>
+                      <div className="border rounded-lg p-4 bg-purple-50/30">
+                        <div className="space-y-2">
+                          {obra?.contato_obra && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-700">Nome:</p>
+                              <p className="text-base font-semibold">{obra.contato_obra}</p>
+                            </div>
+                          )}
+                          {obra?.telefone_obra && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-700">Telefone:</p>
+                              <p className="text-sm">{obra.telefone_obra}</p>
+                            </div>
+                          )}
+                          {obra?.email_obra && (
+                            <div>
+                              <p className="text-sm font-medium text-gray-700">Email:</p>
+                              <p className="text-sm">{obra.email_obra}</p>
+                            </div>
+                          )}
+                          <p className="text-xs text-gray-500 mt-2 italic">
+                            Contato técnico atrelado ao cliente. Não é um funcionário da empresa.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Seção de Supervisores */}
                   <div>
                     <div className="flex items-center gap-2 mb-4">
@@ -6469,46 +6516,24 @@ useEffect(() => {
               Adicionar Supervisor
             </DialogTitle>
             <DialogDescription>
-              Crie um acesso para um supervisor do cliente. O supervisor receberá um email com suas credenciais de acesso.
+              Selecione um supervisor já cadastrado para vincular à obra. Apenas supervisores existentes podem ser adicionados.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleAdicionarSupervisorTerceirizado} className="space-y-6">
             <div className="space-y-4">
-              {/* Nome */}
+              {/* Busca de Supervisor */}
               <div>
-                <Label htmlFor="supervisorNome">Nome *</Label>
-                <Input
-                  id="supervisorNome"
-                  placeholder="Nome completo do supervisor"
-                  value={novoSupervisorData.nome}
-                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, nome: e.target.value })}
-                  required
+                <Label htmlFor="supervisorSearch">Buscar Supervisor *</Label>
+                <SupervisorSearch
+                  onSupervisorSelect={setSupervisorSelecionado}
+                  selectedSupervisor={supervisorSelecionado}
+                  placeholder="Digite o nome ou email do supervisor..."
+                  obraId={parseInt(obraId)}
                 />
-              </div>
-
-              {/* Email */}
-              <div>
-                <Label htmlFor="supervisorEmail">Email *</Label>
-                <Input
-                  id="supervisorEmail"
-                  type="email"
-                  placeholder="email@exemplo.com"
-                  value={novoSupervisorData.email}
-                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, email: e.target.value })}
-                  required
-                />
-              </div>
-
-              {/* Telefone */}
-              <div>
-                <Label htmlFor="supervisorTelefone">Telefone (opcional)</Label>
-                <Input
-                  id="supervisorTelefone"
-                  placeholder="(00) 00000-0000"
-                  value={novoSupervisorData.telefone}
-                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, telefone: e.target.value })}
-                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Apenas supervisores já cadastrados podem ser vinculados à obra.
+                </p>
               </div>
 
               {/* Data de Início */}
@@ -6551,7 +6576,7 @@ useEffect(() => {
               <Button type="button" variant="outline" onClick={handleCancelarAdicionarSupervisor}>
                 Cancelar
               </Button>
-              <Button type="submit" disabled={loadingSupervisor || !novoSupervisorData.nome || !novoSupervisorData.email}>
+              <Button type="submit" disabled={loadingSupervisor || !supervisorSelecionado}>
                 {loadingSupervisor ? (
                   <>
                     <InlineLoader size="sm" />
