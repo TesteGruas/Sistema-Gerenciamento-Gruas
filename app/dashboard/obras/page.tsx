@@ -955,11 +955,82 @@ export default function ObrasPage() {
         return
       }
 
+      // Verificar se é a última obra da página atual
+      const obrasNaPaginaAtual = obras.length
+      const precisaVoltarPagina = obrasNaPaginaAtual === 1 && currentPage > 1
+      const paginaParaCarregar = precisaVoltarPagina ? currentPage - 1 : currentPage
+
       // Excluir obra no backend
       await obrasApi.excluirObra(parseInt(obraToDelete.id))
       
-      // Recarregar lista de obras
-      await carregarObras()
+      // Se era a última obra da página e não é a primeira página, voltar para página anterior
+      if (precisaVoltarPagina) {
+        setCurrentPage(paginaParaCarregar)
+      }
+      
+      // Recarregar lista de obras com a página correta
+      try {
+        startLoading()
+        setError(null)
+        const response = await obrasApi.listarObras({ 
+          page: paginaParaCarregar,
+          limit: itemsPerPage
+        })
+        
+        // Converter obras - os relacionamentos já vêm incluídos no endpoint
+        const obrasComRelacionamentos = await Promise.all(
+          response.data.map(async (obraBackend: any) => {
+            const obraConvertida = converterObraBackendParaFrontend(obraBackend)
+            
+            // Se não houver gruas na listagem, buscar separadamente via grua_obra (fallback)
+            if (!obraConvertida.gruasVinculadas || obraConvertida.gruasVinculadas.length === 0) {
+              try {
+                const gruasResponse = await obrasApi.buscarGruasVinculadas(obraBackend.id)
+                
+                if (gruasResponse.success && gruasResponse.data && gruasResponse.data.length > 0) {
+                  const gruasFormatadas = gruasResponse.data.map((grua: any) => ({
+                    id: grua.id?.toString() || '',
+                    gruaId: grua.gruaId || grua.grua?.id || '',
+                    obraId: obraBackend.id.toString(),
+                    dataInicioLocacao: grua.dataInicioLocacao || '',
+                    dataFimLocacao: grua.dataFimLocacao || null,
+                    valorLocacaoMensal: grua.valorLocacaoMensal || 0,
+                    status: grua.status === 'ativa' ? 'Ativa' : grua.status === 'concluida' ? 'Concluída' : grua.status === 'suspensa' ? 'Suspensa' : 'Ativa',
+                    observacoes: grua.observacoes || '',
+                    createdAt: grua.createdAt || '',
+                    updatedAt: grua.updatedAt || '',
+                    grua: grua.grua ? {
+                      id: grua.grua.id,
+                      modelo: grua.grua.model || grua.grua.modelo || '',
+                      fabricante: grua.grua.manufacturer || grua.grua.fabricante || '',
+                      tipo: grua.grua.type || grua.grua.tipo || ''
+                    } : null
+                  }))
+                  
+                  obraConvertida.gruasVinculadas = gruasFormatadas
+                }
+              } catch (error) {
+                console.error(`❌ Erro ao buscar gruas para obra ${obraBackend.id}:`, error)
+              }
+            }
+            
+            return obraConvertida
+          })
+        )
+        
+        setObras(obrasComRelacionamentos)
+        
+        // Atualizar informações de paginação da API
+        if (response.pagination) {
+          setPagination(response.pagination)
+        }
+      } catch (err) {
+        console.error('Erro ao recarregar obras:', err)
+        setError(err instanceof Error ? err.message : 'Erro ao recarregar obras')
+        setObras([])
+      } finally {
+        stopLoading()
+      }
       
       setIsDeleteDialogOpen(false)
       setObraToDelete(null)

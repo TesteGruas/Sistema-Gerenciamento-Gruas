@@ -87,7 +87,7 @@ router.get('/grua-obra', async (req, res) => {
       .from('grua_obra')
       .select(`
         *,
-        grua:gruas(id, modelo, fabricante, tipo),
+        grua:gruas(id, modelo, fabricante, tipo, capacidade, altura_trabalho, capacidade_ponta, ano),
         obra:obras(id, nome, cliente_id, status)
       `)
 

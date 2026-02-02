@@ -67,6 +67,119 @@ const documentoSchema = Joi.object({
 })
 
 /**
+ * Função auxiliar para buscar informações de usuários em batch
+ * Otimiza queries N+1 buscando todos os usuários de uma vez
+ */
+async function buscarInformacoesUsuarios(assinaturas) {
+  if (!assinaturas || assinaturas.length === 0) {
+    return []
+  }
+
+  const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  
+  // Separar UUIDs (auth users) de IDs numéricos (funcionários/clientes)
+  const authUserIds = []
+  const clienteIds = []
+  const funcionarioIds = []
+  
+  assinaturas.forEach(ass => {
+    if (uuidPattern.test(ass.user_id)) {
+      authUserIds.push(ass.user_id)
+    } else if (ass.tipo === 'cliente') {
+      clienteIds.push(ass.user_id)
+    } else {
+      funcionarioIds.push(ass.user_id)
+    }
+  })
+
+  // Buscar todos os usuários em paralelo
+  const [authUsersMap, clientesMap, funcionariosMap] = await Promise.all([
+    // Buscar usuários auth (um por vez devido à API do Supabase)
+    (async () => {
+      const map = new Map()
+      await Promise.all(authUserIds.map(async (userId) => {
+        try {
+          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId)
+          if (authUser?.user) {
+            map.set(userId, {
+              user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
+              user_email: authUser.user.email || '',
+              user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
+            })
+          }
+        } catch (error) {
+          // Silenciosamente falha e usa valores padrão
+        }
+      }))
+      return map
+    })(),
+    // Buscar clientes em batch
+    clienteIds.length > 0 ? (async () => {
+      const { data: clientes } = await supabaseAdmin
+        .from('clientes')
+        .select('id, nome, email')
+        .in('id', clienteIds)
+      
+      const map = new Map()
+      if (clientes) {
+        clientes.forEach(cliente => {
+          map.set(String(cliente.id), {
+            user_nome: cliente.nome || 'Cliente',
+            user_email: cliente.email || '',
+            user_cargo: 'Cliente'
+          })
+        })
+      }
+      return map
+    })() : Promise.resolve(new Map()),
+    // Buscar funcionários em batch
+    funcionarioIds.length > 0 ? (async () => {
+      const { data: funcionarios } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome, email, cargo')
+        .in('id', funcionarioIds)
+      
+      const map = new Map()
+      if (funcionarios) {
+        funcionarios.forEach(funcionario => {
+          map.set(String(funcionario.id), {
+            user_nome: funcionario.nome || 'Funcionário',
+            user_email: funcionario.email || '',
+            user_cargo: funcionario.cargo || 'Funcionário'
+          })
+        })
+      }
+      return map
+    })() : Promise.resolve(new Map())
+  ])
+
+  // Combinar informações
+  return assinaturas.map(ass => {
+    let userInfo = {
+      user_nome: 'Usuário ID: ' + ass.user_id,
+      user_email: '',
+      user_cargo: ''
+    }
+
+    if (uuidPattern.test(ass.user_id)) {
+      const info = authUsersMap.get(ass.user_id)
+      if (info) userInfo = info
+    } else if (ass.tipo === 'cliente') {
+      const info = clientesMap.get(String(ass.user_id))
+      if (info) userInfo = info
+    } else {
+      const info = funcionariosMap.get(String(ass.user_id))
+      if (info) userInfo = info
+    }
+
+    return {
+      ...ass,
+      ...userInfo
+    }
+  })
+}
+
+/**
  * @swagger
  * /api/obras-documentos/todos:
  *   get:
@@ -204,131 +317,65 @@ router.get('/todos', authenticateToken, requirePermission('obras:visualizar'), a
       })
     }
 
-    // Buscar assinaturas para cada documento
-    const documentosComAssinaturas = await Promise.all(
-      (data || []).map(async (documento) => {
-        const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
+    // Buscar todas as assinaturas e histórico de uma vez (otimização)
+    const documentoIds = (data || []).map(d => d.id)
+    let todasAssinaturas = []
+    let todoHistorico = []
+    
+    if (documentoIds.length > 0) {
+      const [assinaturasResult, historicoResult] = await Promise.all([
+        supabaseAdmin
           .from('obras_documento_assinaturas')
           .select('*')
-          .eq('documento_id', documento.id)
-          .order('ordem', { ascending: true })
-
-        if (assinaturasError) {
-          console.error('Erro ao buscar assinaturas:', assinaturasError)
-        }
-
-        // Buscar histórico
-        const { data: historico, error: historicoError } = await supabaseAdmin
+          .in('documento_id', documentoIds)
+          .order('ordem', { ascending: true }),
+        supabaseAdmin
           .from('obras_documento_historico')
           .select('*')
-          .eq('documento_id', documento.id)
+          .in('documento_id', documentoIds)
           .order('data_acao', { ascending: false })
+      ])
 
-        if (historicoError) {
-          console.error('Erro ao buscar histórico:', historicoError)
-        }
+      if (assinaturasResult.error) {
+        console.error('Erro ao buscar assinaturas:', assinaturasResult.error)
+      } else {
+        todasAssinaturas = assinaturasResult.data || []
+      }
 
-        // Buscar dados dos usuários para as assinaturas
-        const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
-          console.log(`🔍 PROCESSANDO ASSINATURA:`, {
-            user_id: ass.user_id,
-            tipo: ass.tipo,
-            ordem: ass.ordem
-          })
-          
-          let userInfo = {
-            user_nome: 'Usuário ID: ' + ass.user_id,
-            user_email: '',
-            user_cargo: ''
-          }
+      if (historicoResult.error) {
+        console.error('Erro ao buscar histórico:', historicoResult.error)
+      } else {
+        todoHistorico = historicoResult.data || []
+      }
+    }
 
-          // Verificar se é UUID (usuário do Supabase Auth)
-          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-          
-          if (uuidPattern.test(ass.user_id)) {
-            // Buscar no auth.users
-            try {
-              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
-              if (authUser?.user) {
-                userInfo = {
-                  user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
-                  user_email: authUser.user.email || '',
-                  user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
-                }
-              }
-            } catch (error) {
-              console.log('Erro ao buscar usuário auth:', error.message)
-            }
-          } else {
-            // Buscar em funcionários ou clientes baseado no tipo
-            console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
-            try {
-              if (ass.tipo === 'cliente') {
-                // Buscar cliente
-                console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
-                const { data: cliente } = await supabaseAdmin
-                  .from('clientes')
-                  .select('nome, email')
-                  .eq('id', ass.user_id)
-                  .single()
+    // Buscar informações de usuários em batch para todas as assinaturas
+    const assinaturasComUsuario = await buscarInformacoesUsuarios(todasAssinaturas)
+    
+    // Agrupar assinaturas e histórico por documento_id
+    const assinaturasPorDocumento = new Map()
+    const historicoPorDocumento = new Map()
+    
+    assinaturasComUsuario.forEach(ass => {
+      if (!assinaturasPorDocumento.has(ass.documento_id)) {
+        assinaturasPorDocumento.set(ass.documento_id, [])
+      }
+      assinaturasPorDocumento.get(ass.documento_id).push(ass)
+    })
 
-                if (cliente) {
-                  console.log(`✅ Cliente encontrado: ${cliente.nome}`)
-                  userInfo = {
-                    user_nome: cliente.nome || 'Cliente',
-                    user_email: cliente.email || '',
-                    user_cargo: 'Cliente'
-                  }
-                } else {
-                  console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
-                }
-              } else {
-                // Buscar funcionário (tipo 'interno' ou padrão)
-                console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
-                const { data: funcionario } = await supabaseAdmin
-                  .from('funcionarios')
-                  .select('nome, email, cargo')
-                  .eq('id', ass.user_id)
-                  .single()
+    todoHistorico.forEach(hist => {
+      if (!historicoPorDocumento.has(hist.documento_id)) {
+        historicoPorDocumento.set(hist.documento_id, [])
+      }
+      historicoPorDocumento.get(hist.documento_id).push(hist)
+    })
 
-                if (funcionario) {
-                  console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
-                  userInfo = {
-                    user_nome: funcionario.nome || 'Funcionário',
-                    user_email: funcionario.email || '',
-                    user_cargo: funcionario.cargo || 'Funcionário'
-                  }
-                } else {
-                  console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
-                }
-              }
-            } catch (error) {
-              console.log('❌ Erro ao buscar usuário local:', error.message)
-            }
-          }
-
-          const resultado = {
-            ...ass,
-            ...userInfo
-          }
-          
-          console.log(`✅ RESULTADO FINAL:`, {
-            user_id: resultado.user_id,
-            tipo: resultado.tipo,
-            user_nome: resultado.user_nome,
-            user_cargo: resultado.user_cargo
-          })
-          
-          return resultado
-        }))
-
-        return {
-          ...documento,
-          assinaturas: assinaturasComUsuario,
-          historico: historico || []
-        }
-      })
-    )
+    // Combinar documentos com suas assinaturas e histórico
+    const documentosComAssinaturas = (data || []).map(documento => ({
+      ...documento,
+      assinaturas: assinaturasPorDocumento.get(documento.id) || [],
+      historico: historicoPorDocumento.get(documento.id) || []
+    }))
 
     res.json({
       success: true,
@@ -457,120 +504,41 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('obras:vi
       })
     }
 
-    // Buscar assinaturas para cada documento
-    const documentosComAssinaturas = await Promise.all(
-      data.map(async (documento) => {
-        const { data: assinaturas, error: assinaturasError } = await supabaseAdmin
-          .from('obras_documento_assinaturas')
-          .select('*')
-          .eq('documento_id', documento.id)
-          .order('ordem', { ascending: true })
+    // Buscar todas as assinaturas de uma vez (otimização)
+    const documentoIds = data.map(d => d.id)
+    let todasAssinaturas = []
+    
+    if (documentoIds.length > 0) {
+      const { data: assinaturasData, error: assinaturasError } = await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .select('*')
+        .in('documento_id', documentoIds)
+        .order('ordem', { ascending: true })
 
-        if (assinaturasError) {
-          console.error('Erro ao buscar assinaturas:', assinaturasError)
-          return { ...documento, assinaturas: [] }
-        }
+      if (assinaturasError) {
+        console.error('Erro ao buscar assinaturas:', assinaturasError)
+      } else {
+        todasAssinaturas = assinaturasData || []
+      }
+    }
 
-        // Buscar dados dos usuários para as assinaturas
-        const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
-          console.log(`🔍 PROCESSANDO ASSINATURA:`, {
-            user_id: ass.user_id,
-            tipo: ass.tipo,
-            ordem: ass.ordem
-          })
-          
-          let userInfo = {
-            user_nome: 'Usuário ID: ' + ass.user_id,
-            user_email: '',
-            user_cargo: ''
-          }
+    // Buscar informações de usuários em batch para todas as assinaturas
+    const assinaturasComUsuario = await buscarInformacoesUsuarios(todasAssinaturas)
+    
+    // Agrupar assinaturas com informações de usuários por documento_id
+    const assinaturasPorDocumento = new Map()
+    assinaturasComUsuario.forEach(ass => {
+      if (!assinaturasPorDocumento.has(ass.documento_id)) {
+        assinaturasPorDocumento.set(ass.documento_id, [])
+      }
+      assinaturasPorDocumento.get(ass.documento_id).push(ass)
+    })
 
-          // Verificar se é UUID (usuário do Supabase Auth)
-          const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-          
-          if (uuidPattern.test(ass.user_id)) {
-            // Buscar no auth.users
-            try {
-              const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
-              if (authUser?.user) {
-                userInfo = {
-                  user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
-                  user_email: authUser.user.email || '',
-                  user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
-                }
-              }
-            } catch (error) {
-              console.log('Erro ao buscar usuário auth:', error.message)
-            }
-          } else {
-            // Buscar em funcionários ou clientes baseado no tipo
-            console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
-            try {
-              if (ass.tipo === 'cliente') {
-                // Buscar cliente
-                console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
-                const { data: cliente } = await supabaseAdmin
-                  .from('clientes')
-                  .select('nome, email')
-                  .eq('id', ass.user_id)
-                  .single()
-
-                if (cliente) {
-                  console.log(`✅ Cliente encontrado: ${cliente.nome}`)
-                  userInfo = {
-                    user_nome: cliente.nome || 'Cliente',
-                    user_email: cliente.email || '',
-                    user_cargo: 'Cliente'
-                  }
-                } else {
-                  console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
-                }
-              } else {
-                // Buscar funcionário (tipo 'interno' ou padrão)
-                console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
-                const { data: funcionario } = await supabaseAdmin
-                  .from('funcionarios')
-                  .select('nome, email, cargo')
-                  .eq('id', ass.user_id)
-                  .single()
-
-                if (funcionario) {
-                  console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
-                  userInfo = {
-                    user_nome: funcionario.nome || 'Funcionário',
-                    user_email: funcionario.email || '',
-                    user_cargo: funcionario.cargo || 'Funcionário'
-                  }
-                } else {
-                  console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
-                }
-              }
-            } catch (error) {
-              console.log('❌ Erro ao buscar usuário local:', error.message)
-            }
-          }
-
-          const resultado = {
-            ...ass,
-            ...userInfo
-          }
-          
-          console.log(`✅ RESULTADO FINAL:`, {
-            user_id: resultado.user_id,
-            tipo: resultado.tipo,
-            user_nome: resultado.user_nome,
-            user_cargo: resultado.user_cargo
-          })
-          
-          return resultado
-        }))
-
-        return {
-          ...documento,
-          ordemAssinatura: assinaturasComUsuario
-        }
-      })
-    )
+    // Combinar documentos com suas assinaturas
+    const documentosComAssinaturas = data.map(documento => ({
+      ...documento,
+      ordemAssinatura: assinaturasPorDocumento.get(documento.id) || []
+    }))
 
     res.json({
       success: true,
@@ -672,17 +640,10 @@ async function criarDocumento(req, res, obraId = null) {
     }
 
     // Validar dados
-    console.log('=== DEBUG PARSING ===')
-    console.log('ordem_assinatura raw:', ordem_assinatura)
-    console.log('typeof ordem_assinatura:', typeof ordem_assinatura)
-    console.log('obraId:', obraId || 'Nenhuma (documento geral)')
-    
     let ordemAssinaturaArray
     try {
       ordemAssinaturaArray = JSON.parse(ordem_assinatura)
-      console.log('ordemAssinaturaArray parsed:', JSON.stringify(ordemAssinaturaArray, null, 2))
     } catch (parseError) {
-      console.error('❌ Erro ao fazer parse de ordem_assinatura:', parseError)
       return res.status(400).json({
         success: false,
         message: 'Formato inválido de ordem_assinatura',
@@ -695,9 +656,6 @@ async function criarDocumento(req, res, obraId = null) {
       descricao,
       ordem_assinatura: ordemAssinaturaArray
     })
-    
-    console.log('validationError:', validationError)
-    console.log('=== FIM DEBUG PARSING ===')
 
     if (validationError) {
       return res.status(400).json({
@@ -853,10 +811,6 @@ async function criarDocumento(req, res, obraId = null) {
     }
 
     // Salvar ordem de assinaturas
-    console.log('=== DEBUG ASSINATURAS ===')
-    console.log('ordemAssinaturaArray:', JSON.stringify(ordemAssinaturaArray, null, 2))
-    console.log('documento.id:', documento.id)
-    
     const assinaturasData = ordemAssinaturaArray.map(item => ({
       documento_id: documento.id,
       user_id: item.user_id, // Usar o ID original (string)
@@ -865,8 +819,6 @@ async function criarDocumento(req, res, obraId = null) {
       tipo: item.tipo || 'interno', // Default para 'interno' se não especificado
       docu_sign_link: item.docu_sign_link || null
     }))
-
-    console.log('assinaturasData preparado:', JSON.stringify(assinaturasData, null, 2))
 
     const { data: assinaturasInseridas, error: assinaturasError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
@@ -881,9 +833,6 @@ async function criarDocumento(req, res, obraId = null) {
         error: assinaturasError.message
       })
     }
-
-    console.log('Assinaturas inseridas com sucesso:', assinaturasInseridas)
-    console.log('=== FIM DEBUG ASSINATURAS ===')
 
     // Registrar no histórico
     await supabaseAdmin
@@ -1738,96 +1687,8 @@ router.get('/documentos/:documentoId', authenticateToken, requirePermission('obr
       console.error('Erro ao buscar histórico:', historicoError)
     }
 
-    // Buscar dados dos usuários para as assinaturas
-    const assinaturasComUsuario = await Promise.all((assinaturas || []).map(async (ass) => {
-      console.log(`🔍 PROCESSANDO ASSINATURA:`, {
-        user_id: ass.user_id,
-        tipo: ass.tipo,
-        ordem: ass.ordem
-      })
-      
-      let userInfo = {
-        user_nome: 'Usuário ID: ' + ass.user_id,
-        user_email: '',
-        user_cargo: ''
-      }
-
-      const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
-      if (uuidPattern.test(ass.user_id)) {
-        // Buscar no auth.users
-        try {
-          const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(ass.user_id)
-          if (authUser?.user) {
-            userInfo = {
-              user_nome: authUser.user.user_metadata?.nome || authUser.user.email || 'Usuário Auth',
-              user_email: authUser.user.email || '',
-              user_cargo: authUser.user.user_metadata?.cargo || 'Usuário'
-            }
-          }
-        } catch (error) {
-          console.log('Erro ao buscar usuário auth:', error.message)
-        }
-      } else {
-        // Buscar em funcionários ou clientes baseado no tipo
-        console.log(`🔍 Buscando usuário: ID=${ass.user_id}, Tipo=${ass.tipo}`)
-        try {
-          if (ass.tipo === 'cliente') {
-            console.log(`📋 Buscando CLIENTE com ID: ${ass.user_id}`)
-            const { data: cliente } = await supabaseAdmin
-              .from('clientes')
-              .select('nome, email')
-              .eq('id', ass.user_id)
-              .single()
-
-            if (cliente) {
-              console.log(`✅ Cliente encontrado: ${cliente.nome}`)
-              userInfo = {
-                user_nome: cliente.nome || 'Cliente',
-                user_email: cliente.email || '',
-                user_cargo: 'Cliente'
-              }
-            } else {
-              console.log(`❌ Cliente não encontrado com ID: ${ass.user_id}`)
-            }
-          } else {
-            console.log(`👷 Buscando FUNCIONÁRIO com ID: ${ass.user_id}`)
-            const { data: funcionario } = await supabaseAdmin
-              .from('funcionarios')
-              .select('nome, email, cargo')
-              .eq('id', ass.user_id)
-              .single()
-
-            if (funcionario) {
-              console.log(`✅ Funcionário encontrado: ${funcionario.nome}`)
-              userInfo = {
-                user_nome: funcionario.nome || 'Funcionário',
-                user_email: funcionario.email || '',
-                user_cargo: funcionario.cargo || 'Funcionário'
-              }
-            } else {
-              console.log(`❌ Funcionário não encontrado com ID: ${ass.user_id}`)
-            }
-          }
-        } catch (error) {
-          console.log('❌ Erro ao buscar usuário local:', error.message)
-        }
-      }
-
-      const resultado = {
-        ...ass,
-        ...userInfo
-      }
-      
-      console.log(`✅ RESULTADO FINAL:`, {
-        user_id: resultado.user_id,
-        tipo: resultado.tipo,
-        user_nome: resultado.user_nome,
-        user_cargo: resultado.user_cargo
-      })
-      
-      return resultado
-    }))
+    // Buscar dados dos usuários para as assinaturas usando função otimizada
+    const assinaturasComUsuario = await buscarInformacoesUsuarios(assinaturas || [])
 
     const documentoCompleto = {
       ...documento,

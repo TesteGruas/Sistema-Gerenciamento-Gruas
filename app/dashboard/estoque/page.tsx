@@ -28,6 +28,9 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { obrasApi } from "@/lib/api-obras"
 import { gruasApi } from "@/lib/api-gruas"
 import { DebugButton } from "@/components/debug-button"
+import { apiComponentes, type ComponenteAgrupadoPorGrua } from "@/lib/api-componentes"
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
+import { ConeIcon as Crane } from "lucide-react"
 
 export default function EstoquePage() {
   const { toast } = useToast()
@@ -44,6 +47,10 @@ export default function EstoquePage() {
   const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Produto | null>(null)
   const [error, setError] = useState<string | null>(null)
+  
+  // Estados para componentes agrupados por grua
+  const [componentesAgrupados, setComponentesAgrupados] = useState<ComponenteAgrupadoPorGrua[]>([])
+  const [loadingComponentesAgrupados, setLoadingComponentesAgrupados] = useState(false)
   
   // Estados para filtros
   const [filtros, setFiltros] = useState({
@@ -171,6 +178,30 @@ export default function EstoquePage() {
     return () => clearTimeout(timer)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtrosMovimentacoes, dadosIniciaisCarregados])
+
+  // Carregar componentes agrupados por grua
+  const carregarComponentesAgrupados = async () => {
+    try {
+      setLoadingComponentesAgrupados(true)
+      const response = await apiComponentes.buscarAgrupadosPorGrua()
+      setComponentesAgrupados(response.data || [])
+    } catch (error) {
+      console.error('Erro ao carregar componentes agrupados:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao carregar componentes agrupados por grua",
+        variant: "destructive",
+      })
+    } finally {
+      setLoadingComponentesAgrupados(false)
+    }
+  }
+
+  // Carregar componentes agrupados quando a página carregar
+  useEffect(() => {
+    carregarComponentesAgrupados()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const carregarDados = async () => {
     try {
@@ -1684,6 +1715,7 @@ export default function EstoquePage() {
       <Tabs defaultValue="estoque">
         <TabsList>
           <TabsTrigger value="estoque">Itens em Estoque</TabsTrigger>
+          <TabsTrigger value="componentes-grua">Componentes de Gruas</TabsTrigger>
           <TabsTrigger value="movimentacoes">Movimentações</TabsTrigger>
         </TabsList>
 
@@ -1977,6 +2009,143 @@ export default function EstoquePage() {
                   </div>
                 )}
               </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="componentes-grua">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Crane className="w-5 h-5" />
+                Componentes de Gruas no Estoque
+              </CardTitle>
+              <CardDescription>
+                Visualização agrupada dos componentes de gruas que estão vinculados ao estoque
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingComponentesAgrupados ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                  <span className="ml-2 text-gray-600">Carregando componentes...</span>
+                </div>
+              ) : componentesAgrupados.length === 0 ? (
+                <div className="text-center py-12">
+                  <Crane className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">
+                    Nenhum componente encontrado
+                  </h3>
+                  <p className="text-gray-600">
+                    Não há componentes de gruas vinculados ao estoque no momento.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <p className="text-sm text-blue-800">
+                      <strong>Total de gruas com componentes no estoque:</strong> {componentesAgrupados.length}
+                    </p>
+                  </div>
+
+                  <Accordion type="single" collapsible className="w-full">
+                    {componentesAgrupados.map((grupo, index) => (
+                      <AccordionItem key={grupo.grua.id || index} value={`grua-${grupo.grua.id || index}`}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <div className="flex items-center gap-3">
+                              <Crane className="w-5 h-5 text-blue-600" />
+                              <div className="text-left">
+                                <p className="font-semibold text-gray-900">
+                                  {grupo.grua.name || `Grua ${grupo.grua.id}`}
+                                </p>
+                                <p className="text-sm text-gray-600">
+                                  {grupo.grua.fabricante} {grupo.grua.modelo}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4 text-sm text-gray-600">
+                              <span>
+                                <strong>{grupo.total_componentes}</strong> componente{grupo.total_componentes !== 1 ? 's' : ''}
+                              </span>
+                              <span>
+                                <strong>{grupo.total_quantidade}</strong> unidade{grupo.total_quantidade !== 1 ? 's' : ''}
+                              </span>
+                              <span className="text-green-600 font-semibold">
+                                R$ {grupo.total_valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </span>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="pt-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Nome</TableHead>
+                                  <TableHead>Tipo</TableHead>
+                                  <TableHead>Quantidade Total</TableHead>
+                                  <TableHead>Disponível</TableHead>
+                                  <TableHead>Em Uso</TableHead>
+                                  <TableHead>Status</TableHead>
+                                  <TableHead>Localização</TableHead>
+                                  <TableHead className="text-right">Valor Total</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {grupo.componentes.map((componente) => (
+                                  <TableRow key={componente.id}>
+                                    <TableCell className="font-medium">
+                                      {componente.nome}
+                                      {componente.modelo && (
+                                        <span className="text-xs text-gray-500 block">
+                                          {componente.modelo}
+                                        </span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge variant="outline">{componente.tipo}</Badge>
+                                    </TableCell>
+                                    <TableCell>{componente.quantidade_total} {componente.unidade_medida}</TableCell>
+                                    <TableCell>
+                                      <span className="text-green-600 font-medium">
+                                        {componente.quantidade_disponivel} {componente.unidade_medida}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
+                                      <span className="text-blue-600 font-medium">
+                                        {componente.quantidade_em_uso} {componente.unidade_medida}
+                                      </span>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant={
+                                          componente.status === 'Disponível' ? 'default' :
+                                          componente.status === 'Em uso' ? 'secondary' :
+                                          componente.status === 'Danificado' ? 'destructive' :
+                                          'outline'
+                                        }
+                                      >
+                                        {componente.status}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      {componente.localizacao_tipo || componente.localizacao || 'N/A'}
+                                    </TableCell>
+                                    <TableCell className="text-right font-semibold">
+                                      R$ {componente.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </TableCell>
+                                  </TableRow>
+                                ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>

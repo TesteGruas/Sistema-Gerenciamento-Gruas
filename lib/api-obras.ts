@@ -767,7 +767,28 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     gruasVinculadas: gruasVinculadas.length > 0 ? gruasVinculadas : (relacionamentos?.gruasVinculadas || []),
     funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || []),
     // Preservar sinaleiros_obra do backend
-    sinaleiros_obra: obraBackend.sinaleiros_obra || []
+    sinaleiros_obra: obraBackend.sinaleiros_obra || [],
+    // Preservar responsável técnico do backend
+    responsavel_tecnico: obraBackend.responsaveis_tecnicos?.find((rt: any) => rt.tipo === 'obra') || obraBackend.responsavel_tecnico || null,
+    responsavelTecnico: obraBackend.responsaveis_tecnicos?.find((rt: any) => rt.tipo === 'obra') || obraBackend.responsavel_tecnico || null,
+    // Preservar dados de montagem do equipamento (vem da primeira grua_obra)
+    dados_montagem_equipamento: obraBackend.grua_obra?.[0] ? {
+      tipo_base: obraBackend.grua_obra[0].tipo_base,
+      altura_inicial: obraBackend.grua_obra[0].altura_inicial,
+      altura_final: obraBackend.grua_obra[0].altura_final,
+      velocidade_giro: obraBackend.grua_obra[0].velocidade_giro,
+      velocidade_elevacao: obraBackend.grua_obra[0].velocidade_elevacao,
+      velocidade_translacao: obraBackend.grua_obra[0].velocidade_translacao,
+      potencia_instalada: obraBackend.grua_obra[0].potencia_instalada,
+      voltagem: obraBackend.grua_obra[0].voltagem,
+      tipo_ligacao: obraBackend.grua_obra[0].tipo_ligacao,
+      capacidade_ponta: obraBackend.grua_obra[0].capacidade_ponta,
+      capacidade_maxima_raio: obraBackend.grua_obra[0].capacidade_maxima_raio,
+      capacidade_1_cabo: obraBackend.grua_obra[0].capacidade_1_cabo,
+      capacidade_2_cabos: obraBackend.grua_obra[0].capacidade_2_cabos,
+      velocidade_rotacao: obraBackend.grua_obra[0].velocidade_rotacao,
+      observacoes_montagem: obraBackend.grua_obra[0].observacoes_montagem
+    } : null
   }
 }
 
@@ -796,7 +817,13 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
   let gruas = []
   
   // Primeiro, adicionar gruas selecionadas (modo edição com múltiplas gruas)
+  console.log('🔍 DEBUG - Converter: Verificando gruasSelecionadas')
+  console.log('  - gruasSelecionadas existe?', !!obraFrontend.gruasSelecionadas)
+  console.log('  - É array?', Array.isArray(obraFrontend.gruasSelecionadas))
+  console.log('  - Length:', obraFrontend.gruasSelecionadas?.length || 0)
+  
   if (obraFrontend.gruasSelecionadas && Array.isArray(obraFrontend.gruasSelecionadas) && obraFrontend.gruasSelecionadas.length > 0) {
+    console.log('✅ Converter: Processando array de gruas selecionadas')
     gruas = obraFrontend.gruasSelecionadas.map((grua: any) => ({
       grua_id: grua.id,
       valor_locacao: grua.valor_locacao || 0,

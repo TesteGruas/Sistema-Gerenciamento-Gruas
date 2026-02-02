@@ -952,6 +952,127 @@ export default function GruasPage() {
     })
   }
 
+  const preencherECriarGrua = async () => {
+    try {
+      // Preencher formulário com dados de validação
+      setGruaFormData({
+        name: 'validação 1',
+        model: 'GT-500',
+        fabricante: 'Liebherr',
+        capacity: '5000',
+        status: 'disponivel',
+        tipo: 'Grua Torre',
+        lanca: '30',
+        altura_final: '95',
+        ano: '2020',
+        tipo_base: 'Chumbador',
+        capacidade_1_cabo: '2000',
+        capacidade_2_cabos: '1300',
+        potencia_instalada: '42',
+        voltagem: '380V',
+        velocidade_rotacao: '0.8',
+        velocidade_elevacao: '60',
+        observacoes: 'Grua criada automaticamente para validação.',
+        createdAt: new Date().toISOString(),
+        capacidade_ponta: '2000',
+        altura_trabalho: '95',
+        localizacao: 'Depósito Central',
+        horas_operacao: '0',
+        valor_locacao: '15000',
+        valor_real: '15000',
+        valor_operacao: '8000',
+        valor_sinaleiro: '6000',
+        valor_manutencao: '2000',
+        ultima_manutencao: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        proxima_manutencao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
+      })
+
+      // Aguardar um pouco para o estado atualizar
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      // Criar a grua diretamente
+      startCreating()
+      
+      const gruaData = {
+        name: 'validação 1',
+        model: 'GT-500',
+        capacity: '5000',
+        status: 'disponivel',
+        fabricante: 'Liebherr',
+        tipo: 'Grua Torre',
+        lanca: '30',
+        altura_final: 95,
+        ano: 2020,
+        tipo_base: 'Chumbador',
+        capacidade_1_cabo: 2000,
+        capacidade_2_cabos: 1300,
+        potencia_instalada: 42,
+        voltagem: '380V',
+        velocidade_rotacao: 0.8,
+        velocidade_elevacao: 60,
+        observacoes: 'Grua criada automaticamente para validação.',
+      }
+      
+      const response = await gruasApi.criarGrua(gruaData)
+      
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Grua 'validação 1' criada com sucesso!",
+        })
+        
+        // Recarregar a lista de gruas
+        await carregarGruas()
+        
+        // Resetar formulário e fechar dialog
+        setGruaFormData({
+          name: '',
+          model: '',
+          fabricante: '',
+          capacity: '',
+          status: 'disponivel',
+          tipo: '',
+          lanca: '',
+          altura_final: '',
+          ano: '',
+          tipo_base: '',
+          capacidade_1_cabo: '',
+          capacidade_2_cabos: '',
+          potencia_instalada: '',
+          voltagem: '',
+          velocidade_rotacao: '',
+          velocidade_elevacao: '',
+          observacoes: '',
+          createdAt: '',
+          capacidade_ponta: '',
+          altura_trabalho: '',
+          localizacao: '',
+          horas_operacao: '',
+          valor_locacao: '',
+          valor_real: '',
+          valor_operacao: '',
+          valor_sinaleiro: '',
+          valor_manutencao: '',
+          ultima_manutencao: '',
+          proxima_manutencao: ''
+        })
+        
+        setIsCreateDialogOpen(false)
+      } else {
+        throw new Error(response.error || 'Erro ao criar grua')
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar grua:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao criar grua. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      stopCreating()
+    }
+  }
+
   const handleCreateGrua = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -1575,8 +1696,17 @@ export default function GruasPage() {
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateGrua} className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
               <DebugButton onClick={preencherDadosDebugGrua} disabled={creating} />
+              <Button 
+                type="button"
+                onClick={preencherECriarGrua} 
+                disabled={creating}
+                variant="outline"
+                className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+              >
+                Preencher e Criar (validação 1)
+              </Button>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>

@@ -160,6 +160,23 @@ export default function NovaObraPage() {
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Prevenir saída da página durante criação
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (creating) {
+        e.preventDefault()
+        e.returnValue = 'A criação da obra está em andamento. Tem certeza que deseja sair?'
+        return e.returnValue
+      }
+    }
+
+    window.addEventListener('beforeunload', handleBeforeUnload)
+
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [creating])
   
   // Estados do formulário
   const [obraFormData, setObraFormData] = useState({
@@ -720,21 +737,32 @@ export default function NovaObraPage() {
         gruaId: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].id : '',
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
         monthlyFee: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].taxa_mensal?.toString() || '' : '',
-        // Múltiplas gruas
+        // Múltiplas gruas - usar dados específicos de cada grua quando disponíveis, senão usar dados gerais
         gruasSelecionadas: gruasSelecionadas.map(grua => ({
           ...grua,
-          // Incluir dados de montagem do equipamento na grua
-          altura_final: dadosMontagemEquipamento.altura_final ? parseFloat(dadosMontagemEquipamento.altura_final) : undefined,
-          tipo_base: dadosMontagemEquipamento.tipo_base || undefined,
+          // Parâmetros Técnicos - usar dados específicos da grua, senão usar dados gerais
+          tipo_base: grua.tipo_base || dadosMontagemEquipamento.tipo_base || undefined,
+          altura_inicial: grua.altura_inicial || (dadosMontagemEquipamento.altura_inicial ? parseFloat(dadosMontagemEquipamento.altura_inicial) : undefined),
+          altura_final: grua.altura_final || (dadosMontagemEquipamento.altura_final ? parseFloat(dadosMontagemEquipamento.altura_final) : undefined),
+          velocidade_giro: grua.velocidade_giro || (dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined),
+          velocidade_elevacao: grua.velocidade_elevacao || (dadosMontagemEquipamento.velocidade_elevacao ? parseFloat(dadosMontagemEquipamento.velocidade_elevacao) : undefined),
+          velocidade_translacao: grua.velocidade_translacao || (dadosMontagemEquipamento.velocidade_translacao ? parseFloat(dadosMontagemEquipamento.velocidade_translacao) : undefined),
+          potencia_instalada: grua.potencia_instalada || (dadosMontagemEquipamento.potencia_instalada ? parseFloat(dadosMontagemEquipamento.potencia_instalada) : undefined),
+          voltagem: grua.voltagem || dadosMontagemEquipamento.voltagem || undefined,
+          tipo_ligacao: grua.tipo_ligacao || dadosMontagemEquipamento.tipo_ligacao || undefined,
+          capacidade_ponta: grua.capacidade_ponta || (dadosMontagemEquipamento.capacidade_ponta ? parseFloat(dadosMontagemEquipamento.capacidade_ponta) : undefined),
+          capacidade_maxima_raio: grua.capacidade_maxima_raio || undefined,
+          ano_fabricacao: grua.ano_fabricacao || grua.ano || undefined,
+          vida_util: grua.vida_util || undefined,
+          // Dados de montagem específicos (seção geral)
           capacidade_1_cabo: dadosMontagemEquipamento.capacidade_1_cabo ? parseFloat(dadosMontagemEquipamento.capacidade_1_cabo) : undefined,
           capacidade_2_cabos: dadosMontagemEquipamento.capacidade_2_cabos ? parseFloat(dadosMontagemEquipamento.capacidade_2_cabos) : undefined,
-          capacidade_ponta: dadosMontagemEquipamento.capacidade_ponta ? parseFloat(dadosMontagemEquipamento.capacidade_ponta) : undefined,
-          potencia_instalada: dadosMontagemEquipamento.potencia_instalada ? parseFloat(dadosMontagemEquipamento.potencia_instalada) : undefined,
-          voltagem: dadosMontagemEquipamento.voltagem || undefined,
-          tipo_ligacao: dadosMontagemEquipamento.tipo_ligacao || undefined,
           velocidade_rotacao: dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined,
-          velocidade_elevacao: dadosMontagemEquipamento.velocidade_elevacao ? parseFloat(dadosMontagemEquipamento.velocidade_elevacao) : undefined,
-          velocidade_translacao: dadosMontagemEquipamento.velocidade_translacao ? parseFloat(dadosMontagemEquipamento.velocidade_translacao) : undefined,
+          // Serviços e Logística (específicos de cada grua)
+          guindaste_montagem: grua.guindaste_montagem || undefined,
+          quantidade_viagens: grua.quantidade_viagens || undefined,
+          alojamento_alimentacao: grua.alojamento_alimentacao || undefined,
+          responsabilidade_acessorios: grua.responsabilidade_acessorios || undefined,
         })),
         // Dados de montagem do equipamento (geral)
         dados_montagem_equipamento: dadosMontagemEquipamento,
@@ -756,26 +784,154 @@ export default function NovaObraPage() {
         }))
       }
 
-      // Debug: Log dos dados finais
-      console.log('🚀 DEBUG - Dados finais que serão enviados:')
-      console.log('  - Obra básica:', {
+      // Debug: Log COMPLETO de todos os dados que serão enviados
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log('🚀 DEBUG COMPLETO - TODOS OS DADOS QUE SERÃO ENVIADOS')
+      console.log('═══════════════════════════════════════════════════════════')
+      
+      console.log('\n📋 1. DADOS BÁSICOS DA OBRA:')
+      console.log(JSON.stringify({
         name: obraData.name,
+        description: obraData.description,
+        status: obraData.status,
+        startDate: obraData.startDate,
+        endDate: obraData.endDate,
+        budget: obraData.budget,
+        location: obraData.location,
         cidade: obraData.cidade,
         estado: obraData.estado,
         tipo: obraData.tipo,
         cep: obraData.cep,
         contato_obra: obraData.contato_obra,
         telefone_obra: obraData.telefone_obra,
-        email_obra: obraData.email_obra
-      })
-      console.log('  - gruaId:', obraData.gruaId)
-      console.log('  - gruaValue:', obraData.gruaValue)
-      console.log('  - monthlyFee:', obraData.monthlyFee)
-      console.log('  - gruasSelecionadas:', obraData.gruasSelecionadas)
-      console.log('  - custos_mensais:', obraData.custos_mensais)
-      console.log('  - funcionarios:', obraData.funcionarios)
-      console.log('  - responsavel_tecnico:', obraData.responsavel_tecnico)
-      console.log('  - sinaleiros:', obraData.sinaleiros)
+        email_obra: obraData.email_obra,
+        clienteId: obraData.clienteId,
+        orcamento_id: obraData.orcamento_id,
+        observations: obraData.observations
+      }, null, 2))
+      
+      console.log('\n📄 2. DOCUMENTOS:')
+      console.log(JSON.stringify({
+        cno: obraData.cno,
+        art_numero: obraData.art_numero,
+        art_arquivo: obraData.art_arquivo?.name || 'Arquivo não selecionado',
+        apolice_numero: obraData.apolice_numero,
+        apolice_arquivo: obraData.apolice_arquivo?.name || 'Arquivo não selecionado',
+        cnoArquivo: cnoArquivo?.name || 'Não selecionado',
+        manualTecnicoArquivo: manualTecnicoArquivo?.name || 'Não selecionado',
+        termoEntregaArquivo: termoEntregaArquivo?.name || 'Não selecionado',
+        planoCargaArquivo: planoCargaArquivo?.name || 'Não selecionado',
+        aterramentoArquivo: aterramentoArquivo?.name || 'Não selecionado'
+      }, null, 2))
+      
+      console.log('\n🏗️ 3. GRUAS SELECIONADAS:')
+      console.log(JSON.stringify({
+        quantidade: obraData.gruasSelecionadas.length,
+        gruaId: obraData.gruaId,
+        gruaValue: obraData.gruaValue,
+        monthlyFee: obraData.monthlyFee,
+        detalhes: obraData.gruasSelecionadas.map((g: any, idx: number) => ({
+          indice: idx + 1,
+          id: g.id,
+          name: g.name,
+          modelo: g.modelo,
+          fabricante: g.fabricante,
+          tipo: g.tipo,
+          capacidade: g.capacidade,
+          valor_locacao: g.valor_locacao,
+          taxa_mensal: g.taxa_mensal,
+          // Parâmetros Técnicos
+          tipo_base: g.tipo_base,
+          altura_inicial: g.altura_inicial,
+          altura_final: g.altura_final,
+          velocidade_giro: g.velocidade_giro,
+          velocidade_elevacao: g.velocidade_elevacao,
+          velocidade_translacao: g.velocidade_translacao,
+          potencia_instalada: g.potencia_instalada,
+          voltagem: g.voltagem,
+          tipo_ligacao: g.tipo_ligacao,
+          capacidade_ponta: g.capacidade_ponta,
+          capacidade_maxima_raio: g.capacidade_maxima_raio,
+          ano_fabricacao: g.ano_fabricacao,
+          vida_util: g.vida_util,
+          // Dados de montagem específicos (seção geral)
+          capacidade_1_cabo: g.capacidade_1_cabo,
+          capacidade_2_cabos: g.capacidade_2_cabos,
+          velocidade_rotacao: g.velocidade_rotacao,
+          // Serviços e Logística
+          guindaste_montagem: g.guindaste_montagem,
+          quantidade_viagens: g.quantidade_viagens,
+          alojamento_alimentacao: g.alojamento_alimentacao,
+          responsabilidade_acessorios: g.responsabilidade_acessorios
+        }))
+      }, null, 2))
+      
+      console.log('\n⚙️ 4. DADOS DE MONTAGEM DO EQUIPAMENTO (geral):')
+      console.log(JSON.stringify(obraData.dados_montagem_equipamento, null, 2))
+      
+      console.log('\n👥 5. FUNCIONÁRIOS SELECIONADOS:')
+      console.log(JSON.stringify({
+        quantidade: obraData.funcionarios.length,
+        funcionarios: obraData.funcionarios.map((f: any, idx: number) => ({
+          indice: idx + 1,
+          id: f.id,
+          userId: f.userId,
+          role: f.role,
+          name: f.name,
+          gruaId: f.gruaId
+        }))
+      }, null, 2))
+      
+      console.log('\n👨‍💼 6. RESPONSÁVEL TÉCNICO:')
+      console.log(JSON.stringify({
+        responsavelId: obraData.responsavelId,
+        responsavelName: obraData.responsavelName,
+        responsavel_tecnico: obraData.responsavel_tecnico ? {
+          nome: obraData.responsavel_tecnico.nome,
+          cpf_cnpj: obraData.responsavel_tecnico.cpf_cnpj,
+          crea: obraData.responsavel_tecnico.crea,
+          email: obraData.responsavel_tecnico.email,
+          telefone: obraData.responsavel_tecnico.telefone,
+          funcionario_id: obraData.responsavel_tecnico.funcionario_id
+        } : null
+      }, null, 2))
+      
+      console.log('\n🚦 7. SINALEIROS:')
+      console.log(JSON.stringify({
+        quantidade: obraData.sinaleiros.length,
+        sinaleiros: obraData.sinaleiros.map((s: any, idx: number) => ({
+          indice: idx + 1,
+          nome: s.nome,
+          rg_cpf: s.rg_cpf,
+          telefone: s.telefone,
+          email: s.email,
+          tipo: s.tipo
+        }))
+      }, null, 2))
+      
+      console.log('\n💰 8. CUSTOS MENSAIS:')
+      console.log(JSON.stringify({
+        quantidade: obraData.custos_mensais.length,
+        total: obraData.custos_mensais.reduce((acc: number, c: any) => acc + (c.totalOrcamento || 0), 0),
+        custos: obraData.custos_mensais.map((c: any, idx: number) => ({
+          indice: idx + 1,
+          item: c.item,
+          descricao: c.descricao,
+          unidade: c.unidade,
+          quantidadeOrcamento: c.quantidadeOrcamento,
+          valorUnitario: c.valorUnitario,
+          totalOrcamento: c.totalOrcamento,
+          mes: c.mes,
+          tipo: c.tipo
+        }))
+      }, null, 2))
+      
+      console.log('\n📦 9. DADOS COMPLETOS (OBJETO FINAL):')
+      console.log(JSON.stringify(obraData, null, 2))
+      
+      console.log('\n═══════════════════════════════════════════════════════════')
+      console.log('✅ FIM DO DEBUG - Dados prontos para envio')
+      console.log('═══════════════════════════════════════════════════════════\n')
 
       // 1. Fazer upload dos arquivos ART e Apólice (precisamos criar a obra primeiro)
       // Por enquanto, vamos criar a obra sem os arquivos e depois atualizar
@@ -786,6 +942,10 @@ export default function NovaObraPage() {
       delete obraBackendData.art_arquivo
       delete obraBackendData.apolice_arquivo
       
+      console.log('\n🔄 10. DADOS CONVERTIDOS PARA BACKEND:')
+      console.log(JSON.stringify(obraBackendData, null, 2))
+      console.log('\n')
+      
       // 2. Criar a obra
       const response = await obrasApi.criarObra(obraBackendData)
       
@@ -794,10 +954,13 @@ export default function NovaObraPage() {
       }
       
       const obraId = response.data.id
-      console.log('✅ Obra criada com ID:', obraId)
-      console.log('🔍 DEBUG - Estado antes de salvar responsável e sinaleiros:')
-      console.log('  - responsavelTecnico:', responsavelTecnico)
-      console.log('  - sinaleiros:', sinaleiros)
+      console.log('\n✅ Obra criada com ID:', obraId)
+      console.log('📥 RESPOSTA DA API (criação da obra):')
+      console.log(JSON.stringify(response.data, null, 2))
+      
+      console.log('\n🔍 DEBUG - Estado antes de salvar responsável e sinaleiros:')
+      console.log('  - responsavelTecnico:', JSON.stringify(responsavelTecnico, null, 2))
+      console.log('  - sinaleiros:', JSON.stringify(sinaleiros, null, 2))
       
       // 3. Fazer upload dos arquivos ART, Apólice e documentos adicionais
       let artArquivoUrl = ''
@@ -846,33 +1009,45 @@ export default function NovaObraPage() {
         
         // Upload Manual Técnico
         if (manualTecnicoArquivo) {
-          await fazerUploadArquivo(manualTecnicoArquivo, 'manual_tecnico')
+          console.log('📤 Fazendo upload do Manual Técnico...')
+          const manualTecnicoUrl = await fazerUploadArquivo(manualTecnicoArquivo, 'manual_tecnico')
+          console.log('✅ Manual Técnico enviado:', manualTecnicoUrl)
         }
         
         // Upload Termo de Entrega Técnica
         if (termoEntregaArquivo) {
-          await fazerUploadArquivo(termoEntregaArquivo, 'termo_entrega_tecnica')
+          console.log('📤 Fazendo upload do Termo de Entrega Técnica...')
+          const termoEntregaUrl = await fazerUploadArquivo(termoEntregaArquivo, 'termo_entrega_tecnica')
+          console.log('✅ Termo de Entrega Técnica enviado:', termoEntregaUrl)
         }
         
         // Upload Plano de Carga
         if (planoCargaArquivo) {
-          await fazerUploadArquivo(planoCargaArquivo, 'plano_carga')
+          console.log('📤 Fazendo upload do Plano de Carga...')
+          const planoCargaUrl = await fazerUploadArquivo(planoCargaArquivo, 'plano_carga')
+          console.log('✅ Plano de Carga enviado:', planoCargaUrl)
         }
         
         // Upload Aterramento
         if (aterramentoArquivo) {
-          await fazerUploadArquivo(aterramentoArquivo, 'aterramento')
+          console.log('📤 Fazendo upload do Aterramento...')
+          const aterramentoUrl = await fazerUploadArquivo(aterramentoArquivo, 'aterramento')
+          console.log('✅ Aterramento enviado:', aterramentoUrl)
         }
         
         // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
-        await obrasApi.atualizarDocumentos(obraId, {
+        console.log('\n📝 Atualizando documentos da obra...')
+        const documentosUpdate = {
           cno,
           cno_arquivo: cnoArquivoUrl || undefined,
           art_numero: artNumero || undefined,
           art_arquivo: artArquivoUrl || undefined,
           apolice_numero: apoliceNumero || undefined,
           apolice_arquivo: apoliceArquivoUrl || undefined
-        })
+        }
+        console.log('📤 Dados de documentos para atualizar:', JSON.stringify(documentosUpdate, null, 2))
+        const documentosResponse = await obrasApi.atualizarDocumentos(obraId, documentosUpdate)
+        console.log('✅ Documentos atualizados:', JSON.stringify(documentosResponse, null, 2))
       } catch (uploadError) {
         console.error('Erro ao fazer upload de arquivos:', uploadError)
         // Continuar mesmo com erro no upload - a obra já foi criada
@@ -1056,6 +1231,30 @@ export default function NovaObraPage() {
         title: "Sucesso",
         description: "Obra criada com sucesso!"
       })
+      // Resumo final de tudo que foi enviado e salvo
+      console.log('\n═══════════════════════════════════════════════════════════')
+      console.log('📊 RESUMO FINAL - TUDO QUE FOI ENVIADO E SALVO')
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log(`✅ Obra criada com ID: ${obraId}`)
+      console.log(`✅ Nome da Obra: ${obraData.name}`)
+      console.log(`✅ Cliente ID: ${obraData.clienteId}`)
+      console.log(`✅ Gruas vinculadas: ${obraData.gruasSelecionadas.length}`)
+      console.log(`✅ Funcionários vinculados: ${obraData.funcionarios.length}`)
+      console.log(`✅ Sinaleiros cadastrados: ${sinaleiros.length}`)
+      console.log(`✅ Responsável técnico: ${responsavelTecnico ? 'Sim' : 'Não'}`)
+      console.log(`✅ Custos mensais: ${obraData.custos_mensais.length}`)
+      console.log(`✅ Documentos enviados:`)
+      console.log(`   - CNO: ${cno ? 'Sim' : 'Não'}`)
+      console.log(`   - ART: ${artNumero ? 'Sim' : 'Não'}`)
+      console.log(`   - Apólice: ${apoliceNumero ? 'Sim' : 'Não'}`)
+      console.log(`   - Manual Técnico: ${manualTecnicoArquivo ? 'Sim' : 'Não'}`)
+      console.log(`   - Termo Entrega: ${termoEntregaArquivo ? 'Sim' : 'Não'}`)
+      console.log(`   - Plano Carga: ${planoCargaArquivo ? 'Sim' : 'Não'}`)
+      console.log(`✅ Dados de montagem: ${Object.keys(dadosMontagemEquipamento).filter(k => dadosMontagemEquipamento[k as keyof typeof dadosMontagemEquipamento]).length} campos preenchidos`)
+      console.log('\n═══════════════════════════════════════════════════════════')
+      console.log('🎉 PROCESSO CONCLUÍDO COM SUCESSO!')
+      console.log('═══════════════════════════════════════════════════════════\n')
+      
       router.push('/dashboard/obras')
     } catch (err) {
       console.error('Erro ao criar obra:', err)
@@ -1350,27 +1549,193 @@ export default function NovaObraPage() {
     setResponsavelManutencoes({
       nome: 'NESTOR ALVAREZ GONZALEZ',
       cpf_cnpj: '98765432100',
-      crea: 'SP-987654',
+      crea: '123456789',
       email: 'nestor.gonzalez@irbana.com.br',
       telefone: '(11) 98818-5951'
     })
+  }
 
-    setResponsavelMontagemOperacao({
-      nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
-      cpf_cnpj: '12345678901',
-      crea: '5071184591',
-      email: 'alex.nascimento@irbana.com.br',
-      telefone: '(11) 98765-4321'
-    })
+  // Função para preencher apenas os Parâmetros Técnicos de todas as gruas selecionadas
+  const preencherParametrosTecnicos = () => {
+    if (gruasSelecionadas.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos uma grua antes de preencher os parâmetros técnicos.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const dadosParametrosTecnicos = {
+      tipo_base: 'chumbador',
+      altura_inicial: 20,
+      altura_final: 60,
+      velocidade_giro: 0.8,
+      velocidade_elevacao: 60,
+      velocidade_translacao: 0,
+      potencia_instalada: 25,
+      voltagem: '380',
+      tipo_ligacao: 'trifasica',
+      capacidade_ponta: 2000,
+      capacidade_maxima_raio: 5000,
+      ano_fabricacao: 2020,
+      vida_util: 10
+    }
+
+    const gruasAtualizadas = gruasSelecionadas.map(grua => ({
+      ...grua,
+      ...dadosParametrosTecnicos
+    }))
+
+    setGruasSelecionadas(gruasAtualizadas)
 
     toast({
-      title: "Dados de teste preenchidos",
-      description: "Todos os campos foram preenchidos com dados de teste para validação.",
+      title: "Sucesso",
+      description: `Parâmetros técnicos preenchidos para ${gruasSelecionadas.length} grua(s).`,
+      variant: "default"
+    })
+  }
+
+  // Função para preencher apenas os Serviços e Logística de todas as gruas selecionadas
+  const preencherServicosLogistica = () => {
+    if (gruasSelecionadas.length === 0) {
+      toast({
+        title: "Aviso",
+        description: "Selecione pelo menos uma grua antes de preencher os serviços e logística.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const dadosServicosLogistica = {
+      guindaste_montagem: 'incluso',
+      quantidade_viagens: 2,
+      alojamento_alimentacao: 'incluso',
+      responsabilidade_acessorios: 'Estropos, caçambas, garfos, baldes fornecidos por conta do cliente'
+    }
+
+    const gruasAtualizadas = gruasSelecionadas.map(grua => ({
+      ...grua,
+      ...dadosServicosLogistica
+    }))
+
+    setGruasSelecionadas(gruasAtualizadas)
+
+    toast({
+      title: "Sucesso",
+      description: `Serviços e logística preenchidos para ${gruasSelecionadas.length} grua(s).`,
+      variant: "default"
+    })
+  }
+
+  // Função para preencher Parâmetros Técnicos de uma grua específica
+  const preencherParametrosTecnicosGrua = (gruaId: string) => {
+    const dadosParametrosTecnicos = {
+      tipo_base: 'chumbador',
+      altura_inicial: 20,
+      altura_final: 60,
+      velocidade_giro: 0.8,
+      velocidade_elevacao: 60,
+      velocidade_translacao: 0,
+      potencia_instalada: 25,
+      voltagem: '380',
+      tipo_ligacao: 'trifasica',
+      capacidade_ponta: 2000,
+      capacidade_maxima_raio: 5000,
+      ano_fabricacao: 2020,
+      vida_util: 10
+    }
+
+    const gruasAtualizadas = gruasSelecionadas.map(grua => 
+      grua.id === gruaId ? { ...grua, ...dadosParametrosTecnicos } : grua
+    )
+
+    setGruasSelecionadas(gruasAtualizadas)
+
+    toast({
+      title: "Sucesso",
+      description: "Parâmetros técnicos preenchidos para esta grua.",
+      variant: "default"
+    })
+  }
+
+  // Função para preencher Serviços e Logística de uma grua específica
+  const preencherServicosLogisticaGrua = (gruaId: string) => {
+    const dadosServicosLogistica = {
+      guindaste_montagem: 'incluso',
+      quantidade_viagens: 2,
+      alojamento_alimentacao: 'incluso',
+      responsabilidade_acessorios: 'Estropos, caçambas, garfos, baldes fornecidos por conta do cliente'
+    }
+
+    const gruasAtualizadas = gruasSelecionadas.map(grua => 
+      grua.id === gruaId ? { ...grua, ...dadosServicosLogistica } : grua
+    )
+
+    setGruasSelecionadas(gruasAtualizadas)
+
+    toast({
+      title: "Sucesso",
+      description: "Serviços e logística preenchidos para esta grua.",
+      variant: "default"
+    })
+  }
+
+  // Função para preencher todos os dados de uma grua específica
+  const preencherTodosDadosGrua = (gruaId: string) => {
+    const dadosCompletos = {
+      tipo_base: 'chumbador',
+      altura_inicial: 20,
+      altura_final: 60,
+      velocidade_giro: 0.8,
+      velocidade_elevacao: 60,
+      velocidade_translacao: 0,
+      potencia_instalada: 25,
+      voltagem: '380',
+      tipo_ligacao: 'trifasica',
+      capacidade_ponta: 2000,
+      capacidade_maxima_raio: 5000,
+      ano_fabricacao: 2020,
+      vida_util: 10,
+      guindaste_montagem: 'incluso',
+      quantidade_viagens: 2,
+      alojamento_alimentacao: 'incluso',
+      responsabilidade_acessorios: 'Estropos, caçambas, garfos, baldes fornecidos por conta do cliente'
+    }
+
+    const gruasAtualizadas = gruasSelecionadas.map(grua => 
+      grua.id === gruaId ? { ...grua, ...dadosCompletos } : grua
+    )
+
+    setGruasSelecionadas(gruasAtualizadas)
+
+    toast({
+      title: "Sucesso",
+      description: "Todos os dados preenchidos para esta grua.",
+      variant: "default"
     })
   }
 
   return (
-    <div className="space-y-6 w-full">
+    <div className="space-y-6 w-full relative">
+      {/* Loading Overlay */}
+      {creating && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-xl p-8 max-w-md w-full mx-4 flex flex-col items-center gap-4">
+            <Loader2 className="w-12 h-12 text-blue-600 animate-spin" />
+            <div className="text-center">
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Criando Obra...</h3>
+              <p className="text-sm text-gray-600">
+                Por favor, aguarde enquanto processamos os dados e fazemos o upload dos arquivos.
+              </p>
+              <p className="text-xs text-gray-500 mt-2">
+                Não feche esta página ou navegue para outra aba.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -1413,13 +1778,12 @@ export default function NovaObraPage() {
       {/* Formulário */}
       <form onSubmit={handleCreateObra} className="">
         <Tabs defaultValue="obra" className="w-full">
-          <TabsList className="grid w-full grid-cols-7">
+          <TabsList className="grid w-full grid-cols-6">
             <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
             <TabsTrigger value="documentos">Documentos</TabsTrigger>
             <TabsTrigger value="responsavel-tecnico">Responsável Técnico</TabsTrigger>
             <TabsTrigger value="grua">Grua</TabsTrigger>
             <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
-            <TabsTrigger value="custos">Valores</TabsTrigger>
           </TabsList>
 
           {/* Aba: Dados da Obra */}
@@ -1619,189 +1983,6 @@ export default function NovaObraPage() {
                     value={obraFormData.observations}
                     onChange={(e) => setObraFormData({ ...obraFormData, observations: e.target.value })}
                     placeholder="Observações adicionais sobre a obra..."
-                    rows={3}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Seção: Dados de Montagem do Equipamento */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Settings className="w-5 h-5 text-blue-600" />
-                  Dados de Montagem do Equipamento
-                </CardTitle>
-                <CardDescription>
-                  Configure a configuração da grua contratada pelo cliente (90% das vezes não vêm com os tamanhos originais)
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
-                  <p className="text-sm text-amber-800">
-                    <strong>Importante:</strong> Preencha os dados da configuração real da grua contratada pelo cliente, pois geralmente diferem dos tamanhos originais do equipamento.
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="altura_final">Altura Final (m)</Label>
-                    <Input
-                      id="altura_final"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.altura_final}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, altura_final: e.target.value })}
-                      placeholder="Ex: 45.50"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="tipo_base">Tipo de Base</Label>
-                    <Select 
-                      value={dadosMontagemEquipamento.tipo_base} 
-                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_base: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo de base" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Chumbador">Chumbador</SelectItem>
-                        <SelectItem value="Roda">Roda</SelectItem>
-                        <SelectItem value="Carrinho">Carrinho</SelectItem>
-                        <SelectItem value="Fixação Direta">Fixação Direta</SelectItem>
-                        <SelectItem value="Outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="capacidade_1_cabo">Capacidade com 1 Cabo (kg)</Label>
-                    <Input
-                      id="capacidade_1_cabo"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.capacidade_1_cabo}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_1_cabo: e.target.value })}
-                      placeholder="Ex: 8000"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="capacidade_2_cabos">Capacidade com 2 Cabos (kg)</Label>
-                    <Input
-                      id="capacidade_2_cabos"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.capacidade_2_cabos}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_2_cabos: e.target.value })}
-                      placeholder="Ex: 16000"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="capacidade_ponta">Capacidade na Ponta (kg)</Label>
-                    <Input
-                      id="capacidade_ponta"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.capacidade_ponta}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_ponta: e.target.value })}
-                      placeholder="Ex: 2000"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="potencia_instalada">Potência Instalada (kVA)</Label>
-                    <Input
-                      id="potencia_instalada"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.potencia_instalada}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, potencia_instalada: e.target.value })}
-                      placeholder="Ex: 30.5"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="voltagem">Voltagem (V)</Label>
-                    <Select 
-                      value={dadosMontagemEquipamento.voltagem} 
-                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, voltagem: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a voltagem" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="220">220V</SelectItem>
-                        <SelectItem value="380">380V</SelectItem>
-                        <SelectItem value="440">440V</SelectItem>
-                        <SelectItem value="Outro">Outro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="tipo_ligacao">Tipo de Ligação</Label>
-                    <Select 
-                      value={dadosMontagemEquipamento.tipo_ligacao} 
-                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_ligacao: value })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o tipo" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Trifásica">Trifásica</SelectItem>
-                        <SelectItem value="Monofásica">Monofásica</SelectItem>
-                        <SelectItem value="Bifásica">Bifásica</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="velocidade_rotacao">Velocidade de Rotação (rpm)</Label>
-                    <Input
-                      id="velocidade_rotacao"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.velocidade_rotacao}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_rotacao: e.target.value })}
-                      placeholder="Ex: 0.8"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min)</Label>
-                    <Input
-                      id="velocidade_elevacao"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.velocidade_elevacao}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_elevacao: e.target.value })}
-                      placeholder="Ex: 40"
-                    />
-                  </div>
-
-                  <div>
-                    <Label htmlFor="velocidade_translacao">Velocidade de Translação (m/min)</Label>
-                    <Input
-                      id="velocidade_translacao"
-                      type="number"
-                      step="0.01"
-                      value={dadosMontagemEquipamento.velocidade_translacao}
-                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_translacao: e.target.value })}
-                      placeholder="Ex: 25"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label htmlFor="observacoes_montagem">Observações sobre a Montagem</Label>
-                  <Textarea
-                    id="observacoes_montagem"
-                    value={dadosMontagemEquipamento.observacoes_montagem}
-                    onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, observacoes_montagem: e.target.value })}
-                    placeholder="Observações sobre a configuração específica da grua contratada..."
                     rows={3}
                   />
                 </div>
@@ -2141,6 +2322,189 @@ export default function NovaObraPage() {
 
           {/* Aba: Gruas */}
           <TabsContent value="grua" className="space-y-4" forceMount>
+            {/* Seção: Dados de Montagem do Equipamento */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Settings className="w-5 h-5 text-blue-600" />
+                  Dados de Montagem do Equipamento
+                </CardTitle>
+                <CardDescription>
+                  Configure a configuração da grua contratada pelo cliente (90% das vezes não vêm com os tamanhos originais)
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="bg-amber-50 p-4 rounded-lg border border-amber-200">
+                  <p className="text-sm text-amber-800">
+                    <strong>Importante:</strong> Preencha os dados da configuração real da grua contratada pelo cliente, pois geralmente diferem dos tamanhos originais do equipamento.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="altura_final">Altura Final (m)</Label>
+                    <Input
+                      id="altura_final"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.altura_final}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, altura_final: e.target.value })}
+                      placeholder="Ex: 45.50"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="tipo_base">Tipo de Base</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.tipo_base} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_base: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo de base" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Chumbador">Chumbador</SelectItem>
+                        <SelectItem value="Roda">Roda</SelectItem>
+                        <SelectItem value="Carrinho">Carrinho</SelectItem>
+                        <SelectItem value="Fixação Direta">Fixação Direta</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_1_cabo">Capacidade com 1 Cabo (kg)</Label>
+                    <Input
+                      id="capacidade_1_cabo"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_1_cabo}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_1_cabo: e.target.value })}
+                      placeholder="Ex: 8000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_2_cabos">Capacidade com 2 Cabos (kg)</Label>
+                    <Input
+                      id="capacidade_2_cabos"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_2_cabos}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_2_cabos: e.target.value })}
+                      placeholder="Ex: 16000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="capacidade_ponta">Capacidade na Ponta (kg)</Label>
+                    <Input
+                      id="capacidade_ponta"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.capacidade_ponta}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, capacidade_ponta: e.target.value })}
+                      placeholder="Ex: 2000"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="potencia_instalada">Potência Instalada (kVA)</Label>
+                    <Input
+                      id="potencia_instalada"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.potencia_instalada}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, potencia_instalada: e.target.value })}
+                      placeholder="Ex: 30.5"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="voltagem">Voltagem (V)</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.voltagem} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, voltagem: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione a voltagem" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="220">220V</SelectItem>
+                        <SelectItem value="380">380V</SelectItem>
+                        <SelectItem value="440">440V</SelectItem>
+                        <SelectItem value="Outro">Outro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="tipo_ligacao">Tipo de Ligação</Label>
+                    <Select 
+                      value={dadosMontagemEquipamento.tipo_ligacao} 
+                      onValueChange={(value) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, tipo_ligacao: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o tipo" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Trifásica">Trifásica</SelectItem>
+                        <SelectItem value="Monofásica">Monofásica</SelectItem>
+                        <SelectItem value="Bifásica">Bifásica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_rotacao">Velocidade de Rotação (rpm)</Label>
+                    <Input
+                      id="velocidade_rotacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_rotacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_rotacao: e.target.value })}
+                      placeholder="Ex: 0.8"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min)</Label>
+                    <Input
+                      id="velocidade_elevacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_elevacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_elevacao: e.target.value })}
+                      placeholder="Ex: 40"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="velocidade_translacao">Velocidade de Translação (m/min)</Label>
+                    <Input
+                      id="velocidade_translacao"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.velocidade_translacao}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_translacao: e.target.value })}
+                      placeholder="Ex: 25"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="observacoes_montagem">Observações sobre a Montagem</Label>
+                  <Textarea
+                    id="observacoes_montagem"
+                    value={dadosMontagemEquipamento.observacoes_montagem}
+                    onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, observacoes_montagem: e.target.value })}
+                    placeholder="Observações sobre a configuração específica da grua contratada..."
+                    rows={3}
+                  />
+                </div>
+              </CardContent>
+            </Card>
+
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -2195,16 +2559,48 @@ export default function NovaObraPage() {
                           </div>
                           <AccordionContent>
                             <div className="space-y-4 pb-4">
+                              {/* Botão para preencher todos os dados desta grua */}
+                              <div className="flex justify-end mb-2">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => preencherTodosDadosGrua(grua.id)}
+                                  disabled={creating}
+                                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+                                  title="Preencher todos os campos desta grua com dados de teste"
+                                >
+                                  <Zap className="w-3 h-3 mr-1" />
+                                  Preencher Todos os Dados desta Grua
+                                </Button>
+                              </div>
+                              
                               {/* Seção: Parâmetros Técnicos */}
                               <Card>
                                 <CardHeader className="pb-3">
-                                  <CardTitle className="text-base flex items-center gap-2">
-                                    <Settings className="w-4 h-4" />
-                                    Parâmetros Técnicos
-                                  </CardTitle>
-                                  <CardDescription className="text-xs text-gray-500 mt-1">
-                                    Os dados técnicos devem ser definidos no orçamento. Estes campos são apenas para ajustes finais se necessário.
-                                  </CardDescription>
+                                  <div className="flex items-start justify-between gap-4">
+                                    <div className="flex-1">
+                                      <CardTitle className="text-base flex items-center gap-2">
+                                        <Settings className="w-4 h-4" />
+                                        Parâmetros Técnicos
+                                      </CardTitle>
+                                      <CardDescription className="text-xs text-gray-500 mt-1">
+                                        Os dados técnicos devem ser definidos no orçamento. Estes campos são apenas para ajustes finais se necessário.
+                                      </CardDescription>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={preencherParametrosTecnicos}
+                                      disabled={creating || gruasSelecionadas.length === 0}
+                                      className="shrink-0"
+                                      title="Preencher todos os campos de Parâmetros Técnicos com dados de teste"
+                                    >
+                                      <Zap className="w-3 h-3 mr-1" />
+                                      Preencher
+                                    </Button>
+                                  </div>
                                 </CardHeader>
                                 <CardContent>
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2437,10 +2833,24 @@ export default function NovaObraPage() {
                               {/* NOTA: Seção "Valores Detalhados" removida - esses dados devem estar na aba "Valores" (orçamentos) */}
                               <Card>
                                 <CardHeader className="pb-3">
-                                  <CardTitle className="text-base flex items-center gap-2">
-                                    <Truck className="w-4 h-4" />
-                                    Serviços e Logística
-                                  </CardTitle>
+                                  <div className="flex items-start justify-between gap-4">
+                                    <CardTitle className="text-base flex items-center gap-2">
+                                      <Truck className="w-4 h-4" />
+                                      Serviços e Logística
+                                    </CardTitle>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={preencherServicosLogistica}
+                                      disabled={creating || gruasSelecionadas.length === 0}
+                                      className="shrink-0"
+                                      title="Preencher todos os campos de Serviços e Logística com dados de teste"
+                                    >
+                                      <Zap className="w-3 h-3 mr-1" />
+                                      Preencher
+                                    </Button>
+                                  </div>
                                 </CardHeader>
                                 <CardContent>
                                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -2701,143 +3111,6 @@ export default function NovaObraPage() {
                     Digite o nome ou cargo do responsável para buscar
                   </p>
                 </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* Aba: Valores */}
-          <TabsContent value="custos" className="space-y-4" forceMount>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <DollarSign className="w-5 h-5 text-purple-600" />
-                  Valores da Obra
-                </CardTitle>
-                <CardDescription>
-                  Configure os valores que serão aplicados a esta obra
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="">
-                {/* Formulário para adicionar custo */}
-                <div className="rounded-lg">
-                  <h4 className="font-medium text-sm">Adicionar Novo Custo</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="custoItem">Item *</Label>
-                      <Input
-                        id="custoItem"
-                        value={custoForm.item}
-                        onChange={(e) => setCustoForm({...custoForm, item: e.target.value})}
-                        placeholder="Ex: 01.01"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="custoDescricao">Descrição *</Label>
-                      <Input
-                        id="custoDescricao"
-                        value={custoForm.descricao}
-                        onChange={(e) => setCustoForm({...custoForm, descricao: e.target.value})}
-                        placeholder="Ex: Locação de grua torre"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="custoUnidade">Unidade *</Label>
-                      <Select value={custoForm.unidade} onValueChange={(value) => setCustoForm({...custoForm, unidade: value})}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Selecione a unidade" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="mês">Mês</SelectItem>
-                          <SelectItem value="dia">Dia</SelectItem>
-                          <SelectItem value="hora">Hora</SelectItem>
-                          <SelectItem value="un">Unidade</SelectItem>
-                          <SelectItem value="kg">Quilograma</SelectItem>
-                          <SelectItem value="m">Metro</SelectItem>
-                          <SelectItem value="m²">Metro Quadrado</SelectItem>
-                          <SelectItem value="m³">Metro Cúbico</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="custoMes">Mês *</Label>
-                      <Input
-                        id="custoMes"
-                        type="month"
-                        value={custoForm.mes}
-                        onChange={(e) => setCustoForm({...custoForm, mes: e.target.value})}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="custoQuantidade">Quantidade Orçada *</Label>
-                      <Input
-                        id="custoQuantidade"
-                        type="text"
-                        value={custoForm.quantidadeOrcamento && custoForm.quantidadeOrcamento > 0 ? custoForm.quantidadeOrcamento.toString().replace('.', ',') : ''}
-                        onChange={(e) => {
-                          const formatted = formatDecimal(e.target.value)
-                          const numericValue = parseDecimal(formatted)
-                          setCustoForm({...custoForm, quantidadeOrcamento: numericValue})
-                        }}
-                        placeholder="0,00"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="custoValorUnitario">Valor Unitário (R$) *</Label>
-                      <Input
-                        id="custoValorUnitario"
-                        type="text"
-                        value={custoForm.valorUnitario && custoForm.valorUnitario > 0 ? formatCurrency((custoForm.valorUnitario * 100).toString()) : ''}
-                        onChange={(e) => {
-                          const formatted = formatCurrency(e.target.value)
-                          const numericValue = parseCurrency(formatted)
-                          setCustoForm({...custoForm, valorUnitario: numericValue})
-                        }}
-                        placeholder="0,00"
-                      />
-                    </div>
-                  </div>
-                  <div className="flex justify-end">
-                    <Button type="button" onClick={adicionarCustoMensal} disabled={!custoForm.item || !custoForm.descricao || !custoForm.unidade || custoForm.quantidadeOrcamento <= 0 || custoForm.valorUnitario <= 0}>
-                      <Plus className="w-4 h-4 mr-2" />
-                      Adicionar Custo
-                    </Button>
-                  </div>
-                </div>
-
-                {/* Lista de custos mensais */}
-                {custosMensais.length > 0 && (
-                  <div className="space-y-3">
-                    <h4 className="font-medium text-sm">Valores Configurados ({custosMensais.length})</h4>
-                    <div className="space-y-2">
-                      {custosMensais.map((custo) => (
-                        <div key={custo.id} className="flex gap-2 p-3 border rounded-lg bg-purple-50">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2">
-                              <DollarSign className="w-4 h-4 text-purple-600" />
-                              <div>
-                                <p className="font-medium text-purple-900">{custo.item} - {custo.descricao}</p>
-                                <p className="text-sm text-purple-700">
-                                  {custo.quantidadeOrcamento} {custo.unidade} × R$ {custo.valorUnitario.toLocaleString('pt-BR')} = R$ {custo.totalOrcamento.toLocaleString('pt-BR')}
-                                </p>
-                                <p className="text-xs text-purple-600">Mês: {custo.mes}</p>
-                              </div>
-                            </div>
-                          </div>
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => removerCustoMensal(custo.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <X className="w-4 h-4" />
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
               </CardContent>
             </Card>
           </TabsContent>

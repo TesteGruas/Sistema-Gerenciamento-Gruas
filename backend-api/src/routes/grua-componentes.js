@@ -1445,4 +1445,123 @@ router.post('/:id/movimentar', async (req, res) => {
   }
 })
 
+/**
+ * @swagger
+ * /api/grua-componentes/agrupados/estoque:
+ *   get:
+ *     summary: Listar componentes de gruas agrupados por grua (para visualização no estoque)
+ *     tags: [Grua Componentes]
+ *     security:
+ *       - bearerAuth: []
+ *     description: Retorna componentes de gruas que estão vinculados ao estoque, agrupados por grua
+ *     responses:
+ *       200:
+ *         description: Lista de componentes agrupados por grua
+ */
+router.get('/agrupados/estoque', requirePermission('estoque:visualizar'), async (req, res) => {
+  try {
+    // Buscar todos os componentes que têm componente_estoque_id (vinculados ao estoque)
+    const { data: componentes, error: componentesError } = await supabaseAdmin
+      .from('grua_componentes')
+      .select(`
+        id,
+        nome,
+        tipo,
+        modelo,
+        fabricante,
+        unidade_medida,
+        quantidade_total,
+        quantidade_disponivel,
+        quantidade_em_uso,
+        quantidade_danificada,
+        status,
+        localizacao,
+        localizacao_tipo,
+        valor_unitario,
+        componente_estoque_id,
+        grua_id,
+        grua:gruas (
+          id,
+          name,
+          modelo,
+          fabricante,
+          tipo
+        )
+      `)
+      .not('componente_estoque_id', 'is', null)
+      .order('grua_id', { ascending: true })
+      .order('nome', { ascending: true })
+
+    if (componentesError) {
+      return res.status(500).json({
+        error: 'Erro ao buscar componentes',
+        message: componentesError.message
+      })
+    }
+
+    // Agrupar componentes por grua
+    const componentesAgrupados = {}
+
+    componentes.forEach((componente) => {
+      const gruaId = componente.grua_id || 'sem-grua'
+      
+      if (!componentesAgrupados[gruaId]) {
+        componentesAgrupados[gruaId] = {
+          grua: componente.grua || {
+            id: gruaId,
+            name: `Grua ${gruaId}`,
+            modelo: 'N/A',
+            fabricante: 'N/A',
+            tipo: 'N/A'
+          },
+          componentes: [],
+          total_componentes: 0,
+          total_quantidade: 0,
+          total_valor: 0
+        }
+      }
+
+      componentesAgrupados[gruaId].componentes.push(componente)
+      componentesAgrupados[gruaId].total_componentes += 1
+      componentesAgrupados[gruaId].total_quantidade += componente.quantidade_total || 0
+      componentesAgrupados[gruaId].total_valor += (componente.valor_unitario || 0) * (componente.quantidade_total || 0)
+    })
+
+    // Converter objeto em array
+    const resultado = Object.values(componentesAgrupados).map((grupo) => ({
+      ...grupo,
+      componentes: grupo.componentes.map((comp) => ({
+        id: comp.id,
+        nome: comp.nome,
+        tipo: comp.tipo,
+        modelo: comp.modelo,
+        fabricante: comp.fabricante,
+        unidade_medida: comp.unidade_medida,
+        quantidade_total: comp.quantidade_total,
+        quantidade_disponivel: comp.quantidade_disponivel,
+        quantidade_em_uso: comp.quantidade_em_uso,
+        quantidade_danificada: comp.quantidade_danificada,
+        status: comp.status,
+        localizacao: comp.localizacao,
+        localizacao_tipo: comp.localizacao_tipo,
+        valor_unitario: comp.valor_unitario,
+        componente_estoque_id: comp.componente_estoque_id,
+        valor_total: (comp.valor_unitario || 0) * (comp.quantidade_total || 0)
+      }))
+    }))
+
+    res.json({
+      success: true,
+      data: resultado,
+      total: resultado.length
+    })
+  } catch (error) {
+    console.error('Erro ao buscar componentes agrupados:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 export default router

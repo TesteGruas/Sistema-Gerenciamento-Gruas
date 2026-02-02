@@ -17,7 +17,6 @@ import {
   Users,
   Settings,
   Download,
-  Truck,
   CreditCard,
   BookOpen,
   FileCheck,
@@ -25,9 +24,11 @@ import {
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
+import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 import { gruaObraApi } from "@/lib/api-grua-obra"
 import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
+import { Upload } from "lucide-react"
 
 // Nota: Este componente usa gruaObraApi (não obraGruasApi) para buscar relacionamentos grua-obra
 
@@ -129,6 +130,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         gruasVinculadas: [],
         funcionariosVinculados: obraData.grua_funcionario || []
       })
+      
+      // Garantir que sinaleiros sejam carregados (pode vir como sinaleiros_obra ou sinaleiros)
+      if (obraData.sinaleiros_obra && !obraConvertida.sinaleiros) {
+        obraConvertida.sinaleiros = obraData.sinaleiros_obra
+      }
+      
       setObra(obraConvertida)
 
       // Carregar documentos
@@ -136,8 +143,28 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       let documentosData: any[] = []
       if (docsResponse.success && docsResponse.data) {
         documentosData = Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data]
-        setDocumentos(documentosData)
       }
+
+      // Carregar arquivos também e converter para formato de documentos
+      try {
+        const arquivosResponse = await obrasArquivosApi.listarPorObra(parseInt(obraId))
+        if (arquivosResponse.success && arquivosResponse.data) {
+          const arquivosComoDocumentos = arquivosResponse.data.map((arquivo: any) => ({
+            id: `arquivo_${arquivo.id}`,
+            titulo: arquivo.nome_original || arquivo.descricao || 'Arquivo',
+            descricao: arquivo.descricao,
+            categoria: arquivo.categoria === 'manual' ? 'manual_tecnico' : arquivo.categoria === 'certificado' ? 'termo_entrega_tecnica' : arquivo.categoria === 'outro' ? 'plano_carga' : arquivo.categoria,
+            caminho_arquivo: arquivo.caminho,
+            arquivo_original: arquivo.caminho,
+            created_at: arquivo.created_at
+          }))
+          documentosData = [...documentosData, ...arquivosComoDocumentos]
+        }
+      } catch (error) {
+        console.log('Erro ao carregar arquivos:', error)
+      }
+
+      setDocumentos(documentosData)
 
       // Salvar dados em cache via callback
       if (onDataLoaded) {
@@ -183,17 +210,45 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
           return {
             id: grua.id || relacao.grua_id,
             name: nameFinal,
-            modelo: modelo || 'Modelo não informado',
-            fabricante: fabricante || 'Fabricante não informado',
+            modelo: modelo || grua.modelo || 'Modelo não informado',
+            fabricante: fabricante || grua.fabricante || 'Fabricante não informado',
             tipo: grua.tipo || 'Tipo não informado',
             capacidade: grua.capacidade || 'Capacidade não informada',
-            relacao: relacao,
-            // Campos da relação
-            data_inicio_locacao: relacao.data_inicio_locacao,
-            data_fim_locacao: relacao.data_fim_locacao,
-            valor_locacao_mensal: relacao.valor_locacao_mensal,
-            status: relacao.status,
-            observacoes: relacao.observacoes
+            // Incluir todos os campos técnicos da grua
+            ...grua,
+            // Campos específicos da grua que podem estar na grua ou na relação
+            altura_maxima: grua.altura_maxima || grua.altura_trabalho || grua.altura_final || relacao.altura_final,
+            alcance_maximo: grua.alcance_maximo || relacao.capacidade_maxima_raio,
+            numero_serie: grua.numero_serie || grua.num_serie,
+            relacao: {
+              ...relacao,
+              // Incluir TODOS os dados de montagem da relação
+              tipo_base: relacao.tipo_base,
+              altura_inicial: relacao.altura_inicial,
+              altura_final: relacao.altura_final,
+              velocidade_giro: relacao.velocidade_giro,
+              velocidade_elevacao: relacao.velocidade_elevacao,
+              velocidade_translacao: relacao.velocidade_translacao,
+              potencia_instalada: relacao.potencia_instalada,
+              voltagem: relacao.voltagem,
+              tipo_ligacao: relacao.tipo_ligacao,
+              capacidade_ponta: relacao.capacidade_ponta,
+              capacidade_maxima_raio: relacao.capacidade_maxima_raio,
+              capacidade_1_cabo: relacao.capacidade_1_cabo,
+              capacidade_2_cabos: relacao.capacidade_2_cabos,
+              velocidade_rotacao: relacao.velocidade_rotacao,
+              ano_fabricacao: relacao.ano_fabricacao,
+              vida_util: relacao.vida_util,
+              data_inicio_locacao: relacao.data_inicio_locacao,
+              data_fim_locacao: relacao.data_fim_locacao,
+              valor_locacao_mensal: relacao.valor_locacao_mensal,
+              status: relacao.status,
+              observacoes: relacao.observacoes,
+              observacoes_montagem: relacao.observacoes_montagem,
+              local_instalacao: relacao.local_instalacao,
+              data_montagem: relacao.data_montagem,
+              data_desmontagem: relacao.data_desmontagem
+            }
           }
         })
       }
@@ -218,16 +273,66 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
           return {
             id: grua.id || relacao.grua_id,
             name: nameFinal,
-            modelo: modelo || 'Modelo não informado',
-            fabricante: fabricante || 'Fabricante não informado',
+            modelo: modelo || grua.modelo || 'Modelo não informado',
+            fabricante: fabricante || grua.fabricante || 'Fabricante não informado',
             tipo: grua.tipo || 'Tipo não informado',
             capacidade: grua.capacidade || 'Capacidade não informada',
-            relacao: relacao,
-            data_inicio_locacao: relacao.data_inicio_locacao,
-            data_fim_locacao: relacao.data_fim_locacao,
-            valor_locacao_mensal: relacao.valor_locacao_mensal,
-            status: relacao.status,
-            observacoes: relacao.observacoes
+            // Incluir todos os campos técnicos da grua
+            ...grua,
+            // Campos específicos da grua que podem estar na grua ou na relação
+            altura_maxima: grua.altura_maxima || grua.altura_trabalho || grua.altura_final || relacao.altura_final,
+            alcance_maximo: grua.alcance_maximo || relacao.capacidade_maxima_raio,
+            numero_serie: grua.numero_serie || grua.num_serie,
+            relacao: {
+              ...relacao,
+              // Incluir TODOS os campos da relação (incluindo dados de montagem)
+              ...relacao,
+              tipo_base: relacao.tipo_base,
+              altura_inicial: relacao.altura_inicial,
+              altura_final: relacao.altura_final,
+              velocidade_giro: relacao.velocidade_giro,
+              velocidade_elevacao: relacao.velocidade_elevacao,
+              velocidade_translacao: relacao.velocidade_translacao,
+              potencia_instalada: relacao.potencia_instalada,
+              voltagem: relacao.voltagem,
+              tipo_ligacao: relacao.tipo_ligacao,
+              capacidade_ponta: relacao.capacidade_ponta,
+              capacidade_maxima_raio: relacao.capacidade_maxima_raio,
+              capacidade_1_cabo: relacao.capacidade_1_cabo,
+              capacidade_2_cabos: relacao.capacidade_2_cabos,
+              velocidade_rotacao: relacao.velocidade_rotacao,
+              ano_fabricacao: relacao.ano_fabricacao,
+              vida_util: relacao.vida_util,
+              data_inicio_locacao: relacao.data_inicio_locacao,
+              data_fim_locacao: relacao.data_fim_locacao,
+              valor_locacao_mensal: relacao.valor_locacao_mensal,
+              status: relacao.status,
+              observacoes: relacao.observacoes,
+              observacoes_montagem: relacao.observacoes_montagem,
+              local_instalacao: relacao.local_instalacao,
+              data_montagem: relacao.data_montagem,
+              data_desmontagem: relacao.data_desmontagem
+            }
+          }
+        })
+      }
+      
+      // Se ainda não encontrou gruas, tentar usar obra.grua_obra diretamente
+      if (gruasDisponiveis.length === 0 && obraConvertida.grua_obra && Array.isArray(obraConvertida.grua_obra)) {
+        gruasDisponiveis = obraConvertida.grua_obra.map((relacao: any) => {
+          const grua = relacao.grua || {}
+          return {
+            id: grua.id || relacao.grua_id,
+            name: `${grua.fabricante || ''} ${grua.modelo || ''}`.trim() || `Grua ${grua.id || relacao.grua_id}`,
+            modelo: grua.modelo || 'Modelo não informado',
+            fabricante: grua.fabricante || 'Fabricante não informado',
+            tipo: grua.tipo || 'Tipo não informado',
+            capacidade: grua.capacidade || 'Capacidade não informada',
+            ...grua,
+            relacao: {
+              ...relacao,
+              ...relacao // Incluir todos os campos da relação
+            }
           }
         })
       }
@@ -354,6 +459,100 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     return `${formatarData(inicio)} até ${formatarData(fim)} (${diffDays} dias)`
   }
 
+  // Função para fazer upload de arquivo
+  const handleUploadArquivo = async (categoria: string, titulo: string, fileInput: HTMLInputElement) => {
+    const file = fileInput.files?.[0]
+    if (!file) {
+      toast({
+        title: "Erro",
+        description: "Por favor, selecione um arquivo",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      // Validar tipo de arquivo (apenas PDF)
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+        toast({
+          title: "Erro",
+          description: "Por favor, selecione um arquivo PDF",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Validar tamanho (máximo 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "Erro",
+          description: "O arquivo deve ter no máximo 10MB",
+          variant: "destructive"
+        })
+        return
+      }
+
+      toast({
+        title: "Enviando arquivo...",
+        description: "Aguarde enquanto o arquivo é enviado"
+      })
+
+      // Mapear categoria para o formato da API
+      let categoriaApi: 'geral' | 'manual' | 'certificado' | 'licenca' | 'contrato' | 'relatorio' | 'foto' | 'outro' = 'outro'
+      if (categoria === 'manual_tecnico' || categoria === 'ficha_tecnica') {
+        categoriaApi = 'manual'
+      } else if (categoria === 'termo_entrega_tecnica') {
+        categoriaApi = 'certificado'
+      } else if (categoria === 'plano_carga') {
+        categoriaApi = 'outro'
+      }
+
+      // Fazer upload usando obrasArquivosApi
+      const response = await obrasArquivosApi.upload({
+        obra_id: parseInt(obraId),
+        arquivo: file,
+        nome_original: file.name,
+        descricao: titulo,
+        categoria: categoriaApi,
+        is_public: false
+      })
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Arquivo enviado com sucesso"
+        })
+
+        // Recarregar documentos e arquivos
+        await carregarDados()
+
+        // Limpar input
+        fileInput.value = ''
+      } else {
+        throw new Error(response.message || 'Erro ao fazer upload')
+      }
+    } catch (error: any) {
+      console.error('Erro ao fazer upload:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer upload do arquivo",
+        variant: "destructive"
+      })
+    }
+  }
+
+  // Função para criar input de arquivo e disparar upload
+  const criarInputUpload = (categoria: string, titulo: string) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'application/pdf'
+    input.style.display = 'none'
+    input.onchange = () => handleUploadArquivo(categoria, titulo, input)
+    document.body.appendChild(input)
+    input.click()
+    document.body.removeChild(input)
+  }
+
   const handleExportar = async () => {
     try {
       if (!obra || !gruaSelecionada) {
@@ -459,18 +658,17 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         '3. Responsável Técnico',
         '4. Sinaleiros',
         '5. Parâmetros Técnicos',
-        '6. Valores e Condições Comerciais',
-        '7. Documentos e Certificações',
-        '7.1. Dados da Montagem do(s) Equipamento(s)',
-        '7.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento',
-        '7.3. Responsável pela Manutenção da Grua',
-        '7.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)',
-        '7.5. Dados Técnicos do Equipamento',
-        '7.6. Manual de Montagem',
-        '7.7. Entrega Técnica',
-        '7.8. Plano de Cargas',
-        '8. Configuração e Especificações Técnicas',
-        '9. Observações Gerais'
+        '6. Documentos e Certificações',
+        '6.1. Dados da Montagem do(s) Equipamento(s)',
+        '6.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento',
+        '6.3. Responsável pela Manutenção da Grua',
+        '6.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)',
+        '6.5. Dados Técnicos do Equipamento',
+        '6.6. Manual de Montagem',
+        '6.7. Entrega Técnica',
+        '6.8. Plano de Cargas',
+        '7. Configuração e Especificações Técnicas',
+        '8. Observações Gerais'
       ]
 
       for (const item of indiceItens) {
@@ -944,7 +1142,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       // Calcular yPos final baseado na altura máxima usada
       yPos = maxYPosTec + 8
 
-      // 6. VALORES E CONDIÇÕES COMERCIAIS
+      // 6. DOCUMENTOS E CERTIFICAÇÕES
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
@@ -956,74 +1154,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('6. VALORES E CONDIÇÕES COMERCIAIS', 18, secao6Y + 6)
+      doc.text('6. DOCUMENTOS E CERTIFICAÇÕES', 18, secao6Y + 6)
       yPos = secao6Y + 12
-
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-      
-      const valores = [
-        [`Locação Mensal:`, formatarMoeda(relacaoGrua.valor_locacao || 0)],
-        [`Operador:`, formatarMoeda(relacaoGrua.valor_operador || 0)],
-        [`Manutenção:`, formatarMoeda(relacaoGrua.valor_manutencao || 0)],
-        [`Montagem:`, formatarMoeda(relacaoGrua.valor_montagem || 0)],
-        [`Desmontagem:`, formatarMoeda(relacaoGrua.valor_desmontagem || 0)],
-        [`Transporte:`, formatarMoeda(relacaoGrua.valor_transporte || 0)],
-        [`Caução:`, formatarMoeda(relacaoGrua.valor_caucao || 0)],
-        [`Forma de Pagamento:`, relacaoGrua.forma_pagamento || 'N/A'],
-        [`Prazo de Validade:`, relacaoGrua.prazo_validade ? `${relacaoGrua.prazo_validade} dias` : 'N/A']
-      ]
-
-      // Criar tabela para valores
-      const valoresData = valores.map(([label, value]) => [label, value])
-      
-      autoTable(doc, {
-        head: [['Item', 'Valor']],
-        body: valoresData,
-        startY: yPos,
-        margin: { left: 14, right: 14 },
-        styles: { 
-          fontSize: 9,
-          cellPadding: 3,
-          lineColor: [200, 200, 200],
-          lineWidth: 0.1
-        },
-        headStyles: { 
-          fillColor: [66, 139, 202],
-          textColor: [255, 255, 255],
-          fontStyle: 'bold',
-          halign: 'left'
-        },
-        alternateRowStyles: { fillColor: [250, 250, 250] },
-        columnStyles: {
-          0: { cellWidth: 100, fontStyle: 'bold' },
-          1: { cellWidth: 80, halign: 'right' }
-        }
-      })
-
-      // Atualizar yPos após a tabela
-      const lastAutoTableValores = (doc as any).lastAutoTable
-      if (lastAutoTableValores && lastAutoTableValores.finalY) {
-        yPos = lastAutoTableValores.finalY + 10
-      } else {
-        yPos += 40 // Fallback se lastAutoTable não estiver disponível
-      }
-
-      // 7. DOCUMENTOS E CERTIFICAÇÕES
-      if (yPos > MAX_Y - 20) {
-        yPos = await adicionarNovaPaginaComLogos()
-      }
-
-      const secao7Y = yPos
-      doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao7Y, 182, 8, 2, 2, 'F')
-      
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(12)
-      doc.setFont('helvetica', 'bold')
-      doc.text('7. DOCUMENTOS E CERTIFICAÇÕES', 18, secao7Y + 6)
-      yPos = secao7Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1057,32 +1189,43 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       
       yPos += 8
 
-      // 7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)
+      // 6.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao71Y = yPos
+      const secao61Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao71Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao61Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)', 18, secao71Y + 6)
-      yPos = secao71Y + 12
+      doc.text('6.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)', 18, secao61Y + 6)
+      yPos = secao61Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
+      // Buscar dados de montagem da relação ou da obra
+      const dadosMontagemObra = obra.dados_montagem_equipamento || {}
       const dadosMontagem = [
         [`Data de Montagem:`, relacaoGrua?.data_montagem ? formatarData(relacaoGrua.data_montagem) : relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado'],
         [`Data de Desmontagem:`, relacaoGrua?.data_desmontagem ? formatarData(relacaoGrua.data_desmontagem) : relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado'],
-        [`Tipo de Base/Fundação:`, relacaoGrua?.tipo_base || relacaoGrua?.fundacao || 'Não informado'],
-        [`Altura Inicial:`, relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'Não informado'],
-        [`Altura Final:`, relacaoGrua?.altura_final ? `${relacaoGrua.altura_final}m` : 'Não informado'],
-        [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || 'Não informado']
+        [`Tipo de Base/Fundação:`, relacaoGrua?.tipo_base || dadosMontagemObra.tipo_base || relacaoGrua?.fundacao || 'Não informado'],
+        [`Altura Inicial:`, relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial ? `${relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial}m` : 'Não informado'],
+        [`Altura Final:`, relacaoGrua?.altura_final || dadosMontagemObra.altura_final ? `${relacaoGrua?.altura_final || dadosMontagemObra.altura_final}m` : 'Não informado'],
+        [`Capacidade com 1 Cabo:`, relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo ? `${relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo} kg` : 'Não informado'],
+        [`Capacidade com 2 Cabos:`, relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos ? `${relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos} kg` : 'Não informado'],
+        [`Capacidade na Ponta:`, relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta ? `${relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta} kg` : 'Não informado'],
+        [`Potência Instalada:`, relacaoGrua?.potencia_instalada || dadosMontagemObra.potencia_instalada ? `${relacaoGrua?.potencia_instalada || dadosMontagemObra.potencia_instalada} kVA` : 'Não informado'],
+        [`Voltagem:`, relacaoGrua?.voltagem || dadosMontagemObra.voltagem || 'Não informado'],
+        [`Tipo de Ligação:`, relacaoGrua?.tipo_ligacao || dadosMontagemObra.tipo_ligacao || 'Não informado'],
+        [`Velocidade de Rotação:`, relacaoGrua?.velocidade_rotacao || dadosMontagemObra.velocidade_rotacao ? `${relacaoGrua?.velocidade_rotacao || dadosMontagemObra.velocidade_rotacao} rpm` : 'Não informado'],
+        [`Velocidade de Elevação:`, relacaoGrua?.velocidade_elevacao || dadosMontagemObra.velocidade_elevacao ? `${relacaoGrua?.velocidade_elevacao || dadosMontagemObra.velocidade_elevacao} m/min` : 'Não informado'],
+        [`Velocidade de Translação:`, relacaoGrua?.velocidade_translacao || dadosMontagemObra.velocidade_translacao ? `${relacaoGrua?.velocidade_translacao || dadosMontagemObra.velocidade_translacao} m/min` : 'Não informado'],
+        [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || obra.location || 'Não informado']
       ]
 
       for (const [label, value] of dadosMontagem) {
@@ -1107,31 +1250,32 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       
       yPos += 8
 
-      // 7.2. PROPRIETÁRIO DO EQUIPAMENTO
+      // 6.2. PROPRIETÁRIO DO EQUIPAMENTO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao72Y = yPos
+      const secao62Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao72Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao62Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO', 18, secao72Y + 6)
-      yPos = secao72Y + 12
+      doc.text('6.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO', 18, secao62Y + 6)
+      yPos = secao62Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
+      // Dados fixos da Irbana como proprietário/fornecedor
       const proprietario = [
-        [`Nome/Razão Social:`, gruaSelecionada.proprietario_nome || obra.cliente?.nome || 'Não informado'],
-        [`CNPJ:`, gruaSelecionada.proprietario_cnpj || obra.cliente?.cnpj || 'Não informado'],
-        [`Endereço:`, gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'],
-        [`Telefone:`, gruaSelecionada.proprietario_telefone || obra.cliente?.telefone || 'Não informado'],
-        [`Email:`, gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado']
+        [`Nome/Razão Social:`, 'IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'],
+        [`CNPJ:`, '20.053.969/0001-38'],
+        [`Endereço:`, 'Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141'],
+        [`Telefone:`, '(11) 98818-5951'],
+        [`Email:`, 'info@gruascopa.com.br']
       ]
 
       for (const [label, value] of proprietario) {
@@ -1156,20 +1300,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       
       yPos += 8
 
-      // 7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA
+      // 6.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao73Y = yPos
+      const secao63Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao73Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao63Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA', 18, secao73Y + 6)
-      yPos = secao73Y + 12
+      doc.text('6.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA', 18, secao63Y + 6)
+      yPos = secao63Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1215,20 +1359,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
 
       yPos += 8
 
-      // 7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO
+      // 6.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao74Y = yPos
+      const secao64Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao74Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao64Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s)', 18, secao74Y + 6)
-      yPos = secao74Y + 12
+      doc.text('6.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s)', 18, secao64Y + 6)
+      yPos = secao64Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1269,20 +1413,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
 
       yPos += 8
 
-      // 7.5. DADOS TÉCNICOS DO EQUIPAMENTO
+      // 6.5. DADOS TÉCNICOS DO EQUIPAMENTO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao75Y = yPos
+      const secao65Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao75Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao65Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.5. DADOS TÉCNICOS DO EQUIPAMENTO', 18, secao75Y + 6)
-      yPos = secao75Y + 12
+      doc.text('6.5. DADOS TÉCNICOS DO EQUIPAMENTO', 18, secao65Y + 6)
+      yPos = secao65Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1301,20 +1445,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 8
 
-      // 7.6. MANUAL DE MONTAGEM
+      // 6.6. MANUAL DE MONTAGEM
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao76Y = yPos
+      const secao66Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao76Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao66Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.6. MANUAL DE MONTAGEM', 18, secao76Y + 6)
-      yPos = secao76Y + 12
+      doc.text('6.6. MANUAL DE MONTAGEM', 18, secao66Y + 6)
+      yPos = secao66Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1332,21 +1476,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 8
 
-      // 7.7. ENTREGA TÉCNICA
+      // 6.7. ENTREGA TÉCNICA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao77Y = yPos
+      const secao67Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao77Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao67Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.7. ENTREGA TÉCNICA', 18, secao77Y + 6)
-      yPos = secao77Y + 12
-      yPos = secao76Y + 12
+      doc.text('6.7. ENTREGA TÉCNICA', 18, secao67Y + 6)
+      yPos = secao67Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1407,29 +1550,29 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 10
 
-      // 7.8. PLANO DE CARGAS
+      // 6.8. PLANO DE CARGAS
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao78Y = yPos
+      const secao68Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao78Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao68Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('7.8. PLANO DE CARGAS', 18, secao78Y + 6)
-      yPos = secao78Y + 12
-      yPos = secao77Y + 12
+      doc.text('6.8. PLANO DE CARGAS', 18, secao68Y + 6)
+      yPos = secao68Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
       const planoCargas = documentos.find((doc: any) => 
-        doc.titulo?.toLowerCase().includes('plano') && 
-        doc.titulo?.toLowerCase().includes('carga')
+        doc.categoria === 'plano_carga' ||
+        (doc.titulo?.toLowerCase().includes('plano') && 
+        doc.titulo?.toLowerCase().includes('carga'))
       )
 
       if (planoCargas) {
@@ -1532,20 +1675,20 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       }
       yPos += 8
 
-      // 8. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
+      // 7. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao8Y = yPos
+      const secao7Y = yPos
       doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao8Y, 182, 8, 2, 2, 'F')
+      doc.roundedRect(14, secao7Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('8. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS', 18, secao8Y + 6)
-      yPos = secao8Y + 12
+      doc.text('7. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS', 18, secao7Y + 6)
+      yPos = secao7Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1580,21 +1723,21 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       
       yPos += 8
 
-      // 9. OBSERVAÇÕES GERAIS
+      // 8. OBSERVAÇÕES GERAIS
       if ((obra.observacoes || relacaoGrua?.observacoes) && yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
       if (obra.observacoes || relacaoGrua?.observacoes) {
-        const secao9Y = yPos
+        const secao8Y = yPos
         doc.setFillColor(66, 139, 202)
-        doc.roundedRect(14, secao9Y, 182, 8, 2, 2, 'F')
+        doc.roundedRect(14, secao8Y, 182, 8, 2, 2, 'F')
         
         doc.setTextColor(255, 255, 255)
         doc.setFontSize(12)
         doc.setFont('helvetica', 'bold')
-        doc.text('9. OBSERVAÇÕES GERAIS', 18, secao9Y + 6)
-        yPos = secao9Y + 12
+        doc.text('8. OBSERVAÇÕES GERAIS', 18, secao8Y + 6)
+        yPos = secao8Y + 12
 
         doc.setTextColor(0, 0, 0)
         doc.setFontSize(9)
@@ -1677,15 +1820,23 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
   }
 
   // Buscar relação da grua (pode estar em grua_obra ou gruasVinculadas)
-  const relacaoGruaBase = gruaSelecionada?.relacao || obra.gruasVinculadas?.find((g: any) => 
-    g.id === gruaSelecionada?.id || 
-    g.grua_id === gruaSelecionada?.id || 
-    g.grua?.id === gruaSelecionada?.id ||
-    (g.grua && g.grua.id === gruaSelecionada?.id)
-  ) || obra.grua_obra?.find((g: any) => 
-    g.grua_id === gruaSelecionada?.id || 
-    g.grua?.id === gruaSelecionada?.id
-  )
+  const relacaoGruaBase = gruaSelecionada?.relacao || 
+    obra.gruasVinculadas?.find((g: any) => 
+      g.id === gruaSelecionada?.id || 
+      g.grua_id === gruaSelecionada?.id || 
+      g.grua?.id === gruaSelecionada?.id ||
+      (g.grua && g.grua.id === gruaSelecionada?.id)
+    )?.relacao ||
+    obra.gruasVinculadas?.find((g: any) => 
+      g.id === gruaSelecionada?.id || 
+      g.grua_id === gruaSelecionada?.id || 
+      g.grua?.id === gruaSelecionada?.id ||
+      (g.grua && g.grua.id === gruaSelecionada?.id)
+    ) ||
+    obra.grua_obra?.find((g: any) => 
+      g.grua_id === gruaSelecionada?.id || 
+      g.grua?.id === gruaSelecionada?.id
+    )
 
   // Valores padrão mínimos apenas para campos essenciais quando não disponíveis
   // Estes valores são usados apenas como fallback se a API não retornar os dados
@@ -1701,8 +1852,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     valor_locacao: relacaoGruaBase?.valor_locacao || relacaoGruaBase?.valor_locacao_mensal || valoresPadrao.valor_locacao
   }
   
-  // Usar sinaleiros reais da obra (já vêm da API)
-  const sinaleirosDisponiveis = obra?.sinaleiros || []
+  // Usar sinaleiros reais da obra (pode vir como sinaleiros_obra ou sinaleiros)
+  const sinaleirosDisponiveis = obra?.sinaleiros || obra?.sinaleiros_obra || []
   
   // Buscar funcionários vinculados à grua
   const funcionariosGrua = (obra.funcionariosVinculados || obra.grua_funcionario || []).filter((f: any) => {
@@ -1949,7 +2100,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Alcance Máximo (Raio)</p>
-                  <p className="font-medium">{gruaSelecionada.alcance_maximo || relacaoGrua?.raio_operacao || 'Não informado'}</p>
+                  <p className="font-medium">{gruaSelecionada.alcance_maximo || relacaoGrua?.capacidade_maxima_raio || relacaoGrua?.raio_operacao || 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Número de Série</p>
@@ -2091,17 +2242,17 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Tipo de Vínculo</p>
-                              <Badge variant={s.tipo_vinculo === 'interno' ? 'default' : 'outline'}>
-                                {s.tipo_vinculo === 'interno' ? 'Interno' : s.tipo_vinculo === 'cliente' ? 'Indicado pelo Cliente' : 'Não informado'}
+                              <Badge variant={s.tipo_vinculo === 'interno' || s.tipo === 'principal' ? 'default' : 'outline'}>
+                                {s.tipo_vinculo === 'interno' || s.tipo === 'principal' ? 'Interno' : s.tipo_vinculo === 'cliente' || s.tipo === 'reserva' ? 'Indicado pelo Cliente' : s.tipo === 'principal' ? 'Principal' : s.tipo === 'reserva' ? 'Reserva' : 'Não informado'}
                               </Badge>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 mb-1">CPF</p>
-                              <p className="font-medium">{s.cpf || 'Não informado'}</p>
+                              <p className="font-medium">{s.cpf || (s.rg_cpf && s.rg_cpf.length === 11 ? s.rg_cpf : 'Não informado')}</p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 mb-1">RG</p>
-                              <p className="font-medium">{s.rg || s.rg_cpf || 'Não informado'}</p>
+                              <p className="font-medium">{s.rg || (s.rg_cpf && s.rg_cpf.length > 11 ? s.rg_cpf : 'Não informado')}</p>
                             </div>
                             {(s.documentos && s.documentos.length > 0) || (s.certificados && s.certificados.length > 0) ? (
                               <>
@@ -2235,178 +2386,23 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <p className="text-xs text-gray-500">Data de Início</p>
-                  <p className="font-medium">{formatarData(relacaoGrua?.data_inicio_locacao)}</p>
+                  <p className="font-medium">{obra.startDate ? formatarData(obra.startDate) : (relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado')}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Data de Fim</p>
-                  <p className="font-medium">{formatarData(relacaoGrua?.data_fim_locacao) || 'Não definido'}</p>
+                  <p className="font-medium">{obra.endDate ? formatarData(obra.endDate) : (relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado')}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Período Total</p>
                   <p className="font-medium">
-                    {calcularPeriodoLocacao(relacaoGrua?.data_inicio_locacao, relacaoGrua?.data_fim_locacao)}
+                    {calcularPeriodoLocacao(obra.startDate || relacaoGrua?.data_inicio_locacao, obra.endDate || relacaoGrua?.data_fim_locacao)}
                   </p>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* 6. VALORES E CUSTOS */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <DollarSign className="w-4 h-4" />
-                6. Valores e Custos Detalhados
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500">Locação Mensal da Grua</p>
-                  <p className="font-medium text-lg">{formatarMoeda(relacaoGrua?.valor_locacao || relacaoGrua?.valor_locacao_mensal || 31600.00)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Operador / Sinaleiro</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_operador)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Manutenção Preventiva</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_manutencao)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Estaiamento por Unidade</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_estaiamento)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Chumbadores</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_chumbadores)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Montagem</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_montagem)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Desmontagem</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_desmontagem)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Transporte Ida/Volta por Viagem</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_transporte)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Hora Extra</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_hora_extra)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Seguro Responsabilidade Civil</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_seguro)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Caução / Depósito de Garantia</p>
-                  <p className="font-medium">{formatarMoeda(relacaoGrua?.valor_caucao)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Orçamento da Obra</p>
-                  <p className="font-medium text-lg">{formatarMoeda(obra.orcamento || obra.budget)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Total de Custos</p>
-                  <p className="font-medium text-lg">{formatarMoeda(obra.totalCustos || obra.valorTotalObra)}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 6.5. SERVIÇOS E LOGÍSTICA */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Truck className="w-4 h-4" />
-                6.5. Serviços e Logística
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500">Guindaste para Montagem/Desmontagem</p>
-                  <p className="font-medium">
-                    {relacaoGrua?.guindaste_montagem === 'incluso' ? 'Incluso' : 
-                     relacaoGrua?.guindaste_montagem === 'cliente' ? 'Por conta do cliente' : 
-                     'Não informado'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Quantidade de Viagens de Transporte</p>
-                  <p className="font-medium">{relacaoGrua?.quantidade_viagens || 'Não informado'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Alojamento / Alimentação Equipe</p>
-                  <p className="font-medium">
-                    {relacaoGrua?.alojamento_alimentacao === 'incluso' ? 'Incluso' : 
-                     relacaoGrua?.alojamento_alimentacao === 'cliente' ? 'Por conta do cliente' : 
-                     relacaoGrua?.alojamento_alimentacao === 'nao_aplicavel' ? 'Não aplicável' : 
-                     'Não informado'}
-                  </p>
-                </div>
-                <div className="md:col-span-2">
-                  <p className="text-xs text-gray-500">Responsabilidade por Acessórios</p>
-                  <p className="font-medium">{relacaoGrua?.responsabilidade_acessorios || 'Não informado'}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 6.6. CONDIÇÕES COMERCIAIS */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <CreditCard className="w-4 h-4" />
-                6.6. Condições Comerciais e Contratuais
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                <div>
-                  <p className="text-xs text-gray-500">Prazo de Validade da Proposta (dias)</p>
-                  <p className="font-medium">{relacaoGrua?.prazo_validade ? `${relacaoGrua.prazo_validade} dias` : 'Não informado'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Forma de Pagamento / Medição</p>
-                  <p className="font-medium">
-                    {relacaoGrua?.forma_pagamento === 'mensal' ? 'Mensal' : 
-                     relacaoGrua?.forma_pagamento === 'quinzenal' ? 'Quinzenal' : 
-                     relacaoGrua?.forma_pagamento === 'semanal' ? 'Semanal' : 
-                     relacaoGrua?.forma_pagamento === 'unica' ? 'Única' : 
-                     'Não informado'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Multa por Atraso</p>
-                  <p className="font-medium">{relacaoGrua?.multa_atraso ? `${relacaoGrua.multa_atraso}%` : 'Não informado'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Reajuste por Índice</p>
-                  <p className="font-medium">
-                    {relacaoGrua?.reajuste_indice === 'igp_m' ? 'IGP-M' : 
-                     relacaoGrua?.reajuste_indice === 'ipca' ? 'IPCA' : 
-                     relacaoGrua?.reajuste_indice === 'inpc' ? 'INPC' : 
-                     relacaoGrua?.reajuste_indice === 'sem_reajuste' ? 'Sem reajuste' : 
-                     'Não informado'}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Garantia / Caução de Mobilização</p>
-                  <p className="font-medium">{relacaoGrua?.garantia_caucao || 'Não informado'}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">Retenção Contratual</p>
-                  <p className="font-medium">{relacaoGrua?.retencao_contratual ? `${relacaoGrua.retencao_contratual}%` : 'Não informado'}</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* 7. DOCUMENTOS */}
+          {/* 6. DOCUMENTOS */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
@@ -2538,12 +2534,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s) */}
+          {/* 6.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s) */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Package className="w-4 h-4" />
-                7.1. Dados da Montagem do(s) Equipamento(s)
+                6.1. Dados da Montagem do(s) Equipamento(s)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2554,29 +2550,51 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Inicial (m)</p>
-                  <p className="font-medium">{relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial} METROS` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial) ? `${relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial} METROS` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Final (m)</p>
-                  <p className="font-medium">{relacaoGrua?.altura_final ? `${relacaoGrua.altura_final} METROS` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.altura_final || obra.dados_montagem_equipamento?.altura_final) ? `${relacaoGrua?.altura_final || obra.dados_montagem_equipamento?.altura_final} METROS` : 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Comprimento da Lança (m)</p>
-                  <p className="font-medium">{gruaSelecionada.lanca || relacaoGrua?.comprimento_lanca || gruaSelecionada.comprimento_lanca ? `${gruaSelecionada.lanca || relacaoGrua?.comprimento_lanca || gruaSelecionada.comprimento_lanca} METROS` : 'Não informado'}</p>
+                  <p className="text-xs text-gray-500">Tipo de Base</p>
+                  <p className="font-medium">{relacaoGrua?.tipo_base || obra.dados_montagem_equipamento?.tipo_base || relacaoGrua?.fundacao || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Capacidade com 1 Cabo (kg)</p>
+                  <p className="font-medium">{(relacaoGrua?.capacidade_1_cabo || obra.dados_montagem_equipamento?.capacidade_1_cabo) ? `${relacaoGrua?.capacidade_1_cabo || obra.dados_montagem_equipamento?.capacidade_1_cabo} KG` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Capacidade com 2 Cabos (kg)</p>
+                  <p className="font-medium">{(relacaoGrua?.capacidade_2_cabos || obra.dados_montagem_equipamento?.capacidade_2_cabos) ? `${relacaoGrua?.capacidade_2_cabos || obra.dados_montagem_equipamento?.capacidade_2_cabos} KG` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Capacidade de Ponta (kg)</p>
-                  <p className="font-medium">{relacaoGrua?.capacidade_ponta ? `${relacaoGrua.capacidade_ponta} KG` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.capacidade_ponta || obra.dados_montagem_equipamento?.capacidade_ponta) ? `${relacaoGrua?.capacidade_ponta || obra.dados_montagem_equipamento?.capacidade_ponta} KG` : 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Capacidade Máxima / Alcance</p>
-                  <p className="font-medium">
-                    {relacaoGrua?.capacidade_maxima_raio && relacaoGrua?.raio_operacao 
-                      ? `${relacaoGrua.capacidade_maxima_raio} KG / ${relacaoGrua.raio_operacao} METROS`
-                      : relacaoGrua?.capacidade_maxima_raio 
-                        ? `${relacaoGrua.capacidade_maxima_raio} KG / ${gruaSelecionada.alcance_maximo || 'N/A'} METROS`
-                        : 'Não informado'}
-                  </p>
+                  <p className="text-xs text-gray-500">Potência Instalada (kVA)</p>
+                  <p className="font-medium">{(relacaoGrua?.potencia_instalada || obra.dados_montagem_equipamento?.potencia_instalada) ? `${relacaoGrua?.potencia_instalada || obra.dados_montagem_equipamento?.potencia_instalada} kVA` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Voltagem</p>
+                  <p className="font-medium">{relacaoGrua?.voltagem || obra.dados_montagem_equipamento?.voltagem || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Tipo de Ligação</p>
+                  <p className="font-medium">{relacaoGrua?.tipo_ligacao || obra.dados_montagem_equipamento?.tipo_ligacao || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Velocidade de Rotação (rpm)</p>
+                  <p className="font-medium">{(relacaoGrua?.velocidade_rotacao || obra.dados_montagem_equipamento?.velocidade_rotacao) ? `${relacaoGrua?.velocidade_rotacao || obra.dados_montagem_equipamento?.velocidade_rotacao} rpm` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Velocidade de Elevação (m/min)</p>
+                  <p className="font-medium">{(relacaoGrua?.velocidade_elevacao || obra.dados_montagem_equipamento?.velocidade_elevacao) ? `${relacaoGrua?.velocidade_elevacao || obra.dados_montagem_equipamento?.velocidade_elevacao} m/min` : 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Velocidade de Translação (m/min)</p>
+                  <p className="font-medium">{(relacaoGrua?.velocidade_translacao || obra.dados_montagem_equipamento?.velocidade_translacao) ? `${relacaoGrua?.velocidade_translacao || obra.dados_montagem_equipamento?.velocidade_translacao} m/min` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Marca, Modelo e Ano de Fabricação</p>
@@ -2597,12 +2615,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="font-medium">{relacaoGrua?.data_desmontagem ? formatarData(relacaoGrua.data_desmontagem) : relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Tipo de Base/Fundação</p>
-                  <p className="font-medium">{relacaoGrua?.tipo_base || relacaoGrua?.fundacao || 'Não informado'}</p>
-                </div>
-                <div>
                   <p className="text-xs text-gray-500">Local de Instalação</p>
-                  <p className="font-medium">{relacaoGrua?.local_instalacao || obra.endereco || 'Não informado'}</p>
+                  <p className="font-medium">{relacaoGrua?.local_instalacao || obra.endereco || obra.location || 'Não informado'}</p>
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-xs text-gray-500">Outras Características Singulares do Equipamento</p>
@@ -2612,12 +2626,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO */}
+          {/* 6.2. FORNECEDOR/LOCADOR DO EQUIPAMENTO / PROPRIETÁRIO DO EQUIPAMENTO */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Building2 className="w-4 h-4" />
-                7.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento
+                6.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2625,43 +2639,43 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Razão Social</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_nome || obra.cliente?.nome || 'Não informado'}</p>
+                    <p className="font-medium">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Nome Fantasia</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_nome_fantasia || relacaoGrua?.nome_fantasia || 'Não informado'}</p>
+                    <p className="font-medium">IRBANA COPAS</p>
                   </div>
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_endereco || obra.endereco || 'Não informado'}</p>
+                    <p className="font-medium">Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">CNPJ</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_cnpj || obra.cliente?.cnpj || 'Não informado'}</p>
+                    <p className="font-medium">20.053.969/0001-38</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">E-mail</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_email || obra.cliente?.email || 'Não informado'}</p>
+                    <p className="font-medium">info@gruascopa.com.br</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Fone</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_telefone || obra.cliente?.telefone || 'Não informado'}</p>
+                    <p className="font-medium">(11) 98818-5951</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Fax</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_fax || relacaoGrua?.fax || 'Não informado'}</p>
+                    <p className="font-medium">Não informado</p>
                   </div>
                 </div>
                 <div className="md:col-span-2">
@@ -2698,19 +2712,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500 mb-2">N° do CREA da Empresa</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">{gruaSelecionada.proprietario_crea_empresa || relacaoGrua?.crea_empresa || 'Não informado'}</p>
+                    <p className="font-medium">SP 2494244</p>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* 7.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA */}
+          {/* 6.3. RESPONSÁVEL PELA MANUTENÇÃO DA GRUA */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Wrench className="w-4 h-4" />
-                7.3. Responsável pela Manutenção da Grua
+                6.3. Responsável pela Manutenção da Grua
               </CardTitle>
               <CardDescription className="text-xs text-gray-500">
                 (permanece fixo os textos)
@@ -2721,85 +2735,67 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Razão Social</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_razao_social || 'IRBANA COPA SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'}
-                    </p>
+                    <p className="font-medium">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</p>
                   </div>
                 </div>
                 <div className="md:col-span-2">
                   <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_endereco || 'RUA BENEVENUTO VIEIRA N.48 J AEROPORTO ITU SP'}
-                    </p>
+                    <p className="font-medium">Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">CNPJ</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_cnpj || '20.053.969/0001-38'}
-                    </p>
+                    <p className="font-medium">20.053.969/0001-38</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">E-mail</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_email || 'info@irbana.net'}
-                    </p>
+                    <p className="font-medium">info@gruascopa.com.br</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Fone</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_fone || '(11) 98818 5951'}
-                    </p>
+                    <p className="font-medium">(11) 98818-5951</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Fax</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_fax || 'Não informado'}
-                    </p>
+                    <p className="font-medium">Não informado</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Responsável Técnico</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'NESTOR ALVAREZ GONZALEZ'}
-                    </p>
+                    <p className="font-medium">{relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'NESTOR ALVAREZ GONZALEZ'}</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Fone do Responsável</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_fone_responsavel || '(11) 98818-5951'}
-                    </p>
+                    <p className="font-medium">{relacaoGrua?.empresa_manutencao_fone_responsavel || '(11) 98818-5951'}</p>
                   </div>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">N° do CREA da Empresa</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    <p className="font-medium">
-                      {relacaoGrua?.empresa_manutencao_crea || 'SP 2494244'}
-                    </p>
+                    <p className="font-medium">SP 2494244</p>
                   </div>
                 </div>
               </div>
             </CardContent>
           </Card>
 
-          {/* 7.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s) */}
+          {/* 6.4. RESPONSÁVEL(is) PELA MONTAGEM E OPERAÇÃO DA(s) GRUA(s) */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Users className="w-4 h-4" />
-                7.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)
+                6.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2811,65 +2807,49 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Razão Social</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_razao_social || 'IRBANA COPA SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'}
-                        </p>
+                        <p className="font-medium">IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA</p>
                       </div>
                     </div>
                     <div className="md:col-span-2">
                       <p className="text-xs text-gray-500 mb-2">Endereço Completo</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_endereco || 'RUA BENEVENUTO VIEIRA N.48 J AEROPORTO ITU SP'}
-                        </p>
+                        <p className="font-medium">Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">CNPJ</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_cnpj || '20.053.969/0001-38'}
-                        </p>
+                        <p className="font-medium">20.053.969/0001-38</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">E-mail</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_email || 'info@irbana.net'}
-                        </p>
+                        <p className="font-medium">info@gruascopa.com.br</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Fone</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_fone || '(11) 98818 5951'}
-                        </p>
+                        <p className="font-medium">(11) 98818-5951</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Fax</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_fax || 'Não informado'}
-                        </p>
+                        <p className="font-medium">Não informado</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Responsável Técnico</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_responsavel_tecnico || 'ALEX MARCELO DA SILVA NASCIMENTO'}
-                        </p>
+                        <p className="font-medium">{relacaoGrua?.empresa_montagem_responsavel_tecnico || 'ALEX MARCELO DA SILVA NASCIMENTO'}</p>
                       </div>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 mb-2">Nº do CREA</p>
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="font-medium">
-                          {relacaoGrua?.empresa_montagem_crea || '5071184591'}
-                        </p>
+                        <p className="font-medium">{relacaoGrua?.empresa_montagem_crea || '5071184591'}</p>
                       </div>
                     </div>
                   </div>
@@ -2932,12 +2912,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.5. DADOS TÉCNICOS DO EQUIPAMENTO */}
+          {/* 6.5. DADOS TÉCNICOS DO EQUIPAMENTO */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                7.5. Dados Técnicos do Equipamento
+                6.5. Dados Técnicos do Equipamento
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -2946,10 +2926,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="text-xs text-gray-500 mb-2">Ficha Técnica do Equipamento (PDF)</p>
                   {(() => {
                     const fichaTecnica = documentos.find((doc: any) => 
+                      doc.categoria === 'manual_tecnico' ||
                       (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('técnica')) ||
                       (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('tecnica')) ||
                       (doc.titulo?.toLowerCase().includes('dados') && doc.titulo?.toLowerCase().includes('técnicos')) ||
-                      (doc.categoria?.toLowerCase().includes('ficha') && doc.categoria?.toLowerCase().includes('técnica'))
+                      (doc.categoria?.toLowerCase().includes('ficha') && doc.categoria?.toLowerCase().includes('técnica')) ||
+                      (doc.categoria?.toLowerCase().includes('manual') && doc.categoria?.toLowerCase().includes('tecnico'))
                     )
                     
                     if (fichaTecnica) {
@@ -2983,15 +2965,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                           size="sm"
                           variant="outline"
                           className="mt-3 print:hidden"
-                          onClick={() => {
-                            toast({
-                              title: "Upload de Ficha Técnica",
-                              description: "Funcionalidade de upload será implementada em breve. Use a seção de Documentos da Obra para fazer upload.",
-                              variant: "default"
-                            })
-                          }}
+                          onClick={() => criarInputUpload('manual_tecnico', 'Ficha Técnica do Equipamento')}
                         >
-                          <FileText className="w-4 h-4 mr-2" />
+                          <Upload className="w-4 h-4 mr-2" />
                           Fazer Upload de PDF
                         </Button>
                       </div>
@@ -3002,12 +2978,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.6. MANUAL DE MONTAGEM */}
+          {/* 6.6. MANUAL DE MONTAGEM */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <BookOpen className="w-4 h-4" />
-                7.6. Manual de Montagem
+                6.6. Manual de Montagem
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3016,8 +2992,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="text-xs text-gray-500 mb-2">Manual de Montagem Disponível</p>
                   {(() => {
                     const manualMontagem = documentos.find((doc: any) => 
-                      doc.titulo?.toLowerCase().includes('manual') && 
-                      (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação'))
+                      doc.categoria === 'manual_tecnico' ||
+                      (doc.titulo?.toLowerCase().includes('manual') && 
+                      (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação')))
                     ) || relacaoGrua?.manual_montagem
                     
                     if (manualMontagem) {
@@ -3044,7 +3021,16 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                     }
                     return (
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-gray-500">Não informado</p>
+                        <p className="text-gray-500 mb-3">Não informado</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="print:hidden"
+                          onClick={() => criarInputUpload('manual_tecnico', 'Manual de Montagem')}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Fazer Upload de PDF
+                        </Button>
                       </div>
                     )
                   })()}
@@ -3053,12 +3039,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.7. ENTREGA TÉCNICA */}
+          {/* 6.7. ENTREGA TÉCNICA */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileCheck className="w-4 h-4" />
-                7.7. Entrega Técnica
+                6.7. Entrega Técnica
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3067,8 +3053,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="text-xs text-gray-500 mb-2">Termo de Entrega Técnica</p>
                   {(() => {
                     const termoEntrega = documentos.find((doc: any) => 
-                      doc.titulo?.toLowerCase().includes('entrega') && 
-                      doc.titulo?.toLowerCase().includes('técnica')
+                      doc.categoria === 'termo_entrega_tecnica' ||
+                      (doc.titulo?.toLowerCase().includes('entrega') && 
+                      doc.titulo?.toLowerCase().includes('técnica'))
                     ) || documentos.find((doc: any) => 
                       doc.titulo?.toLowerCase().includes('termo') && 
                       doc.titulo?.toLowerCase().includes('entrega')
@@ -3113,7 +3100,16 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                     }
                     return (
                       <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-gray-500">Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.</p>
+                        <p className="text-gray-500 mb-3">Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="print:hidden"
+                          onClick={() => criarInputUpload('termo_entrega_tecnica', 'Termo de Entrega Técnica')}
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Fazer Upload de PDF
+                        </Button>
                       </div>
                     )
                   })()}
@@ -3122,20 +3118,21 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 7.7. PLANO DE CARGAS */}
+          {/* 6.8. PLANO DE CARGAS */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                7.7. Plano de Cargas
+                6.8. Plano de Cargas
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
                 {(() => {
                   const planoCargas = documentos.find((doc: any) => 
-                    doc.titulo?.toLowerCase().includes('plano') && 
-                    doc.titulo?.toLowerCase().includes('carga')
+                    doc.categoria === 'plano_carga' ||
+                    (doc.titulo?.toLowerCase().includes('plano') && 
+                    doc.titulo?.toLowerCase().includes('carga'))
                   )
                   
                   if (planoCargas) {
@@ -3200,15 +3197,24 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   return (
                     <div className="p-3 bg-gray-50 rounded-md">
                       <p className="text-gray-500 mb-2">Plano de cargas não encontrado.</p>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-gray-500 mb-3">
                         Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.
                       </p>
                       {relacaoGrua?.local_instalacao && (
-                        <div className="mt-3">
+                        <div className="mb-3">
                           <p className="text-xs text-gray-500">Local de Instalação (referência):</p>
                           <p className="font-medium">{relacaoGrua.local_instalacao}</p>
                         </div>
                       )}
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="print:hidden"
+                        onClick={() => criarInputUpload('plano_carga', 'Plano de Cargas')}
+                      >
+                        <Upload className="w-4 h-4 mr-2" />
+                        Fazer Upload de PDF
+                      </Button>
                     </div>
                   )
                 })()}
@@ -3216,12 +3222,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 8. CONFIGURAÇÃO E ESPECIFICAÇÕES */}
+          {/* 7. CONFIGURAÇÃO E ESPECIFICAÇÕES */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <Settings className="w-4 h-4" />
-                8. Configuração e Especificações Técnicas
+                7. Configuração e Especificações Técnicas
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3242,7 +3248,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="text-xs text-gray-500">Manual de Montagem</p>
                   <p className="font-medium">
                     {documentos.find((doc: any) => doc.titulo?.toLowerCase().includes('manual') && doc.titulo?.toLowerCase().includes('montagem')) 
-                      ? 'Disponível (ver seção 7.6)' 
+                      ? 'Disponível (ver seção 6.6)' 
                       : 'Não informado'}
                   </p>
                 </div>
@@ -3268,13 +3274,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
             </CardContent>
           </Card>
 
-          {/* 9. OBSERVAÇÕES GERAIS */}
+          {/* 8. OBSERVAÇÕES GERAIS */}
           {(obra.observacoes || relacaoGrua?.observacoes) && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-base flex items-center gap-2">
                   <ClipboardCheck className="w-4 h-4" />
-                  9. Observações Gerais
+                  8. Observações Gerais
                 </CardTitle>
               </CardHeader>
               <CardContent>

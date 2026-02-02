@@ -87,6 +87,43 @@ export interface MovimentacaoResponse {
   message: string
 }
 
+export interface ComponenteAgrupadoPorGrua {
+  grua: {
+    id: string
+    name: string
+    modelo: string
+    fabricante: string
+    tipo: string
+  }
+  componentes: Array<{
+    id: number
+    nome: string
+    tipo: string
+    modelo?: string
+    fabricante?: string
+    unidade_medida: string
+    quantidade_total: number
+    quantidade_disponivel: number
+    quantidade_em_uso: number
+    quantidade_danificada: number
+    status: string
+    localizacao?: string
+    localizacao_tipo?: string
+    valor_unitario: number
+    componente_estoque_id: string | number
+    valor_total: number
+  }>
+  total_componentes: number
+  total_quantidade: number
+  total_valor: number
+}
+
+export interface ComponentesAgrupadosResponse {
+  success: boolean
+  data: ComponenteAgrupadoPorGrua[]
+  total: number
+}
+
 // API de Componentes
 export const apiComponentes = {
   // Listar componentes com filtros
@@ -164,6 +201,12 @@ export const apiComponentes = {
     }
 
     return estatisticas
+  },
+
+  // Buscar componentes agrupados por grua (para visualização no estoque)
+  async buscarAgrupadosPorGrua(): Promise<ComponentesAgrupadosResponse> {
+    const response = await api.get('/grua-componentes/agrupados/estoque')
+    return response.data
   }
 }
 

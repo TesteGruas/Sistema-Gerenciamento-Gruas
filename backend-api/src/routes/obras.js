@@ -374,11 +374,50 @@ router.get('/', authenticateToken, async (req, res) => {
           valor_locacao_mensal,
           status,
           observacoes,
+          tipo_base,
+          altura_inicial,
+          altura_final,
+          velocidade_giro,
+          velocidade_elevacao,
+          velocidade_translacao,
+          potencia_instalada,
+          voltagem,
+          tipo_ligacao,
+          capacidade_ponta,
+          capacidade_maxima_raio,
+          capacidade_1_cabo,
+          capacidade_2_cabos,
+          velocidade_rotacao,
+          ano_fabricacao,
+          vida_util,
+          guindaste_montagem,
+          quantidade_viagens,
+          alojamento_alimentacao,
+          responsabilidade_acessorios,
+          data_montagem,
+          data_desmontagem,
+          local_instalacao,
+          observacoes_montagem,
           grua:gruas (
             id,
+            name,
             modelo,
             fabricante,
-            tipo
+            tipo,
+            tipo_base,
+            capacidade,
+            altura_trabalho,
+            altura_final,
+            altura_maxima,
+            alcance_maximo,
+            numero_serie,
+            capacidade_1_cabo,
+            capacidade_2_cabos,
+            potencia_instalada,
+            voltagem,
+            velocidade_rotacao,
+            velocidade_elevacao,
+            ano
           )
         ),
         obra_gruas_configuracao:obra_gruas_configuracao (
@@ -716,7 +755,18 @@ router.get('/:id', authenticateToken, async (req, res) => {
             id,
             modelo,
             fabricante,
-            tipo
+            tipo,
+            tipo_base,
+            capacidade,
+            altura_trabalho,
+            altura_final,
+            capacidade_1_cabo,
+            capacidade_2_cabos,
+            potencia_instalada,
+            voltagem,
+            velocidade_rotacao,
+            velocidade_elevacao,
+            ano
           )
         ),
         obra_gruas_configuracao:obra_gruas_configuracao (
@@ -787,6 +837,19 @@ router.get('/:id', authenticateToken, async (req, res) => {
           telefone,
           email,
           tipo,
+          created_at,
+          updated_at
+        ),
+        responsaveis_tecnicos (
+          id,
+          obra_id,
+          nome,
+          cpf_cnpj,
+          crea,
+          email,
+          telefone,
+          tipo,
+          crea_empresa,
           created_at,
           updated_at
         )
@@ -1014,9 +1077,15 @@ router.get('/:id', authenticateToken, async (req, res) => {
  */
 router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
-    console.log('🔍 DEBUG - Dados recebidos para criação de obra:', req.body)
+    console.log('🔍 DEBUG - Dados recebidos para criação de obra:', JSON.stringify(req.body, null, 2))
+    console.log('🔍 DEBUG - Array gruas no req.body:', req.body.gruas)
+    console.log('🔍 DEBUG - Tipo de gruas no req.body:', typeof req.body.gruas)
+    console.log('🔍 DEBUG - É array?', Array.isArray(req.body.gruas))
     
-    const { error, value } = obraSchema.validate(req.body)
+    const { error, value } = obraSchema.validate(req.body, {
+      stripUnknown: false, // Não remover campos desconhecidos
+      abortEarly: false // Retornar todos os erros, não apenas o primeiro
+    })
     if (error) {
       console.error('❌ Erro de validação:', error.details)
       return res.status(400).json({
@@ -1032,12 +1101,17 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       grua_valor: value.grua_valor,
       grua_mensalidade: value.grua_mensalidade
     })
+    console.log('🏗️ Array de gruas recebido:', value.gruas)
+    console.log('🏗️ Tipo de gruas:', typeof value.gruas)
+    console.log('🏗️ É array?', Array.isArray(value.gruas))
+    console.log('🏗️ Length:', value.gruas?.length || 0)
     console.log('👥 Funcionários recebidos:', value.funcionarios)
     console.log('💰 Custos mensais recebidos:', value.custos_mensais)
     console.log('📊 Resumo dos dados recebidos:')
     console.log('  - Obra:', value.nome)
     console.log('  - Cliente ID:', value.cliente_id)
     console.log('  - Grua ID:', value.grua_id || 'Nenhuma')
+    console.log('  - Array Gruas:', value.gruas?.length || 0)
     console.log('  - Funcionários:', value.funcionarios?.length || 0)
     console.log('  - Custos mensais:', value.custos_mensais?.length || 0)
 
@@ -1161,7 +1235,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
 
     console.log('📝 Dados da obra a ser criada:', obraData)
 
-    const { data, error: insertError } = await supabaseAdmin
+    let { data, error: insertError } = await supabaseAdmin
       .from('obras')
       .insert(obraData)
       .select()
@@ -1365,24 +1439,118 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     }
 
     // Processar dados das gruas se fornecidos
-    if (value.gruas && value.gruas.length > 0) {
+    // IMPORTANTE: Priorizar array de gruas sobre grua_id individual
+    console.log('🔍 DEBUG - Verificando array de gruas antes do processamento:')
+    console.log('  - value.gruas existe?', !!value.gruas)
+    console.log('  - É array?', Array.isArray(value.gruas))
+    console.log('  - Length:', value.gruas?.length || 0)
+    console.log('  - Conteúdo:', JSON.stringify(value.gruas, null, 2))
+    console.log('  - value.grua_id:', value.grua_id)
+    
+    // Priorizar array de gruas sobre grua_id individual
+    const errosGruas = []
+    if (value.gruas && Array.isArray(value.gruas) && value.gruas.length > 0) {
       console.log('🔧 Processando múltiplas gruas...')
       try {
         console.log('📝 Dados das gruas para processar:', value.gruas)
         
         // Processar cada grua
         for (const grua of value.gruas) {
+          console.log('🔍 DEBUG - Dados completos da grua recebidos:', JSON.stringify(grua, null, 2))
+          
+          // Validar se a grua existe antes de tentar criar o relacionamento
+          if (!grua.grua_id) {
+            console.error('❌ Erro: grua_id não fornecido para uma das gruas')
+            continue
+          }
+          
+          console.log('🔍 Verificando se a grua existe:', grua.grua_id)
+          const { data: gruaExistente, error: gruaCheckError } = await supabaseAdmin
+            .from('gruas')
+            .select('id, name, status')
+            .eq('id', grua.grua_id)
+            .single()
+          
+          if (gruaCheckError || !gruaExistente) {
+            console.error('❌ Erro: Grua não encontrada:', grua.grua_id)
+            console.error('❌ Detalhes:', gruaCheckError)
+            // Continuar com a próxima grua ao invés de falhar toda a operação
+            continue
+          }
+          
+          console.log('✅ Grua encontrada:', gruaExistente.name, 'Status atual:', gruaExistente.status)
+          
+          // Verificar se já existe um relacionamento ativo para esta grua
+          const { data: relacionamentoExistente, error: relacionamentoCheckError } = await supabaseAdmin
+            .from('grua_obra')
+            .select('id, obra_id, status')
+            .eq('grua_id', grua.grua_id)
+            .eq('status', 'Ativa')
+            .maybeSingle()
+          
+          if (relacionamentoExistente) {
+            console.warn('⚠️ ATENÇÃO: A grua já possui um relacionamento ativo com a obra ID:', relacionamentoExistente.obra_id)
+            console.warn('⚠️ Será criado um novo relacionamento. Considere finalizar o relacionamento anterior primeiro.')
+            // Continuar mesmo assim - pode ser intencional ter múltiplos relacionamentos
+          }
+          
+          // Função auxiliar para converter valores numéricos
+          const parseNumber = (val) => {
+            if (val === null || val === undefined || val === '') return null
+            const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
+            return isNaN(parsed) ? null : parsed
+          }
+          
+          const parseInteger = (val) => {
+            if (val === null || val === undefined || val === '') return null
+            const parsed = typeof val === 'string' ? parseInt(val, 10) : Number(val)
+            return isNaN(parsed) ? null : parsed
+          }
+          
+          // Função auxiliar para converter data para formato YYYY-MM-DD
+          const formatDate = (dateValue) => {
+            if (!dateValue) return new Date().toISOString().split('T')[0]
+            if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0]
+            if (typeof dateValue === 'string') {
+              // Se já está no formato YYYY-MM-DD, retornar direto
+              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) return dateValue
+              // Se tem T (ISO format), pegar só a parte da data
+              if (dateValue.includes('T')) return dateValue.split('T')[0]
+              return dateValue
+            }
+            return new Date().toISOString().split('T')[0]
+          }
+          
           const gruaObraData = {
             obra_id: data.id,
             grua_id: grua.grua_id,
-            valor_locacao_mensal: grua.valor_locacao || grua.taxa_mensal,
-            data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+            valor_locacao_mensal: parseNumber(grua.valor_locacao || grua.taxa_mensal) || 0,
+            data_inicio_locacao: formatDate(value.data_inicio),
             status: 'Ativa',
+            // Parâmetros Técnicos
+            tipo_base: grua.tipo_base || null,
+            altura_inicial: parseNumber(grua.altura_inicial),
+            altura_final: parseNumber(grua.altura_final),
+            velocidade_giro: parseNumber(grua.velocidade_giro),
+            velocidade_elevacao: parseNumber(grua.velocidade_elevacao),
+            velocidade_translacao: parseNumber(grua.velocidade_translacao),
+            potencia_instalada: parseNumber(grua.potencia_instalada),
+            voltagem: grua.voltagem || null,
+            tipo_ligacao: grua.tipo_ligacao || null,
+            capacidade_ponta: parseNumber(grua.capacidade_ponta),
+            capacidade_maxima_raio: parseNumber(grua.capacidade_maxima_raio),
+            ano_fabricacao: parseInteger(grua.ano_fabricacao),
+            vida_util: parseInteger(grua.vida_util),
+            // Serviços e Logística
+            guindaste_montagem: grua.guindaste_montagem || null,
+            quantidade_viagens: parseInteger(grua.quantidade_viagens),
+            alojamento_alimentacao: grua.alojamento_alimentacao || null,
+            responsabilidade_acessorios: grua.responsabilidade_acessorios || null,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
           
-          console.log('📝 Inserindo grua na tabela grua_obra:', gruaObraData)
+          console.log('📝 Inserindo grua na tabela grua_obra com todos os campos:', JSON.stringify(gruaObraData, null, 2))
           
           const { data: gruaObraResult, error: gruaObraError } = await supabaseAdmin
             .from('grua_obra')
@@ -1391,7 +1559,41 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             .single()
           
           if (gruaObraError) {
+            const erroInfo = {
+              grua_id: grua.grua_id,
+              codigo: gruaObraError.code,
+              mensagem: gruaObraError.message,
+              detalhes: gruaObraError.details,
+              hint: gruaObraError.hint
+            }
+            errosGruas.push(erroInfo)
+            
             console.error('❌ Erro ao inserir grua na tabela grua_obra:', gruaObraError)
+            console.error('❌ Detalhes do erro:', JSON.stringify(gruaObraError, null, 2))
+            console.error('❌ Código do erro:', gruaObraError.code)
+            console.error('❌ Mensagem do erro:', gruaObraError.message)
+            console.error('❌ Detalhes completos:', gruaObraError.details)
+            
+            // Se o erro for de coluna não encontrada, informar sobre a migration
+            if (gruaObraError.code === 'PGRST204' || gruaObraError.message?.includes('column') || gruaObraError.message?.includes('does not exist')) {
+              console.error('⚠️ ATENÇÃO: Parece que algumas colunas não existem na tabela grua_obra.')
+              console.error('⚠️ Execute a migration: 20250202_add_campos_tecnicos_grua_obra.sql')
+            }
+            
+            // Se o erro for de foreign key ou constraint, informar
+            if (gruaObraError.code === '23503' || gruaObraError.message?.includes('foreign key')) {
+              console.error('⚠️ ATENÇÃO: Erro de foreign key. Verifique se a grua_id está correto.')
+            }
+            
+            // Se o erro for de constraint única (duplicate key)
+            if (gruaObraError.code === '23505' || gruaObraError.message?.includes('duplicate') || gruaObraError.message?.includes('unique')) {
+              console.error('⚠️ ATENÇÃO: Já existe um relacionamento ativo para esta grua nesta obra ou há uma constraint única violada.')
+              console.error('⚠️ Código do erro:', gruaObraError.code)
+              console.error('⚠️ Detalhes:', gruaObraError.details)
+            }
+            
+            // Continuar com a próxima grua ao invés de falhar toda a operação
+            continue
           } else {
             console.log('✅ Grua inserida na tabela grua_obra:', gruaObraResult)
             
@@ -1416,65 +1618,124 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
         
       } catch (gruaError) {
         console.error('❌ Erro ao processar dados das gruas:', gruaError)
+        console.error('❌ Stack trace:', gruaError.stack)
         // Não falhar a criação da obra por causa das gruas
       }
     } else if (value.grua_id) {
       // Processar grua única (compatibilidade com versão anterior)
       console.log('🔧 Processando grua única (compatibilidade)...')
       try {
+        // Função auxiliar para converter data para formato YYYY-MM-DD
+        const formatDate = (dateValue) => {
+          if (!dateValue) return new Date().toISOString().split('T')[0]
+          if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0]
+          if (typeof dateValue === 'string') {
+            // Se já está no formato YYYY-MM-DD, retornar direto
+            if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) return dateValue
+            // Se tem T (ISO format), pegar só a parte da data
+            if (dateValue.includes('T')) return dateValue.split('T')[0]
+            return dateValue
+          }
+          return new Date().toISOString().split('T')[0]
+        }
+        
         console.log('📝 Dados da grua para processar:', {
           obra_id: data.id,
           grua_id: value.grua_id,
           valor_locacao_mensal: value.grua_mensalidade,
-          data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
+          data_inicio_locacao: formatDate(value.data_inicio),
           status: 'Ativa'
         })
         
-        const gruaObraData = {
-          obra_id: data.id,
-          grua_id: value.grua_id,
-          valor_locacao_mensal: value.grua_mensalidade,
-          data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
-          status: 'Ativa',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }
-        
-        console.log('📝 Inserindo dados na tabela grua_obra:', gruaObraData)
-        
-        const { data: gruaObraResult, error: gruaObraError } = await supabaseAdmin
-          .from('grua_obra')
-          .insert(gruaObraData)
-          .select()
+        // Validar se a grua existe antes de tentar criar o relacionamento
+        console.log('🔍 Verificando se a grua existe:', value.grua_id)
+        const { data: gruaExistente, error: gruaCheckError } = await supabaseAdmin
+          .from('gruas')
+          .select('id, name, status')
+          .eq('id', value.grua_id)
           .single()
         
-        if (gruaObraError) {
-          console.error('❌ Erro ao inserir na tabela grua_obra:', gruaObraError)
+        if (gruaCheckError || !gruaExistente) {
+          console.error('❌ Erro: Grua não encontrada:', value.grua_id)
+          console.error('❌ Detalhes:', gruaCheckError)
         } else {
-          console.log('✅ Registro inserido na tabela grua_obra:', gruaObraResult)
+          console.log('✅ Grua encontrada:', gruaExistente.name, 'Status atual:', gruaExistente.status)
           
-          // Atualizar status da grua para 'em_obra'
-          const { error: updateGruaError } = await supabaseAdmin
-            .from('gruas')
-            .update({
-              status: 'em_obra',
-              current_obra_id: data.id,
-              current_obra_name: data.nome,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', value.grua_id)
+          // Função auxiliar para converter data para formato YYYY-MM-DD
+          const formatDate = (dateValue) => {
+            if (!dateValue) return new Date().toISOString().split('T')[0]
+            if (dateValue instanceof Date) return dateValue.toISOString().split('T')[0]
+            if (typeof dateValue === 'string') {
+              // Se já está no formato YYYY-MM-DD, retornar direto
+              if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) return dateValue
+              // Se tem T (ISO format), pegar só a parte da data
+              if (dateValue.includes('T')) return dateValue.split('T')[0]
+              return dateValue
+            }
+            return new Date().toISOString().split('T')[0]
+          }
           
-          if (updateGruaError) {
-            console.error('❌ Erro ao atualizar status da grua:', updateGruaError)
+          const gruaObraData = {
+            obra_id: data.id,
+            grua_id: value.grua_id,
+            valor_locacao_mensal: value.grua_mensalidade || 0,
+            data_inicio_locacao: formatDate(value.data_inicio),
+            status: 'Ativa',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+          
+          console.log('📝 Inserindo dados na tabela grua_obra:', gruaObraData)
+          
+          const { data: gruaObraResult, error: gruaObraError } = await supabaseAdmin
+            .from('grua_obra')
+            .insert(gruaObraData)
+            .select()
+            .single()
+          
+          if (gruaObraError) {
+            console.error('❌ Erro ao inserir na tabela grua_obra:', gruaObraError)
+            console.error('❌ Código do erro:', gruaObraError.code)
+            console.error('❌ Mensagem do erro:', gruaObraError.message)
+            console.error('❌ Detalhes completos:', gruaObraError.details)
+            
+            // Se o erro for de foreign key ou constraint, informar
+            if (gruaObraError.code === '23503' || gruaObraError.message?.includes('foreign key')) {
+              console.error('⚠️ ATENÇÃO: Erro de foreign key. Verifique se a grua_id está correto.')
+            }
           } else {
-            console.log('✅ Status da grua atualizado para "em_obra"')
+            console.log('✅ Registro inserido na tabela grua_obra:', gruaObraResult)
+            
+            // Atualizar status da grua para 'em_obra'
+            const { error: updateGruaError } = await supabaseAdmin
+              .from('gruas')
+              .update({
+                status: 'em_obra',
+                current_obra_id: data.id,
+                current_obra_name: data.nome,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', value.grua_id)
+            
+            if (updateGruaError) {
+              console.error('❌ Erro ao atualizar status da grua:', updateGruaError)
+            } else {
+              console.log('✅ Status da grua atualizado para "em_obra"')
+            }
           }
         }
         
       } catch (gruaError) {
         console.error('❌ Erro ao processar dados da grua:', gruaError)
+        console.error('❌ Stack trace:', gruaError.stack)
         // Não falhar a criação da obra por causa da grua
       }
+    } else {
+      console.log('⚠️ AVISO: Nenhuma grua foi processada!')
+      console.log('  - value.gruas:', value.gruas)
+      console.log('  - value.grua_id:', value.grua_id)
+      console.log('  - Array gruas é válido?', value.gruas && Array.isArray(value.gruas) && value.gruas.length > 0)
+      console.log('  - grua_id existe?', !!value.grua_id)
     }
 
     // Processar dados dos funcionários se fornecidos
@@ -1582,6 +1843,56 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       }
     }
 
+    // Buscar dados completos da obra incluindo gruas vinculadas
+    console.log('🔍 Buscando dados completos da obra criada...')
+    const { data: obraCompleta, error: obraCompletaError } = await supabaseAdmin
+      .from('obras')
+      .select(`
+        *,
+        grua_obra (
+          id,
+          grua_id,
+          data_inicio_locacao,
+          data_fim_locacao,
+          valor_locacao_mensal,
+          status,
+          tipo_base,
+          altura_inicial,
+          altura_final,
+          velocidade_giro,
+          velocidade_elevacao,
+          velocidade_translacao,
+          potencia_instalada,
+          voltagem,
+          tipo_ligacao,
+          capacidade_ponta,
+          capacidade_maxima_raio,
+          ano_fabricacao,
+          vida_util,
+          guindaste_montagem,
+          quantidade_viagens,
+          alojamento_alimentacao,
+          responsabilidade_acessorios,
+          grua:gruas (
+            id,
+            name,
+            modelo,
+            fabricante,
+            tipo
+          )
+        )
+      `)
+      .eq('id', data.id)
+      .single()
+
+    if (obraCompletaError) {
+      console.error('⚠️ Erro ao buscar obra completa:', obraCompletaError)
+      // Retornar dados básicos mesmo se houver erro ao buscar dados completos
+    } else {
+      console.log('✅ Obra completa encontrada com', obraCompleta.grua_obra?.length || 0, 'grua(s) vinculada(s)')
+      data = obraCompleta
+    }
+
     // Enviar notificações WhatsApp para cliente e gestores (não bloquear criação se falhar)
     try {
       const { enviarMensagemNovaObra } = await import('../services/whatsapp-service.js');
@@ -1595,7 +1906,11 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     res.status(201).json({
       success: true,
       data,
-      message: 'Obra criada com sucesso'
+      message: 'Obra criada com sucesso',
+      warnings: errosGruas.length > 0 ? {
+        message: `${errosGruas.length} grua(s) não puderam ser vinculada(s)`,
+        erros: errosGruas
+      } : undefined
     })
   } catch (error) {
     console.error('Erro ao criar obra:', error)
