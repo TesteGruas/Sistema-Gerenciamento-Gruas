@@ -71,7 +71,8 @@ interface CustoComRelacionamentos extends Custo {
 
 // Interface para contas a pagar
 interface ContaPagar {
-  id: number
+  id: number | string // Pode ser número ou string (ex: "nf_123" para notas fiscais)
+  tipo?: 'conta_pagar' | 'nota_fiscal' // Tipo do registro
   descricao: string
   valor: number
   data_vencimento: string
@@ -79,7 +80,14 @@ interface ContaPagar {
   status: 'pendente' | 'pago' | 'vencido' | 'cancelado'
   cliente?: { nome: string; cnpj: string }
   obra?: { nome: string }
+  fornecedor?: { id?: number; nome: string; cnpj?: string }
   observacoes?: string
+  // Campos específicos de notas fiscais
+  numero_nf?: string
+  serie?: string
+  data_emissao?: string
+  valor_total?: number
+  valor_liquido?: number
 }
 
 interface Alertas {
@@ -258,7 +266,10 @@ export default function ContasPagarPage() {
     return [
       ...filteredCustos.map(c => ({ tipo: 'custo' as const, data: c })),
       ...filteredImpostos.map(i => ({ tipo: 'imposto' as const, data: i })),
-      ...contas.map(c => ({ tipo: 'conta' as const, data: c }))
+      ...contas.map(c => ({ 
+        tipo: (c.tipo === 'nota_fiscal' ? 'nota_fiscal' : 'conta') as const, 
+        data: c 
+      }))
     ]
   }, [filteredCustos, filteredImpostos, contas])
 
@@ -552,27 +563,56 @@ export default function ContasPagarPage() {
   }
 
   // Handlers de Contas a Pagar
-  const marcarComoPago = async (id: number) => {
+  const marcarComoPago = async (id: number | string) => {
     try {
       const token = getAuthToken()
-      const response = await fetch(`${API_URL}/api/contas-pagar/${id}/pagar`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          data_pagamento: new Date().toISOString().split('T')[0]
+      
+      // Verificar se é uma nota fiscal (ID começa com "nf_")
+      if (typeof id === 'string' && id.startsWith('nf_')) {
+        const notaId = id.replace('nf_', '')
+        const response = await fetch(`${API_URL}/api/notas-fiscais/${notaId}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            status: 'paga'
+          })
         })
-      })
 
-      if (response.ok) {
-        carregarContas()
-        carregarAlertas()
-        toast({
-          title: "Sucesso",
-          description: "Conta marcada como paga"
+        if (response.ok) {
+          carregarContas()
+          carregarAlertas()
+          toast({
+            title: "Sucesso",
+            description: "Nota fiscal marcada como paga"
+          })
+        } else {
+          const errorData = await response.json()
+          throw new Error(errorData.message || 'Erro ao marcar nota fiscal como paga')
+        }
+      } else {
+        // É uma conta a pagar normal
+        const response = await fetch(`${API_URL}/api/contas-pagar/${id}/pagar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            data_pagamento: new Date().toISOString().split('T')[0]
+          })
         })
+
+        if (response.ok) {
+          carregarContas()
+          carregarAlertas()
+          toast({
+            title: "Sucesso",
+            description: "Conta marcada como paga"
+          })
+        }
       }
     } catch (error) {
       console.error('Erro ao marcar como pago:', error)
@@ -1011,6 +1051,78 @@ export default function ContasPagarPage() {
                       )
                     }
                     
+                    // Renderizar Nota Fiscal de Entrada
+                    if (registro.tipo === 'nota_fiscal') {
+                      const nota = registro.data as ContaPagar
+                      return (
+                        <TableRow key={`nota-${nota.id}`}>
+                          <TableCell>
+                            <Badge className="bg-purple-100 text-purple-800">
+                              <Receipt className="w-3 h-3 mr-1" />
+                              Nota Fiscal
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            {nota.descricao}
+                            {nota.numero_nf && (
+                              <span className="text-xs text-gray-500 ml-2">
+                                NF: {nota.numero_nf}
+                                {nota.serie && ` - Série ${nota.serie}`}
+                              </span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Building2 className="w-4 h-4 text-gray-400" />
+                              {nota.obra?.nome || 'N/A'}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {nota.fornecedor?.nome || nota.cliente?.nome || 'N/A'}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <Calendar className="w-4 h-4 text-gray-400" />
+                              {formatarData(nota.data_vencimento)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              <DollarSign className="w-4 h-4 text-red-600" />
+                              {formatarMoeda(nota.valor)}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {getStatusBadge(nota.status)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setViewingItem({ tipo: 'nota_fiscal', data: nota })
+                                  setIsViewDialogOpen(true)
+                                }}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              {nota.status === 'pendente' && (
+                                <Button
+                                  size="sm"
+                                  onClick={() => marcarComoPago(nota.id)}
+                                  className="bg-green-500 hover:bg-green-600"
+                                >
+                                  <CheckCircle className="w-4 h-4 mr-1" />
+                                  Pagar
+                                </Button>
+                              )}
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    }
+
                     // Renderizar Conta a Pagar
                     if (registro.tipo === 'conta') {
                       const conta = registro.data as ContaPagar
@@ -1031,7 +1143,7 @@ export default function ContasPagarPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            {conta.cliente?.nome || 'N/A'}
+                            {conta.fornecedor?.nome || conta.cliente?.nome || 'N/A'}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1563,6 +1675,100 @@ export default function ContasPagarPage() {
                 </>
               )}
 
+              {viewingItem.tipo === 'nota_fiscal' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold">Tipo</Label>
+                      <p className="mt-1">
+                        <Badge className="bg-purple-100 text-purple-800">
+                          <Receipt className="w-3 h-3 mr-1" />
+                          Nota Fiscal de Entrada
+                        </Badge>
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-semibold">Status</Label>
+                      <p className="mt-1">
+                        {getStatusBadge(viewingItem.data.status)}
+                      </p>
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-semibold">Descrição</Label>
+                    <p className="mt-1 text-gray-700">{viewingItem.data.descricao}</p>
+                  </div>
+                  {viewingItem.data.numero_nf && (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <Label className="text-sm font-semibold">Número da NF</Label>
+                        <p className="mt-1 text-gray-700">{viewingItem.data.numero_nf}</p>
+                      </div>
+                      {viewingItem.data.serie && (
+                        <div>
+                          <Label className="text-sm font-semibold">Série</Label>
+                          <p className="mt-1 text-gray-700">{viewingItem.data.serie}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold">Data de Emissão</Label>
+                      <p className="mt-1 text-gray-700">
+                        {viewingItem.data.data_emissao ? formatarData(viewingItem.data.data_emissao) : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-semibold">Data de Vencimento</Label>
+                      <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_vencimento)}</p>
+                    </div>
+                  </div>
+                  {viewingItem.data.data_pagamento && (
+                    <div>
+                      <Label className="text-sm font-semibold">Data de Pagamento</Label>
+                      <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_pagamento)}</p>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-semibold">Fornecedor</Label>
+                      <p className="mt-1 text-gray-700">{viewingItem.data.fornecedor?.nome || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-semibold">Obra</Label>
+                      <p className="mt-1 text-gray-700">{viewingItem.data.obra?.nome || 'N/A'}</p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-4">
+                    {viewingItem.data.valor_total && (
+                      <div>
+                        <Label className="text-sm font-semibold">Valor Total</Label>
+                        <p className="mt-1 text-gray-700">{formatarMoeda(viewingItem.data.valor_total)}</p>
+                      </div>
+                    )}
+                    {viewingItem.data.valor_liquido && viewingItem.data.valor_liquido !== viewingItem.data.valor_total && (
+                      <div>
+                        <Label className="text-sm font-semibold">Valor Líquido</Label>
+                        <p className="mt-1 text-gray-700">{formatarMoeda(viewingItem.data.valor_liquido)}</p>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-sm font-semibold">Valor</Label>
+                      <p className="mt-1 text-lg font-bold text-red-600">
+                        {formatarMoeda(viewingItem.data.valor)}
+                      </p>
+                    </div>
+                  </div>
+                  {viewingItem.data.observacoes && (
+                    <div>
+                      <Label className="text-sm font-semibold">Observações</Label>
+                      <p className="mt-1 text-gray-700 whitespace-pre-wrap">{viewingItem.data.observacoes}</p>
+                    </div>
+                  )}
+                </>
+              )}
+
               {viewingItem.tipo === 'conta' && (
                 <>
                   <div>
@@ -1597,8 +1803,8 @@ export default function ContasPagarPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <Label className="text-sm font-semibold">Cliente</Label>
-                      <p className="mt-1 text-gray-700">{viewingItem.data.cliente?.nome || 'N/A'}</p>
+                      <Label className="text-sm font-semibold">Fornecedor</Label>
+                      <p className="mt-1 text-gray-700">{viewingItem.data.fornecedor?.nome || viewingItem.data.cliente?.nome || 'N/A'}</p>
                     </div>
                     <div>
                       <Label className="text-sm font-semibold">Obra</Label>
