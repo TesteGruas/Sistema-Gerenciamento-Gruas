@@ -1216,8 +1216,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
         [`Tipo de Base/Fundação:`, relacaoGrua?.tipo_base || dadosMontagemObra.tipo_base || relacaoGrua?.fundacao || 'Não informado'],
         [`Altura Inicial:`, relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial ? `${relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial}m` : 'Não informado'],
         [`Altura Final:`, relacaoGrua?.altura_final || dadosMontagemObra.altura_final ? `${relacaoGrua?.altura_final || dadosMontagemObra.altura_final}m` : 'Não informado'],
-        [`Capacidade com 1 Cabo:`, relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo ? `${relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo} kg` : 'Não informado'],
-        [`Capacidade com 2 Cabos:`, relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos ? `${relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos} kg` : 'Não informado'],
+        [`Capacidade com 2 Cabos:`, relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo ? `${relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo} kg` : 'Não informado'],
+        [`Capacidade com 4 Cabos:`, relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos ? `${relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos} kg` : 'Não informado'],
         [`Capacidade na Ponta:`, relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta ? `${relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta} kg` : 'Não informado'],
         [`Potência Instalada:`, relacaoGrua?.potencia_instalada || dadosMontagemObra.potencia_instalada ? `${relacaoGrua?.potencia_instalada || dadosMontagemObra.potencia_instalada} kVA` : 'Não informado'],
         [`Voltagem:`, relacaoGrua?.voltagem || dadosMontagemObra.voltagem || 'Não informado'],
@@ -2561,11 +2561,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   <p className="font-medium">{relacaoGrua?.tipo_base || obra.dados_montagem_equipamento?.tipo_base || relacaoGrua?.fundacao || 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Capacidade com 1 Cabo (kg)</p>
+                  <p className="text-xs text-gray-500">Capacidade com 2 Cabos (kg)</p>
                   <p className="font-medium">{(relacaoGrua?.capacidade_1_cabo || obra.dados_montagem_equipamento?.capacidade_1_cabo) ? `${relacaoGrua?.capacidade_1_cabo || obra.dados_montagem_equipamento?.capacidade_1_cabo} KG` : 'Não informado'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Capacidade com 2 Cabos (kg)</p>
+                  <p className="text-xs text-gray-500">Capacidade com 4 Cabos (kg)</p>
                   <p className="font-medium">{(relacaoGrua?.capacidade_2_cabos || obra.dados_montagem_equipamento?.capacidade_2_cabos) ? `${relacaoGrua?.capacidade_2_cabos || obra.dados_montagem_equipamento?.capacidade_2_cabos} KG` : 'Não informado'}</p>
                 </div>
                 <div>

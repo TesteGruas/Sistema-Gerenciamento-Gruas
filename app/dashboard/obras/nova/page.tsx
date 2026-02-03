@@ -185,7 +185,6 @@ export default function NovaObraPage() {
     status: 'Em Andamento',
     startDate: '',
     endDate: '',
-    budget: '',
     location: '',
     cidade: '',
     estado: 'SP',
@@ -712,7 +711,6 @@ export default function NovaObraPage() {
         status: obraFormData.status,
         startDate: obraFormData.startDate,
         endDate: obraFormData.endDate,
-        budget: parseCurrency(obraFormData.budget),
         location: obraFormData.location,
         cidade: obraFormData.cidade,
         estado: obraFormData.estado,
@@ -796,7 +794,6 @@ export default function NovaObraPage() {
         status: obraData.status,
         startDate: obraData.startDate,
         endDate: obraData.endDate,
-        budget: obraData.budget,
         location: obraData.location,
         cidade: obraData.cidade,
         estado: obraData.estado,
@@ -1276,7 +1273,6 @@ export default function NovaObraPage() {
       status: 'Em Andamento',
       startDate: '',
       endDate: '',
-      budget: '',
       location: '',
       cidade: '',
       estado: 'SP',
@@ -1357,7 +1353,6 @@ export default function NovaObraPage() {
       status: 'Em Andamento',
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 ano a partir de hoje
-      budget: '1500000,00',
       location: 'Rua das Flores, 123 - Centro',
       cidade: 'São Paulo',
       estado: 'SP',
@@ -1799,8 +1794,8 @@ export default function NovaObraPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-5">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="md:col-span-2 lg:col-span-2">
                     <Label htmlFor="name">Nome da Obra *</Label>
                     <Input
                       id="name"
@@ -1809,7 +1804,7 @@ export default function NovaObraPage() {
                       placeholder="Ex: Obra Residencial Jardim das Flores"
                     />
                   </div>
-                  <div className="md:col-span-2">
+                  <div>
                     <Label htmlFor="status">Status</Label>
                     <Select value={obraFormData.status} onValueChange={(value) => setObraFormData({ ...obraFormData, status: value })}>
                       <SelectTrigger>
@@ -1823,7 +1818,24 @@ export default function NovaObraPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="md:col-span-2">
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div>
+                    <Label htmlFor="tipo">Tipo de Obra *</Label>
+                    <Select value={obraFormData.tipo} onValueChange={(value) => setObraFormData({ ...obraFormData, tipo: value })}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Residencial">Residencial</SelectItem>
+                        <SelectItem value="Comercial">Comercial</SelectItem>
+                        <SelectItem value="Industrial">Industrial</SelectItem>
+                        <SelectItem value="Infraestrutura">Infraestrutura</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
                     <Label htmlFor="startDate">Data de Início</Label>
                     <Input
                       id="startDate"
@@ -1832,49 +1844,13 @@ export default function NovaObraPage() {
                       onChange={(e) => setObraFormData({ ...obraFormData, startDate: e.target.value })}
                     />
                   </div>
-                  <div className="md:col-span-2">
+                  <div>
                     <Label htmlFor="endDate">Data de Fim</Label>
                     <Input
                       id="endDate"
                       type="date"
                       value={obraFormData.endDate}
                       onChange={(e) => setObraFormData({ ...obraFormData, endDate: e.target.value })}
-                    />
-                  </div>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
-                  <div className="md:col-span-8">
-                    <Label htmlFor="location">Endereço *</Label>
-                    <Input
-                      id="location"
-                      value={obraFormData.location}
-                      onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
-                      placeholder="Ex: Rua das Flores, 123 - Centro"
-                    />
-                  </div>
-                  <div className="md:col-span-4">
-                    <Label htmlFor="budget">Orçamento (R$)</Label>
-                    <Input
-                      id="budget"
-                      type="text"
-                      value={obraFormData.budget}
-                      onChange={(e) => {
-                        const formatted = formatCurrency(e.target.value)
-                        setObraFormData({ ...obraFormData, budget: formatted })
-                      }}
-                      placeholder="0,00"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                    <Label htmlFor="cidade">Cidade *</Label>
-                    <Input
-                      id="cidade"
-                      value={obraFormData.cidade}
-                      onChange={(e) => setObraFormData({ ...obraFormData, cidade: e.target.value })}
-                      placeholder="Ex: São Paulo"
                     />
                   </div>
                   <div>
@@ -1914,19 +1890,26 @@ export default function NovaObraPage() {
                       </SelectContent>
                     </Select>
                   </div>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="tipo">Tipo de Obra *</Label>
-                    <Select value={obraFormData.tipo} onValueChange={(value) => setObraFormData({ ...obraFormData, tipo: value })}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Residencial">Residencial</SelectItem>
-                        <SelectItem value="Comercial">Comercial</SelectItem>
-                        <SelectItem value="Industrial">Industrial</SelectItem>
-                        <SelectItem value="Infraestrutura">Infraestrutura</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="cidade">Cidade *</Label>
+                    <Input
+                      id="cidade"
+                      value={obraFormData.cidade}
+                      onChange={(e) => setObraFormData({ ...obraFormData, cidade: e.target.value })}
+                      placeholder="Ex: São Paulo"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="location">Endereço *</Label>
+                    <Input
+                      id="location"
+                      value={obraFormData.location}
+                      onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
+                      placeholder="Ex: Rua das Flores, 123 - Centro"
+                    />
                   </div>
                 </div>
                 
@@ -2373,7 +2356,7 @@ export default function NovaObraPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="capacidade_1_cabo">Capacidade com 1 Cabo (kg)</Label>
+                    <Label htmlFor="capacidade_1_cabo">Capacidade com 2 Cabos (kg)</Label>
                     <Input
                       id="capacidade_1_cabo"
                       type="number"
@@ -2385,7 +2368,7 @@ export default function NovaObraPage() {
                   </div>
 
                   <div>
-                    <Label htmlFor="capacidade_2_cabos">Capacidade com 2 Cabos (kg)</Label>
+                    <Label htmlFor="capacidade_2_cabos">Capacidade com 4 Cabos (kg)</Label>
                     <Input
                       id="capacidade_2_cabos"
                       type="number"
