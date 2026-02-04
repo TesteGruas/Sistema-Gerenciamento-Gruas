@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -46,40 +46,121 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   // Estados para upload de holerite
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
-  const [mesReferencia, setMesReferencia] = useState('')
+  const [mesUpload, setMesUpload] = useState<string>('')
+  const [anoUpload, setAnoUpload] = useState<string>('')
   const [uploading, setUploading] = useState(false)
   
-  // Estado para filtro de mês/ano - inicializar com "Todos os meses"
-  const [filtroMesAno, setFiltroMesAno] = useState<string>('all')
+  // Estado para filtro de mês - inicializar com "Todos os meses"
+  const [filtroMes, setFiltroMes] = useState<string>('all')
+  // Estado para filtro de ano - inicializar com "Todos os anos"
+  const [filtroAno, setFiltroAno] = useState<string>('all')
   
-  // Gerar opções de meses e anos
-  const gerarOpcoesMesAno = () => {
+  // Gerar opções de meses
+  const gerarOpcoesMes = () => {
     const opcoes: { value: string; label: string }[] = [
       { value: 'all', label: 'Todos os meses' }
     ]
-    const agora = new Date()
-    const anoAtual = agora.getFullYear()
-    const mesAtual = agora.getMonth() + 1
     
-    // Adicionar últimos 12 meses
-    for (let i = 0; i < 12; i++) {
-      const data = new Date(anoAtual, mesAtual - i - 1, 1)
-      const ano = data.getFullYear()
-      const mes = data.getMonth() + 1
-      const mesFormatado = `${ano}-${String(mes).padStart(2, '0')}`
+    // Adicionar todos os meses do ano
+    for (let mes = 1; mes <= 12; mes++) {
+      const data = new Date(2024, mes - 1, 1) // Usar 2024 como base, apenas para obter o nome do mês
       const mesNome = data.toLocaleString('pt-BR', { month: 'long' })
       const mesNomeCapitalizado = mesNome.charAt(0).toUpperCase() + mesNome.slice(1)
       
       opcoes.push({
-        value: mesFormatado,
-        label: `${mesNomeCapitalizado} / ${ano}`
+        value: String(mes).padStart(2, '0'),
+        label: mesNomeCapitalizado
       })
     }
     
     return opcoes
   }
   
-  const opcoesMesAno = gerarOpcoesMesAno()
+  // Gerar opções de anos baseado nos holerites disponíveis
+  const gerarOpcoesAno = () => {
+    const opcoes: { value: string; label: string }[] = [
+      { value: 'all', label: 'Todos os anos' }
+    ]
+    
+    // Extrair anos únicos dos holerites
+    const anosUnicos = new Set<number>()
+    holerites.forEach((h) => {
+      if (h.ano) {
+        anosUnicos.add(h.ano)
+      }
+    })
+    
+    // Se não houver holerites, adicionar anos recentes
+    if (anosUnicos.size === 0) {
+      const anoAtual = new Date().getFullYear()
+      for (let i = 0; i < 5; i++) {
+        anosUnicos.add(anoAtual - i)
+      }
+    }
+    
+    // Ordenar anos em ordem decrescente
+    const anosOrdenados = Array.from(anosUnicos).sort((a, b) => b - a)
+    
+    anosOrdenados.forEach((ano) => {
+      opcoes.push({
+        value: String(ano),
+        label: String(ano)
+      })
+    })
+    
+    return opcoes
+  }
+  
+  const opcoesMes = gerarOpcoesMes()
+  const opcoesAno = useMemo(() => gerarOpcoesAno(), [holerites])
+  
+  // Verificar se já existe holerite para o mês/ano selecionado
+  const verificarHoleriteExistente = (mes: string, ano: string): Holerite | null => {
+    if (!mes || !ano) return null
+    
+    const mesReferencia = `${ano}-${mes}`
+    return holerites.find((h) => {
+      if ((h as any).mes_referencia) {
+        return (h as any).mes_referencia === mesReferencia
+      }
+      // Caso contrário, construir a data a partir de mes e ano
+      const mesNumero = new Date(`${h.mes} 1, ${h.ano}`).getMonth() + 1
+      const mesFormatado = `${h.ano}-${String(mesNumero).padStart(2, '0')}`
+      return mesFormatado === mesReferencia
+    }) || null
+  }
+  
+  const holeriteDuplicado = useMemo(() => {
+    return verificarHoleriteExistente(mesUpload, anoUpload)
+  }, [mesUpload, anoUpload, holerites])
+  
+  // Gerar opções de anos para upload (incluindo anos futuros)
+  const gerarOpcoesAnoUpload = () => {
+    const opcoes: { value: string; label: string }[] = []
+    const anoAtual = new Date().getFullYear()
+    
+    // Adicionar anos do ano atual até 5 anos no futuro
+    for (let i = 0; i <= 5; i++) {
+      const ano = anoAtual + i
+      opcoes.push({
+        value: String(ano),
+        label: String(ano)
+      })
+    }
+    
+    // Adicionar anos passados (últimos 5 anos)
+    for (let i = 1; i <= 5; i++) {
+      const ano = anoAtual - i
+      opcoes.unshift({
+        value: String(ano),
+        label: String(ano)
+      })
+    }
+    
+    return opcoes
+  }
+  
+  const opcoesAnoUpload = gerarOpcoesAnoUpload()
 
   useEffect(() => {
     loadHolerites()
@@ -103,7 +184,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           mes_referencia: h.mes_referencia // Guardar o formato original para filtro
         }))
         setHolerites(holeritesConvertidos)
-        aplicarFiltro(holeritesConvertidos, filtroMesAno)
+        aplicarFiltro(holeritesConvertidos, filtroMes, filtroAno)
       }
     } catch (error: any) {
       toast({
@@ -112,41 +193,48 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
         variant: "destructive"
       })
       // Garantir que o filtro seja aplicado mesmo em caso de erro
-      aplicarFiltro([], filtroMesAno)
+      aplicarFiltro([], filtroMes, filtroAno)
     } finally {
       setLoading(false)
     }
   }
 
   // Função para aplicar filtro
-  const aplicarFiltro = (listaHolerites: Holerite[], filtro: string) => {
-    // Se filtro for "all" ou vazio, mostrar todos
-    if (!filtro || filtro === '' || filtro === 'all') {
-      setHoleritesFiltrados(listaHolerites)
-      return
+  const aplicarFiltro = (listaHolerites: Holerite[], filtroMesAtual: string, filtroAnoAtual: string) => {
+    let holeritesFiltrados = listaHolerites
+
+    // Filtrar por mês
+    if (filtroMesAtual && filtroMesAtual !== 'all' && filtroMesAtual !== '') {
+      holeritesFiltrados = holeritesFiltrados.filter((h) => {
+        if ((h as any).mes_referencia) {
+          const mesReferencia = (h as any).mes_referencia.split('-')[1] // Extrair mês do formato YYYY-MM
+          return mesReferencia === filtroMesAtual
+        }
+        // Caso contrário, construir a data a partir de mes e ano
+        const mesNumero = new Date(`${h.mes} 1, ${h.ano}`).getMonth() + 1
+        return String(mesNumero).padStart(2, '0') === filtroMesAtual
+      })
     }
 
-    const holeritesFiltrados = listaHolerites.filter((h) => {
-      // Se o holerite tem mes_referencia, comparar diretamente
-      if ((h as any).mes_referencia) {
-        return (h as any).mes_referencia === filtro
-      }
-      // Caso contrário, construir a data a partir de mes e ano
-      const mesNumero = new Date(`${h.mes} 1, ${h.ano}`).getMonth() + 1
-      const mesFormatado = `${h.ano}-${String(mesNumero).padStart(2, '0')}`
-      return mesFormatado === filtro
-    })
+    // Filtrar por ano
+    if (filtroAnoAtual && filtroAnoAtual !== 'all' && filtroAnoAtual !== '') {
+      holeritesFiltrados = holeritesFiltrados.filter((h) => {
+        if ((h as any).mes_referencia) {
+          const anoReferencia = (h as any).mes_referencia.split('-')[0] // Extrair ano do formato YYYY-MM
+          return anoReferencia === filtroAnoAtual
+        }
+        return String(h.ano) === filtroAnoAtual
+      })
+    }
 
     setHoleritesFiltrados(holeritesFiltrados)
   }
 
   // Efeito para aplicar filtro quando mudar
   useEffect(() => {
-    if (holerites.length > 0 || filtroMesAno === 'all') {
-      aplicarFiltro(holerites, filtroMesAno)
-    }
+    aplicarFiltro(holerites, filtroMes, filtroAno)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroMesAno, holerites])
+  }, [filtroMes, filtroAno, holerites])
 
   const handleAssinar = async (holerite: Holerite) => {
     if (!assinaturaDataUrl) {
@@ -265,21 +353,25 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       return
     }
 
-    if (!mesReferencia) {
+    if (!mesUpload || !anoUpload) {
       toast({
         title: "Erro",
-        description: "A data (mês/ano) é obrigatória",
+        description: "Mês e ano são obrigatórios",
         variant: "destructive"
       })
       return
     }
 
-    // Validar formato do mês (YYYY-MM)
-    const mesRegex = /^\d{4}-\d{2}$/
-    if (!mesRegex.test(mesReferencia)) {
+    // Construir mes_referencia no formato YYYY-MM
+    const mesReferencia = `${anoUpload}-${mesUpload}`
+
+    // Verificar se já existe um holerite para este mês/ano
+    const holeriteExistente = verificarHoleriteExistente(mesUpload, anoUpload)
+
+    if (holeriteExistente) {
       toast({
         title: "Erro",
-        description: "Formato de data inválido. Use o formato YYYY-MM (ex: 2025-01)",
+        description: `Já existe um holerite para ${holeriteExistente.mes} / ${holeriteExistente.ano}. Por favor, selecione outro mês/ano ou atualize o holerite existente.`,
         variant: "destructive"
       })
       return
@@ -335,8 +427,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
         description: "Holerite enviado com sucesso!",
       })
       
-      // Atualizar filtro para o mês do holerite enviado
-      setFiltroMesAno(mesReferencia)
+      // Atualizar filtro para o mês e ano do holerite enviado
+      setFiltroMes(mesUpload)
+      setFiltroAno(anoUpload)
       
       // Recarregar holerites
       await loadHolerites()
@@ -344,7 +437,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       // Fechar dialog e limpar
       setIsUploadDialogOpen(false)
       setArquivoHolerite(null)
-      setMesReferencia('')
+      setMesUpload('')
+      setAnoUpload('')
     } catch (error: any) {
       console.error('Erro ao fazer upload de holerite:', error)
       toast({
@@ -370,15 +464,31 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
             </div>
             <div className="flex items-center gap-3">
               <Select
-                value={filtroMesAno}
-                onValueChange={setFiltroMesAno}
-                className="w-48"
+                value={filtroMes}
+                onValueChange={setFiltroMes}
+                className="w-40"
               >
                 <SelectTrigger>
-                  <SelectValue placeholder="Selecione o mês" />
+                  <SelectValue placeholder="Mês" />
                 </SelectTrigger>
                 <SelectContent>
-                  {opcoesMesAno.map((opcao) => (
+                  {opcoesMes.map((opcao) => (
+                    <SelectItem key={opcao.value} value={opcao.value}>
+                      {opcao.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={filtroAno}
+                onValueChange={setFiltroAno}
+                className="w-32"
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Ano" />
+                </SelectTrigger>
+                <SelectContent>
+                  {opcoesAno.map((opcao) => (
                     <SelectItem key={opcao.value} value={opcao.value}>
                       {opcao.label}
                     </SelectItem>
@@ -524,23 +634,61 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           </DialogHeader>
 
           <div className="space-y-4">
-            <div>
-              <Label htmlFor="mes-referencia">
-                Mês/Ano de Referência <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="mes-referencia"
-                type="month"
-                value={mesReferencia}
-                onChange={(e) => setMesReferencia(e.target.value)}
-                required
-                className="mt-1"
-                placeholder="YYYY-MM"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                Selecione o mês e ano de referência do holerite (formato: YYYY-MM)
-              </p>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="mes-upload">
+                  Mês <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={mesUpload}
+                  onValueChange={setMesUpload}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o mês" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opcoesMes.filter(op => op.value !== 'all').map((opcao) => (
+                      <SelectItem key={opcao.value} value={opcao.value}>
+                        {opcao.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="ano-upload">
+                  Ano <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={anoUpload}
+                  onValueChange={setAnoUpload}
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Selecione o ano" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {opcoesAnoUpload.map((opcao) => (
+                      <SelectItem key={opcao.value} value={opcao.value}>
+                        {opcao.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
+            {holeriteDuplicado ? (
+              <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                <p className="text-sm text-yellow-800">
+                  Já existe um holerite para {holeriteDuplicado.mes} / {holeriteDuplicado.ano}. 
+                  Por favor, selecione outro mês/ano ou atualize o holerite existente.
+                </p>
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Selecione o mês e ano de referência do holerite
+              </p>
+            )}
 
             <div>
               <DocumentoUpload
@@ -561,7 +709,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 onClick={() => {
                   setIsUploadDialogOpen(false)
                   setArquivoHolerite(null)
-                  setMesReferencia('')
+                  setMesUpload('')
+                  setAnoUpload('')
                 }}
                 disabled={uploading}
               >
@@ -569,7 +718,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
               </Button>
               <Button
                 onClick={handleUploadHolerite}
-                disabled={!arquivoHolerite || !mesReferencia || uploading}
+                disabled={!arquivoHolerite || !mesUpload || !anoUpload || uploading || !!holeriteDuplicado}
               >
                 {uploading ? (
                   <>
