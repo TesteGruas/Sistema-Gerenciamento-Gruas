@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -45,7 +45,7 @@ import { useToast } from "@/hooks/use-toast"
 import { CnoInput } from "@/components/cno-input"
 import { DocumentoUpload } from "@/components/documento-upload"
 import { ResponsavelTecnicoForm, ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
-import { SinaleirosForm } from "@/components/sinaleiros-form"
+import { SinaleirosForm, type SinaleirosFormRef } from "@/components/sinaleiros-form"
 import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -251,6 +251,7 @@ export default function NovaObraPage() {
   const [responsaveisAdicionais, setResponsaveisAdicionais] = useState<Array<ResponsavelTecnicoData & { tipo?: string; area?: string }>>([])
   
   const [sinaleiros, setSinaleiros] = useState<any[]>([])
+  const sinaleirosFormRef = useRef<SinaleirosFormRef>(null)
   
   // Estados para orçamento aprovado
   const [orcamentoAprovado, setOrcamentoAprovado] = useState<Orcamento | null>(null)
@@ -1120,45 +1121,200 @@ export default function NovaObraPage() {
       
       // 6. Salvar sinaleiros (apenas se houver dados válidos)
       // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
-      console.log('🔍 DEBUG - Sinaleiros no estado:', sinaleiros)
-      if (sinaleiros && sinaleiros.length > 0) {
+      // Buscar sinaleiros do estado atual (que foram preenchidos no formulário)
+      // O componente SinaleirosForm mantém o estado local, precisamos obter os dados dele
+      // Primeiro tentar obter do ref (estado mais atualizado), depois do estado
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log('🚦 INICIANDO PROCESSAMENTO DE SINALEIROS')
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log('🔍 DEBUG - Obra ID:', obraId)
+      
+      // Tentar obter sinaleiros do componente via ref (estado mais atualizado)
+      let sinaleirosParaProcessar = sinaleiros
+      console.log('🔍 Tentando obter sinaleiros via ref...')
+      console.log('   - Estado atual:', sinaleiros.length)
+      console.log('   - Ref existe?', !!sinaleirosFormRef.current)
+      
+      if (sinaleirosFormRef.current) {
+        try {
+          const sinaleirosDoComponente = sinaleirosFormRef.current.getSinaleiros()
+          console.log('📥 Sinaleiros obtidos via ref:', sinaleirosDoComponente.length)
+          console.log('   - Dados:', JSON.stringify(sinaleirosDoComponente, null, 2))
+          
+          if (sinaleirosDoComponente && Array.isArray(sinaleirosDoComponente) && sinaleirosDoComponente.length > 0) {
+            sinaleirosParaProcessar = sinaleirosDoComponente
+            // Sincronizar com o estado também
+            setSinaleiros(sinaleirosDoComponente)
+            console.log('✅ Usando sinaleiros do ref:', sinaleirosDoComponente.length)
+          } else {
+            console.log('⚠️ Ref retornou array vazio ou inválido, usando estado')
+          }
+        } catch (error) {
+          console.error('❌ Erro ao obter sinaleiros via ref:', error)
+          console.log('⚠️ Usando estado como fallback')
+        }
+      } else {
+        console.log('⚠️ Ref não disponível, usando estado')
+        console.log('   - Estado tem', sinaleiros.length, 'sinaleiros')
+      }
+      
+      // Se ainda não temos sinaleiros, tentar forçar uma última sincronização
+      if (sinaleirosParaProcessar.length === 0 && sinaleirosFormRef.current) {
+        console.log('🔄 Tentando forçar sincronização final...')
+        try {
+          const sinaleirosFinais = sinaleirosFormRef.current.getSinaleiros()
+          if (sinaleirosFinais && sinaleirosFinais.length > 0) {
+            sinaleirosParaProcessar = sinaleirosFinais
+            setSinaleiros(sinaleirosFinais)
+            console.log('✅ Sincronização forçada bem-sucedida:', sinaleirosFinais.length)
+          }
+        } catch (error) {
+          console.error('❌ Erro na sincronização forçada:', error)
+        }
+      }
+      
+      console.log('🔍 DEBUG - Sinaleiros no estado:', sinaleirosParaProcessar)
+      console.log('🔍 DEBUG - Tipo de sinaleiros:', typeof sinaleirosParaProcessar)
+      console.log('🔍 DEBUG - É array?', Array.isArray(sinaleirosParaProcessar))
+      console.log('🔍 DEBUG - Length:', sinaleirosParaProcessar?.length || 0)
+      console.log('🔍 DEBUG - Conteúdo completo:', JSON.stringify(sinaleirosParaProcessar, null, 2))
+      console.log('🔍 DEBUG - Verificação detalhada:')
+      if (Array.isArray(sinaleirosParaProcessar)) {
+        sinaleirosParaProcessar.forEach((s, index) => {
+          console.log(`   - Sinaleiro ${index + 1}:`, {
+            id: s?.id,
+            nome: s?.nome,
+            rg_cpf: s?.rg_cpf,
+            tipo: s?.tipo,
+            tipo_vinculo: s?.tipo_vinculo
+          })
+        })
+      }
+      
+      if (!obraId) {
+        console.error('❌ ERRO: obraId não está disponível! Não é possível salvar sinaleiros.')
+        toast({
+          title: "Erro",
+          description: "ID da obra não disponível. Os sinaleiros não puderam ser salvos.",
+          variant: "destructive"
+        })
+      } else if (sinaleirosParaProcessar && Array.isArray(sinaleirosParaProcessar) && sinaleirosParaProcessar.length > 0) {
+        console.log('✅ Condição passou: sinaleiros encontrados, processando...')
         // Filtrar apenas sinaleiros com dados válidos (nome e rg_cpf preenchidos)
-        const sinaleirosValidos = sinaleiros.filter(s => {
-          const temNome = !!s.nome
-          const temDocumento = !!(s.rg_cpf || s.cpf || s.rg)
-          return temNome && temDocumento
+        const sinaleirosValidos = sinaleirosParaProcessar.filter((s: any) => {
+          const temNome = !!s.nome && s.nome.trim() !== ''
+          
+          // Verificar se tem documento válido (RG ou CPF)
+          const documento = (s.rg_cpf || s.cpf || s.rg || '').trim()
+          // Remover formatação e contar apenas dígitos
+          const apenasDigitos = documento.replace(/\D/g, '')
+          // RG deve ter pelo menos 7 dígitos, CPF deve ter 11
+          const temDocumentoValido = apenasDigitos.length >= 7 && apenasDigitos.length <= 11
+          
+          const valido = temNome && temDocumentoValido
+          if (!valido) {
+            console.warn('⚠️ Sinaleiro inválido ignorado:', { 
+              nome: s.nome, 
+              rg_cpf: s.rg_cpf, 
+              cpf: s.cpf, 
+              rg: s.rg,
+              motivo: !temNome ? 'Nome ausente' : `Documento inválido (${apenasDigitos.length} dígitos, mínimo 7)`
+            })
+          }
+          return valido
         })
         
-        console.log('🔍 DEBUG - Sinaleiros válidos:', sinaleirosValidos)
+        console.log('🔍 DEBUG - Sinaleiros válidos após filtro:', sinaleirosValidos.length)
+        console.log('🔍 DEBUG - Sinaleiros válidos:', JSON.stringify(sinaleirosValidos, null, 2))
         
         if (sinaleirosValidos.length > 0) {
           try {
             // Converter para o formato esperado pelo backend (remover IDs temporários)
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-            const sinaleirosParaEnviar = sinaleirosValidos.map(s => ({
-              id: s.id && uuidRegex.test(s.id) ? s.id : undefined,
-              nome: s.nome,
-              rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-              telefone: s.telefone || '',
-              email: s.email || '',
-              tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
-            }))
-            console.log('📤 Enviando sinaleiros para obra ID:', obraId)
-            console.log('📤 Dados dos sinaleiros:', JSON.stringify(sinaleirosParaEnviar, null, 2))
-            const response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
-            console.log('✅ Sinaleiros salvos com sucesso:', response)
+            const sinaleirosParaEnviar = sinaleirosValidos.map((s: any) => {
+              // Determinar tipo corretamente
+              let tipo: 'principal' | 'reserva' = 'principal'
+              if (s.tipo === 'principal' || s.tipo === 'reserva') {
+                tipo = s.tipo
+              } else if (s.tipo_vinculo === 'interno') {
+                tipo = 'principal'
+              } else if (s.tipo_vinculo === 'cliente') {
+                tipo = 'reserva'
+              }
+              
+              // Garantir que rg_cpf está válido antes de enviar
+              const rgCpf = (s.rg_cpf || s.cpf || s.rg || '').trim()
+              const apenasDigitos = rgCpf.replace(/\D/g, '')
+              
+              if (apenasDigitos.length < 7) {
+                console.error(`❌ Sinaleiro "${s.nome}" tem documento inválido: ${rgCpf} (${apenasDigitos.length} dígitos)`)
+                throw new Error(`O documento do sinaleiro "${s.nome}" está incompleto. RG deve ter pelo menos 7 dígitos e CPF deve ter 11 dígitos.`)
+              }
+              
+              return {
+                id: s.id && uuidRegex.test(s.id) ? s.id : undefined,
+                nome: s.nome.trim(),
+                rg_cpf: rgCpf,
+                telefone: (s.telefone || '').trim(),
+                email: (s.email || '').trim(),
+                tipo: tipo
+              }
+            })
+            console.log('═══════════════════════════════════════════════════════════')
+            console.log('📤 CHAMANDO API PARA SALVAR SINALEIROS')
+            console.log('═══════════════════════════════════════════════════════════')
+            console.log('📤 Obra ID:', obraId)
+            console.log('📤 Quantidade de sinaleiros:', sinaleirosParaEnviar.length)
+            console.log('📤 Dados dos sinaleiros formatados:', JSON.stringify(sinaleirosParaEnviar, null, 2))
+            console.log('📤 URL da API:', `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras/${obraId}/sinaleiros`)
             
-            if (!response.success) {
-              throw new Error(response.error || 'Erro ao salvar sinaleiros')
-            }
-            
-            if (!response.data || response.data.length === 0) {
-              console.warn('⚠️ Nenhum sinaleiro foi retornado na resposta')
+            let response: any = null
+            try {
+              console.log('🔄 Iniciando chamada à API...')
+              const startTime = Date.now()
+              response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
+              const endTime = Date.now()
+              console.log(`✅ API chamada concluída em ${endTime - startTime}ms`)
+              console.log('✅ Resposta da API:', JSON.stringify(response, null, 2))
+              
+              if (!response.success) {
+                console.error('❌ Erro ao salvar sinaleiros:', response.error)
+                toast({
+                  title: "Aviso",
+                  description: `Erro ao salvar sinaleiros: ${response.error || 'Erro desconhecido'}`,
+                  variant: "destructive"
+                })
+              } else {
+                if (!response.data || response.data.length === 0) {
+                  console.warn('⚠️ Nenhum sinaleiro foi retornado na resposta')
+                  toast({
+                    title: "Aviso",
+                    description: "Sinaleiros foram enviados, mas nenhum foi retornado na resposta.",
+                    variant: "default"
+                  })
+                } else {
+                  console.log(`✅ ${response.data.length} sinaleiro(s) salvo(s) com sucesso`)
+                  toast({
+                    title: "Sucesso",
+                    description: `${response.data.length} sinaleiro(s) atrelado(s) à obra com sucesso.`,
+                    variant: "default"
+                  })
+                }
+              }
+            } catch (error: any) {
+              console.error('❌ Erro ao salvar sinaleiros:', error)
+              toast({
+                title: "Erro ao salvar sinaleiros",
+                description: error.message || 'Erro desconhecido ao salvar sinaleiros',
+                variant: "destructive"
+              })
+              // Não continuar com validação de documentos se houve erro ao salvar
+              return
             }
             
             // Validar documentos completos para sinaleiros externos (clientes)
             // Conforme especificação: "CASO ESSE NÃO ESTEJA COM OS DOCUMENTOS COMPLETOS, O SISTEMA NÃO PERMITE ATRELAR A OBRA"
-            if (response.success && response.data) {
+            if (response && response.success && response.data) {
               const sinaleirosSalvos = response.data
               const sinaleirosComDocumentosIncompletos: string[] = []
               
@@ -1213,6 +1369,7 @@ export default function NovaObraPage() {
               }
             }
           } catch (error: any) {
+            // Este catch captura erros na conversão/formatação dos dados
             console.error('❌ Erro ao salvar sinaleiros:', error)
             console.error('❌ Detalhes do erro:', {
               message: error?.message,
@@ -1221,37 +1378,34 @@ export default function NovaObraPage() {
               obraId: obraId,
               sinaleirosEnviados: sinaleirosParaEnviar
             })
+            toast({
+              title: "Erro ao salvar sinaleiros",
+              description: error.message || 'Erro desconhecido ao salvar sinaleiros',
+              variant: "destructive"
+            })
             
-            // Se o erro for sobre documentos incompletos, propagar
-            if (error instanceof Error && (
-              error.message.includes('documentos completos') ||
-              error.message.includes('Documentos incompletos') ||
-              error.message.includes('documentos faltando')
-            )) {
-              throw error
-            }
-            
-            // Se o erro for sobre obra não encontrada, pode ser que a obra não foi criada corretamente
-            if (error?.message?.includes('não encontrada') || error?.message?.includes('404')) {
-              toast({
-                title: "Erro",
-                description: `Erro ao vincular sinaleiros: ${error.message || 'Obra não encontrada'}. Verifique se a obra foi criada corretamente.`,
-                variant: "destructive"
-              })
-            } else {
-              toast({
-                title: "Aviso",
-                description: `Obra criada, mas houve erro ao salvar os sinaleiros: ${error?.message || 'Erro desconhecido'}. Você pode editá-los depois.`,
-                variant: "destructive"
-              })
-            }
+            toast({
+              title: "Erro ao processar sinaleiros",
+              description: error.message || 'Erro desconhecido ao processar sinaleiros',
+              variant: "destructive"
+            })
           }
         } else {
-          console.warn('⚠️ Nenhum sinaleiro válido para salvar')
+          console.log('⚠️ Nenhum sinaleiro válido encontrado após filtro')
         }
       } else {
-        console.log('⚠️ Nenhum sinaleiro no estado')
+        console.log('⚠️ Nenhum sinaleiro encontrado para salvar')
+        console.log('   - obraData.sinaleiros existe?', !!obraData.sinaleiros)
+        console.log('   - obraData.sinaleiros é array?', Array.isArray(obraData.sinaleiros))
+        console.log('   - obraData.sinaleiros.length:', obraData.sinaleiros?.length || 0)
+        console.log('   - sinaleiros (estado) existe?', !!sinaleiros)
+        console.log('   - sinaleiros (estado) é array?', Array.isArray(sinaleiros))
+        console.log('   - sinaleiros (estado).length:', sinaleiros?.length || 0)
       }
+      
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log('🚦 FIM DO PROCESSAMENTO DE SINALEIROS')
+      console.log('═══════════════════════════════════════════════════════════')
       
       toast({
         title: "Sucesso",
@@ -3102,14 +3256,33 @@ export default function NovaObraPage() {
               </CardHeader>
               <CardContent>
                 <SinaleirosForm
+                  ref={sinaleirosFormRef}
                   sinaleiros={sinaleiros}
                   onSave={(data) => {
-                    console.log('💾 Salvando sinaleiros no estado:', data)
-                    setSinaleiros(data)
-                    toast({
-                      title: "Sucesso",
-                      description: "Sinaleiros salvos com sucesso"
-                    })
+                    // Callback para sincronizar estado do componente filho com o componente pai
+                    console.log('═══════════════════════════════════════════════════════════')
+                    console.log('💾 CALLBACK onSave DO SINALEIROSFORM CHAMADO')
+                    console.log('═══════════════════════════════════════════════════════════')
+                    console.log('📥 Dados recebidos do componente filho:', data)
+                    console.log('   - Quantidade:', data?.length || 0)
+                    console.log('   - É array?', Array.isArray(data))
+                    if (data && data.length > 0) {
+                      console.log('   - Primeiro sinaleiro:', {
+                        id: data[0]?.id,
+                        nome: data[0]?.nome,
+                        rg_cpf: data[0]?.rg_cpf,
+                        tipo: data[0]?.tipo
+                      })
+                    }
+                    console.log('📊 Estado ANTES da atualização:', sinaleiros?.length || 0)
+                    
+                    // Garantir que data é um array válido
+                    if (Array.isArray(data)) {
+                      setSinaleiros(data)
+                      console.log('✅ Estado atualizado com', data.length, 'sinaleiros')
+                    } else {
+                      console.error('❌ Dados recebidos não são um array:', data)
+                    }
                   }}
                 />
               </CardContent>

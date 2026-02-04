@@ -562,4 +562,404 @@ router.put('/:id/saldo', async (req, res) => {
   }
 });
 
+// Schema de validação para movimentação bancária
+const movimentacaoSchema = Joi.object({
+  conta_bancaria_id: Joi.number().integer().required(),
+  tipo: Joi.string().valid('entrada', 'saida').required(),
+  valor: Joi.number().positive().required(),
+  descricao: Joi.string().min(1).max(255).required(),
+  referencia: Joi.string().max(255).allow(null, '').optional(),
+  data: Joi.date().required(),
+  categoria: Joi.string().max(100).allow(null, '').optional(),
+  observacoes: Joi.string().allow(null, '').optional()
+});
+
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}/movimentacoes:
+ *   get:
+ *     summary: Lista movimentações de uma conta bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data inicial para filtro
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data final para filtro
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [entrada, saida]
+ *         description: Tipo de movimentação
+ *     responses:
+ *       200:
+ *         description: Lista de movimentações
+ */
+router.get('/:id/movimentacoes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { data_inicio, data_fim, tipo } = req.query;
+
+    let query = supabase
+      .from('movimentacoes_bancarias')
+      .select('*')
+      .eq('conta_bancaria_id', id)
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+    if (tipo) {
+      query = query.eq('tipo', tipo);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Erro ao listar movimentações:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/contas-bancarias/{id}/movimentacoes:
+ *   post:
+ *     summary: Cria uma nova movimentação bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - tipo
+ *               - valor
+ *               - descricao
+ *               - data
+ *             properties:
+ *               tipo:
+ *                 type: string
+ *                 enum: [entrada, saida]
+ *               valor:
+ *                 type: number
+ *                 minimum: 0.01
+ *               descricao:
+ *                 type: string
+ *               referencia:
+ *                 type: string
+ *               data:
+ *                 type: string
+ *                 format: date
+ *               categoria:
+ *                 type: string
+ *               observacoes:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: Movimentação criada com sucesso
+ */
+router.post('/:id/movimentacoes', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const movimentacaoData = {
+      ...req.body,
+      conta_bancaria_id: parseInt(id)
+    };
+
+    const { error: validationError, value } = movimentacaoSchema.validate(movimentacaoData);
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        errors: validationError.details
+      });
+    }
+
+    // Verificar se a conta bancária existe
+    const { data: conta, error: contaError } = await supabase
+      .from('contas_bancarias')
+      .select('id')
+      .eq('id', id)
+      .single();
+
+    if (contaError || !conta) {
+      return res.status(404).json({
+        success: false,
+        message: 'Conta bancária não encontrada'
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('movimentacoes_bancarias')
+      .insert([value])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    res.status(201).json({
+      success: true,
+      data,
+      message: 'Movimentação criada com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao criar movimentação:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/contas-bancarias/movimentacoes/{movimentacaoId}:
+ *   put:
+ *     summary: Atualiza uma movimentação bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: movimentacaoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da movimentação
+ *     responses:
+ *       200:
+ *         description: Movimentação atualizada com sucesso
+ */
+router.put('/movimentacoes/:movimentacaoId', async (req, res) => {
+  try {
+    const { movimentacaoId } = req.params;
+    const updateData = req.body;
+
+    // Buscar movimentação atual para obter conta_bancaria_id se não fornecido
+    const { data: movimentacaoAtual, error: fetchError } = await supabase
+      .from('movimentacoes_bancarias')
+      .select('conta_bancaria_id')
+      .eq('id', movimentacaoId)
+      .single();
+
+    if (fetchError) throw fetchError;
+
+    const movimentacaoData = {
+      ...updateData,
+      conta_bancaria_id: updateData.conta_bancaria_id || movimentacaoAtual?.conta_bancaria_id
+    };
+
+    const { error: validationError, value } = movimentacaoSchema.validate(movimentacaoData);
+
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'Dados inválidos',
+        errors: validationError.details
+      });
+    }
+
+    const { data, error } = await supabase
+      .from('movimentacoes_bancarias')
+      .update(value)
+      .eq('id', movimentacaoId)
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    if (!data) {
+      return res.status(404).json({
+        success: false,
+        message: 'Movimentação não encontrada'
+      });
+    }
+
+    res.json({
+      success: true,
+      data,
+      message: 'Movimentação atualizada com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao atualizar movimentação:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/contas-bancarias/movimentacoes/{movimentacaoId}:
+ *   delete:
+ *     summary: Exclui uma movimentação bancária
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: movimentacaoId
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da movimentação
+ *     responses:
+ *       200:
+ *         description: Movimentação excluída com sucesso
+ */
+router.delete('/movimentacoes/:movimentacaoId', async (req, res) => {
+  try {
+    const { movimentacaoId } = req.params;
+
+    const { error } = await supabase
+      .from('movimentacoes_bancarias')
+      .delete()
+      .eq('id', movimentacaoId);
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      message: 'Movimentação excluída com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao excluir movimentação:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/contas-bancarias/movimentacoes:
+ *   get:
+ *     summary: Lista todas as movimentações bancárias (com filtros)
+ *     tags: [Contas Bancárias]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: data_inicio
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data inicial para filtro
+ *       - in: query
+ *         name: data_fim
+ *         schema:
+ *           type: string
+ *           format: date
+ *         description: Data final para filtro
+ *       - in: query
+ *         name: tipo
+ *         schema:
+ *           type: string
+ *           enum: [entrada, saida]
+ *         description: Tipo de movimentação
+ *       - in: query
+ *         name: conta_bancaria_id
+ *         schema:
+ *           type: integer
+ *         description: ID da conta bancária
+ *     responses:
+ *       200:
+ *         description: Lista de movimentações
+ */
+router.get('/movimentacoes/todas', async (req, res) => {
+  try {
+    const { data_inicio, data_fim, tipo, conta_bancaria_id } = req.query;
+
+    let query = supabase
+      .from('movimentacoes_bancarias')
+      .select(`
+        *,
+        contas_bancarias (
+          id,
+          banco,
+          agencia,
+          conta,
+          tipo_conta
+        )
+      `)
+      .order('data', { ascending: false })
+      .order('created_at', { ascending: false });
+
+    if (data_inicio) {
+      query = query.gte('data', data_inicio);
+    }
+    if (data_fim) {
+      query = query.lte('data', data_fim);
+    }
+    if (tipo) {
+      query = query.eq('tipo', tipo);
+    }
+    if (conta_bancaria_id) {
+      query = query.eq('conta_bancaria_id', conta_bancaria_id);
+    }
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+
+    res.json({
+      success: true,
+      data: data || []
+    });
+  } catch (error) {
+    console.error('Erro ao listar movimentações:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
 export default router;

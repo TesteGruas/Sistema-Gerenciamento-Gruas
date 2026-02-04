@@ -2725,12 +2725,29 @@ router.put('/:id/documentos', authenticateToken, requirePermission('obras:editar
  */
 router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log('🚦 API: POST /api/obras/:id/sinaleiros - ATRELAR SINALEIROS À OBRA')
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log('📥 Dados recebidos:')
+    console.log('   - Params:', req.params)
+    console.log('   - Body:', JSON.stringify(req.body, null, 2))
+    console.log('   - Headers:', {
+      authorization: req.headers.authorization ? 'Presente' : 'Ausente',
+      'content-type': req.headers['content-type']
+    })
+    
     const { id } = req.params
     const { sinaleiros } = req.body
 
+    console.log('🔍 Validando ID da obra...')
     // Validar ID da obra
     const obraId = parseInt(id)
+    console.log('   - ID recebido:', id)
+    console.log('   - ID convertido:', obraId)
+    console.log('   - É válido?', !isNaN(obraId) && obraId > 0)
+    
     if (isNaN(obraId) || obraId <= 0) {
+      console.error('❌ ID de obra inválido:', id)
       return res.status(400).json({ 
         error: 'ID de obra inválido',
         message: 'O ID da obra deve ser um número inteiro positivo'
@@ -2738,6 +2755,7 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
     }
 
     // Verificar se a obra existe
+    console.log('🔍 Verificando se a obra existe...')
     const { data: obra, error: obraError } = await supabaseAdmin
       .from('obras')
       .select('id')
@@ -2745,33 +2763,85 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
       .single()
 
     if (obraError || !obra) {
+      console.error('❌ Obra não encontrada:', obraError)
       return res.status(404).json({ 
         error: 'Obra não encontrada',
         message: 'A obra especificada não existe no banco de dados'
       })
     }
+    
+    console.log('✅ Obra encontrada:', obra.id)
 
     const schema = Joi.object({
       sinaleiros: Joi.array().items(
         Joi.object({
           id: Joi.string().uuid().allow(null, '').optional(),
           nome: Joi.string().min(2).max(255).trim().required(),
-          rg_cpf: Joi.string().min(11).max(20).trim().required(),
-          telefone: Joi.string().pattern(/^[\d\s\(\)\-\+]+$/).allow(null, '').optional(),
-          email: Joi.string().email().max(255).trim().allow(null, '').optional(),
+          // rg_cpf pode ser RG (7-9 dígitos) ou CPF (11 dígitos), com ou sem formatação
+          // Aceita: "1234567", "12.345.678-9", "123.456.789-01", "12345678901", etc.
+          rg_cpf: Joi.string()
+            .min(7) // Mínimo para RG (7 dígitos)
+            .max(20) // Máximo com formatação
+            .trim()
+            .required()
+            .custom((value, helpers) => {
+              // Remover formatação para contar apenas dígitos
+              const apenasDigitos = value.replace(/\D/g, '')
+              
+              // Validar se tem pelo menos 7 dígitos (RG mínimo) e no máximo 11 (CPF máximo)
+              if (apenasDigitos.length < 7) {
+                return helpers.error('any.custom', { 
+                  message: `O documento deve ter pelo menos 7 dígitos (RG) ou 11 dígitos (CPF). Valor recebido: "${value}" (${apenasDigitos.length} dígitos)`
+                })
+              }
+              
+              // Se tem mais de 11 dígitos, pode ser CNPJ (não esperado para sinaleiro)
+              if (apenasDigitos.length > 11) {
+                return helpers.error('any.custom', { 
+                  message: `O documento não pode ter mais de 11 dígitos (CPF). Valor recebido: "${value}" (${apenasDigitos.length} dígitos)`
+                })
+              }
+              
+              return value
+            }),
+          telefone: Joi.string().pattern(/^[\d\s\(\)\-\+]+$/).allow(null, '').empty('').optional(),
+          email: Joi.string().email().max(255).trim().allow(null, '').empty('').optional(),
           tipo: Joi.string().valid('principal', 'reserva').required()
         })
       ).min(0).max(2).required()
-    })
+    }).options({ stripUnknown: true, abortEarly: false })
 
-    const { error: validationError, value: validatedData } = schema.validate({ sinaleiros })
-    if (validationError) {
+    console.log('🔍 Validando dados dos sinaleiros...')
+    console.log('   - Quantidade recebida:', sinaleiros?.length || 0)
+    console.log('   - Dados recebidos:', JSON.stringify(sinaleiros, null, 2))
+    
+    // Verificar se sinaleiros é um array válido
+    if (!Array.isArray(sinaleiros)) {
+      console.error('❌ sinaleiros não é um array:', typeof sinaleiros)
       return res.status(400).json({ 
         error: 'Dados inválidos',
-        message: validationError.details[0].message,
+        message: 'O campo "sinaleiros" deve ser um array'
+      })
+    }
+    
+    const { error: validationError, value: validatedData } = schema.validate({ sinaleiros }, { 
+      abortEarly: false,
+      stripUnknown: true 
+    })
+    
+    if (validationError) {
+      console.error('❌ Erro de validação:')
+      console.error('   - Mensagens:', validationError.details.map(d => d.message))
+      console.error('   - Detalhes completos:', JSON.stringify(validationError.details, null, 2))
+      return res.status(400).json({ 
+        error: 'Dados inválidos',
+        message: validationError.details.map(d => d.message).join('; '),
         details: validationError.details
       })
     }
+    
+    console.log('✅ Dados validados com sucesso')
+    console.log('   - Dados validados:', JSON.stringify(validatedData, null, 2))
 
     // Usar dados validados e sanitizados
     const sinaleirosValidados = validatedData.sinaleiros
@@ -2848,8 +2918,17 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
       existing?.map(s => [`${s.nome}_${s.rg_cpf}`, s]) || []
     )
 
+    console.log('🔄 Processando sinaleiros para salvar/atualizar...')
     const results = []
-    for (const sinaleiro of sinaleirosValidados) {
+    for (let i = 0; i < sinaleirosValidados.length; i++) {
+      const sinaleiro = sinaleirosValidados[i]
+      console.log(`\n📋 Processando sinaleiro ${i + 1}/${sinaleirosValidados.length}:`, {
+        id: sinaleiro.id,
+        nome: sinaleiro.nome,
+        tipo: sinaleiro.tipo,
+        rg_cpf: sinaleiro.rg_cpf
+      })
+      
       const { id: sinaleiroId, ...data } = sinaleiro
       const chaveNomeRgCpf = `${data.nome}_${data.rg_cpf}`
 
@@ -2867,11 +2946,16 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error(`❌ Erro ao atualizar sinaleiro ${data.nome}:`, error)
+          throw error
+        }
+        console.log(`✅ Sinaleiro ${data.nome} atualizado com sucesso`)
         results.push(updated)
       } else if (sinaleiroId && existingByType.has(sinaleiro.tipo)) {
         // Atualizar existente por tipo (quando ID é fornecido)
         const existentePorTipo = existingByType.get(sinaleiro.tipo)
+        console.log(`🔄 Atualizando sinaleiro existente por tipo (${sinaleiro.tipo})...`)
         const { data: updated, error } = await supabaseAdmin
           .from('sinaleiros_obra')
           .update(data)
@@ -2880,12 +2964,16 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
           .select()
           .single()
 
-        if (error) throw error
+        if (error) {
+          console.error(`❌ Erro ao atualizar sinaleiro por tipo:`, error)
+          throw error
+        }
+        console.log(`✅ Sinaleiro atualizado por tipo com sucesso`)
         results.push(updated)
       } else {
         // Criar novo - garantir que obra_id está sendo passado corretamente
         const dadosInsert = { obra_id: obraId, ...data }
-        console.log(`📤 Criando sinaleiro para obra ${obraId}:`, dadosInsert)
+        console.log(`📤 Criando novo sinaleiro para obra ${obraId}:`, dadosInsert)
         
         const { data: created, error } = await supabaseAdmin
           .from('sinaleiros_obra')
@@ -2899,11 +2987,15 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
           console.error('❌ Obra ID (tipo):', typeof obraId, obraId)
           throw error
         }
-        console.log('✅ Sinaleiro criado com sucesso:', created)
+        console.log(`✅ Sinaleiro ${data.nome} criado com sucesso:`, created)
         results.push(created)
       }
     }
 
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log(`✅ PROCESSAMENTO CONCLUÍDO: ${results.length} sinaleiro(s) processado(s)`)
+    console.log('═══════════════════════════════════════════════════════════')
+    
     res.json({ success: true, data: results })
   } catch (error) {
     console.error('Erro ao salvar sinaleiros:', error)

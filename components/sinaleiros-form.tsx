@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useImperativeHandle, forwardRef, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -37,16 +37,45 @@ interface SinaleirosFormProps {
   clientePodeEditar?: boolean
 }
 
-export function SinaleirosForm({
+export interface SinaleirosFormRef {
+  getSinaleiros: () => Sinaleiro[]
+}
+
+export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>(({
   obraId,
   sinaleiros: initialSinaleiros,
   onSave,
   readOnly = false,
   clientePodeEditar = false
-}: SinaleirosFormProps) {
+}, ref) => {
   const { toast } = useToast()
   const [sinaleiros, setSinaleiros] = useState<Sinaleiro[]>(initialSinaleiros || [])
   const [loading, setLoading] = useState(false)
+  
+  // Criar uma ref para o callback onSave para evitar problemas de closure
+  const onSaveRef = useRef(onSave)
+  useEffect(() => {
+    onSaveRef.current = onSave
+  }, [onSave])
+  
+  // Expor método para obter sinaleiros atuais via ref
+  useImperativeHandle(ref, () => ({
+    getSinaleiros: () => {
+      console.log('📤 getSinaleiros chamado - retornando:', sinaleiros.length)
+      return sinaleiros
+    }
+  }))
+  
+  // Log inicial para debug
+  console.log('═══════════════════════════════════════════════════════════')
+  console.log('🎨 SINALEIROSFORM RENDERIZADO')
+  console.log('═══════════════════════════════════════════════════════════')
+  console.log('   - Obra ID:', obraId || 'N/A (nova obra)')
+  console.log('   - Initial Sinaleiros:', initialSinaleiros?.length || 0)
+  console.log('   - Estado interno:', sinaleiros.length)
+  console.log('   - ReadOnly:', readOnly)
+  console.log('   - Cliente pode editar:', clientePodeEditar)
+  console.log('   - onSave existe?', typeof onSave === 'function')
 
   useEffect(() => {
     if (obraId && !initialSinaleiros) {
@@ -56,8 +85,17 @@ export function SinaleirosForm({
 
   // Atualizar estado quando initialSinaleiros mudar (dados salvos)
   useEffect(() => {
-    // Só atualizar se initialSinaleiros for fornecido e tiver dados
-    if (initialSinaleiros && initialSinaleiros.length > 0) {
+    console.log('🔄 useEffect - initialSinaleiros mudou:', {
+      initialSinaleiros,
+      length: initialSinaleiros?.length || 0,
+      obraId: obraId || 'N/A',
+      estadoAtual: sinaleiros.length
+    })
+    
+    // IMPORTANTE: Se estamos criando uma nova obra (!obraId), não resetar o estado
+    // apenas porque initialSinaleiros mudou. O estado interno é a fonte da verdade.
+    if (obraId && initialSinaleiros && initialSinaleiros.length > 0) {
+      console.log('📥 Atualizando estado a partir de initialSinaleiros (obra existente)')
       // Converter para o formato esperado pelo componente
       const sinaleirosConvertidos = initialSinaleiros.map(s => ({
         id: s.id,
@@ -74,11 +112,29 @@ export function SinaleirosForm({
         documentos: s.documentos || [],
         certificados: s.certificados || []
       }))
+      console.log('✅ Estado atualizado:', sinaleirosConvertidos)
       setSinaleiros(sinaleirosConvertidos)
+    } else if (!obraId) {
+      console.log('ℹ️ Nova obra - mantendo estado interno (não resetar)')
+      // Para nova obra, manter o estado interno e sincronizar com o pai quando necessário
+      if (sinaleiros.length > 0) {
+        console.log('💾 Sincronizando estado interno com estado pai:', sinaleiros.length)
+        console.log('   - Dados:', JSON.stringify(sinaleiros, null, 2))
+        try {
+          const callback = onSaveRef.current || onSave
+          callback(sinaleiros)
+          console.log('✅ onSave chamado no useEffect')
+        } catch (error) {
+          console.error('❌ Erro ao chamar onSave no useEffect:', error)
+        }
+      }
     }
     // Se initialSinaleiros for undefined, null ou array vazio, não fazer nada (manter estado atual)
     // Isso evita limpar quando o componente é re-renderizado
-  }, [initialSinaleiros])
+  }, [initialSinaleiros, obraId])
+
+  // Removido auto-save - os sinaleiros serão salvos apenas ao criar a obra
+  // O estado local do componente é mantido, mas não é sincronizado com o estado pai até criar a obra
 
   const loadSinaleiros = async () => {
     if (!obraId) return
@@ -115,9 +171,14 @@ export function SinaleirosForm({
   // Os sinaleiros são opcionais: pode ter apenas interno, apenas cliente, ambos ou nenhum
 
   const handleAddSinaleiro = (tipo: 'interno' | 'cliente') => {
+    console.log(`➕ Adicionando sinaleiro do tipo: ${tipo}`)
+    console.log(`   - Sinaleiros atuais: ${sinaleiros.length}`)
+    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
+    
     // Verificar se já existe um sinaleiro deste tipo
     const jaExiste = sinaleiros.some(s => s.tipo_vinculo === tipo)
     if (jaExiste) {
+      console.log(`⚠️ Sinaleiro ${tipo} já existe`)
       toast({
         title: "Sinaleiro já existe",
         description: `Já existe um sinaleiro ${tipo === 'interno' ? 'interno' : 'indicado pelo cliente'}`,
@@ -128,6 +189,7 @@ export function SinaleirosForm({
 
     // Verificar limite máximo de 2 sinaleiros
     if (sinaleiros.length >= 2) {
+      console.log(`⚠️ Limite de sinaleiros atingido`)
       toast({
         title: "Limite atingido",
         description: "Apenas 2 sinaleiros permitidos (máximo: 1 Interno + 1 Indicado pelo Cliente)",
@@ -152,21 +214,111 @@ export function SinaleirosForm({
       certificados: []
     }
 
-    setSinaleiros([...sinaleiros, novoSinaleiro])
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log(`➕ ADICIONANDO NOVO SINALEIRO`)
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log(`✅ Novo sinaleiro criado:`, novoSinaleiro)
+    console.log(`   - Tipo: ${tipo}`)
+    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
+    
+    const novosSinaleiros = [...sinaleiros, novoSinaleiro]
+    console.log(`📋 Total de sinaleiros após adicionar: ${novosSinaleiros.length}`)
+    
+    setSinaleiros(novosSinaleiros)
+    console.log(`💾 Estado atualizado com novo sinaleiro`)
+    
+    // Se não há obraId, sincronizar com estado pai (sem salvar na API)
+    // Isso garante que os sinaleiros estejam disponíveis ao criar a obra
+    if (!obraId) {
+      // Sincronizar imediatamente para que o estado pai tenha o novo sinaleiro
+      // Mesmo sem nome preenchido, o sinaleiro precisa estar no estado para ser salvo depois
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log('💾 SINCRONIZANDO NOVO SINALEIRO COM ESTADO PAI')
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log(`   - Quantidade: ${novosSinaleiros.length}`)
+      console.log('   - Dados:', JSON.stringify(novosSinaleiros, null, 2))
+      console.log('   - Chamando onSave callback...')
+      
+      try {
+        const callback = onSaveRef.current || onSave
+        callback(novosSinaleiros)
+        console.log('✅ onSave chamado com sucesso')
+      } catch (error) {
+        console.error('❌ Erro ao chamar onSave:', error)
+      }
+    } else {
+      console.log('ℹ️ Obra ID existe, não sincronizando (será salvo via API)')
+    }
   }
 
   const handleRemoveSinaleiro = (id: string) => {
     // Permitir remover sinaleiros (não são mais obrigatórios)
-    setSinaleiros(prevSinaleiros => prevSinaleiros.filter(s => s.id !== id))
+    setSinaleiros(prevSinaleiros => {
+      const updated = prevSinaleiros.filter(s => s.id !== id)
+      
+      // Se não há obraId, sincronizar com estado pai (sem salvar na API)
+      if (!obraId) {
+        const sinaleirosComNome = updated.filter(s => s.nome && s.nome.trim() !== '')
+        console.log('💾 Sincronizando sinaleiros após remoção:', sinaleirosComNome.length)
+        const callback = onSaveRef.current || onSave
+        callback(sinaleirosComNome)
+      }
+      
+      return updated
+    })
   }
 
   const handleUpdateSinaleiro = (id: string, field: keyof Sinaleiro, value: any) => {
     console.log(`🔄 Atualizando sinaleiro ${id}, campo ${field} com valor:`, value)
+    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
+    console.log(`   - Tipo de obraId: ${typeof obraId}`)
+    console.log(`   - obraId é undefined? ${obraId === undefined}`)
+    console.log(`   - obraId é null? ${obraId === null}`)
+    console.log(`   - obraId é falsy? ${!obraId}`)
+    console.log(`   - Vai sincronizar? ${!obraId}`)
+    
     setSinaleiros(prevSinaleiros => {
       const updated = prevSinaleiros.map(s => 
         s.id === id ? { ...s, [field]: value } : s
       )
-      console.log('📋 Sinaleiros atualizados:', updated)
+      console.log('📋 Sinaleiros atualizados:', updated.length)
+      
+      // IMPORTANTE: Sempre sincronizar quando não há obraId (nova obra)
+      // Chamar onSave DENTRO do setState para ter acesso ao estado atualizado
+      const deveSincronizar = !obraId
+      console.log(`🔍 Verificação de sincronização: obraId=${obraId}, deveSincronizar=${deveSincronizar}`)
+      
+      if (deveSincronizar) {
+        console.log('═══════════════════════════════════════════════════════════')
+        console.log('💾 SINCRONIZANDO SINALEIROS COM ESTADO PAI')
+        console.log('═══════════════════════════════════════════════════════════')
+        console.log('   - Quantidade:', updated.length)
+        console.log('   - Dados:', JSON.stringify(updated, null, 2))
+        console.log('   - onSaveRef.current existe?', !!onSaveRef.current)
+        console.log('   - onSave existe?', typeof onSave === 'function')
+        console.log('   - Chamando onSave callback...')
+        
+        // Chamar onSave após um pequeno delay para garantir que o estado foi atualizado
+        // Usar onSaveRef para evitar problemas de closure
+        setTimeout(() => {
+          try {
+            console.log('📞 Executando onSave callback com', updated.length, 'sinaleiros')
+            const callback = onSaveRef.current || onSave
+            console.log('   - Callback tipo:', typeof callback)
+            if (typeof callback === 'function') {
+              callback([...updated]) // Criar nova cópia do array
+              console.log('✅ onSave executado com sucesso')
+            } else {
+              console.error('❌ Callback não é uma função!', callback)
+            }
+          } catch (error) {
+            console.error('❌ Erro ao executar onSave:', error)
+          }
+        }, 10)
+      } else {
+        console.log('ℹ️ Obra ID existe (' + obraId + '), não sincronizando (será salvo via API)')
+      }
+      
       return updated
     })
   }
@@ -187,8 +339,9 @@ export function SinaleirosForm({
       if (!sinaleiro.nome || !sinaleiro.nome.trim()) {
         camposFaltando.push(`Nome do sinaleiro ${i + 1}`)
       }
-      // Se for sinaleiro cliente, validar CPF/RG
-      if (sinaleiro.tipo_vinculo === 'cliente' && !sinaleiro.cpf && !sinaleiro.rg && !sinaleiro.rg_cpf) {
+      // Se for sinaleiro cliente, validar CPF/RG apenas se já existe obraId (edição)
+      // Na criação de nova obra, permitir salvar sem CPF/RG (será validado depois)
+      if (obraId && sinaleiro.tipo_vinculo === 'cliente' && !sinaleiro.cpf && !sinaleiro.rg && !sinaleiro.rg_cpf) {
         camposFaltando.push(`CPF/RG do sinaleiro ${i + 1}`)
       }
     }
@@ -203,39 +356,42 @@ export function SinaleirosForm({
     }
     
     // Validar documentos completos para sinaleiros externos (cliente)
-    // Apenas validar se o sinaleiro já foi salvo (tem UUID válido)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    const sinaleirosCliente = sinaleirosPreenchidos.filter(s => 
-      s.tipo_vinculo === 'cliente' && s.id && uuidRegex.test(s.id)
-    )
-    
-    for (const sinaleiroCliente of sinaleirosCliente) {
-      try {
-        const validacao = await sinaleirosApi.validarDocumentosCompletos(sinaleiroCliente.id)
-        if (!validacao.completo) {
-          const documentosFaltando = validacao.documentosFaltando || []
-          const nomesDocumentos: Record<string, string> = {
-            'rg_frente': 'RG (Frente)',
-            'rg_verso': 'RG (Verso)',
-            'comprovante_vinculo': 'Comprovante de Vínculo'
+    // IMPORTANTE: Apenas validar se já existe obraId (edição de obra existente)
+    // Na criação de nova obra, não validar documentos ainda (serão validados depois)
+    if (obraId) {
+      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      const sinaleirosCliente = sinaleirosPreenchidos.filter(s => 
+        s.tipo_vinculo === 'cliente' && s.id && uuidRegex.test(s.id)
+      )
+      
+      for (const sinaleiroCliente of sinaleirosCliente) {
+        try {
+          const validacao = await sinaleirosApi.validarDocumentosCompletos(sinaleiroCliente.id)
+          if (!validacao.completo) {
+            const documentosFaltando = validacao.documentosFaltando || []
+            const nomesDocumentos: Record<string, string> = {
+              'rg_frente': 'RG (Frente)',
+              'rg_verso': 'RG (Verso)',
+              'comprovante_vinculo': 'Comprovante de Vínculo'
+            }
+            const nomesFaltando = documentosFaltando.map(tipo => nomesDocumentos[tipo] || tipo).join(', ')
+            
+            toast({
+              title: "Documentos Incompletos",
+              description: `O sinaleiro "${sinaleiroCliente.nome}" não pode ser vinculado à obra. Documentos faltando: ${nomesFaltando}. Complete o cadastro pelo RH antes de vincular à obra.`,
+              variant: "destructive"
+            })
+            return
           }
-          const nomesFaltando = documentosFaltando.map(tipo => nomesDocumentos[tipo] || tipo).join(', ')
-          
+        } catch (error: any) {
+          // Se a validação falhar, permitir continuar mas avisar
+          console.warn('Erro ao validar documentos do sinaleiro:', error)
           toast({
-            title: "Documentos Incompletos",
-            description: `O sinaleiro "${sinaleiroCliente.nome}" não pode ser vinculado à obra. Documentos faltando: ${nomesFaltando}. Complete o cadastro pelo RH antes de vincular à obra.`,
-            variant: "destructive"
+            title: "Aviso",
+            description: `Não foi possível validar os documentos do sinaleiro "${sinaleiroCliente.nome}". Verifique se todos os documentos obrigatórios estão completos.`,
+            variant: "default"
           })
-          return
         }
-      } catch (error: any) {
-        // Se a validação falhar, permitir continuar mas avisar
-        console.warn('Erro ao validar documentos do sinaleiro:', error)
-        toast({
-          title: "Aviso",
-          description: `Não foi possível validar os documentos do sinaleiro "${sinaleiroCliente.nome}". Verifique se todos os documentos obrigatórios estão completos.`,
-          variant: "default"
-        })
       }
     }
 
@@ -264,10 +420,11 @@ export function SinaleirosForm({
       console.log('📤 Enviando sinaleiros para o backend:', sinaleirosParaEnviar)
       console.log('📤 Obra ID:', obraId)
 
-      // Se não tiver obraId, apenas salvar no estado local (página de nova obra)
+      // Se não tiver obraId, apenas atualizar estado local (página de nova obra)
+      // Os sinaleiros serão salvos apenas ao criar a obra
       if (!obraId) {
-        // Converter para formato do componente antes de salvar
-        const sinaleirosSalvos: Sinaleiro[] = sinaleirosParaEnviar.map(s => ({
+        // Converter para formato do componente antes de atualizar estado local
+        const sinaleirosAtualizados: Sinaleiro[] = sinaleirosParaEnviar.map(s => ({
           id: s.id || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           obra_id: 0,
           nome: s.nome,
@@ -285,11 +442,11 @@ export function SinaleirosForm({
 
         toast({
           title: "Sucesso",
-          description: "Sinaleiros salvos localmente. Serão enviados ao criar a obra."
+          description: "Sinaleiros atualizados. Serão salvos ao criar a obra."
         })
 
-        setSinaleiros(sinaleirosSalvos)
-        onSave(sinaleirosSalvos)
+        setSinaleiros(sinaleirosAtualizados)
+        // Não chamar onSave aqui - será chamado apenas ao criar a obra
         setLoading(false)
         return
       }
@@ -481,7 +638,10 @@ export function SinaleirosForm({
                   </Label>
                   <Input
                     value={sinaleiro.nome}
-                    onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'nome', e.target.value)}
+                    onChange={(e) => {
+                      console.log('📝 Input Nome alterado:', e.target.value)
+                      handleUpdateSinaleiro(sinaleiro.id, 'nome', e.target.value)
+                    }}
                     placeholder="Nome completo"
                     disabled={!canEdit}
                   />
@@ -494,6 +654,7 @@ export function SinaleirosForm({
                   <Input
                     value={sinaleiro.cpf || sinaleiro.rg_cpf || ''}
                     onChange={(e) => {
+                      console.log('📝 Input CPF alterado:', e.target.value)
                       const value = e.target.value.replace(/\D/g, '')
                       let formatted = value
                       if (value.length <= 11) {
@@ -516,6 +677,7 @@ export function SinaleirosForm({
                   <Input
                     value={sinaleiro.rg || sinaleiro.rg_cpf || ''}
                     onChange={(e) => {
+                      console.log('📝 Input RG alterado:', e.target.value)
                       const value = e.target.value.replace(/\D/g, '')
                       let formatted = value
                       if (value.length <= 9) {
@@ -536,6 +698,7 @@ export function SinaleirosForm({
                   <Input
                     value={sinaleiro.telefone || ''}
                     onChange={(e) => {
+                      console.log('📝 Input Telefone alterado:', e.target.value)
                       const value = e.target.value.replace(/\D/g, '')
                       let formatted = value
                       if (value.length <= 10) {
@@ -555,7 +718,10 @@ export function SinaleirosForm({
                   <Input
                     type="email"
                     value={sinaleiro.email || ''}
-                    onChange={(e) => handleUpdateSinaleiro(sinaleiro.id, 'email', e.target.value)}
+                    onChange={(e) => {
+                      console.log('📝 Input Email alterado:', e.target.value)
+                      handleUpdateSinaleiro(sinaleiro.id, 'email', e.target.value)
+                    }}
                     placeholder="email@example.com"
                     disabled={!canEdit}
                   />
@@ -603,5 +769,7 @@ export function SinaleirosForm({
       )}
     </div>
   )
-}
+})
+
+SinaleirosForm.displayName = 'SinaleirosForm'
 

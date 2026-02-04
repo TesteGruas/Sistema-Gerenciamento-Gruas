@@ -1578,7 +1578,10 @@ router.post('/:id/aprovar', async (req, res) => {
           orcamento_id: parseInt(id),
           observacoes: `Orçamento de origem: ${orcamento.numero || id}\n${orcamento.observacoes || ''}`,
           cep: orcamento.obra_cep || null,
-          contato_obra: orcamento.obra_contato || null,
+          // Não copiar dados mockados de contato técnico
+          contato_obra: (orcamento.obra_contato && orcamento.obra_contato !== 'João Silva') ? orcamento.obra_contato : null,
+          telefone_obra: null, // Não copiar telefone de orçamento para evitar dados mockados
+          email_obra: null, // Não copiar email de orçamento para evitar dados mockados
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         };

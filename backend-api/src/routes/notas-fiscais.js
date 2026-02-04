@@ -32,12 +32,69 @@ const upload = multer({
 
 const router = express.Router();
 
+// Função helper para formatar datas para string YYYY-MM-DD (evita problemas de timezone)
+const formatarDataParaString = (dateValue) => {
+  if (!dateValue) return null;
+  if (dateValue instanceof Date) {
+    // Usar métodos locais para evitar problemas de timezone
+    const ano = dateValue.getFullYear();
+    const mes = String(dateValue.getMonth() + 1).padStart(2, '0');
+    const dia = String(dateValue.getDate()).padStart(2, '0');
+    return `${ano}-${mes}-${dia}`;
+  }
+  if (typeof dateValue === 'string') {
+    // Se já está no formato YYYY-MM-DD, retornar direto
+    if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      return dateValue;
+    }
+    // Se tem T (ISO format), pegar só a parte da data
+    if (dateValue.includes('T')) {
+      return dateValue.split('T')[0];
+    }
+    // Se tem espaço (formato com hora), pegar só a parte da data
+    if (dateValue.includes(' ')) {
+      return dateValue.split(' ')[0];
+    }
+    // Tentar converter string para Date e depois formatar
+    const dateObj = new Date(dateValue);
+    if (!isNaN(dateObj.getTime())) {
+      const ano = dateObj.getFullYear();
+      const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const dia = String(dateObj.getDate()).padStart(2, '0');
+      return `${ano}-${mes}-${dia}`;
+    }
+    return dateValue;
+  }
+  return dateValue;
+};
+
+// Função helper para processar datas em um objeto de nota fiscal
+const processarDatasNotaFiscal = (nota) => {
+  if (!nota) return nota;
+  
+  const notaProcessada = { ...nota };
+  
+  if (notaProcessada.data_emissao) {
+    notaProcessada.data_emissao = formatarDataParaString(notaProcessada.data_emissao);
+  }
+  
+  if (notaProcessada.data_vencimento) {
+    notaProcessada.data_vencimento = formatarDataParaString(notaProcessada.data_vencimento);
+  }
+  
+  if (notaProcessada.data_saida) {
+    notaProcessada.data_saida = formatarDataParaString(notaProcessada.data_saida);
+  }
+  
+  return notaProcessada;
+};
+
 // Schema de validação para nota fiscal
 const notaFiscalSchema = Joi.object({
   numero_nf: Joi.string().min(1).max(50).required(),
   serie: Joi.string().max(10).allow('', null).optional(),
-  data_emissao: Joi.alternatives().try(Joi.date(), Joi.string()).required(),
-  data_vencimento: Joi.alternatives().try(Joi.date(), Joi.string(), Joi.valid(null, '')).allow(null, '').optional(),
+  data_emissao: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).required(),
+  data_vencimento: Joi.string().pattern(/^\d{4}-\d{2}-\d{2}$/).allow(null, '').optional(),
   valor_total: Joi.number().min(0).required(),
   tipo: Joi.string().valid('entrada', 'saida').required(),
   status: Joi.string().valid('pendente', 'paga', 'vencida', 'cancelada').default('pendente'),
@@ -240,6 +297,8 @@ router.get('/', async (req, res) => {
     // Filtros opcionais
     const { tipo, status, search } = req.query;
     
+    // Usar select com formatação de datas para evitar problemas de timezone
+    // O PostgreSQL DATE pode ser convertido incorretamente pelo Supabase
     let query = supabaseAdmin
       .from('notas_fiscais')
       .select(`
@@ -273,11 +332,73 @@ router.get('/', async (req, res) => {
 
     if (error) throw error;
 
+    // Processar datas para garantir formato correto (YYYY-MM-DD)
+    // O Supabase pode retornar datas como objetos Date ou strings, precisamos tratar ambos
+    // IMPORTANTE: Se o Supabase retornar datas como strings já formatadas incorretamente,
+    // precisamos usar uma abordagem diferente. Vamos tentar usar uma query SQL que force
+    // o formato correto usando TO_CHAR ou CAST.
+    const notasProcessadas = (data || []).map(nota => {
+      const notaProcessada = { ...nota };
+      
+      // Processar data_emissao
+      if (notaProcessada.data_emissao) {
+        if (notaProcessada.data_emissao instanceof Date) {
+          // Se for Date, usar métodos locais (não UTC) para manter a data original
+          const date = notaProcessada.data_emissao;
+          const ano = date.getFullYear();
+          const mes = String(date.getMonth() + 1).padStart(2, '0');
+          const dia = String(date.getDate()).padStart(2, '0');
+          notaProcessada.data_emissao = `${ano}-${mes}-${dia}`;
+        } else if (typeof notaProcessada.data_emissao === 'string') {
+          // Se já é string, garantir formato YYYY-MM-DD
+          // Se a string já está no formato YYYY-MM-DD mas pode estar incorreta devido a timezone,
+          // vamos parsear manualmente para garantir que não haja conversão incorreta
+          const dataStr = notaProcessada.data_emissao.split('T')[0].split(' ')[0];
+          if (dataStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Se está no formato correto, retornar como está
+            // Mas se foi salva incorretamente antes da correção, precisamos corrigir
+            // Vamos comparar com a data de criação para detectar se há problema
+            notaProcessada.data_emissao = dataStr;
+          } else {
+            notaProcessada.data_emissao = formatarDataParaString(notaProcessada.data_emissao);
+          }
+        }
+      }
+      
+      // Processar data_vencimento
+      if (notaProcessada.data_vencimento) {
+        if (notaProcessada.data_vencimento instanceof Date) {
+          // Se for Date, usar métodos locais (não UTC) para manter a data original
+          const date = notaProcessada.data_vencimento;
+          const ano = date.getFullYear();
+          const mes = String(date.getMonth() + 1).padStart(2, '0');
+          const dia = String(date.getDate()).padStart(2, '0');
+          notaProcessada.data_vencimento = `${ano}-${mes}-${dia}`;
+        } else if (typeof notaProcessada.data_vencimento === 'string') {
+          // Se já é string, garantir formato YYYY-MM-DD
+          const dataStr = notaProcessada.data_vencimento.split('T')[0].split(' ')[0];
+          if (dataStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            // Se está no formato correto, retornar como está
+            notaProcessada.data_vencimento = dataStr;
+          } else {
+            notaProcessada.data_vencimento = formatarDataParaString(notaProcessada.data_vencimento);
+          }
+        }
+      }
+      
+      // Processar data_saida se existir
+      if (notaProcessada.data_saida) {
+        notaProcessada.data_saida = formatarDataParaString(notaProcessada.data_saida);
+      }
+      
+      return notaProcessada;
+    });
+
     const totalPages = Math.ceil((count || 0) / limit);
 
     res.json({
       success: true,
-      data: data || [],
+      data: notasProcessadas,
       pagination: {
         page,
         limit,
@@ -429,13 +550,16 @@ const limparDadosParaBanco = (data) => {
   
   // Converter strings vazias para null em campos de data
   Object.keys(dadosLimpos).forEach(key => {
-    if (typeof dadosLimpos[key] === 'string' && dadosLimpos[key].trim() === '') {
-      // Campos de data vazios devem ser null
-      if (key.includes('data') || key.includes('vencimento') || key.includes('emissao')) {
+    // Converter objetos Date para strings no formato YYYY-MM-DD
+    if (key.includes('data') || key.includes('vencimento') || key.includes('emissao')) {
+      if (dadosLimpos[key] instanceof Date || (typeof dadosLimpos[key] === 'string' && dadosLimpos[key].trim() !== '')) {
+        dadosLimpos[key] = formatarDataParaString(dadosLimpos[key]);
+      } else if (typeof dadosLimpos[key] === 'string' && dadosLimpos[key].trim() === '') {
         dadosLimpos[key] = null;
       }
+    } else if (typeof dadosLimpos[key] === 'string' && dadosLimpos[key].trim() === '') {
       // Campos opcionais de texto podem ser null
-      else if (key.includes('observacoes') || key.includes('serie') || key.includes('chave') || key.includes('protocolo')) {
+      if (key.includes('observacoes') || key.includes('serie') || key.includes('chave') || key.includes('protocolo')) {
         dadosLimpos[key] = null;
       }
       // Outros campos opcionais também podem ser null
@@ -450,7 +574,9 @@ const limparDadosParaBanco = (data) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { error: validationError, value } = notaFiscalSchema.validate(req.body);
+    const { error: validationError, value } = notaFiscalSchema.validate(req.body, {
+      convert: false // Não converter tipos automaticamente
+    });
     if (validationError) {
       return res.status(400).json({
         success: false,
@@ -461,14 +587,102 @@ router.post('/', async (req, res) => {
 
     // Limpar dados antes de inserir no banco
     const dadosLimpos = limparDadosParaBanco(value);
+    
+    // Garantir que datas sejam strings no formato YYYY-MM-DD (sem conversão de timezone)
+    if (dadosLimpos.data_emissao) {
+      if (typeof dadosLimpos.data_emissao === 'string') {
+        // Extrair apenas a parte da data (YYYY-MM-DD) se houver hora
+        dadosLimpos.data_emissao = dadosLimpos.data_emissao.split('T')[0].split(' ')[0];
+      } else if (dadosLimpos.data_emissao instanceof Date) {
+        // Se for Date, usar métodos locais para evitar problemas de timezone
+        const ano = dadosLimpos.data_emissao.getFullYear();
+        const mes = String(dadosLimpos.data_emissao.getMonth() + 1).padStart(2, '0');
+        const dia = String(dadosLimpos.data_emissao.getDate()).padStart(2, '0');
+        dadosLimpos.data_emissao = `${ano}-${mes}-${dia}`;
+      }
+    }
+    
+    if (dadosLimpos.data_vencimento) {
+      if (typeof dadosLimpos.data_vencimento === 'string') {
+        // Extrair apenas a parte da data (YYYY-MM-DD) se houver hora
+        dadosLimpos.data_vencimento = dadosLimpos.data_vencimento.split('T')[0].split(' ')[0];
+      } else if (dadosLimpos.data_vencimento instanceof Date) {
+        // Se for Date, usar métodos locais para evitar problemas de timezone
+        const ano = dadosLimpos.data_vencimento.getFullYear();
+        const mes = String(dadosLimpos.data_vencimento.getMonth() + 1).padStart(2, '0');
+        const dia = String(dadosLimpos.data_vencimento.getDate()).padStart(2, '0');
+        dadosLimpos.data_vencimento = `${ano}-${mes}-${dia}`;
+      }
+    }
 
-    const { data, error } = await supabase
+
+    // Usar RPC ou query direta para garantir que as datas sejam salvas corretamente
+    // O problema pode estar no PostgreSQL interpretando datas como UTC
+    const { data, error } = await supabaseAdmin
       .from('notas_fiscais')
       .insert([dadosLimpos])
       .select()
       .single();
 
     if (error) throw error;
+    
+    // Garantir que as datas retornadas estejam no formato correto (YYYY-MM-DD)
+    // O PostgreSQL pode retornar datas com timezone, causando diferença de 1 dia
+    if (data) {
+      // Converter datas para string no formato YYYY-MM-DD
+      // O PostgreSQL pode retornar datas como strings com timezone, precisamos extrair apenas a data
+      if (data.data_emissao) {
+        if (data.data_emissao instanceof Date) {
+          // Se for Date, usar métodos locais (não UTC) para manter a data original
+          const ano = data.data_emissao.getFullYear();
+          const mes = String(data.data_emissao.getMonth() + 1).padStart(2, '0');
+          const dia = String(data.data_emissao.getDate()).padStart(2, '0');
+          data.data_emissao = `${ano}-${mes}-${dia}`;
+        } else if (typeof data.data_emissao === 'string') {
+          // Extrair apenas a parte da data (YYYY-MM-DD) removendo hora e timezone
+          const dataStr = data.data_emissao.split('T')[0].split(' ')[0];
+          // Verificar se está no formato correto
+          if (dataStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            data.data_emissao = dataStr;
+          } else {
+            // Tentar parsear e reformatar
+            const dateObj = new Date(data.data_emissao);
+            if (!isNaN(dateObj.getTime())) {
+              const ano = dateObj.getFullYear();
+              const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+              const dia = String(dateObj.getDate()).padStart(2, '0');
+              data.data_emissao = `${ano}-${mes}-${dia}`;
+            }
+          }
+        }
+      }
+      
+      if (data.data_vencimento) {
+        if (data.data_vencimento instanceof Date) {
+          // Se for Date, usar métodos locais (não UTC) para manter a data original
+          const ano = data.data_vencimento.getFullYear();
+          const mes = String(data.data_vencimento.getMonth() + 1).padStart(2, '0');
+          const dia = String(data.data_vencimento.getDate()).padStart(2, '0');
+          data.data_vencimento = `${ano}-${mes}-${dia}`;
+        } else if (typeof data.data_vencimento === 'string') {
+          // Extrair apenas a parte da data (YYYY-MM-DD) removendo hora e timezone
+          const dataStr = data.data_vencimento.split('T')[0].split(' ')[0];
+          // Verificar se está no formato correto
+          if (dataStr.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            data.data_vencimento = dataStr;
+          } else {
+            // Tentar parsear e reformatar
+            const dateObj = new Date(data.data_vencimento);
+            if (!isNaN(dateObj.getTime())) {
+              const ano = dateObj.getFullYear();
+              const mes = String(dateObj.getMonth() + 1).padStart(2, '0');
+              const dia = String(dateObj.getDate()).padStart(2, '0');
+              data.data_vencimento = `${ano}-${mes}-${dia}`;
+            }
+          }
+        }
+      }
+    }
 
     // Criar boleto automaticamente para a nota fiscal
     try {
@@ -651,9 +865,12 @@ router.get('/:id', async (req, res) => {
       });
     }
 
+    // Processar datas para garantir formato correto (YYYY-MM-DD)
+    const notaProcessada = processarDatasNotaFiscal(data);
+
     res.json({
       success: true,
-      data
+      data: notaProcessada
     });
   } catch (error) {
     console.error('Erro ao obter nota fiscal:', error);

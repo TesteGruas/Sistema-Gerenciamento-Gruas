@@ -65,16 +65,39 @@ export interface DocumentoSinaleiroResponse {
 // Função para fazer requisições autenticadas
 const apiRequest = async (url: string, options: RequestInit = {}) => {
   try {
+    console.log('🌐 [apiRequest] Fazendo requisição:', {
+      url,
+      method: options.method || 'GET',
+      headers: options.headers,
+      body: options.body ? JSON.parse(options.body as string) : null
+    })
+    
     const response = await fetchWithAuth(url, options)
+    
+    console.log('📥 [apiRequest] Resposta recebida:', {
+      status: response.status,
+      statusText: response.statusText,
+      ok: response.ok,
+      headers: Object.fromEntries(response.headers.entries())
+    })
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
+      console.error('❌ [apiRequest] Erro na resposta:', {
+        status: response.status,
+        statusText: response.statusText,
+        errorData
+      })
       throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`)
     }
     
-    return await response.json()
+    const data = await response.json()
+    console.log('✅ [apiRequest] Dados recebidos:', data)
+    return data
   } catch (error) {
-    console.error('API request error:', error)
+    console.error('❌ [apiRequest] Erro na requisição:', error)
+    console.error('   - URL:', url)
+    console.error('   - Options:', options)
     throw error
   }
 }
@@ -90,13 +113,30 @@ export const sinaleirosApi = {
   // Criar ou atualizar sinaleiros de uma obra
   async criarOuAtualizar(obraId: number, sinaleiros: SinaleiroCreateData[]): Promise<SinaleirosResponse> {
     const url = buildApiUrl(`obras/${obraId}/sinaleiros`)
-    return apiRequest(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ sinaleiros }),
-    })
+    
+    console.log('🌐 [API Sinaleiros] Chamando API para criar/atualizar sinaleiros:')
+    console.log('   - URL:', url)
+    console.log('   - Obra ID:', obraId)
+    console.log('   - Quantidade de sinaleiros:', sinaleiros.length)
+    console.log('   - Dados dos sinaleiros:', JSON.stringify(sinaleiros, null, 2))
+    
+    try {
+      const response = await apiRequest(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ sinaleiros }),
+      })
+      
+      console.log('✅ [API Sinaleiros] Resposta da API:', response)
+      return response
+    } catch (error: any) {
+      console.error('❌ [API Sinaleiros] Erro na chamada da API:', error)
+      console.error('   - URL chamada:', url)
+      console.error('   - Dados enviados:', JSON.stringify({ sinaleiros }, null, 2))
+      throw error
+    }
   },
 
   // Listar documentos de um sinaleiro

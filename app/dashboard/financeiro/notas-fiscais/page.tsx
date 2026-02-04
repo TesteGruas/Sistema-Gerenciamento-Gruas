@@ -1079,6 +1079,29 @@ export default function NotasFiscaisPage() {
 
   const formatDate = (dateString: string) => {
     try {
+      if (!dateString) return '-'
+      
+      // Se já está no formato YYYY-MM-DD, parsear manualmente para evitar problemas de timezone
+      const match = dateString.match(/^(\d{4})-(\d{2})-(\d{2})/)
+      if (match) {
+        const [, ano, mes, dia] = match
+        // Criar Date usando ano, mês e dia diretamente (mês é 0-indexed no JavaScript)
+        const date = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia))
+        return format(date, "dd/MM/yyyy", { locale: ptBR })
+      }
+      
+      // Se tem T (ISO format), parsear manualmente também
+      if (dateString.includes('T')) {
+        const datePart = dateString.split('T')[0]
+        const match = datePart.match(/^(\d{4})-(\d{2})-(\d{2})/)
+        if (match) {
+          const [, ano, mes, dia] = match
+          const date = new Date(parseInt(ano), parseInt(mes) - 1, parseInt(dia))
+          return format(date, "dd/MM/yyyy", { locale: ptBR })
+        }
+      }
+      
+      // Fallback para formato padrão
       return format(new Date(dateString), "dd/MM/yyyy", { locale: ptBR })
     } catch {
       return dateString

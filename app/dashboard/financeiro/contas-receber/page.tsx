@@ -332,14 +332,34 @@ export default function ContasReceberPage() {
   const fim = inicio + itemsPerPage
   const registrosPaginados = todosRegistros.slice(inicio, fim)
 
-  // Calcular totais usando utilitários (depois de filteredReceitas ser definido)
+  // Calcular totais incluindo receitas e contas a receber/notas fiscais
   const totaisReceitas = useMemo(() => {
-    return receitasUtils.calculateTotals(filteredReceitas)
-  }, [filteredReceitas])
+    return receitasUtils.calculateTotals(receitas)
+  }, [receitas])
   
-  const totalReceitas = totaisReceitas.total
-  const totalConfirmadas = totaisReceitas.confirmadas
-  const totalPendentes = totaisReceitas.pendentes
+  // Calcular totais das contas a receber e notas fiscais
+  const totaisContas = useMemo(() => {
+    const totalContas = contas.reduce((sum, conta) => sum + (conta.valor || 0), 0)
+    const contasPagas = contas
+      .filter(c => c.status === 'pago')
+      .reduce((sum, conta) => sum + (conta.valor || 0), 0)
+    const contasPendentes = contas
+      .filter(c => c.status === 'pendente' || c.status === 'vencido')
+      .reduce((sum, conta) => sum + (conta.valor || 0), 0)
+    
+    return {
+      total: totalContas,
+      pagas: contasPagas,
+      pendentes: contasPendentes,
+      count: contas.length
+    }
+  }, [contas])
+  
+  // Totais combinados (receitas + contas)
+  const totalReceitas = totaisReceitas.total + totaisContas.total
+  const totalConfirmadas = totaisReceitas.confirmadas + totaisContas.pagas
+  const totalPendentes = totaisReceitas.pendentes + totaisContas.pendentes
+  const totalRegistrosCard = receitas.length + contas.length
 
   // Filtrar obras para seleção nos formulários
   const obrasFiltradas = obras.filter(obra => {
@@ -409,8 +429,8 @@ export default function ContasReceberPage() {
         observacoes: receitaForm.observacoes.trim() || undefined
       }
 
-      const novaReceita = await receitasApi.create(receitaData)
-      setReceitas([novaReceita, ...(receitas || [])])
+      await receitasApi.create(receitaData)
+      await carregarDados()
       setIsCreateDialogOpen(false)
       resetForm()
 
@@ -488,11 +508,8 @@ export default function ContasReceberPage() {
         observacoes: receitaForm.observacoes.trim() || undefined
       }
 
-      const receitaAtualizada = await receitasApi.update(editingReceita.id, receitaData)
-      
-      setReceitas((receitas || []).map(receita => 
-        receita.id === editingReceita.id ? receitaAtualizada : receita
-      ))
+      await receitasApi.update(editingReceita.id, receitaData)
+      await carregarDados()
       
       setIsEditDialogOpen(false)
       setEditingReceita(null)
@@ -515,7 +532,7 @@ export default function ContasReceberPage() {
   const handleDeleteReceita = async (id: string) => {
     try {
       await receitasApi.delete(id)
-      setReceitas((receitas || []).filter(r => r.id !== id))
+      await carregarDados()
       toast({
         title: "Sucesso",
         description: "Receita removida com sucesso"
@@ -532,10 +549,8 @@ export default function ContasReceberPage() {
 
   const handleConfirmReceita = async (id: string) => {
     try {
-      const receitaAtualizada = await receitasApi.confirm(id)
-      setReceitas((receitas || []).map(receita => 
-        receita.id === id ? receitaAtualizada : receita
-      ))
+      await receitasApi.confirm(id)
+      await carregarDados()
       toast({
         title: "Sucesso",
         description: "Receita confirmada com sucesso"
@@ -552,10 +567,8 @@ export default function ContasReceberPage() {
 
   const handleCancelReceita = async (id: string) => {
     try {
-      const receitaAtualizada = await receitasApi.cancel(id)
-      setReceitas((receitas || []).map(receita => 
-        receita.id === id ? receitaAtualizada : receita
-      ))
+      await receitasApi.cancel(id)
+      await carregarDados()
       toast({
         title: "Sucesso",
         description: "Receita cancelada com sucesso"
@@ -769,7 +782,7 @@ export default function ContasReceberPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total de Receitas</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      R$ {totalReceitas.toLocaleString('pt-BR')}
+                      {receitasUtils.formatCurrency(totalReceitas)}
                     </p>
                   </div>
                 </div>
@@ -783,7 +796,7 @@ export default function ContasReceberPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Confirmadas</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      R$ {totalConfirmadas.toLocaleString('pt-BR')}
+                      {receitasUtils.formatCurrency(totalConfirmadas)}
                     </p>
                   </div>
                 </div>
@@ -797,7 +810,7 @@ export default function ContasReceberPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Pendentes</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      R$ {totalPendentes.toLocaleString('pt-BR')}
+                      {receitasUtils.formatCurrency(totalPendentes)}
                     </p>
                   </div>
                 </div>
@@ -811,7 +824,7 @@ export default function ContasReceberPage() {
                   <div className="ml-4">
                     <p className="text-sm font-medium text-gray-600">Total de Registros</p>
                     <p className="text-2xl font-bold text-gray-900">
-                      {filteredReceitas.length}
+                      {totalRegistrosCard}
                     </p>
                   </div>
                 </div>

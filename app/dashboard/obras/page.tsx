@@ -1573,13 +1573,6 @@ export default function ObrasPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => handleEditObra(obra)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
                         onClick={() => handleDeleteObra(obra)}
                         className="text-red-600 hover:text-red-700 hover:bg-red-50"
                       >
