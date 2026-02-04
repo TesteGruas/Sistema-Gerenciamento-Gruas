@@ -1569,28 +1569,44 @@ router.post('/registros', async (req, res) => {
       });
     }
 
-    // VALIDAÇÃO DE CARGO: Apenas Operários e Sinaleiros podem bater ponto
+    // VALIDAÇÃO DE CARGO E ROLE: Apenas Operários e Sinaleiros podem bater ponto
     // Nota: Supervisor não é mais um cargo, é uma atribuição que pode ser dada a qualquer funcionário
     // Verificar cargo da tabela cargos (se cargo_id existir) ou campo cargo direto
     const cargoNome = (funcionario.cargos?.nome || funcionario.cargo || '').toLowerCase()
     
-    // Verificar se é Operário ou Sinaleiro
+    // Verificar role do usuário autenticado
+    const userRole = (req.user?.role || '').toLowerCase()
+    
+    // Verificar se a role é "Operários" (permite bater ponto)
+    const rolePermitePonto = (
+      userRole.includes('operário') ||
+      userRole.includes('operario') ||
+      userRole === 'operários' ||
+      userRole === 'operarios'
+    )
+    
+    // Verificar se o cargo permite bater ponto
+    // Inclui: Operário, Sinaleiro, Auxiliar Operacional, Operador, etc.
     const cargoPermitePonto = (
       cargoNome.includes('operário') ||
       cargoNome.includes('operario') ||
       cargoNome.includes('sinaleiro') ||
+      cargoNome.includes('auxiliar operacional') ||
       cargoNome === 'operários' ||
       cargoNome === 'operarios' ||
       cargoNome === 'operador' ||
-      cargoNome === 'sinaleiros'
+      cargoNome === 'sinaleiros' ||
+      cargoNome === 'auxiliar operacional'
     )
 
-    if (!cargoPermitePonto) {
+    // Se a role é "Operários" OU o cargo permite, então pode bater ponto
+    if (!rolePermitePonto && !cargoPermitePonto) {
       return res.status(403).json({
         success: false,
-        message: 'Registro de ponto disponível apenas para funcionários com cargo de Operário ou Sinaleiro',
+        message: 'Registro de ponto disponível apenas para funcionários com role "Operários" ou cargo de Operário, Auxiliar Operacional ou Sinaleiro',
         error: 'CARGO_NAO_PERMITIDO',
-        cargo: funcionario.cargos?.nome || funcionario.cargo || 'Não informado'
+        cargo: funcionario.cargos?.nome || funcionario.cargo || 'Não informado',
+        role: req.user?.role || 'Não informado'
       });
     }
 

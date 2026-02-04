@@ -8,7 +8,7 @@ import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
-import { sendPasswordResetEmail } from '../services/email.service.js'
+import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {

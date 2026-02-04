@@ -671,17 +671,19 @@ export default function PWAPontoPage() {
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
 
-  // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
+  // Verificar se o cargo ou role permite bater ponto (apenas Operários e Sinaleiros)
   const verificarCargoPermitePonto = () => {
     if (typeof window === 'undefined') return false
     
     try {
       // Obter cargo de todas as fontes possíveis
       let cargoFromMetadata: string | null = null
+      let roleFromMetadata: string | null = null
       const userDataStr = localStorage.getItem('user_data')
       if (userDataStr) {
         const userData = JSON.parse(userDataStr)
         cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
+        roleFromMetadata = userData?.role || userData?.user?.role || null
       }
       
       const userProfileStr = localStorage.getItem('user_profile')
@@ -691,30 +693,52 @@ export default function PWAPontoPage() {
         cargoFromProfile = profile?.cargo || null
       }
       
-      // Buscar cargo do funcionário se disponível
+      // Buscar cargo e role do funcionário se disponível
       const funcionarioCargo = user?.profile?.cargo || user?.cargo || null
+      const funcionarioRole = user?.role || user?.user?.role || null
       
-      // Criar array de todos os cargos possíveis
+      // Criar array de todos os cargos e roles possíveis
       const allCargos = [
         cargoFromMetadata?.toLowerCase(),
         cargoFromProfile?.toLowerCase(),
         funcionarioCargo?.toLowerCase()
       ].filter(Boolean)
       
-      // Nota: Supervisor não é mais um cargo, é uma atribuição que pode ser dada a qualquer funcionário
-      // Verificar se é Operário ou Sinaleiro
-      return allCargos.some(cargo => {
+      const allRoles = [
+        roleFromMetadata?.toLowerCase(),
+        funcionarioRole?.toLowerCase()
+      ].filter(Boolean)
+      
+      // Verificar se a role é "Operários" (permite bater ponto)
+      const rolePermitePonto = allRoles.some(role => {
+        if (!role) return false
+        return (
+          role.includes('operário') ||
+          role.includes('operario') ||
+          role === 'operários' ||
+          role === 'operarios'
+        )
+      })
+      
+      // Verificar se o cargo permite bater ponto
+      // Inclui: Operário, Sinaleiro, Auxiliar Operacional, Operador, etc.
+      const cargoPermitePonto = allCargos.some(cargo => {
         if (!cargo) return false
         return (
           cargo.includes('operário') ||
           cargo.includes('operario') ||
           cargo.includes('sinaleiro') ||
+          cargo.includes('auxiliar operacional') ||
           cargo === 'operários' ||
           cargo === 'operarios' ||
           cargo === 'operador' ||
-          cargo === 'sinaleiros'
+          cargo === 'sinaleiros' ||
+          cargo === 'auxiliar operacional'
         )
       })
+      
+      // Se a role é "Operários" OU o cargo permite, então pode bater ponto
+      return rolePermitePonto || cargoPermitePonto
     } catch (error) {
       console.error('Erro ao verificar cargo:', error)
       return false
