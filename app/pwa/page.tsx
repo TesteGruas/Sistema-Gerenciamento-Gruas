@@ -951,13 +951,7 @@ export default function PWAMainPage() {
                     // Ignorar erro
                   }
                 }
-                const cargoLower = cargoCheck?.toLowerCase() || pwaUserData.user?.cargo?.toLowerCase() || ''
-                const isSupervisorCheck = isSupervisorUser || cargoLower.includes('supervisor')
-                
-                // Se for supervisor, não mostrar o botão
-                if (isSupervisorCheck) {
-                  return null
-                }
+                // Validação de supervisor removida - todos os funcionários podem bater ponto
                 
                 // Se não tiver próximo registro, não mostrar
                 if (!getProximoRegistro()) {
@@ -969,53 +963,7 @@ export default function PWAMainPage() {
                   return null
                 }
                 
-                // Verificar se o cargo permite bater ponto (apenas Operários e Sinaleiros)
-                let cargoFromMetadata: string | null = null
-                try {
-                  const userDataStr = localStorage.getItem('user_data')
-                  if (userDataStr) {
-                    const userData = JSON.parse(userDataStr)
-                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
-                  }
-                } catch (e) {
-                  // Ignorar erro
-                }
-                
-                const hookRole = userRole?.toLowerCase() || ''
-                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
-                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
-                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
-                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
-                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
-                const currentRoleLower = currentUserRole?.toLowerCase() || ''
-                
-                const allRolesArray = [
-                  cargoFromMetadataLower,
-                  pwaCargoLower,
-                  roleFromUserDataLower,
-                  currentRoleLower,
-                  hookRole,
-                  roleFromPerfilLower,
-                  pwaRoleLower
-                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
-                
-                // Verificar se é Operário ou Sinaleiro
-                const podeBaterPonto = allRolesArray.some(role => {
-                  const roleLower = role.toLowerCase()
-                  return (
-                    roleLower.includes('operário') ||
-                    roleLower.includes('operario') ||
-                    roleLower.includes('sinaleiro') ||
-                    roleLower === 'operários' ||
-                    roleLower === 'operarios' ||
-                    roleLower === 'operador' ||
-                    roleLower === 'sinaleiros'
-                  )
-                })
-                
-                if (!podeBaterPonto) {
-                  return null
-                }
+                // Validação de cargo removida - todos os funcionários podem bater ponto
                 
                 return (
                   <button
@@ -1336,34 +1284,8 @@ export default function PWAMainPage() {
                   pwaRoleLower
                 ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
                 
-                // PRIMEIRO: Verificar se é Supervisor - se for, BLOQUEAR
-                const isSupervisor = allRolesArray.some(role => {
-                  const roleLower = role.toLowerCase()
-                  return (
-                    roleLower.includes('supervisor') ||
-                    roleLower === 'supervisores'
-                  )
-                })
-                
-                if (isSupervisor) {
-                  return false // Supervisores NÃO podem bater ponto
-                }
-                
-                // SEGUNDO: Verificar se é Operário ou Sinaleiro
-                const podeBaterPonto = allRolesArray.some(role => {
-                  const roleLower = role.toLowerCase()
-                  return (
-                    roleLower.includes('operário') ||
-                    roleLower.includes('operario') ||
-                    roleLower.includes('sinaleiro') ||
-                    roleLower === 'operários' ||
-                    roleLower === 'operarios' ||
-                    roleLower === 'operador' ||
-                    roleLower === 'sinaleiros'
-                  )
-                })
-                
-                return podeBaterPonto
+                // Validação de cargo removida - todos os funcionários podem bater ponto
+                return true
               }
               
               // Filtrar Aprovações - apenas Supervisor para cima (NÃO para Operador)

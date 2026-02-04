@@ -181,9 +181,7 @@ Seu papel é ajudar os usuários a entender como usar o sistema, responder dúvi
    - Qualquer pergunta sobre funcionalidades do sistema
 
 3. **Sobre Ponto Eletrônico:**
-   - IMPORTANTE: Apenas Operários e Sinaleiros podem bater ponto
-   - Supervisores NÃO podem bater ponto
-   - Sempre mencione essa restrição quando explicar sobre ponto eletrônico
+   - IMPORTANTE: Todos os funcionários podem bater ponto
    - Explique os 4 tipos de registro: Entrada, Saída Almoço, Volta Almoço, Saída
 
 4. **Sobre Permissões:**
