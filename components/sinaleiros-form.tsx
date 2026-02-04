@@ -375,8 +375,9 @@ export function SinaleirosForm({
           )}
         </div>
       ) : (
-        sinaleiros.map((sinaleiro, index) => (
-        <div key={sinaleiro.id} className="space-y-4">
+        <div>
+          {sinaleiros.map((sinaleiro, index) => (
+            <div key={sinaleiro.id || `sinaleiro-${index}`} className="space-y-4">
           {/* Cabeçalho do sinaleiro */}
           <div className="flex items-center justify-between pb-3 border-b">
             <div className="flex items-center gap-2">
@@ -596,8 +597,9 @@ export function SinaleirosForm({
               )
             })()}
           </div>
+            </div>
+          ))}
         </div>
-        ))
       )}
     </div>
   )

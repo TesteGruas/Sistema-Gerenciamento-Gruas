@@ -53,8 +53,8 @@ export function getUserLevel(userData: UserData | null): number {
     'gestores': 9,
     'gerente': 8,
     'financeiro': 8,
-    'supervisores': 6, // Supervisores mesclado em Clientes (nível 6)
-    'supervisor': 6, // Supervisores mesclado em Clientes (nível 6)
+    'supervisores': 6, // Supervisor migrado para Cliente (nível 6)
+    'supervisor': 6, // Supervisor migrado para Cliente (nível 6)
     'clientes': 6,
     'cliente': 6,
     'operários': 4,

@@ -51,7 +51,7 @@ export default function PWAObraDetalhesPage() {
   const params = useParams()
   const router = useRouter()
   const obraId = Number(params.id)
-  const { isSupervisor, isClient } = usePermissions()
+  const { isClient } = usePermissions()
 
   // Estados
   const [obra, setObra] = useState<Obra | null>(null)
@@ -181,7 +181,7 @@ export default function PWAObraDetalhesPage() {
         console.error('❌ [PWA Obras] Erro ao buscar gruas da obra:', error)
       }
 
-      // Carregar documentos da obra (para supervisor e cliente)
+      // Carregar documentos da obra (para cliente)
       try {
         const documentosResponse = await obrasDocumentosApi.listarPorObra(obraId)
         console.log('🔍 [PWA Obras] Documentos carregados:', documentosResponse)
@@ -1474,7 +1474,7 @@ export default function PWAObraDetalhesPage() {
 
       {/* Tabs para Livro Gruas, Checklist, Manutenções, Funcionários e Documentos */}
       <Tabs defaultValue="livro-grua" className="w-full">
-        <TabsList className={`grid w-full ${isSupervisor() ? 'grid-cols-5' : 'grid-cols-4'}`}>
+        <TabsList className="grid w-full grid-cols-4">
           <TabsTrigger value="livro-grua" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
             <BookOpen className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Livro Grua</span>
@@ -1491,7 +1491,7 @@ export default function PWAObraDetalhesPage() {
             <Users className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Funcionários</span>
           </TabsTrigger>
-          {isSupervisor() && (
+          {isClient() && (
             <TabsTrigger value="documentos" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
               <FileText className="w-4 h-4 shrink-0" />
               <span className="hidden sm:inline">Documentos</span>
@@ -1757,8 +1757,8 @@ export default function PWAObraDetalhesPage() {
           )}
         </TabsContent>
 
-        {/* Aba: Documentos (apenas supervisor) */}
-        {isSupervisor() && (
+        {/* Aba: Documentos (apenas cliente) */}
+        {isClient() && (
           <TabsContent value="documentos" className="space-y-4">
             {documentos.length === 0 ? (
               <Card>

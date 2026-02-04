@@ -336,7 +336,7 @@ router.get('/', authenticateToken, async (req, res) => {
     const { status, cliente_id } = req.query
 
     // Verificar se usuário tem permissão total ou apenas para suas obras
-    const hasFullAccess = ['Admin', 'Gestores', 'Supervisores'].includes(userRole)
+    const hasFullAccess = ['Admin', 'Gestores'].includes(userRole)
     const isOperador = userRole === 'Operários'
 
     // Verificar se funcionário tem acesso global através do cargo
@@ -1074,6 +1074,74 @@ router.get('/:id', authenticateToken, async (req, res) => {
  */
 router.post('/', authenticateToken, requirePermission('obras:criar'), async (req, res) => {
   try {
+    // ============================================
+    // 📋 LOG COMPLETO - CRIAÇÃO DE OBRA (POST)
+    // ============================================
+    console.log('\n═══════════════════════════════════════════════════════════')
+    console.log('🚀 POST /api/obras - CRIAÇÃO DE OBRA')
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log('📅 Timestamp:', new Date().toISOString())
+    console.log('👤 Usuário:', req.user?.id || 'N/A')
+    console.log('\n📥 DADOS RECEBIDOS (req.body):')
+    console.log(JSON.stringify(req.body, null, 2))
+    
+    // Log estruturado por seção
+    console.log('\n📊 RESUMO DOS DADOS RECEBIDOS:')
+    console.log('  📝 Dados Básicos:')
+    console.log('    - Nome:', req.body.nome || 'N/A')
+    console.log('    - Cliente ID:', req.body.cliente_id || 'N/A')
+    console.log('    - Tipo:', req.body.tipo || 'N/A')
+    console.log('    - Status:', req.body.status || 'N/A')
+    console.log('    - Endereço:', req.body.endereco || 'N/A')
+    console.log('    - Cidade:', req.body.cidade || 'N/A')
+    console.log('    - Estado:', req.body.estado || 'N/A')
+    console.log('    - CEP:', req.body.cep || 'N/A')
+    console.log('  📄 Documentos:')
+    console.log('    - CNO:', req.body.cno || 'N/A')
+    console.log('    - CNO Arquivo:', req.body.cno_arquivo || 'N/A')
+    console.log('    - ART Número:', req.body.art_numero || 'N/A')
+    console.log('    - ART Arquivo:', req.body.art_arquivo || 'N/A')
+    console.log('    - Apólice Número:', req.body.apolice_numero || 'N/A')
+    console.log('    - Apólice Arquivo:', req.body.apolice_arquivo || 'N/A')
+    console.log('  🏗️ Gruas:')
+    console.log('    - Grua ID (individual):', req.body.grua_id || 'N/A')
+    console.log('    - Array de Gruas:', Array.isArray(req.body.gruas) ? `${req.body.gruas.length} grua(s)` : 'N/A')
+    if (Array.isArray(req.body.gruas) && req.body.gruas.length > 0) {
+      req.body.gruas.forEach((grua, idx) => {
+        console.log(`      [${idx + 1}] ID: ${grua.id || grua.grua_id || 'N/A'}, Modelo: ${grua.modelo || 'N/A'}`)
+      })
+    }
+    console.log('  👥 Funcionários:')
+    console.log('    - Quantidade:', Array.isArray(req.body.funcionarios) ? req.body.funcionarios.length : 0)
+    if (Array.isArray(req.body.funcionarios) && req.body.funcionarios.length > 0) {
+      req.body.funcionarios.forEach((func, idx) => {
+        console.log(`      [${idx + 1}] ${func.name || func.nome || 'N/A'} (${func.role || func.cargo || 'N/A'})`)
+      })
+    }
+    console.log('  🚦 Sinaleiros:')
+    console.log('    - Quantidade:', Array.isArray(req.body.sinaleiros) ? req.body.sinaleiros.length : 0)
+    if (Array.isArray(req.body.sinaleiros) && req.body.sinaleiros.length > 0) {
+      req.body.sinaleiros.forEach((sinal, idx) => {
+        console.log(`      [${idx + 1}] ${sinal.nome || 'N/A'} (${sinal.tipo || 'N/A'}) - ${sinal.rg_cpf || 'N/A'}`)
+      })
+    }
+    console.log('  👨‍💼 Responsável Técnico:')
+    if (req.body.responsavel_tecnico) {
+      console.log('    - Nome:', req.body.responsavel_tecnico.nome || 'N/A')
+      console.log('    - CPF/CNPJ:', req.body.responsavel_tecnico.cpf_cnpj || 'N/A')
+      console.log('    - CREA:', req.body.responsavel_tecnico.crea || 'N/A')
+      console.log('    - Funcionário ID:', req.body.responsavel_tecnico.funcionario_id || 'N/A')
+    } else {
+      console.log('    - Nenhum responsável técnico fornecido')
+    }
+    console.log('  💰 Custos Mensais:')
+    console.log('    - Quantidade:', Array.isArray(req.body.custos_mensais) ? req.body.custos_mensais.length : 0)
+    if (Array.isArray(req.body.custos_mensais) && req.body.custos_mensais.length > 0) {
+      const total = req.body.custos_mensais.reduce((acc, c) => acc + (c.totalOrcamento || c.total_orcamento || 0), 0)
+      console.log('    - Total:', total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }))
+    }
+    console.log('═══════════════════════════════════════════════════════════\n')
+    
     console.log('🔍 DEBUG - Dados recebidos para criação de obra:', JSON.stringify(req.body, null, 2))
     console.log('🔍 DEBUG - Array gruas no req.body:', req.body.gruas)
     console.log('🔍 DEBUG - Tipo de gruas no req.body:', typeof req.body.gruas)
@@ -1253,110 +1321,8 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('🔍 DEBUG - Sinaleiros é array?', Array.isArray(value.sinaleiros))
     console.log('🔍 DEBUG - Quantidade de sinaleiros:', value.sinaleiros?.length || 0)
 
-    // Vincular automaticamente o cliente como supervisor da obra
-    try {
-      console.log('👤 Processando vinculação automática do cliente como supervisor...')
-      
-      // Buscar cliente completo com contato_usuario_id
-      const { data: clienteCompleto, error: clienteCompletoError } = await supabaseAdmin
-        .from('clientes')
-        .select('id, nome, contato_usuario_id')
-        .eq('id', value.cliente_id)
-        .single()
-
-      if (!clienteCompletoError && clienteCompleto && clienteCompleto.contato_usuario_id) {
-        console.log('✅ Cliente encontrado com contato_usuario_id:', clienteCompleto.contato_usuario_id)
-        
-        // Buscar usuário vinculado ao cliente
-        const { data: usuario, error: usuarioError } = await supabaseAdmin
-          .from('usuarios')
-          .select('id, nome, email, funcionario_id')
-          .eq('id', clienteCompleto.contato_usuario_id)
-          .single()
-
-        if (!usuarioError && usuario) {
-          console.log('✅ Usuário encontrado:', usuario.email)
-          
-          let funcionarioId = usuario.funcionario_id
-
-          // Se o usuário não tem funcionário vinculado, criar um funcionário para ele
-          if (!funcionarioId) {
-            console.log('🔧 Usuário não tem funcionário vinculado. Criando funcionário...')
-            
-            // Criar funcionário vinculado ao usuário do cliente
-            const { data: novoFuncionario, error: funcionarioError } = await supabaseAdmin
-              .from('funcionarios')
-              .insert({
-                nome: usuario.nome || clienteCompleto.nome,
-                email: usuario.email,
-                cpf: null, // Cliente pode não ter CPF
-                status: 'Ativo',
-                cargo: 'Supervisor',
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-              .select()
-              .single()
-
-            if (funcionarioError) {
-              console.error('❌ Erro ao criar funcionário para cliente:', funcionarioError)
-            } else {
-              console.log('✅ Funcionário criado para cliente:', novoFuncionario.id)
-              funcionarioId = novoFuncionario.id
-
-              // Atualizar usuário com funcionario_id
-              await supabaseAdmin
-                .from('usuarios')
-                .update({ funcionario_id: funcionarioId })
-                .eq('id', usuario.id)
-            }
-          }
-
-          // Vincular funcionário à obra como supervisor
-          if (funcionarioId) {
-            // Verificar se já não está vinculado
-            const { data: jaVinculado } = await supabaseAdmin
-              .from('funcionarios_obras')
-              .select('id')
-              .eq('funcionario_id', funcionarioId)
-              .eq('obra_id', data.id)
-              .eq('status', 'ativo')
-              .single()
-
-            if (!jaVinculado) {
-              const { data: supervisorVinculado, error: supervisorError } = await supabaseAdmin
-                .from('funcionarios_obras')
-                .insert({
-                  funcionario_id: funcionarioId,
-                  obra_id: data.id,
-                  data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
-                  status: 'ativo',
-                  horas_trabalhadas: 0,
-                  is_supervisor: true,
-                  observacoes: `Contato técnico do cliente ${clienteCompleto.nome} vinculado automaticamente como supervisor da obra`
-                })
-                .select()
-                .single()
-
-              if (supervisorError) {
-                console.error('❌ Erro ao vincular cliente como supervisor:', supervisorError)
-              } else {
-                console.log('✅ Cliente vinculado como supervisor com sucesso:', supervisorVinculado.id)
-              }
-            } else {
-              console.log('ℹ️ Cliente já está vinculado como supervisor')
-            }
-          }
-        } else {
-          console.log('⚠️ Usuário não encontrado para contato_usuario_id:', clienteCompleto.contato_usuario_id)
-        }
-      } else {
-        console.log('ℹ️ Cliente não tem contato_usuario_id ou não foi encontrado')
-      }
-    } catch (error) {
-      console.error('❌ Erro ao processar vinculação automática do cliente como supervisor:', error)
-      // Não falhar a criação da obra por causa disso
-    }
+    // Nota: Removida vinculação automática do cliente como supervisor
+    // O sistema não utiliza mais o conceito de supervisor
 
     // Processar responsável técnico se fornecido
     if (value.responsavel_tecnico && (value.responsavel_tecnico.funcionario_id || (value.responsavel_tecnico.nome && value.responsavel_tecnico.cpf_cnpj))) {
@@ -1754,10 +1720,8 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
             status: 'ativo',
             horas_trabalhadas: 0,
-            is_supervisor: funcionario.isSupervisor === true || funcionario.is_supervisor === true,
-            observacoes: funcionario.isSupervisor || funcionario.is_supervisor 
-              ? `Supervisor ${funcionario.name} (${funcionario.role}) alocado na obra`
-              : `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            is_supervisor: false, // Removido: sistema não utiliza mais supervisor
+            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
@@ -1840,44 +1804,23 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       }
     }
 
-    // Buscar dados completos da obra incluindo gruas vinculadas
+    // Buscar dados completos da obra incluindo relacionamentos
     console.log('🔍 Buscando dados completos da obra criada...')
     const { data: obraCompleta, error: obraCompletaError } = await supabaseAdmin
       .from('obras')
       .select(`
         *,
+        clientes (*),
         grua_obra (
-          id,
-          grua_id,
-          data_inicio_locacao,
-          data_fim_locacao,
-          valor_locacao_mensal,
-          status,
-          tipo_base,
-          altura_inicial,
-          altura_final,
-          velocidade_giro,
-          velocidade_elevacao,
-          velocidade_translacao,
-          potencia_instalada,
-          voltagem,
-          tipo_ligacao,
-          capacidade_ponta,
-          capacidade_maxima_raio,
-          ano_fabricacao,
-          vida_util,
-          guindaste_montagem,
-          quantidade_viagens,
-          alojamento_alimentacao,
-          responsabilidade_acessorios,
-          grua:gruas (
-            id,
-            name,
-            modelo,
-            fabricante,
-            tipo
-          )
-        )
+          *,
+          grua (*)
+        ),
+        funcionarios_obras (
+          *,
+          funcionarios (*)
+        ),
+        sinaleiros_obra (*),
+        responsaveis_tecnicos (*)
       `)
       .eq('id', data.id)
       .single()
@@ -1900,9 +1843,54 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       console.error('❌ Erro ao importar serviço WhatsApp (não bloqueia criação):', importError);
     }
 
+    // ============================================
+    // ✅ LOG FINAL - OBRA CRIADA COM SUCESSO
+    // ============================================
+    if (!obraCompletaError && obraCompleta) {
+      console.log('\n✅ OBRA CRIADA COM SUCESSO - DADOS COMPLETOS:')
+      console.log('📋 DADOS FINAIS SALVOS NO BANCO:')
+      console.log(JSON.stringify(obraCompleta, null, 2))
+      console.log('\n📊 RESUMO FINAL DA OBRA CRIADA:')
+      console.log('  - ID:', obraCompleta.id)
+      console.log('  - Nome:', obraCompleta.nome)
+      console.log('  - Cliente:', obraCompleta.clientes?.nome || 'N/A')
+      console.log('  - Status:', obraCompleta.status)
+      console.log('  - Tipo:', obraCompleta.tipo)
+      console.log('  - CNO:', obraCompleta.cno || 'N/A')
+      console.log('  - ART:', obraCompleta.art_numero || 'N/A')
+      console.log('  - Apólice:', obraCompleta.apolice_numero || 'N/A')
+      console.log('  - Responsável:', obraCompleta.responsavel_nome || 'N/A')
+      console.log('  - Gruas vinculadas:', obraCompleta.grua_obra?.length || 0)
+      console.log('  - Funcionários vinculados:', obraCompleta.funcionarios_obras?.length || 0)
+      console.log('  - Sinaleiros:', obraCompleta.sinaleiros_obra?.length || 0)
+      console.log('  - Responsáveis técnicos:', obraCompleta.responsaveis_tecnicos?.length || 0)
+      if (errosGruas.length > 0) {
+        console.log('  ⚠️ Avisos:', `${errosGruas.length} grua(s) não puderam ser vinculada(s)`)
+      }
+      console.log('═══════════════════════════════════════════════════════════\n')
+    } else {
+      console.log('\n✅ OBRA CRIADA COM SUCESSO (dados básicos):')
+      console.log('📋 DADOS SALVOS NO BANCO:')
+      console.log(JSON.stringify(data, null, 2))
+      console.log('\n📊 RESUMO DA OBRA CRIADA:')
+      console.log('  - ID:', data.id)
+      console.log('  - Nome:', data.nome)
+      console.log('  - Cliente ID:', data.cliente_id)
+      console.log('  - Status:', data.status)
+      console.log('  - Tipo:', data.tipo)
+      console.log('  - CNO:', data.cno || 'N/A')
+      console.log('  - ART:', data.art_numero || 'N/A')
+      console.log('  - Apólice:', data.apolice_numero || 'N/A')
+      console.log('  - Responsável:', data.responsavel_nome || 'N/A')
+      if (errosGruas.length > 0) {
+        console.log('  ⚠️ Avisos:', `${errosGruas.length} grua(s) não puderam ser vinculada(s)`)
+      }
+      console.log('═══════════════════════════════════════════════════════════\n')
+    }
+
     res.status(201).json({
       success: true,
-      data,
+      data: obraCompleta || data,
       message: 'Obra criada com sucesso',
       warnings: errosGruas.length > 0 ? {
         message: `${errosGruas.length} grua(s) não puderam ser vinculada(s)`,
@@ -1987,8 +1975,51 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
   try {
     const { id } = req.params
 
+    // ============================================
+    // 📋 LOG COMPLETO - ATUALIZAÇÃO DE OBRA (PUT)
+    // ============================================
+    console.log('\n═══════════════════════════════════════════════════════════')
+    console.log('🔄 PUT /api/obras/:id - ATUALIZAÇÃO DE OBRA')
+    console.log('═══════════════════════════════════════════════════════════')
+    console.log('📅 Timestamp:', new Date().toISOString())
+    console.log('👤 Usuário:', req.user?.id || 'N/A')
+    console.log('🆔 Obra ID:', id)
+    console.log('\n📥 DADOS RECEBIDOS (req.body):')
+    console.log(JSON.stringify(req.body, null, 2))
+    
+    // Log estruturado por seção
+    console.log('\n📊 RESUMO DOS DADOS RECEBIDOS PARA ATUALIZAÇÃO:')
+    console.log('  📝 Dados Básicos:')
+    console.log('    - Nome:', req.body.nome || 'N/A')
+    console.log('    - Cliente ID:', req.body.cliente_id || 'N/A')
+    console.log('    - Tipo:', req.body.tipo || 'N/A')
+    console.log('    - Status:', req.body.status || 'N/A')
+    console.log('    - Endereço:', req.body.endereco || 'N/A')
+    console.log('    - Cidade:', req.body.cidade || 'N/A')
+    console.log('    - Estado:', req.body.estado || 'N/A')
+    console.log('    - CEP:', req.body.cep || 'N/A')
+    console.log('  📄 Documentos:')
+    console.log('    - CNO:', req.body.cno || 'N/A')
+    console.log('    - CNO Arquivo:', req.body.cno_arquivo || 'N/A')
+    console.log('    - ART Número:', req.body.art_numero || 'N/A')
+    console.log('    - ART Arquivo:', req.body.art_arquivo || 'N/A')
+    console.log('    - Apólice Número:', req.body.apolice_numero || 'N/A')
+    console.log('    - Apólice Arquivo:', req.body.apolice_arquivo || 'N/A')
+    console.log('  👥 Funcionários:')
+    console.log('    - Quantidade:', Array.isArray(req.body.funcionarios) ? req.body.funcionarios.length : 'N/A')
+    if (Array.isArray(req.body.funcionarios) && req.body.funcionarios.length > 0) {
+      req.body.funcionarios.forEach((func, idx) => {
+        console.log(`      [${idx + 1}] ${func.name || func.nome || 'N/A'} (${func.role || func.cargo || 'N/A'})`)
+      })
+    }
+    console.log('  👨‍💼 Responsável:')
+    console.log('    - Responsável ID:', req.body.responsavel_id || 'N/A')
+    console.log('    - Responsável Nome:', req.body.responsavel_nome || 'N/A')
+    console.log('═══════════════════════════════════════════════════════════\n')
+
     const { error, value } = obraSchema.validate(req.body)
     if (error) {
+      console.error('❌ Erro de validação:', error.details)
       return res.status(400).json({
         error: 'Dados inválidos',
         details: error.details[0].message
@@ -2037,6 +2068,9 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       }
     })
 
+    console.log('\n📤 DADOS QUE SERÃO ATUALIZADOS NO BANCO:')
+    console.log(JSON.stringify(updateData, null, 2))
+
     const { data, error: updateError } = await supabaseAdmin
       .from('obras')
       .update(updateData)
@@ -2045,6 +2079,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       .single()
 
     if (updateError) {
+      console.error('❌ Erro ao atualizar obra:', updateError)
       if (updateError.code === 'PGRST116') {
         return res.status(404).json({
           error: 'Obra não encontrada',
@@ -2056,6 +2091,20 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
         message: updateError.message
       })
     }
+
+    console.log('\n✅ OBRA ATUALIZADA COM SUCESSO:')
+    console.log('📋 DADOS SALVOS NO BANCO:')
+    console.log(JSON.stringify(data, null, 2))
+    console.log('\n📊 RESUMO DA OBRA ATUALIZADA:')
+    console.log('  - ID:', data.id)
+    console.log('  - Nome:', data.nome)
+    console.log('  - Cliente ID:', data.cliente_id)
+    console.log('  - Status:', data.status)
+    console.log('  - Tipo:', data.tipo)
+    console.log('  - CNO:', data.cno || 'N/A')
+    console.log('  - ART:', data.art_numero || 'N/A')
+    console.log('  - Apólice:', data.apolice_numero || 'N/A')
+    console.log('═══════════════════════════════════════════════════════════\n')
 
     // Processar dados dos funcionários (incluindo quando vier array vazio)
     if (value.funcionarios !== undefined) {
@@ -2082,10 +2131,8 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
             data_inicio: value.data_inicio || new Date().toISOString().split('T')[0],
             status: 'ativo',
             horas_trabalhadas: 0,
-            is_supervisor: funcionario.isSupervisor === true || funcionario.is_supervisor === true,
-            observacoes: funcionario.isSupervisor || funcionario.is_supervisor 
-              ? `Supervisor ${funcionario.name} (${funcionario.role}) alocado na obra`
-              : `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            is_supervisor: false, // Removido: sistema não utiliza mais supervisor
+            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
@@ -2203,9 +2250,50 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       }
     }
 
+    // Buscar dados completos da obra atualizada para log final
+    const { data: obraAtualizadaCompleta, error: obraCompletaError } = await supabaseAdmin
+      .from('obras')
+      .select(`
+        *,
+        clientes (*),
+        grua_obra (
+          *,
+          grua (*)
+        ),
+        funcionarios_obras (
+          *,
+          funcionarios (*)
+        ),
+        sinaleiros_obra (*),
+        responsaveis_tecnicos (*)
+      `)
+      .eq('id', id)
+      .single()
+
+    if (!obraCompletaError && obraAtualizadaCompleta) {
+      console.log('\n✅ OBRA ATUALIZADA COM SUCESSO - DADOS COMPLETOS:')
+      console.log('📋 DADOS FINAIS SALVOS NO BANCO:')
+      console.log(JSON.stringify(obraAtualizadaCompleta, null, 2))
+      console.log('\n📊 RESUMO FINAL DA OBRA ATUALIZADA:')
+      console.log('  - ID:', obraAtualizadaCompleta.id)
+      console.log('  - Nome:', obraAtualizadaCompleta.nome)
+      console.log('  - Cliente:', obraAtualizadaCompleta.clientes?.nome || 'N/A')
+      console.log('  - Status:', obraAtualizadaCompleta.status)
+      console.log('  - Tipo:', obraAtualizadaCompleta.tipo)
+      console.log('  - CNO:', obraAtualizadaCompleta.cno || 'N/A')
+      console.log('  - ART:', obraAtualizadaCompleta.art_numero || 'N/A')
+      console.log('  - Apólice:', obraAtualizadaCompleta.apolice_numero || 'N/A')
+      console.log('  - Responsável:', obraAtualizadaCompleta.responsavel_nome || 'N/A')
+      console.log('  - Gruas vinculadas:', obraAtualizadaCompleta.grua_obra?.length || 0)
+      console.log('  - Funcionários vinculados:', obraAtualizadaCompleta.funcionarios_obras?.length || 0)
+      console.log('  - Sinaleiros:', obraAtualizadaCompleta.sinaleiros_obra?.length || 0)
+      console.log('  - Responsáveis técnicos:', obraAtualizadaCompleta.responsaveis_tecnicos?.length || 0)
+      console.log('═══════════════════════════════════════════════════════════\n')
+    }
+
     res.json({
       success: true,
-      data,
+      data: obraAtualizadaCompleta || data,
       message: 'Obra atualizada com sucesso'
     })
   } catch (error) {
@@ -2419,7 +2507,7 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
       crea_empresa: Joi.string().allow(null, '').optional(),
       email: Joi.string().email().allow(null, '').optional(),
       telefone: Joi.string().allow(null, '').optional(),
-      tipo: Joi.string().valid('obra', 'irbana_equipamentos', 'irbana_manutencoes', 'irbana_montagem_operacao').default('obra')
+      tipo: Joi.string().valid('obra', 'irbana_equipamentos', 'irbana_manutencoes', 'irbana_montagem_operacao', 'adicional').default('obra')
     })
 
     const { error: validationError } = schema.validate({ nome, cpf_cnpj, crea, crea_empresa, email, telefone, funcionario_id, tipo })
@@ -3110,16 +3198,27 @@ router.get('/alertas/fim-proximo', authenticateToken, async (req, res) => {
 
 /**
  * POST /api/obras/:id/supervisores
- * Adicionar supervisor terceirizado à obra
+ * REMOVIDO: Sistema não utiliza mais supervisores terceirizados
  */
+// Rota removida - sistema não utiliza mais supervisores
+
+router.post('/:id/supervisores', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: 'Funcionalidade removida',
+    message: 'O sistema não utiliza mais supervisores terceirizados. Esta funcionalidade foi removida.'
+  })
+})
+
+/* CÓDIGO REMOVIDO - SUPERVISORES TERCEIRIZADOS
 const supervisorTerceirizadoSchema = Joi.object({
-  supervisor_id: Joi.number().integer().optional(), // ID do supervisor existente para vincular
-  nome: Joi.string().min(2).optional(), // Obrigatório apenas se não fornecer supervisor_id
-  email: Joi.string().email().optional(), // Obrigatório apenas se não fornecer supervisor_id
+  supervisor_id: Joi.number().integer().optional(),
+  nome: Joi.string().min(2).optional(),
+  email: Joi.string().email().optional(),
   telefone: Joi.string().allow('', null).optional(),
   observacoes: Joi.string().allow('', null).optional(),
   data_inicio: Joi.date().optional()
-}).or('supervisor_id', 'nome', 'email') // Pelo menos supervisor_id OU (nome E email)
+}).or('supervisor_id', 'nome', 'email')
 
 router.post('/:id/supervisores', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
@@ -3457,11 +3556,21 @@ router.post('/:id/supervisores', authenticateToken, requirePermission('obras:edi
     })
   }
 })
+*/
 
 /**
  * PUT /api/obras/:obra_id/supervisores/:id
- * Atualizar supervisor terceirizado
+ * REMOVIDO: Sistema não utiliza mais supervisores terceirizados
  */
+router.put('/:obra_id/supervisores/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: 'Funcionalidade removida',
+    message: 'O sistema não utiliza mais supervisores terceirizados. Esta funcionalidade foi removida.'
+  })
+})
+
+/* CÓDIGO REMOVIDO - ATUALIZAR SUPERVISOR
 const atualizarSupervisorSchema = Joi.object({
   nome: Joi.string().min(2).optional(),
   email: Joi.string().email().optional(),
@@ -3634,12 +3743,22 @@ router.put('/:obra_id/supervisores/:id', authenticateToken, requirePermission('o
     })
   }
 })
+*/
 
 /**
  * GET /api/obras/supervisores
- * Listar todos os supervisores terceirizados existentes
- * IMPORTANTE: Este endpoint deve vir ANTES de /:obra_id/supervisores/:id para evitar conflito de rotas
+ * REMOVIDO: Sistema não utiliza mais supervisores terceirizados
  */
+router.get('/supervisores', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: 'Funcionalidade removida',
+    message: 'O sistema não utiliza mais supervisores terceirizados. Esta funcionalidade foi removida.',
+    data: []
+  })
+})
+
+/* CÓDIGO REMOVIDO - LISTAR SUPERVISORES
 router.get('/supervisores', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { search } = req.query
@@ -3729,11 +3848,21 @@ router.get('/supervisores', authenticateToken, requirePermission('obras:visualiz
     })
   }
 })
+*/
 
 /**
  * GET /api/obras/:obra_id/supervisores/:id
- * Obter dados completos de um supervisor terceirizado
+ * REMOVIDO: Sistema não utiliza mais supervisores terceirizados
  */
+router.get('/:obra_id/supervisores/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  return res.status(410).json({
+    success: false,
+    error: 'Funcionalidade removida',
+    message: 'O sistema não utiliza mais supervisores terceirizados. Esta funcionalidade foi removida.'
+  })
+})
+
+/* CÓDIGO REMOVIDO - OBTER SUPERVISOR
 router.get('/:obra_id/supervisores/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { obra_id, id } = req.params
@@ -3803,5 +3932,6 @@ router.get('/:obra_id/supervisores/:id', authenticateToken, requirePermission('o
     })
   }
 })
+*/
 
 export default router

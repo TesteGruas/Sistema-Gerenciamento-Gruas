@@ -85,7 +85,6 @@ const roleLabels = {
   funcionario_nivel_3: "Funcionário Nível 3",
   administrador: "Administrador",
   gerente: "Gerente",
-  supervisor: "Supervisor",
   operador: "Operador",
   visualizador: "Visualizador",
   user: "Usuário"
@@ -100,7 +99,6 @@ const roleColors = {
   funcionario_nivel_3: "bg-orange-100 text-orange-800",
   administrador: "bg-red-100 text-red-800",
   gerente: "bg-purple-100 text-purple-800",
-  supervisor: "bg-blue-100 text-blue-800",
   operador: "bg-green-100 text-green-800",
   visualizador: "bg-gray-100 text-gray-800",
   user: "bg-gray-100 text-gray-800"
@@ -177,7 +175,6 @@ export default function UsuariosPage() {
   const rolePermissions = {
     administrador: ["all"],
     gerente: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
-    supervisor: ["obras", "gruas", "funcionarios_read"],
     operador: ["obras_read", "gruas_read"],
     visualizador: ["obras_read", "gruas_read"],
     // Manter compatibilidade com roles antigos
@@ -314,14 +311,14 @@ export default function UsuariosPage() {
     const roleToPerfilMap: { [key: string]: number } = {
       'admin': 1,        // Administrador
       'gerente': 2,      // Gerente
-      'supervisor': 3,   // Supervisor
       'operador': 4,     // Operador
       'visualizador': 5, // Visualizador
       'administrador': 1, // Administrador (alternativo)
       'gestor': 2,       // Gerente (alternativo)
       'cliente': 5,      // Cliente como Visualizador
       'funcionario_nivel_1': 4, // Operador
-      'funcionario_nivel_2': 3, // Supervisor
+      'funcionario_nivel_2': 5, // Migrado para Cliente/Visualizador
+      'supervisor': 5,   // Supervisor migrado para Cliente/Visualizador
       'funcionario_nivel_3': 2  // Gerente
     }
     console.log('🔍 DEBUG: Mapeando role:', role, '-> perfil_id:', roleToPerfilMap[role] || null)
@@ -429,7 +426,7 @@ export default function UsuariosPage() {
   // Obter funções únicas dos usuários para o filtro
   // Combinar funções dos usuários carregados com funções padrão do sistema
   const funcoesDosUsuarios = [...new Set(usuarios.map(u => u.role))].filter(Boolean)
-  const funcoesPadrao = ['administrador', 'gerente', 'supervisor', 'operador', 'visualizador', 'cliente', 'admin', 'gestor']
+  const funcoesPadrao = ['administrador', 'gerente', 'operador', 'visualizador', 'cliente', 'admin', 'gestor']
   const funcoesUnicas = [...new Set([...funcoesDosUsuarios, ...funcoesPadrao])].sort()
 
   // Aplicar filtro local caso o backend não suporte (fallback)
@@ -1123,7 +1120,6 @@ export default function UsuariosPage() {
                     <SelectContent>
                       <SelectItem value="administrador">Administrador</SelectItem>
                       <SelectItem value="gerente">Gerente</SelectItem>
-                      <SelectItem value="supervisor">Supervisor</SelectItem>
                       <SelectItem value="operador">Operador</SelectItem>
                       <SelectItem value="visualizador">Visualizador</SelectItem>
                     </SelectContent>
@@ -1330,7 +1326,6 @@ export default function UsuariosPage() {
                     <SelectContent>
                       <SelectItem value="administrador">Administrador</SelectItem>
                       <SelectItem value="gerente">Gerente</SelectItem>
-                      <SelectItem value="supervisor">Supervisor</SelectItem>
                       <SelectItem value="operador">Operador</SelectItem>
                       <SelectItem value="visualizador">Visualizador</SelectItem>
                     </SelectContent>

@@ -21,7 +21,7 @@ interface WelcomeScreenProps {
 }
 
 export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
-  const { perfil, isAdmin, isManager, isSupervisor, isOperator, isClient, level, userRole } = usePermissions()
+  const { perfil, isAdmin, isManager, isOperator, isClient, level, userRole } = usePermissions()
 
   const getProfileInfo = () => {
     if (isAdmin()) {
@@ -54,23 +54,6 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
           "Financeiro e RH",
           "Aprovações e validações",
           "Clientes e obras"
-        ]
-      }
-    }
-    
-    if (isSupervisor()) {
-      return {
-        title: "Supervisores",
-        description: "Supervisão operacional (Nível 6)",
-        icon: Users,
-        color: "bg-green-500",
-        features: [
-          "Gestão de gruas e obras",
-          "Aprovação de ponto",
-          "Controle de estoque",
-          "Livro de gruas",
-          "Documentos e assinaturas",
-          "Relatórios operacionais"
         ]
       }
     }
@@ -136,7 +119,7 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ user }) => {
         { name: "RH", href: "/dashboard/rh", icon: Users },
         { name: "Relatórios", href: "/dashboard/relatorios", icon: FileText }
       )
-    } else if (isSupervisor()) {
+    } else if (isClient()) {
       modules.push(
         { name: "Dashboard", href: "/dashboard", icon: Building2 },
         { name: "Gruas", href: "/dashboard/gruas", icon: Building2 },

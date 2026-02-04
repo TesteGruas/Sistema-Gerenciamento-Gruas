@@ -140,13 +140,6 @@ export const usePermissions = () => {
   }
 
   /**
-   * Verifica se é Supervisor
-   */
-  const isSupervisor = (): boolean => {
-    return userRole === 'Supervisores'
-  }
-
-  /**
    * Verifica se é Operário
    */
   const isOperator = (): boolean => {
@@ -168,7 +161,7 @@ export const usePermissions = () => {
    * Verifica se tem acesso ao dashboard web
    */
   const canAccessDashboard = (): boolean => {
-    // Admin, Gestores e Supervisores têm acesso ao dashboard
+    // Admin, Gestores e Clientes têm acesso ao dashboard
     return hasMinLevel(6 as AccessLevel) || hasPermission('dashboard:visualizar')
   }
 
@@ -220,7 +213,7 @@ export const usePermissions = () => {
    * Nota: Esta verificação deve ser feita no backend também
    */
   const hasGlobalAccessToObras = (): boolean => {
-    // Admin, Gestores e Supervisores têm acesso global por padrão
+    // Admin, Gestores e Clientes têm acesso global por padrão
     if (hasMinLevel(6 as AccessLevel)) return true
     
     // Verificar se o cargo do usuário tem acesso_global_obras
@@ -333,7 +326,6 @@ export const usePermissions = () => {
     // Verificações por role
     isAdmin,
     isManager,
-    isSupervisor,
     isOperator,
     isClient,
 

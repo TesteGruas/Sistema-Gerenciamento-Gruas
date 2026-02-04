@@ -9,9 +9,9 @@
 // ========================================
 
 /**
- * Nomes dos 5 roles principais do sistema
+ * Nomes dos 4 roles principais do sistema
  */
-export type RoleName = 'Admin' | 'Gestores' | 'Supervisores' | 'Operários' | 'Clientes'
+export type RoleName = 'Admin' | 'Gestores' | 'Operários' | 'Clientes'
 
 /**
  * Formato de uma permissão: "modulo:acao"
@@ -186,47 +186,6 @@ export const ROLES: Role[] = [
   },
   {
     id: 3,
-    nome: 'Supervisores',
-    nivel: 6,
-    descricao: 'Supervisor - Mesmo acesso do Cliente: visualização de obras, documentos e assinaturas dos pontos dos funcionários',
-    permissoes: [
-      // Dashboard
-      'dashboard:visualizar',
-      
-      // Obras (visualizar próprias obras)
-      'obras:visualizar',
-      
-      // Gruas (visualizar gruas relacionadas às obras)
-      'gruas:visualizar',
-      
-      // Funcionários (visualizar funcionários da obra)
-      'funcionarios:visualizar',
-      
-      // Ponto Eletrônico (supervisão das horas dos funcionários atrelados às gruas)
-      'ponto:visualizar',
-      'ponto:aprovacoes',
-      'ponto_eletronico:visualizar',
-      'ponto_eletronico:aprovacoes',
-      
-      // Documentos (visualização e assinatura)
-      'documentos:visualizar',
-      'documentos:gerenciar',
-      'documentos:assinatura',
-      'assinatura_digital:visualizar',
-      'assinatura_digital:gerenciar',
-      
-      // Justificativas (aprovar justificativas dos funcionários)
-      'justificativas:visualizar',
-      'justificativas:aprovar',
-      'justificativas:gerenciar',
-      
-      // Notificações
-      'notificacoes:visualizar',
-      'notificacoes:gerenciar'
-    ]
-  },
-  {
-    id: 4,
     nome: 'Operários',
     nivel: 4,
     descricao: 'Funcionário - Todas as funções de ponto (se atrelado a uma obra), documentos, holerites e obras',
@@ -263,7 +222,7 @@ export const ROLES: Role[] = [
     ]
   },
   {
-    id: 5,
+    id: 4,
     nome: 'Clientes',
     nivel: 6,
     descricao: 'Cliente - Vê os funcionários da obra, pode ver documentos da obra e assinaturas dos pontos dos funcionários',
@@ -315,9 +274,8 @@ export const ROLES: Role[] = [
 export const ROLES_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Admin': ROLES[0].permissoes,
   'Gestores': ROLES[1].permissoes,
-  'Supervisores': ROLES[2].permissoes,
-  'Operários': ROLES[3].permissoes,
-  'Clientes': ROLES[4].permissoes
+  'Operários': ROLES[2].permissoes,
+  'Clientes': ROLES[3].permissoes
 }
 
 /**
@@ -326,7 +284,6 @@ export const ROLES_PERMISSIONS: Record<RoleName, Permission[]> = {
 export const ROLES_LEVELS: Record<RoleName, AccessLevel> = {
   'Admin': 10,
   'Gestores': 9,
-  'Supervisores': 6,
   'Clientes': 6,
   'Operários': 4
 }
@@ -388,20 +345,6 @@ export type ActionName = typeof ACTIONS[keyof typeof ACTIONS]
 export const PWA_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Admin': ['*'],
   'Gestores': ['*'],
-  'Supervisores': [
-    'ponto:visualizar',
-    'ponto:aprovacoes',
-    'ponto_eletronico:visualizar',
-    'ponto_eletronico:aprovacoes',
-    'documentos:visualizar',
-    'documentos:gerenciar',
-    'documentos:assinatura',
-    'gruas:visualizar',
-    'obras:visualizar',
-    'funcionarios:visualizar',
-    'notificacoes:visualizar',
-    'notificacoes:gerenciar'
-  ],
   'Clientes': [
     'ponto:visualizar',
     'ponto:aprovacoes',
@@ -456,13 +399,13 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   // Nomes novos (passam direto)
   'Admin': 'Admin',
   'Gestores': 'Gestores',
-  'Supervisores': 'Supervisores',
   'Operários': 'Operários',
   'Clientes': 'Clientes',
   // Nomes antigos → novos
   'Administrador': 'Admin',
   'Gerente': 'Gestores',
-  'Supervisor': 'Supervisores',
+  'Supervisor': 'Clientes', // Supervisor migrado para Cliente
+  'Supervisores': 'Clientes', // Supervisor migrado para Cliente
   'Operador': 'Operários',
   'Operario': 'Operários',
   'Cliente': 'Clientes',
@@ -472,8 +415,8 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   'administrador': 'Admin',
   'gestores': 'Gestores',
   'gerente': 'Gestores',
-  'supervisores': 'Supervisores',
-  'supervisor': 'Supervisores',
+  'supervisores': 'Clientes', // Supervisor migrado para Cliente
+  'supervisor': 'Clientes', // Supervisor migrado para Cliente
   'operarios': 'Operários',
   'operários': 'Operários',
   'operador': 'Operários',

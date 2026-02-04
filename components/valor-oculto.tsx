@@ -11,13 +11,13 @@ interface ValorOcultoProps {
 }
 
 /**
- * Componente que oculta valores monetários para Supervisores
- * Mostra uma tarja com ícone de bloqueio quando o usuário é Supervisor
+ * Componente que oculta valores monetários para Clientes
+ * Mostra uma tarja com ícone de bloqueio quando o usuário é Cliente
  */
 export function ValorOculto({ valor, className = "", children }: ValorOcultoProps) {
-  const { isSupervisor } = usePermissions()
+  const { isClient } = usePermissions()
   
-  if (isSupervisor()) {
+  if (isClient()) {
     return (
       <span className={`relative inline-flex items-center gap-1 ${className}`}>
         <span className="flex items-center gap-1 px-2 py-1 bg-gray-200 rounded text-gray-600 text-xs font-medium">
@@ -36,11 +36,9 @@ export function ValorOculto({ valor, className = "", children }: ValorOcultoProp
  * Componente para valores monetários formatados (R$)
  */
 export function ValorMonetarioOculto({ valor, className = "", formatar = true }: { valor: number | string, className?: string, formatar?: boolean }) {
-  const { isSupervisor } = usePermissions()
+  const { isClient } = usePermissions()
   
-  const isSupervisorUser = useMemo(() => isSupervisor(), [isSupervisor])
-  
-  if (isSupervisorUser) {
+  if (isClient()) {
     return (
       <span className={`relative inline-flex items-center gap-1 ${className}`}>
         <span className="flex items-center gap-1 px-2 py-1 bg-gray-200 rounded text-gray-600 text-xs font-medium">
@@ -74,9 +72,9 @@ export function ValorMonetarioOculto({ valor, className = "", formatar = true }:
  * Componente para valores formatados com função de formatação customizada
  */
 export function ValorFormatadoOculto({ valor, formatar }: { valor: number | string, formatar: (v: number) => string }) {
-  const { isSupervisor } = usePermissions()
+  const { isClient } = usePermissions()
   
-  if (isSupervisor()) {
+  if (isClient()) {
     return (
       <span className="relative inline-flex items-center gap-1">
         <span className="flex items-center gap-1 px-2 py-1 bg-gray-200 rounded text-gray-600 text-xs font-medium">

@@ -1,19 +1,18 @@
 /**
  * Configuração de Roles e Permissões do Sistema
  * 
- * Sistema simplificado com 5 roles principais e permissões hardcoded.
+ * Sistema simplificado com 4 roles principais e permissões hardcoded.
  * As permissões seguem o formato: "modulo:acao"
  * 
  * Níveis hierárquicos:
  * - Admin (10): Acesso total
  * - Gestores (9): Acesso gerencial completo
- * - Supervisores (6): Supervisão operacional - Gruas, Obras, Ponto, Documentos, Livro Grua, Estoque
  * - Clientes (6): Cliente - Visualização de obras, documentos e supervisão das horas dos funcionários
  * - Operários (4): Operação diária via APP
  */
 
 // ========================================
-// DEFINIÇÃO DOS 5 ROLES PRINCIPAIS
+// DEFINIÇÃO DOS 4 ROLES PRINCIPAIS
 // ========================================
 
 export const ROLES = {
@@ -119,50 +118,8 @@ export const ROLES = {
     ]
   },
   
-  SUPERVISORES: {
-    id: 3,
-    nome: 'Supervisores',
-    nivel: 6,
-    descricao: 'Supervisor - Mesmo acesso do Cliente: visualização de obras, documentos e assinaturas dos pontos dos funcionários',
-    permissoes: [
-      // Dashboard
-      'dashboard:visualizar',
-      
-      // Obras (visualizar próprias obras)
-      'obras:visualizar',
-      
-      // Gruas (visualizar gruas relacionadas às obras)
-      'gruas:visualizar',
-      
-      // Funcionários (visualizar funcionários da obra)
-      'funcionarios:visualizar',
-      
-      // Ponto Eletrônico (supervisão das horas dos funcionários atrelados às gruas)
-      'ponto:visualizar',
-      'ponto:aprovacoes',
-      'ponto_eletronico:visualizar',
-      'ponto_eletronico:aprovacoes',
-      
-      // Documentos (visualização e assinatura)
-      'documentos:visualizar',
-      'documentos:gerenciar',
-      'documentos:assinatura',
-      'assinatura_digital:visualizar',
-      'assinatura_digital:gerenciar',
-      
-      // Justificativas (aprovar justificativas dos funcionários)
-      'justificativas:visualizar',
-      'justificativas:aprovar',
-      'justificativas:gerenciar',
-      
-      // Notificações
-      'notificacoes:visualizar',
-      'notificacoes:gerenciar'
-    ]
-  },
-  
   OPERARIOS: {
-    id: 4,
+    id: 3,
     nome: 'Operários',
     nivel: 4,
     descricao: 'Funcionário - Todas as funções de ponto (se atrelado a uma obra), documentos, holerites e obras',
@@ -200,7 +157,7 @@ export const ROLES = {
   },
   
   CLIENTES: {
-    id: 5,
+    id: 4,
     nome: 'Clientes',
     nivel: 6,
     descricao: 'Cliente - Vê os funcionários da obra, pode ver documentos da obra e assinaturas dos pontos dos funcionários',
@@ -301,7 +258,6 @@ export const ROLES = {
 export const ROLES_PERMISSIONS = {
   'Admin': ROLES.ADMIN.permissoes,
   'Gestores': ROLES.GESTORES.permissoes,
-  'Supervisores': ROLES.SUPERVISORES.permissoes,
   'Operários': ROLES.OPERARIOS.permissoes,
   'Clientes': ROLES.CLIENTES.permissoes,
   'Financeiro': ROLES.FINANCEIRO.permissoes
@@ -315,7 +271,6 @@ export const ROLES_LEVELS = {
   'Admin': 10,
   'Gestores': 9,
   'Financeiro': 8,
-  'Supervisores': 6,
   'Clientes': 6,
   'Operários': 4
 }
@@ -328,7 +283,6 @@ export const ROLES_LIST = [
   ROLES.ADMIN,
   ROLES.GESTORES,
   ROLES.FINANCEIRO,
-  ROLES.SUPERVISORES,
   ROLES.CLIENTES,
   ROLES.OPERARIOS
 ]
@@ -412,20 +366,6 @@ export const ADMIN_ONLY_PERMISSIONS = [
 export const PWA_PERMISSIONS = {
   'Admin': ['*'],
   'Gestores': ['*'],
-  'Supervisores': [
-    'ponto:visualizar',
-    'ponto:aprovacoes',
-    'ponto_eletronico:visualizar',
-    'ponto_eletronico:aprovacoes',
-    'documentos:visualizar',
-    'documentos:gerenciar',
-    'documentos:assinatura',
-    'gruas:visualizar',
-    'obras:visualizar',
-    'funcionarios:visualizar',
-    'notificacoes:visualizar',
-    'notificacoes:gerenciar'
-  ],
   'Clientes': [
     'ponto:visualizar',
     'ponto:aprovacoes',
@@ -466,13 +406,13 @@ export const ROLE_NAME_MAPPING = {
   // Nomes novos (passam direto)
   'Admin': 'Admin',
   'Gestores': 'Gestores',
-  'Supervisores': 'Supervisores',
   'Operários': 'Operários',
   'Clientes': 'Clientes',
   // Nomes antigos → novos
   'Administrador': 'Admin',
   'Gerente': 'Gestores',
-  'Supervisor': 'Supervisores',
+  'Supervisor': 'Clientes', // Supervisor migrado para Cliente
+  'Supervisores': 'Clientes', // Supervisor migrado para Cliente
   'Operador': 'Operários',
   'Operario': 'Operários',
   'Cliente': 'Clientes',
@@ -480,8 +420,8 @@ export const ROLE_NAME_MAPPING = {
   // Lowercase variants
   'admin': 'Admin',
   'gestores': 'Gestores',
-  'supervisores': 'Supervisores',
-  'supervisor': 'Supervisores',
+  'supervisores': 'Clientes', // Supervisor migrado para Cliente
+  'supervisor': 'Clientes', // Supervisor migrado para Cliente
   'operarios': 'Operários',
   'operários': 'Operários',
   'clientes': 'Clientes',

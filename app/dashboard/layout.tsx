@@ -147,7 +147,6 @@ function DashboardLayoutContent({
     hasAllPermissions, 
     isAdmin: isAdminFromPermissions, 
     isManager,
-    isSupervisor,
     isOperator,
     isViewer,
     isClient,
@@ -159,6 +158,8 @@ function DashboardLayoutContent({
     canAccessClientes,
     canAccessRelatorios,
     canAccessUsuarios,
+    hasMinLevel,
+    level,
     perfil, 
     loading: permissionsLoading 
   } = usePermissions()
@@ -213,9 +214,9 @@ function DashboardLayoutContent({
         return canAccessObras()
       }
       
-      // Controle de Gruas - Admin, Gerente, Supervisor
+      // Controle de Gruas - Admin, Gerente, Clientes (nível 6+)
       if (item.href === '/dashboard/gruas') {
-        return isAdminFromPermissions() || isManager() || isSupervisor()
+        return isAdminFromPermissions() || isManager() || (level >= 6)
       }
       
       // Livros de Gruas - todos podem acessar
@@ -223,14 +224,14 @@ function DashboardLayoutContent({
         return true
       }
       
-      // Estoque - Admin, Gerente, Supervisor
+      // Estoque - Admin, Gerente, Clientes (nível 6+)
       if (item.href === '/dashboard/estoque') {
-        return isAdminFromPermissions() || isManager() || isSupervisor()
+        return isAdminFromPermissions() || isManager() || (level >= 6)
       }
       
-      // Complementos - Admin, Gerente, Supervisor
+      // Complementos - Admin, Gerente, Clientes (nível 6+)
       if (item.href === '/dashboard/complementos') {
-        return isAdminFromPermissions() || isManager() || isSupervisor()
+        return isAdminFromPermissions() || isManager() || (level >= 6)
       }
       
       // Orçamentos - apenas Admin, Gestor e Financeiro
@@ -302,7 +303,7 @@ function DashboardLayoutContent({
     canAccessObras,
     isAdminFromPermissions,
     isManager,
-    isSupervisor,
+    level,
     canAccessPontoEletronico,
     canAccessRH,
     canAccessFinanceiro,

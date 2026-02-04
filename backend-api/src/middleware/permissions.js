@@ -355,9 +355,11 @@ export function requireManager() {
 
 /**
  * Middleware para acesso de Supervisores ou superior
+ * @deprecated Sistema não utiliza mais supervisores. Use requireClient() ou requireLevel(6)
  * @returns {Function} - Middleware Express
  */
 export function requireSupervisor() {
+  // Retorna mesmo nível que Clientes (nível 6)
   return requireLevel(6)
 }
 

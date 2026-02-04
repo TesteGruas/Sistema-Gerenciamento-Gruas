@@ -22,8 +22,6 @@ export interface ObraBackend {
   data_fim?: string
   orcamento?: number
   observacoes?: string
-  responsavel_id?: number
-  responsavel_nome?: string
   // Campos obrigatórios (CNO, ART, Apólice)
   cno?: string
   cno_arquivo?: string
@@ -157,8 +155,6 @@ export interface ObraCreateData {
   orcamento?: number
   orcamento_id?: number // ID do orçamento aprovado vinculado à obra
   observacoes?: string
-  responsavel_id?: number
-  responsavel_nome?: string
   // Campos obrigatórios (CNO, ART, Apólice)
   cno?: string
   cno_arquivo?: string
@@ -272,8 +268,6 @@ export interface ObraUpdateData {
   data_fim?: string
   orcamento?: number
   observacoes?: string
-  responsavel_id?: number
-  responsavel_nome?: string
   // Campos obrigatórios (CNO, ART, Apólice)
   cno?: string
   cno_arquivo?: string
@@ -489,13 +483,6 @@ export const obrasApi = {
             is_supervisor_value: item.is_supervisor === true
           })
           
-          // Converter is_supervisor para boolean de forma robusta
-          const isSupervisorValue = item.is_supervisor === true || 
-                                   item.is_supervisor === 'true' || 
-                                   item.is_supervisor === 1 ||
-                                   item.is_supervisor === '1' ||
-                                   (typeof item.is_supervisor === 'string' && item.is_supervisor.toLowerCase() === 'true')
-          
           return {
             id: item.id.toString(),
             userId: item.funcionario_id.toString(),
@@ -506,7 +493,7 @@ export const obrasApi = {
             dataInicio: item.data_inicio,
             dataFim: item.data_fim,
             status: item.status,
-            isSupervisor: Boolean(isSupervisorValue),
+            isSupervisor: false, // Removido: sistema não utiliza mais supervisor
             horasTrabalhadas: item.horas_trabalhadas,
             valorHora: item.valor_hora,
             totalReceber: item.total_receber,
@@ -618,54 +605,7 @@ export const obrasApi = {
     })
   },
 
-  // Listar supervisores terceirizados existentes
-  async listarSupervisores(search?: string): Promise<{ success: boolean; data: any[] }> {
-    const url = buildApiUrl(`obras/supervisores${search ? `?search=${encodeURIComponent(search)}` : ''}`)
-    return apiRequest(url)
-  },
-
-  // Adicionar supervisor terceirizado à obra
-  async adicionarSupervisorTerceirizado(obraId: number, data: {
-    supervisor_id?: number
-    nome?: string
-    email?: string
-    telefone?: string
-    observacoes?: string
-    data_inicio?: string
-  }): Promise<{ 
-    success: boolean
-    data: any
-    message?: string
-  }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores`)
-    return apiRequest(url, {
-      method: 'POST',
-      body: JSON.stringify(data),
-    })
-  },
-
-  // Obter dados completos de um supervisor terceirizado
-  async obterSupervisor(obraId: number, supervisorId: number): Promise<{ success: boolean; data: any; error?: string }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores/${supervisorId}`)
-    return apiRequest(url)
-  },
-
-  // Atualizar supervisor terceirizado
-  async atualizarSupervisor(obraId: number, supervisorId: number, data: {
-    nome?: string;
-    email?: string;
-    telefone?: string;
-    observacoes?: string;
-    data_inicio?: string;
-    data_fim?: string;
-    reenviar_senha?: boolean;
-  }): Promise<{ success: boolean; data: any; message?: string }> {
-    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/supervisores/${supervisorId}`)
-    return apiRequest(url, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    })
-  }
+  // Funções de supervisores removidas - sistema não utiliza mais supervisores terceirizados
 }
 
 // Funções utilitárias para converter dados entre frontend e backend
@@ -725,8 +665,6 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     startDate: obraBackend.data_inicio || obraBackend.created_at.split('T')[0],
     endDate: obraBackend.data_fim,
     status: obraBackend.status,
-    responsavelId: obraBackend.responsavel_id?.toString() || null,
-    responsavelName: obraBackend.responsavel_nome || null,
     clienteId: obraBackend.cliente_id.toString(),
     clienteName: obraBackend.clientes?.nome || null,
     cliente: obraBackend.clientes ? {
@@ -912,8 +850,6 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     data_fim: obraFrontend.endDate,
     orcamento: obraFrontend.budget ? parseFloat(obraFrontend.budget) : undefined,
     observacoes: obraFrontend.observations,
-    responsavel_id: obraFrontend.responsavelId ? parseInt(obraFrontend.responsavelId) : undefined,
-    responsavel_nome: obraFrontend.responsavelName,
     // Campos obrigatórios (CNO, ART, Apólice)
     cno: obraFrontend.cno,
     art_numero: obraFrontend.art_numero,

@@ -10,6 +10,7 @@ export interface ResponsavelTecnicoBackend {
   crea?: string
   email?: string
   telefone?: string
+  tipo?: 'obra' | 'irbana_equipamentos' | 'irbana_manutencoes' | 'irbana_montagem_operacao' | 'adicional'
   created_at: string
   updated_at: string
 }
@@ -22,7 +23,7 @@ export interface ResponsavelTecnicoCreateData {
   crea_empresa?: string // CREA da empresa (para IRBANA: SP 2494244)
   email?: string
   telefone?: string
-  tipo?: 'obra' | 'irbana_equipamentos' | 'irbana_manutencoes' | 'irbana_montagem_operacao' // Tipo do responsável técnico
+  tipo?: 'obra' | 'irbana_equipamentos' | 'irbana_manutencoes' | 'irbana_montagem_operacao' | 'adicional' // Tipo do responsável técnico
 }
 
 export interface ResponsavelTecnicoResponse {
@@ -65,6 +66,24 @@ export const responsavelTecnicoApi = {
       },
       body: JSON.stringify(data),
     })
+  },
+
+  // Listar todos os responsáveis técnicos de uma obra
+  async listarPorObra(obraId: number): Promise<{ success: boolean; data: ResponsavelTecnicoBackend[] }> {
+    try {
+      const url = buildApiUrl(`obras/${obraId}/responsaveis-tecnicos`)
+      const response = await apiRequest(url)
+      return {
+        success: true,
+        data: Array.isArray(response.data) ? response.data : []
+      }
+    } catch (error: any) {
+      // Se o endpoint não existir, retornar array vazio
+      if (error.message?.includes('404') || error.message?.includes('Not Found')) {
+        return { success: true, data: [] }
+      }
+      throw error
+    }
   },
 
   // Buscar responsável técnico por CPF/CNPJ

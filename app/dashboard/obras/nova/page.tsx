@@ -196,9 +196,6 @@ export default function NovaObraPage() {
     contato_obra: '',
     telefone_obra: '',
     email_obra: '',
-    // Dados do responsável
-    responsavelId: '',
-    responsavelName: '',
     // Lista de funcionários
     funcionarios: [] as Array<{
       id: string
@@ -212,7 +209,6 @@ export default function NovaObraPage() {
   const [clienteSelecionado, setClienteSelecionado] = useState<any>(null)
   const [gruasSelecionadas, setGruasSelecionadas] = useState<any[]>([])
   const [funcionariosSelecionados, setFuncionariosSelecionados] = useState<any[]>([])
-  const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
   
   // Estados para novos campos obrigatórios
   const [cno, setCno] = useState<string>('')
@@ -250,6 +246,9 @@ export default function NovaObraPage() {
     email: '',
     telefone: ''
   })
+  
+  // Estado para responsáveis técnicos adicionais dinâmicos
+  const [responsaveisAdicionais, setResponsaveisAdicionais] = useState<Array<ResponsavelTecnicoData & { tipo?: string; area?: string }>>([])
   
   const [sinaleiros, setSinaleiros] = useState<any[]>([])
   
@@ -539,7 +538,6 @@ export default function NovaObraPage() {
       userId: funcionario.id,
       role: funcionario.role,
       name: funcionario.name,
-      isSupervisor: false,
       gruaId: '' // Removido - usando array de gruas
     }
     
@@ -553,19 +551,7 @@ export default function NovaObraPage() {
     })
   }
 
-  // Função para alternar status de supervisor
-  const handleToggleSupervisor = (funcionarioId: string) => {
-    const funcionariosAtualizados = funcionariosSelecionados.map(f => 
-      f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
-    )
-    setFuncionariosSelecionados(funcionariosAtualizados)
-    setObraFormData({
-      ...obraFormData,
-      funcionarios: obraFormData.funcionarios.map(f => 
-        f.id === funcionarioId ? { ...f, isSupervisor: !f.isSupervisor } : f
-      )
-    })
-  }
+  // Função removida: handleToggleSupervisor - sistema não utiliza mais supervisor
 
   // Função para remover funcionário selecionado
   const removeFuncionarioSelecionado = (id: string) => {
@@ -579,27 +565,6 @@ export default function NovaObraPage() {
     }
   }
 
-  // Função para lidar com seleção de responsável
-  const handleResponsavelSelect = (responsavel: any) => {
-    setResponsavelSelecionado(responsavel)
-    if (responsavel) {
-      setObraFormData({ 
-        ...obraFormData, 
-        responsavelId: responsavel.id,
-        responsavelName: responsavel.name
-      })
-    }
-  }
-
-  // Função para remover responsável selecionado
-  const handleRemoveResponsavel = () => {
-    setResponsavelSelecionado(null)
-    setObraFormData({ 
-      ...obraFormData, 
-      responsavelId: '',
-      responsavelName: ''
-    })
-  }
 
   // Função para criar obra
   const handleCreateObra = async (e: React.FormEvent) => {
@@ -764,9 +729,6 @@ export default function NovaObraPage() {
         })),
         // Dados de montagem do equipamento (geral)
         dados_montagem_equipamento: dadosMontagemEquipamento,
-        // Dados do responsável
-        responsavelId: obraFormData.responsavelId,
-        responsavelName: obraFormData.responsavelName,
         // Lista de funcionários
         funcionarios: funcionariosSelecionados,
         // Valores - converter para formato do backend
@@ -881,8 +843,6 @@ export default function NovaObraPage() {
       
       console.log('\n👨‍💼 6. RESPONSÁVEL TÉCNICO:')
       console.log(JSON.stringify({
-        responsavelId: obraData.responsavelId,
-        responsavelName: obraData.responsavelName,
         responsavel_tecnico: obraData.responsavel_tecnico ? {
           nome: obraData.responsavel_tecnico.nome,
           cpf_cnpj: obraData.responsavel_tecnico.cpf_cnpj,
@@ -1088,6 +1048,75 @@ export default function NovaObraPage() {
       } else {
         console.log('⚠️ Nenhum responsável técnico no estado')
       }
+
+      // 5.1. Salvar responsáveis técnicos IRBANA (equipamentos, manutenções, montagem e operação)
+      const responsaveisIrbana = [
+        { data: responsavelEquipamentos, tipo: 'irbana_equipamentos' },
+        { data: responsavelManutencoes, tipo: 'irbana_manutencoes' },
+        { data: responsavelMontagemOperacao, tipo: 'irbana_montagem_operacao' }
+      ]
+
+      for (const { data, tipo } of responsaveisIrbana) {
+        if (data && data.nome) {
+          try {
+            const payload: any = {
+              nome: data.nome,
+              tipo: tipo
+            }
+            if (data.cpf_cnpj) payload.cpf_cnpj = data.cpf_cnpj
+            if (data.crea) payload.crea = data.crea
+            if (data.email) payload.email = data.email
+            if (data.telefone) payload.telefone = data.telefone
+            if (tipo === 'irbana_equipamentos' || tipo === 'irbana_manutencoes') {
+              payload.crea_empresa = 'SP 2494244' // CREA da empresa IRBANA
+            }
+
+            console.log(`📤 Enviando responsável técnico ${tipo}:`, payload)
+            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
+            console.log(`✅ Responsável técnico ${tipo} salvo:`, response)
+          } catch (error) {
+            console.error(`❌ Erro ao salvar responsável técnico ${tipo}:`, error)
+            toast({
+              title: "Aviso",
+              description: `Obra criada, mas houve erro ao salvar o responsável técnico ${tipo}. Você pode editá-lo depois.`,
+              variant: "destructive"
+            })
+          }
+        }
+      }
+
+      // 5.2. Salvar responsáveis técnicos adicionais dinâmicos
+      if (responsaveisAdicionais && responsaveisAdicionais.length > 0) {
+        const responsaveisValidos = responsaveisAdicionais.filter(rt => rt.nome && rt.cpf_cnpj)
+        
+        for (const responsavel of responsaveisValidos) {
+          try {
+            const payload: any = {
+              nome: responsavel.nome,
+              cpf_cnpj: responsavel.cpf_cnpj,
+              tipo: 'adicional' // Tipo genérico para responsáveis adicionais
+            }
+            if (responsavel.crea) payload.crea = responsavel.crea
+            if (responsavel.email) payload.email = responsavel.email
+            if (responsavel.telefone) payload.telefone = responsavel.telefone
+            // Incluir área no nome se fornecida (formato: "Nome - Área")
+            if (responsavel.area) {
+              payload.nome = `${responsavel.nome} - ${responsavel.area}`
+            }
+
+            console.log(`📤 Enviando responsável técnico adicional:`, payload)
+            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
+            console.log(`✅ Responsável técnico adicional salvo:`, response)
+          } catch (error) {
+            console.error(`❌ Erro ao salvar responsável técnico adicional:`, error)
+            toast({
+              title: "Aviso",
+              description: `Obra criada, mas houve erro ao salvar um responsável técnico adicional. Você pode editá-lo depois.`,
+              variant: "destructive"
+            })
+          }
+        }
+      }
       
       // 6. Salvar sinaleiros (apenas se houver dados válidos)
       // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
@@ -1284,8 +1313,6 @@ export default function NovaObraPage() {
       contato_obra: '',
       telefone_obra: '',
       email_obra: '',
-      responsavelId: '',
-      responsavelName: '',
       funcionarios: []
     })
     setCno('')
@@ -1299,6 +1326,7 @@ export default function NovaObraPage() {
     setPlanoCargaArquivo(null)
     setAterramentoArquivo(null)
     setResponsavelTecnico(null)
+    setResponsaveisAdicionais([])
     setResponsavelEquipamentos({
       nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
       cpf_cnpj: '',
@@ -1323,7 +1351,6 @@ export default function NovaObraPage() {
     setSinaleiros([])
     setGruasSelecionadas([])
     setFuncionariosSelecionados([])
-    setResponsavelSelecionado(null)
     setClienteSelecionado(null)
     setCustosMensais([])
     setOrcamentoAprovado(null)
@@ -1361,11 +1388,9 @@ export default function NovaObraPage() {
       observations: 'Obra de teste para validação do sistema. Todos os campos foram preenchidos automaticamente.',
       // Campos adicionais
       cep: '01310-100',
-      contato_obra: 'João Silva',
-      telefone_obra: '(11) 98765-4321',
-      email_obra: 'joao.silva@construtora.com.br',
-      responsavelId: '',
-      responsavelName: '',
+      contato_obra: '',
+      telefone_obra: '',
+      email_obra: '',
       funcionarios: []
     })
 
@@ -1384,27 +1409,8 @@ export default function NovaObraPage() {
       telefone: '(11) 98765-4321'
     })
 
-    // Sinaleiros
-    setSinaleiros([
-      {
-        id: undefined,
-        nome: 'Pedro Oliveira',
-        rg_cpf: '98765432100',
-        telefone: '(11) 91234-5678',
-        email: 'pedro.oliveira@empresa.com.br',
-        tipo: 'principal',
-        tipo_vinculo: 'interno'
-      },
-      {
-        id: undefined,
-        nome: 'Maria Santos',
-        rg_cpf: '11122233344',
-        telefone: '(11) 92345-6789',
-        email: 'maria.santos@cliente.com.br',
-        tipo: 'reserva',
-        tipo_vinculo: 'cliente'
-      }
-    ])
+    // Sinaleiros - removidos dados mockados
+    setSinaleiros([])
 
     // Grua de teste (simulada)
     const gruaTeste = {
@@ -1469,8 +1475,6 @@ export default function NovaObraPage() {
     // Responsável pela obra
     setObraFormData(prev => ({
       ...prev,
-      responsavelId: 'resp-teste-001',
-      responsavelName: 'Eng. Maria Costa'
     }))
 
     // Valores de teste
@@ -1533,6 +1537,7 @@ export default function NovaObraPage() {
     })
 
     // Responsáveis Técnicos IRBANA
+    setResponsaveisAdicionais([])
     setResponsavelEquipamentos({
       nome: 'ALEX MARCELO DA SILVA NASCIMENTO',
       cpf_cnpj: '12345678901',
@@ -1773,12 +1778,12 @@ export default function NovaObraPage() {
       {/* Formulário */}
       <form onSubmit={handleCreateObra} className="">
         <Tabs defaultValue="obra" className="w-full">
-          <TabsList className="grid w-full grid-cols-6">
-            <TabsTrigger value="obra">Dados da Obra</TabsTrigger>
-            <TabsTrigger value="documentos">Documentos</TabsTrigger>
-            <TabsTrigger value="responsavel-tecnico">Responsável Técnico</TabsTrigger>
-            <TabsTrigger value="grua">Grua</TabsTrigger>
-            <TabsTrigger value="funcionarios">Funcionários</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-5 gap-1">
+            <TabsTrigger value="obra" className="px-4">Dados da Obra</TabsTrigger>
+            <TabsTrigger value="documentos" className="px-4">Documentos</TabsTrigger>
+            <TabsTrigger value="responsavel-tecnico" className="px-4">Responsável Técnico</TabsTrigger>
+            <TabsTrigger value="grua" className="px-4">Grua</TabsTrigger>
+            <TabsTrigger value="funcionarios" className="px-4">Funcionários</TabsTrigger>
           </TabsList>
 
           {/* Aba: Dados da Obra */}
@@ -2298,6 +2303,138 @@ export default function NovaObraPage() {
                       />
                     </div>
                   </div>
+                </div>
+
+                {/* Responsáveis Técnicos Adicionais Dinâmicos */}
+                <div className="space-y-4 mt-6">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-semibold text-gray-900">Responsáveis Técnicos Adicionais</h3>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setResponsaveisAdicionais([
+                          ...responsaveisAdicionais,
+                          {
+                            nome: '',
+                            cpf_cnpj: '',
+                            crea: '',
+                            email: '',
+                            telefone: '',
+                            area: '',
+                            tipo: 'adicional'
+                          }
+                        ])
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar Responsável
+                    </Button>
+                  </div>
+
+                  {responsaveisAdicionais.map((responsavel, index) => (
+                    <div key={index} className="space-y-4 p-4 border rounded-lg bg-gray-50/50">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-900">
+                          Responsável Técnico #{index + 1}
+                        </h4>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setResponsaveisAdicionais(responsaveisAdicionais.filter((_, i) => i !== index))
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Área de Responsabilidade</Label>
+                          <Input
+                            value={responsavel.area || ''}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].area = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Ex: Segurança, Qualidade, etc."
+                          />
+                        </div>
+                        <div>
+                          <Label>Nome do Responsável Técnico <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={responsavel.nome}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].nome = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Nome completo"
+                          />
+                        </div>
+                        <div>
+                          <Label>CPF/CNPJ <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={responsavel.cpf_cnpj}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].cpf_cnpj = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                          />
+                        </div>
+                        <div>
+                          <Label>N° do CREA</Label>
+                          <Input
+                            value={responsavel.crea || ''}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].crea = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Ex: 5071184591"
+                          />
+                        </div>
+                        <div>
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            value={responsavel.email}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].email = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="email@example.com"
+                          />
+                        </div>
+                        <div>
+                          <Label>Telefone</Label>
+                          <Input
+                            value={responsavel.telefone}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].telefone = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="(11) 98765-4321"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {responsaveisAdicionais.length === 0 && (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      Nenhum responsável técnico adicional adicionado. Clique em "Adicionar Responsável" para adicionar.
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -3008,42 +3145,19 @@ export default function NovaObraPage() {
                   <div className="space-y-3">
                     <h4 className="font-medium text-sm">Funcionários Selecionados ({funcionariosSelecionados.length})</h4>
                     {funcionariosSelecionados.map((funcionario) => (
-                      <div key={funcionario.id} className={`flex gap-2 p-3 border rounded-lg ${funcionario.isSupervisor ? 'bg-blue-50 border-blue-200' : 'bg-green-50'}`}>
+                      <div key={funcionario.id} className="flex gap-2 p-3 border rounded-lg bg-green-50">
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
-                            {funcionario.isSupervisor ? (
-                              <Shield className="w-4 h-4 text-blue-600" />
-                            ) : (
-                              <User className="w-4 h-4 text-green-600" />
-                            )}
+                            <User className="w-4 h-4 text-green-600" />
                             <div>
                               <div className="flex items-center gap-2">
-                                <p className={`font-medium ${funcionario.isSupervisor ? 'text-blue-900' : 'text-green-900'}`}>{funcionario.name}</p>
-                                {funcionario.isSupervisor && (
-                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300 text-xs">
-                                    Supervisor
-                                  </Badge>
-                                )}
+                                <p className="font-medium text-green-900">{funcionario.name}</p>
                               </div>
-                              <p className={`text-sm ${funcionario.isSupervisor ? 'text-blue-700' : 'text-green-700'}`}>{funcionario.role}</p>
+                              <p className="text-sm text-green-700">{funcionario.role}</p>
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-2">
-                            <Checkbox
-                              id={`supervisor-${funcionario.id}`}
-                              checked={funcionario.isSupervisor === true}
-                              onCheckedChange={() => handleToggleSupervisor(funcionario.id)}
-                            />
-                            <Label 
-                              htmlFor={`supervisor-${funcionario.id}`}
-                              className="text-sm cursor-pointer flex items-center gap-1"
-                            >
-                              <Shield className="w-3 h-3" />
-                              Supervisor
-                            </Label>
-                          </div>
                           <Button
                             type="button"
                             variant="outline"
@@ -3059,41 +3173,6 @@ export default function NovaObraPage() {
                   </div>
                 )}
 
-                <div>
-                  <Label htmlFor="responsavelSearch">Responsável pela Obra</Label>
-                  <FuncionarioSearch
-                    onFuncionarioSelect={handleResponsavelSelect}
-                    placeholder="Buscar responsável por nome ou cargo..."
-                    className="mt-1"
-                    onlyActive={true}
-                  />
-                  {responsavelSelecionado && (
-                    <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-blue-600" />
-                          <div>
-                            <p className="font-medium text-blue-900">{responsavelSelecionado.name}</p>
-                            <p className="text-sm text-blue-700">{responsavelSelecionado.role}</p>
-                          </div>
-                        </div>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={handleRemoveResponsavel}
-                          className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                          title="Remover responsável"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <p className="text-xs text-gray-500 mt-1">
-                    Digite o nome ou cargo do responsável para buscar
-                  </p>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>

@@ -163,7 +163,8 @@ export const usePWAPermissions = () => {
 
   const isAdmin = () => userRole === 'Admin'
   const isManager = () => userRole === 'Gestores'
-  const isSupervisor = () => userRole === 'Supervisores'
+  // Função removida: isSupervisor - sistema não utiliza mais supervisor
+  const isSupervisor = () => false
   const isClient = () => userRole === 'Clientes'
   const isOperator = () => userRole === 'Operários'
 

@@ -46,7 +46,8 @@ import {
   Calculator,
   XCircle,
   Check,
-  Loader2
+  Loader2,
+  Settings
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -81,9 +82,10 @@ import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils } from "@/lib/medicoes-utils"
 import { getOrcamentos } from "@/lib/api-orcamentos"
 import FuncionarioSearch from "@/components/funcionario-search"
-import { SupervisorSearch } from "@/components/supervisor-search"
 import { sinaleirosApi, type SinaleiroBackend, type DocumentoSinaleiroBackend } from "@/lib/api-sinaleiros"
 import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
+import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
+import { ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
 
 function ObraDetailsPageContent() {
 
@@ -91,6 +93,37 @@ function ObraDetailsPageContent() {
   const params = useParams()
   const router = useRouter()
   const obraId = params.id as string
+
+  // Função para formatar data no formato YYYY-MM-DD para DD/MM/YYYY sem problemas de timezone
+  const formatarDataSemTimezone = (dataString: string | null | undefined): string => {
+    if (!dataString) return 'Não informado'
+    
+    // Se já estiver no formato DD/MM/YYYY, retornar como está
+    if (dataString.includes('/')) {
+      return dataString
+    }
+    
+    // Se estiver no formato YYYY-MM-DD, formatar diretamente sem usar Date
+    if (dataString.match(/^\d{4}-\d{2}-\d{2}$/)) {
+      const [ano, mes, dia] = dataString.split('-')
+      return `${dia}/${mes}/${ano}`
+    }
+    
+    // Caso contrário, tentar usar Date com UTC para evitar problemas de timezone
+    try {
+      const date = new Date(dataString + 'T00:00:00')
+      if (!isNaN(date.getTime())) {
+        const dia = String(date.getUTCDate()).padStart(2, '0')
+        const mes = String(date.getUTCMonth() + 1).padStart(2, '0')
+        const ano = date.getUTCFullYear()
+        return `${dia}/${mes}/${ano}`
+      }
+    } catch {
+      return dataString
+    }
+    
+    return dataString
+  }
   
   // Usar store de obra
   const {
@@ -152,6 +185,11 @@ function ObraDetailsPageContent() {
   })
   const [salvandoSinaleiro, setSalvandoSinaleiro] = useState(false)
   
+  // Estado para responsáveis técnicos adicionais dinâmicos
+  const [responsaveisAdicionais, setResponsaveisAdicionais] = useState<Array<ResponsavelTecnicoData & { tipo?: string; area?: string }>>([])
+  const [responsaveisTecnicosExistentes, setResponsaveisTecnicosExistentes] = useState<any[]>([])
+  const [loadingResponsaveisTecnicos, setLoadingResponsaveisTecnicos] = useState(false)
+  
   // Estados para devolução de componentes
   const [componentesDevolucao, setComponentesDevolucao] = useState<Array<ComponenteGrua & { grua_nome?: string }>>([])
   const [loadingComponentesDevolucao, setLoadingComponentesDevolucao] = useState(false)
@@ -177,8 +215,6 @@ function ObraDetailsPageContent() {
   const [artArquivo, setArtArquivo] = useState<File | null>(null)
   const [apoliceArquivo, setApoliceArquivo] = useState<File | null>(null)
   const [cnoArquivo, setCnoArquivo] = useState<File | null>(null)
-  const [responsavelSelecionado, setResponsavelSelecionado] = useState<any>(null)
-  
   // Estado para diálogo de criação manual de medição
   const [isCriarMedicaoOpen, setIsCriarMedicaoOpen] = useState(false)
   const [medicaoFormData, setMedicaoFormData] = useState({
@@ -193,16 +229,6 @@ function ObraDetailsPageContent() {
   const iniciarEdicao = () => {
     if (!obra) return
     
-    // Inicializar responsável selecionado se existir
-    if (obra?.responsavelId && obra?.responsavelName) {
-      setResponsavelSelecionado({
-        id: parseInt(obra.responsavelId),
-        name: obra.responsavelName
-      })
-    } else {
-      setResponsavelSelecionado(null)
-    }
-    
     setEditingData({
       nome: obra.name || '',
       descricao: obra.description || '',
@@ -215,8 +241,6 @@ function ObraDetailsPageContent() {
       estado: obra?.estado || '',
       cep: obra?.cep || '',
       tipo: obra?.tipo || '',
-      responsavel_id: obra?.responsavelId ? parseInt(obra.responsavelId) : null,
-      responsavel_nome: obra?.responsavelName || '',
       cno: obra?.cno || '',
       art_numero: obra?.art_numero || '',
       apolice_numero: obra?.apolice_numero || '',
@@ -225,31 +249,12 @@ function ObraDetailsPageContent() {
     setIsEditing(true)
   }
   
-  // Função para lidar com seleção de responsável
-  const handleResponsavelSelect = (responsavel: any) => {
-    setResponsavelSelecionado(responsavel)
-    if (responsavel) {
-      setEditingData({ 
-        ...editingData, 
-        responsavel_id: responsavel.id,
-        responsavel_nome: responsavel.name
-      })
-    } else {
-      setEditingData({ 
-        ...editingData, 
-        responsavel_id: null,
-        responsavel_nome: ''
-      })
-    }
-  }
-  
   // Função para cancelar edição
   const cancelarEdicao = () => {
     setEditingData({})
     setArtArquivo(null)
     setApoliceArquivo(null)
     setCnoArquivo(null)
-    setResponsavelSelecionado(null)
     setIsEditing(false)
   }
   
@@ -351,8 +356,6 @@ function ObraDetailsPageContent() {
         data_fim: editingData.data_fim || null,
         orcamento: editingData.orcamento ? parseFloat(editingData.orcamento.toString()) : null,
         cep: editingData.cep || null,
-        responsavel_id: editingData.responsavel_id || null,
-        responsavel_nome: editingData.responsavel_nome || null,
         cno: editingData.cno || null,
         art_numero: editingData.art_numero || null,
         apolice_numero: editingData.apolice_numero || null,
@@ -390,6 +393,38 @@ function ObraDetailsPageContent() {
         
         // Recarregar obra atualizada
         await carregarObra(obraId)
+        
+        // Salvar responsáveis técnicos adicionais dinâmicos
+        if (responsaveisAdicionais && responsaveisAdicionais.length > 0) {
+          const responsaveisValidos = responsaveisAdicionais.filter(rt => rt.nome && rt.cpf_cnpj)
+          
+          for (const responsavel of responsaveisValidos) {
+            try {
+              const payload: any = {
+                nome: responsavel.nome,
+                cpf_cnpj: responsavel.cpf_cnpj,
+                tipo: 'adicional'
+              }
+              if (responsavel.crea) payload.crea = responsavel.crea
+              if (responsavel.email) payload.email = responsavel.email
+              if (responsavel.telefone) payload.telefone = responsavel.telefone
+              // Incluir área no nome se fornecida (formato: "Nome - Área")
+              if (responsavel.area) {
+                payload.nome = `${responsavel.nome} - ${responsavel.area}`
+              }
+
+              await responsavelTecnicoApi.criarOuAtualizar(parseInt(obraId), payload)
+            } catch (error) {
+              console.error('Erro ao salvar responsável técnico adicional:', error)
+              toast({
+                title: "Aviso",
+                description: `Obra atualizada, mas houve erro ao salvar um responsável técnico adicional. Você pode tentar novamente depois.`,
+                variant: "default"
+              })
+            }
+          }
+        }
+        
         setIsEditing(false)
         setEditingData({})
         setArtArquivo(null)
@@ -409,6 +444,58 @@ function ObraDetailsPageContent() {
     }
   }
   
+  // Função para carregar todos os responsáveis técnicos
+  const carregarTodosResponsaveisTecnicos = async () => {
+    if (!obraId) return
+    
+    setLoadingResponsaveisTecnicos(true)
+    try {
+      const response = await responsavelTecnicoApi.listarPorObra(parseInt(obraId))
+      
+      if (response.success && response.data) {
+        // Separar responsáveis adicionais dos outros
+        const todosResponsaveis = response.data || []
+        
+        // Filtrar apenas responsáveis do tipo 'adicional' para edição
+        const responsaveisAdicionaisData = todosResponsaveis
+          .filter((rt: any) => rt.tipo === 'adicional')
+          .map((rt: any) => {
+            // Separar área do nome se estiver no formato "Nome - Área"
+            let nome = rt.nome || ''
+            let area = ''
+            if (nome.includes(' - ')) {
+              const partes = nome.split(' - ')
+              nome = partes[0]
+              area = partes.slice(1).join(' - ')
+            }
+            
+            return {
+              nome: nome,
+              cpf_cnpj: rt.cpf_cnpj || '',
+              crea: rt.crea || '',
+              email: rt.email || '',
+              telefone: rt.telefone || '',
+              area: area,
+              tipo: 'adicional'
+            }
+          })
+        
+        setResponsaveisAdicionais(responsaveisAdicionaisData)
+        setResponsaveisTecnicosExistentes(todosResponsaveis)
+      } else {
+        setResponsaveisTecnicosExistentes([])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar responsáveis técnicos:', error)
+      setResponsaveisTecnicosExistentes([])
+    } finally {
+      setLoadingResponsaveisTecnicos(false)
+    }
+  }
+
+  // Função para carregar responsáveis técnicos adicionais (mantida para compatibilidade)
+  const carregarResponsaveisAdicionais = carregarTodosResponsaveisTecnicos
+
   // Função para carregar sinaleiros da obra
   const carregarSinaleiros = async () => {
     if (!obraId) return
@@ -832,12 +919,14 @@ function ObraDetailsPageContent() {
   const carregarDocumentosAdicionaisEquipamento = async () => {
     if (!obraId) {
       console.log('⚠️ [Documentos Adicionais] obraId não encontrado')
+      setLoadingDocumentosAdicionais(false)
       return
     }
     
-    // Evitar carregamento duplicado
-    if (documentosAdicionaisCarregadosRef.current) {
-      console.log('⚠️ [Documentos Adicionais] Já carregado, pulando...')
+    // Evitar carregamento duplicado apenas se já foi carregado para este obraId
+    if (documentosAdicionaisCarregadosRef.current && obraCarregadaRef.current === obraId) {
+      console.log('⚠️ [Documentos Adicionais] Já carregado para esta obra, pulando...')
+      setLoadingDocumentosAdicionais(false)
       return
     }
     
@@ -846,46 +935,72 @@ function ObraDetailsPageContent() {
     setLoadingDocumentosAdicionais(true)
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-      
       const categorias = ['manual_tecnico', 'termo_entrega_tecnica', 'plano_carga', 'aterramento']
       const documentos: any = {}
       
-      await Promise.all(
+      // Função auxiliar para fazer requisição com timeout
+      const fetchWithTimeout = async (endpoint: string, timeoutMs = 10000): Promise<Response> => {
+        const timeoutPromise = new Promise<Response>((_, reject) => {
+          setTimeout(() => reject(new Error(`Timeout após ${timeoutMs}ms`)), timeoutMs)
+        })
+        
+        // Usar buildApiUrl para construir a URL corretamente
+        const url = buildApiUrl(endpoint)
+        console.log(`📡 [Documentos Adicionais] URL construída:`, url)
+        
+        return Promise.race([
+          fetchWithAuth(url, {
+            headers: {
+              'Content-Type': 'application/json'
+            }
+          }),
+          timeoutPromise
+        ])
+      }
+      
+      // Usar Promise.allSettled para garantir que todas as requisições sejam processadas
+      const resultados = await Promise.allSettled(
         categorias.map(async (categoria) => {
           try {
-            const url = `${apiUrl}/api/arquivos/obra/${obraId}?categoria=${categoria}`
-            console.log(`📡 [Documentos Adicionais] Buscando ${categoria} em:`, url)
+            const endpoint = `arquivos/obra/${obraId}?categoria=${categoria}`
+            console.log(`📡 [Documentos Adicionais] Buscando ${categoria} no endpoint:`, endpoint)
             
-            const response = await fetch(url, {
-              headers: {
-                'Authorization': `Bearer ${token}`
-              }
-            })
+            const response = await fetchWithTimeout(endpoint, 10000) // Timeout de 10 segundos
             
             if (response.ok) {
               const data = await response.json()
               console.log(`✅ [Documentos Adicionais] Resposta para ${categoria}:`, data)
-              if (data.success && data.data && data.data.length > 0) {
-                documentos[categoria] = data.data[0] // Pegar o primeiro arquivo de cada categoria
-                console.log(`✅ [Documentos Adicionais] ${categoria} encontrado:`, documentos[categoria])
+              if (data.success && data.data && Array.isArray(data.data) && data.data.length > 0) {
+                return { categoria, documento: data.data[0] }
               } else {
                 console.log(`⚠️ [Documentos Adicionais] ${categoria} não encontrado ou vazio`)
+                return { categoria, documento: null }
               }
             } else {
               console.error(`❌ [Documentos Adicionais] Erro na resposta para ${categoria}:`, response.status, response.statusText)
+              return { categoria, documento: null }
             }
-          } catch (error) {
+          } catch (error: any) {
             console.error(`❌ [Documentos Adicionais] Erro ao carregar ${categoria}:`, error)
+            return { categoria, documento: null }
           }
         })
       )
+      
+      // Processar resultados
+      resultados.forEach((resultado, index) => {
+        if (resultado.status === 'fulfilled' && resultado.value.documento) {
+          documentos[resultado.value.categoria] = resultado.value.documento
+        } else if (resultado.status === 'rejected') {
+          console.error(`❌ [Documentos Adicionais] Requisição rejeitada para ${categorias[index]}:`, resultado.reason)
+        }
+      })
       
       console.log('📦 [Documentos Adicionais] Documentos carregados:', documentos)
       setDocumentosAdicionaisEquipamento(documentos)
     } catch (error) {
       console.error('❌ [Documentos Adicionais] Erro ao carregar documentos adicionais:', error)
+      setDocumentosAdicionaisEquipamento({}) // Definir objeto vazio em caso de erro
       documentosAdicionaisCarregadosRef.current = false // Resetar em caso de erro
     } finally {
       setLoadingDocumentosAdicionais(false)
@@ -910,30 +1025,6 @@ function ObraDetailsPageContent() {
     observacoes: ''
   })
   
-  // Estados para adicionar supervisor terceirizado
-  const [isAdicionarSupervisorOpen, setIsAdicionarSupervisorOpen] = useState(false)
-  const [isEditarSupervisorOpen, setIsEditarSupervisorOpen] = useState(false)
-  const [supervisorEditando, setSupervisorEditando] = useState<any>(null)
-  const [supervisorSelecionado, setSupervisorSelecionado] = useState<any>(null)
-  const [novoSupervisorData, setNovoSupervisorData] = useState({
-    nome: '',
-    email: '',
-    telefone: '',
-    dataInicio: '',
-    observacoes: ''
-  })
-  const [editarSupervisorData, setEditarSupervisorData] = useState({
-    nome: '',
-    email: '',
-    telefone: '',
-    dataInicio: '',
-    dataFim: '',
-    observacoes: ''
-  })
-  const [reenviarSenha, setReenviarSenha] = useState(false)
-  const [loadingSupervisor, setLoadingSupervisor] = useState(false)
-  const [arquivoSupervisor, setArquivoSupervisor] = useState<File | null>(null)
-  const [arquivoSupervisorEditando, setArquivoSupervisorEditando] = useState<File | null>(null)
   
   // Estados para modal de adicionar grua
   const [isAdicionarGruaOpen, setIsAdicionarGruaOpen] = useState(false)
@@ -1910,42 +2001,27 @@ function ObraDetailsPageContent() {
     setGruasSelecionadas(gruasSelecionadas.filter(g => g.id !== gruaId))
   }
 
-  // Função auxiliar para verificar se é supervisor
-  const isSupervisor = (funcionario: any): boolean => {
-    // Não considerar como supervisor se foi criado automaticamente como contato técnico do cliente
-    if (funcionario.observacoes && (
-      funcionario.observacoes.includes('vinculado automaticamente como supervisor') ||
-      funcionario.observacoes.includes('Contato técnico do cliente')
-    )) {
-      return false
-    }
-    return funcionario.isSupervisor === true || 
-           funcionario.isSupervisor === 'true' || 
-           funcionario.isSupervisor === 1 ||
-           funcionario.isSupervisor === '1'
-  }
 
   // Funções para gerenciar funcionários
   const carregarFuncionariosVinculados = async () => {
-    if (!obra) return
+    if (!obra) {
+      console.log('⚠️ [Funcionários] Obra não encontrada')
+      return
+    }
     
     try {
       setLoadingFuncionarios(true)
       
+      console.log('🔍 [Funcionários] Carregando funcionários para obra:', obra.id)
       const response = await obrasApi.buscarFuncionariosVinculados(parseInt(obra.id))
       
+      console.log('📋 [Funcionários] Resposta da API:', response)
+      
       if (response.success && response.data) {
-        // Debug: verificar dados recebidos
-        console.log('🔍 DEBUG - Funcionários carregados:', response.data.map((f: any) => ({
-          id: f.id,
-          name: f.name,
-          isSupervisor: f.isSupervisor,
-          isSupervisorType: typeof f.isSupervisor,
-          isSupervisorCheck: isSupervisor(f),
-          role: f.role
-        })))
+        console.log('✅ [Funcionários] Funcionários carregados:', response.data.length)
         setFuncionariosVinculados(response.data)
       } else {
+        console.log('⚠️ [Funcionários] Nenhum funcionário encontrado ou erro na resposta')
         setFuncionariosVinculados([])
       }
     } catch (err) {
@@ -2039,279 +2115,6 @@ function ObraDetailsPageContent() {
     })
   }
 
-  // Função para adicionar supervisor terceirizado
-  const handleAdicionarSupervisorTerceirizado = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!supervisorSelecionado) {
-      toast({
-        title: "Erro",
-        description: "Selecione um supervisor existente",
-        variant: "destructive"
-      })
-      return
-    }
-
-    try {
-      setLoadingSupervisor(true)
-      
-      // Se houver arquivo, fazer upload primeiro
-      let arquivoUrl = null
-      if (arquivoSupervisor) {
-        try {
-          const formData = new FormData()
-          formData.append('arquivo', arquivoSupervisor)
-          formData.append('categoria', 'supervisores')
-          formData.append('descricao', `Documento do supervisor ${supervisorSelecionado.nome}`)
-          
-          const uploadResponse = await fetch(buildApiUrl(`arquivos/upload/${obraId}`), {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-            },
-            body: formData
-          })
-          
-          if (uploadResponse.ok) {
-            const uploadData = await uploadResponse.json()
-            arquivoUrl = uploadData.data?.url || uploadData.data?.arquivo_url
-          }
-        } catch (uploadError) {
-          console.error('Erro ao fazer upload do arquivo:', uploadError)
-          // Continuar mesmo se o upload falhar
-        }
-      }
-      
-      const response = await obrasApi.adicionarSupervisorTerceirizado(parseInt(obraId), {
-        supervisor_id: supervisorSelecionado.id,
-        observacoes: novoSupervisorData.observacoes || (arquivoUrl ? `Documento: ${arquivoUrl}` : undefined),
-        data_inicio: novoSupervisorData.dataInicio || undefined
-      })
-      
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Supervisor vinculado à obra com sucesso!",
-        })
-        
-        // Fechar modal e limpar dados
-        setIsAdicionarSupervisorOpen(false)
-        setSupervisorSelecionado(null)
-        setNovoSupervisorData({
-          nome: '',
-          email: '',
-          telefone: '',
-          dataInicio: '',
-          observacoes: ''
-        })
-        setArquivoSupervisor(null)
-        
-        // Recarregar funcionários vinculados
-        await carregarFuncionariosVinculados()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao vincular supervisor à obra",
-        variant: "destructive"
-      })
-    } finally {
-      setLoadingSupervisor(false)
-    }
-  }
-
-  const handleCancelarAdicionarSupervisor = () => {
-    setIsAdicionarSupervisorOpen(false)
-    setSupervisorSelecionado(null)
-    setNovoSupervisorData({
-      nome: '',
-      email: '',
-      telefone: '',
-      dataInicio: '',
-      observacoes: ''
-    })
-    setArquivoSupervisor(null)
-  }
-
-  // Função para abrir modal de edição de supervisor
-  const handleEditarSupervisor = async (supervisor: any) => {
-    try {
-      setLoadingSupervisor(true)
-      
-      // Buscar dados completos do supervisor via API
-      const response = await obrasApi.obterSupervisor(parseInt(obraId), parseInt(supervisor.id))
-      
-      if (response.success && response.data) {
-        const supervisorData = response.data
-        // A API retorna funcionario diretamente ou dentro de funcionario_obra.funcionarios
-        const funcionario = supervisorData.funcionario || supervisorData.funcionario_obra?.funcionarios
-        const usuario = supervisorData.usuario
-        const funcionarioObra = supervisorData.funcionario_obra || supervisor
-        
-        // Montar objeto completo do supervisor
-        const supervisorCompleto = {
-          id: funcionarioObra.id,
-          name: funcionario?.nome || funcionario?.name || supervisor.name || '',
-          email: funcionario?.email || usuario?.email || supervisor.email || '',
-          telefone: funcionario?.telefone || usuario?.telefone || supervisor.telefone || '',
-          dataInicio: funcionarioObra.data_inicio || supervisor.dataInicio || '',
-          dataFim: funcionarioObra.data_fim || supervisor.dataFim || null,
-          observacoes: funcionarioObra.observacoes || supervisor.observacoes || '',
-          funcionario_id: funcionario?.id,
-          usuario_id: usuario?.id
-        }
-        
-        setSupervisorEditando(supervisorCompleto)
-        setEditarSupervisorData({
-          nome: supervisorCompleto.name || '',
-          email: supervisorCompleto.email || '',
-          telefone: supervisorCompleto.telefone || '',
-          dataInicio: supervisorCompleto.dataInicio,
-          dataFim: supervisorCompleto.dataFim || '',
-          observacoes: supervisorCompleto.observacoes || ''
-        })
-        setIsEditarSupervisorOpen(true)
-      } else {
-        // Fallback: usar dados do supervisor passado
-        setSupervisorEditando(supervisor)
-        setEditarSupervisorData({
-          nome: supervisor.name || '',
-          email: supervisor.email || '',
-          telefone: supervisor.telefone || '',
-          dataInicio: supervisor.dataInicio || '',
-          dataFim: supervisor.dataFim || '',
-          observacoes: supervisor.observacoes || ''
-        })
-        setIsEditarSupervisorOpen(true)
-      }
-    } catch (error: any) {
-      console.error('Erro ao buscar dados do supervisor:', error)
-      toast({
-        title: "Aviso",
-        description: "Não foi possível carregar todos os dados. Usando informações disponíveis.",
-        variant: "default"
-      })
-      // Fallback: usar dados do supervisor passado
-      setSupervisorEditando(supervisor)
-      setEditarSupervisorData({
-        nome: supervisor.name || '',
-        email: supervisor.email || '',
-        telefone: supervisor.telefone || '',
-        dataInicio: supervisor.dataInicio || '',
-        dataFim: supervisor.dataFim || '',
-        observacoes: supervisor.observacoes || ''
-      })
-      setIsEditarSupervisorOpen(true)
-    } finally {
-      setLoadingSupervisor(false)
-    }
-  }
-
-  // Função para salvar edição de supervisor
-  const handleSalvarEdicaoSupervisor = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    if (!supervisorEditando) return
-
-    if (!editarSupervisorData.nome || !editarSupervisorData.email) {
-      toast({
-        title: "Erro",
-        description: "Nome e email são obrigatórios",
-        variant: "destructive"
-      })
-      return
-    }
-
-    try {
-      setLoadingSupervisor(true)
-      
-      // Se houver arquivo, fazer upload primeiro
-      let arquivoUrl = null
-      if (arquivoSupervisorEditando) {
-        try {
-          const formData = new FormData()
-          formData.append('arquivo', arquivoSupervisorEditando)
-          formData.append('categoria', 'supervisores')
-          formData.append('descricao', `Documento do supervisor ${editarSupervisorData.nome}`)
-          
-          const uploadResponse = await fetch(buildApiUrl(`arquivos/upload/${obraId}`), {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${localStorage.getItem('access_token')}`
-            },
-            body: formData
-          })
-          
-          if (uploadResponse.ok) {
-            const uploadData = await uploadResponse.json()
-            arquivoUrl = uploadData.data?.url || uploadData.data?.arquivo_url
-          }
-        } catch (uploadError) {
-          console.error('Erro ao fazer upload do arquivo:', uploadError)
-          // Continuar mesmo se o upload falhar
-        }
-      }
-      
-      const observacoesComArquivo = arquivoUrl 
-        ? `${editarSupervisorData.observacoes || ''}${editarSupervisorData.observacoes ? ' | ' : ''}Documento: ${arquivoUrl}`.trim()
-        : editarSupervisorData.observacoes
-      
-      const response = await obrasApi.atualizarSupervisor(parseInt(obraId), parseInt(supervisorEditando.id), {
-        nome: editarSupervisorData.nome,
-        email: editarSupervisorData.email,
-        telefone: editarSupervisorData.telefone || undefined,
-        data_inicio: editarSupervisorData.dataInicio || undefined,
-        data_fim: editarSupervisorData.dataFim || undefined,
-        observacoes: observacoesComArquivo || undefined,
-        reenviar_senha: reenviarSenha
-      })
-      
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Supervisor atualizado com sucesso!",
-        })
-        
-        setIsEditarSupervisorOpen(false)
-        setSupervisorEditando(null)
-        setEditarSupervisorData({
-          nome: '',
-          email: '',
-          telefone: '',
-          dataInicio: '',
-          dataFim: '',
-          observacoes: ''
-        })
-        setArquivoSupervisorEditando(null)
-        setReenviarSenha(false)
-        
-        await carregarFuncionariosVinculados()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao atualizar supervisor",
-        variant: "destructive"
-      })
-    } finally {
-      setLoadingSupervisor(false)
-    }
-  }
-
-  const handleCancelarEditarSupervisor = () => {
-    setIsEditarSupervisorOpen(false)
-    setSupervisorEditando(null)
-    setEditarSupervisorData({
-      nome: '',
-      email: '',
-      telefone: '',
-      dataInicio: '',
-      dataFim: '',
-      observacoes: ''
-    })
-    setArquivoSupervisorEditando(null)
-    setReenviarSenha(false)
-  }
 
   const handleFuncionarioSelect = (funcionario: any) => {
     if (!funcionariosSelecionados.find(f => f.id === funcionario.id)) {
@@ -2352,7 +2155,6 @@ function ObraDetailsPageContent() {
           role: f.cargo_info?.nome || f.cargo || 'Cargo não informado',
           email: f.email,
           telefone: f.telefone,
-          eh_supervisor: f.eh_supervisor === true || f.eh_supervisor === 'true' || f.eh_supervisor === 1
         }))
         
         setFuncionariosDisponiveis(funcionariosFormatados)
@@ -2905,7 +2707,9 @@ function ObraDetailsPageContent() {
         await Promise.all([
           carregarDocumentos(),
           carregarArquivos(),
-          carregarDocumentosAdicionaisEquipamento()
+          carregarDocumentosAdicionaisEquipamento(),
+          carregarTodosResponsaveisTecnicos(),
+          carregarSinaleiros()
         ])
       }
     }
@@ -3343,21 +3147,21 @@ useEffect(() => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
       <TabsList className="flex w-full gap-1 p-1 h-auto justify-start overflow-x-auto">
-        <TabsTrigger value="geral" className="flex-1 min-w-[120px] whitespace-nowrap">Geral</TabsTrigger>
-        <TabsTrigger value="gruas" className="flex-1 min-w-[120px] whitespace-nowrap">Gruas</TabsTrigger>
-        <TabsTrigger value="funcionarios" className="flex-1 min-w-[120px] whitespace-nowrap">Funcionários</TabsTrigger>
-        <TabsTrigger value="medicoes-mensais" className="flex-1 min-w-[120px] whitespace-nowrap">
+        <TabsTrigger value="geral" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Geral</TabsTrigger>
+        <TabsTrigger value="gruas" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Gruas</TabsTrigger>
+        <TabsTrigger value="funcionarios" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Funcionários</TabsTrigger>
+        <TabsTrigger value="medicoes-mensais" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">
           Medições Mensais
         </TabsTrigger>
-        <TabsTrigger value="documentos" className="flex-1 min-w-[120px] whitespace-nowrap">Arquivos</TabsTrigger>
-        <TabsTrigger value="livro-grua" className="flex-1 min-w-[120px] whitespace-nowrap">
+        <TabsTrigger value="documentos" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Arquivos</TabsTrigger>
+        <TabsTrigger value="livro-grua" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">
           Livro da Grua
         </TabsTrigger>
-        <TabsTrigger value="checklists" className="flex-1 min-w-[120px] whitespace-nowrap">
+        <TabsTrigger value="checklists" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">
           <CheckCircle2 className="w-4 h-4 mr-2" />
           Checklists e Manutenções
         </TabsTrigger>
-        <TabsTrigger value="complementos" className="flex-1 min-w-[120px] whitespace-nowrap">Complementos</TabsTrigger>
+        <TabsTrigger value="complementos" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Complementos</TabsTrigger>
       </TabsList>
 
         <TabsContent value="geral" className="space-y-4">
@@ -3415,7 +3219,7 @@ useEffect(() => {
                         onChange={(e) => setEditingData({ ...editingData, data_inicio: e.target.value })}
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{obra?.startDate ? new Date(obra.startDate).toLocaleDateString('pt-BR') : 'Não informado'}</span>
+                      <span className="text-sm block mt-1">{formatarDataSemTimezone(obra?.startDate)}</span>
                     )}
                   </div>
                   <div>
@@ -3427,7 +3231,7 @@ useEffect(() => {
                         onChange={(e) => setEditingData({ ...editingData, data_fim: e.target.value })}
                       />
                     ) : (
-                      <span className="text-sm block mt-1">{obra?.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}</span>
+                      <span className="text-sm block mt-1">{obra?.endDate ? formatarDataSemTimezone(obra.endDate) : 'Em andamento'}</span>
                     )}
                   </div>
                   <div>
@@ -3551,22 +3355,6 @@ useEffect(() => {
                       />
                     ) : (
                       <span className="text-sm block mt-1">{obra?.cep || 'Não informado'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-600">Responsável:</Label>
-                    {isEditing ? (
-                      <div className="mt-1">
-                        <FuncionarioSearch
-                          onFuncionarioSelect={handleResponsavelSelect}
-                          selectedFuncionario={responsavelSelecionado}
-                          placeholder="Buscar responsável por nome ou cargo..."
-                          onlyActive={true}
-                          allowedRoles={['Engenheiro', 'Chefe de Obras', 'Supervisor', 'Gerente', 'Operador']}
-                        />
-                      </div>
-                    ) : (
-                      <span className="text-sm block mt-1">{obra?.responsavelName || 'Não informado'}</span>
                     )}
                   </div>
                   <div>
@@ -4079,6 +3867,229 @@ useEffect(() => {
               </CardContent>
             </Card>
 
+            {/* Responsáveis Técnicos Existentes */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Shield className="w-4 h-4 text-blue-600" />
+                  Responsáveis Técnicos
+                </CardTitle>
+                <CardDescription>
+                  Responsáveis técnicos cadastrados para esta obra
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingResponsaveisTecnicos ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm text-gray-500">Carregando responsáveis técnicos...</span>
+                  </div>
+                ) : responsaveisTecnicosExistentes.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 text-sm">
+                    Nenhum responsável técnico cadastrado para esta obra.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {responsaveisTecnicosExistentes.map((responsavel) => {
+                      // Separar área do nome se estiver no formato "Nome - Área"
+                      let nome = responsavel.nome || ''
+                      let area = ''
+                      if (nome.includes(' - ')) {
+                        const partes = nome.split(' - ')
+                        nome = partes[0]
+                        area = partes.slice(1).join(' - ')
+                      }
+                      
+                      const tipoLabel = responsavel.tipo === 'obra' ? 'Cliente' :
+                                       responsavel.tipo === 'irbana_equipamentos' ? 'IRBANA - Equipamentos' :
+                                       responsavel.tipo === 'irbana_manutencoes' ? 'IRBANA - Manutenções' :
+                                       responsavel.tipo === 'irbana_montagem_operacao' ? 'IRBANA - Montagem e Operação' :
+                                       responsavel.tipo === 'adicional' ? (area ? `Adicional - ${area}` : 'Adicional') :
+                                       'Responsável Técnico'
+                      
+                      return (
+                        <div key={responsavel.id} className="border rounded-lg p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-2">
+                                <h4 className="font-semibold text-base">{nome}</h4>
+                                <Badge variant="outline">{tipoLabel}</Badge>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                                {responsavel.cpf_cnpj && (
+                                  <div>
+                                    <span className="text-gray-600">CPF/CNPJ:</span> {responsavel.cpf_cnpj}
+                                  </div>
+                                )}
+                                {responsavel.crea && (
+                                  <div>
+                                    <span className="text-gray-600">CREA:</span> {responsavel.crea}
+                                  </div>
+                                )}
+                                {responsavel.email && (
+                                  <div>
+                                    <span className="text-gray-600">Email:</span> {responsavel.email}
+                                  </div>
+                                )}
+                                {responsavel.telefone && (
+                                  <div>
+                                    <span className="text-gray-600">Telefone:</span> {responsavel.telefone}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Responsáveis Técnicos Adicionais - Edição */}
+            {isEditing && (
+              <Card>
+                <CardHeader>
+                  <div className="flex items-center justify-between">
+                    <CardTitle className="text-sm flex items-center gap-2">
+                      <Shield className="w-4 h-4 text-blue-600" />
+                      Responsáveis Técnicos Adicionais
+                    </CardTitle>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setResponsaveisAdicionais([
+                          ...responsaveisAdicionais,
+                          {
+                            nome: '',
+                            cpf_cnpj: '',
+                            crea: '',
+                            email: '',
+                            telefone: '',
+                            area: '',
+                            tipo: 'adicional'
+                          }
+                        ])
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Adicionar Responsável
+                    </Button>
+                  </div>
+                  <CardDescription>
+                    Adicione responsáveis técnicos adicionais para esta obra
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {responsaveisAdicionais.map((responsavel, index) => (
+                    <div key={index} className="space-y-4 p-4 border rounded-lg bg-gray-50/50">
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-gray-900">
+                          Responsável Técnico #{index + 1}
+                        </h4>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setResponsaveisAdicionais(responsaveisAdicionais.filter((_, i) => i !== index))
+                          }}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <X className="w-4 h-4" />
+                        </Button>
+                      </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>Área de Responsabilidade</Label>
+                          <Input
+                            value={responsavel.area || ''}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].area = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Ex: Segurança, Qualidade, etc."
+                          />
+                        </div>
+                        <div>
+                          <Label>Nome do Responsável Técnico <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={responsavel.nome}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].nome = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Nome completo"
+                          />
+                        </div>
+                        <div>
+                          <Label>CPF/CNPJ <span className="text-red-500">*</span></Label>
+                          <Input
+                            value={responsavel.cpf_cnpj}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].cpf_cnpj = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                          />
+                        </div>
+                        <div>
+                          <Label>N° do CREA</Label>
+                          <Input
+                            value={responsavel.crea || ''}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].crea = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="Ex: 5071184591"
+                          />
+                        </div>
+                        <div>
+                          <Label>Email</Label>
+                          <Input
+                            type="email"
+                            value={responsavel.email}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].email = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="email@example.com"
+                          />
+                        </div>
+                        <div>
+                          <Label>Telefone</Label>
+                          <Input
+                            value={responsavel.telefone}
+                            onChange={(e) => {
+                              const novos = [...responsaveisAdicionais]
+                              novos[index].telefone = e.target.value
+                              setResponsaveisAdicionais(novos)
+                            }}
+                            placeholder="(11) 98765-4321"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+
+                  {responsaveisAdicionais.length === 0 && (
+                    <div className="text-center py-8 text-gray-500 text-sm">
+                      Nenhum responsável técnico adicional adicionado. Clique em "Adicionar Responsável" para adicionar.
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader>
                 <CardTitle className="text-sm">Resumo Financeiro</CardTitle>
@@ -4159,11 +4170,11 @@ useEffect(() => {
                             </p>
                             <div className="mt-2 space-y-1">
                               <p className="text-xs text-gray-500">
-                                <strong>Início da Locação:</strong> {(grua.dataInicioLocacao || grua.data_inicio_locacao || grua.data_instalacao) ? new Date(grua.dataInicioLocacao || grua.data_inicio_locacao || grua.data_instalacao).toLocaleDateString('pt-BR') : 'Não informado'}
+                                <strong>Início da Locação:</strong> {formatarDataSemTimezone(grua.dataInicioLocacao || grua.data_inicio_locacao || grua.data_instalacao)}
                               </p>
                               {(grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao) && (
                                 <p className="text-xs text-gray-500">
-                                  <strong>Fim da Locação:</strong> {new Date(grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao).toLocaleDateString('pt-BR')}
+                                  <strong>Fim da Locação:</strong> {formatarDataSemTimezone(grua.dataFimLocacao || grua.data_fim_locacao || grua.data_remocao)}
                                 </p>
                               )}
                               {(grua.valorLocacaoMensal || grua.valor_locacao_mensal) && (
@@ -4493,75 +4504,16 @@ useEffect(() => {
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">
-                  Funcionários e Supervisores
+                  Funcionários
                   {loadingFuncionarios && <InlineLoader size="sm" />}
                 </CardTitle>
                 <div className="flex gap-2">
-                  <Button 
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setIsAdicionarSupervisorOpen(true)}
-                    className="gap-2"
-                  >
-                    <Shield className="w-4 h-4" />
-                    Adicionar Supervisor
-                  </Button>
                   <Button 
                     size="sm"
                     onClick={() => setIsAdicionarFuncionarioOpen(true)}
                   >
                     <Plus className="w-4 h-4 mr-2" />
                     Vincular Funcionário
-                  </Button>
-                  <Button 
-                    size="sm"
-                    variant="outline"
-                    onClick={async () => {
-                      try {
-                        const token = 'eyJhbGciOiJIUzI1NiIsImtpZCI6ImIza0FDV3E2dGdIeTRmQWQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJodHRwczovL21naGRrdGtvZWpvYnNtZGJ2c3NsLnN1cGFiYXNlLmNvL2F1dGgvdjEiLCJzdWIiOiI2YjNjZDVhOC0yOTkxLTQwYTItODIzNy1jNjRhZmM0MzEzMjAiLCJhdWQiOiJhdXRoZW50aWNhdGVkIiwiZXhwIjoxNzY3NTc4MDY5LCJpYXQiOjE3Njc1NzQ0NjksImVtYWlsIjoiYWRtaW5AYWRtaW4uY29tIiwicGhvbmUiOiIiLCJhcHBfbWV0YWRhdGEiOnsicHJvdmlkZXIiOiJlbWFpbCIsInByb3ZpZGVycyI6WyJlbWFpbCJdfSwidXNlcl9tZXRhZGF0YSI6eyJlbWFpbCI6ImFkbWluQGFkbWluLmNvbSIsImVtYWlsX3ZlcmlmaWVkIjp0cnVlLCJub21lIjoiQWRtaW5pc3RyYWRvciIsInBob25lX3ZlcmlmaWVkIjpmYWxzZSwicm9sZSI6ImFkbWluIiwic3ViIjoiNmIzY2Q1YTgtMjk5MS00MGEyLTgyMzctYzY0YWZjNDMxMzIwIn0sInJvbGUiOiJhdXRoZW50aWNhdGVkIiwiYWFsIjoiYWFsMSIsImFtciI6W3sibWV0aG9kIjoicGFzc3dvcmQiLCJ0aW1lc3RhbXAiOjE3Njc1NzQ0Njl9XSwic2Vzc2lvbl9pZCI6ImJlZGE0MjE0LTViNWEtNGFhMS04YzVkLWQwMWVmYzk4ODUyOSIsImlzX2Fub255bW91cyI6ZmFsc2V9.NlFQDQOwnPjaf-FE52frNaD_XDge2raviDGqcUFf_EM'
-                        const url = buildApiUrl(`obras/${obraId}/supervisores`)
-                        const response = await fetch(url, {
-                          method: 'POST',
-                          headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`
-                          },
-                          body: JSON.stringify({
-                            nome: 'Supervisor Teste',
-                            email: 'samuellinkon+supervisor123@gmail.com',
-                            telefone: '',
-                            observacoes: 'Supervisor adicionado via botão de validação',
-                            data_inicio: new Date().toISOString().split('T')[0]
-                          })
-                        })
-                        const data = await response.json()
-                        if (response.ok) {
-                          toast({
-                            title: "Sucesso",
-                            description: "Supervisor adicionado com sucesso!",
-                          })
-                          console.log('Supervisor adicionado:', data)
-                          await carregarFuncionariosVinculados()
-                        } else {
-                          toast({
-                            title: "Erro",
-                            description: data.message || data.error || "Erro ao adicionar supervisor",
-                            variant: "destructive"
-                          })
-                          console.error('Erro ao adicionar supervisor:', data)
-                        }
-                      } catch (error: any) {
-                        toast({
-                          title: "Erro",
-                          description: error.message || "Erro ao adicionar supervisor",
-                          variant: "destructive"
-                        })
-                        console.error('Erro ao adicionar supervisor:', error)
-                      }
-                    }}
-                  >
-                    <CheckCircle className="w-4 h-4 mr-2" />
-                    Validar Supervisor
                   </Button>
                 </div>
               </div>
@@ -4609,92 +4561,18 @@ useEffect(() => {
                     </div>
                   )}
 
-                  {/* Seção de Supervisores */}
-                  <div>
-                    <div className="flex items-center gap-2 mb-4">
-                      <Shield className="w-5 h-5 text-blue-600" />
-                      <h3 className="font-semibold text-base">Supervisores</h3>
-                      <Badge variant="outline" className="ml-2">
-                        {funcionariosVinculados.filter(isSupervisor).length}
-                      </Badge>
-                    </div>
-                    {funcionariosVinculados.filter(isSupervisor).length > 0 ? (
-                      <div className="space-y-4">
-                        {funcionariosVinculados.filter(isSupervisor).map((funcionario) => (
-                          <div key={funcionario.id} className="border rounded-lg p-4">
-                            <div className="flex justify-between items-start mb-4">
-                              <div>
-                                <div className="flex items-center gap-2 mb-1">
-                                  <h3 className="font-semibold text-lg">{funcionario.name}</h3>
-                                  <Badge variant="outline" className="bg-blue-100 text-blue-800 border-blue-300">
-                                    Supervisor
-                                  </Badge>
-                                </div>
-                                <p className="text-sm text-gray-600">{funcionario.role}</p>
-                                <div className="mt-2 space-y-1">
-                                  <p className="text-xs text-gray-500">
-                                    <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
-                                  </p>
-                                  {funcionario.dataFim && (
-                                    <p className="text-xs text-gray-500">
-                                      <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
-                                    </p>
-                                  )}
-                                  {funcionario.observacoes && (
-                                    <p className="text-xs text-gray-500">
-                                      <strong>Observações:</strong> {funcionario.observacoes}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end gap-2">
-                                <Badge 
-                                  variant={funcionario.status === 'ativo' ? 'default' : 'secondary'}
-                                  className={funcionario.status === 'ativo' ? 'bg-green-100 text-green-800' : ''}
-                                >
-                                  {funcionario.status}
-                                </Badge>
-                                <div className="flex gap-2">
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleEditarSupervisor(funcionario)}
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </Button>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleRemoverFuncionarioVinculado(funcionario.id)}
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="text-center py-6 border border-dashed rounded-lg bg-gray-50">
-                        <Shield className="w-8 h-8 text-gray-400 mx-auto mb-2" />
-                        <p className="text-sm text-gray-600">Nenhum supervisor vinculado</p>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Seção de Funcionários */}
                   <div>
                     <div className="flex items-center gap-2 mb-4">
                       <Users className="w-5 h-5 text-gray-600" />
                       <h3 className="font-semibold text-base">Funcionários</h3>
                       <Badge variant="outline" className="ml-2">
-                        {funcionariosVinculados.filter(f => !isSupervisor(f)).length}
+                        {funcionariosVinculados.length}
                       </Badge>
                     </div>
-                    {funcionariosVinculados.filter(f => !isSupervisor(f)).length > 0 ? (
+                    {funcionariosVinculados.length > 0 ? (
                       <div className="space-y-4">
-                        {funcionariosVinculados.filter(f => !isSupervisor(f)).map((funcionario) => (
+                        {funcionariosVinculados.map((funcionario) => (
                           <div key={funcionario.id} className="border rounded-lg p-4">
                             <div className="flex justify-between items-start mb-4">
                               <div>
@@ -4702,11 +4580,11 @@ useEffect(() => {
                                 <p className="text-sm text-gray-600">{funcionario.role}</p>
                                 <div className="mt-2 space-y-1">
                                   <p className="text-xs text-gray-500">
-                                    <strong>Data de Início:</strong> {funcionario.dataInicio ? new Date(funcionario.dataInicio).toLocaleDateString('pt-BR') : 'Não informado'}
+                                    <strong>Data de Início:</strong> {formatarDataSemTimezone(funcionario.dataInicio)}
                                   </p>
                                   {funcionario.dataFim && (
                                     <p className="text-xs text-gray-500">
-                                      <strong>Data de Fim:</strong> {new Date(funcionario.dataFim).toLocaleDateString('pt-BR')}
+                                      <strong>Data de Fim:</strong> {formatarDataSemTimezone(funcionario.dataFim)}
                                     </p>
                                   )}
                                   {funcionario.observacoes && (
@@ -4800,7 +4678,7 @@ useEffect(() => {
                             selectedFuncionario={funcionarioSelecionado}
                             placeholder="Digite o nome ou cargo do funcionário..."
                             onlyActive={true}
-                            allowedRoles={['Sinaleiro', 'Operador', 'Supervisor']}
+                            allowedRoles={['Sinaleiro', 'Operador']}
                           />
                         </div>
                         {funcionarioSelecionado && (
@@ -4859,7 +4737,7 @@ useEffect(() => {
                       <DialogHeader>
                         <DialogTitle>Atrelar Terceirizado como Sinaleiro</DialogTitle>
                         <DialogDescription>
-                          Cadastre um terceirizado (supervisor ou outro) como sinaleiro nesta obra
+                          Cadastre um terceirizado como sinaleiro nesta obra
                         </DialogDescription>
                       </DialogHeader>
                       <div className="space-y-4 py-4">
@@ -6355,10 +6233,10 @@ useEffect(() => {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="w-5 h-5" />
-              Vincular Funcionários e Supervisores à Obra
+              Vincular Funcionários à Obra
             </DialogTitle>
             <DialogDescription>
-              Selecione funcionários para vincular à obra. Marque a opção "Supervisor" para designar como supervisor.
+              Selecione funcionários para vincular à obra.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleAdicionarFuncionario} className="space-y-6">
@@ -6507,227 +6385,6 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
 
-      {/* Modal para adicionar supervisor terceirizado */}
-      <Dialog open={isAdicionarSupervisorOpen} onOpenChange={setIsAdicionarSupervisorOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Shield className="w-5 h-5" />
-              Adicionar Supervisor
-            </DialogTitle>
-            <DialogDescription>
-              Selecione um supervisor já cadastrado para vincular à obra. Apenas supervisores existentes podem ser adicionados.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleAdicionarSupervisorTerceirizado} className="space-y-6">
-            <div className="space-y-4">
-              {/* Busca de Supervisor */}
-              <div>
-                <Label htmlFor="supervisorSearch">Buscar Supervisor *</Label>
-                <SupervisorSearch
-                  onSupervisorSelect={setSupervisorSelecionado}
-                  selectedSupervisor={supervisorSelecionado}
-                  placeholder="Digite o nome ou email do supervisor..."
-                  obraId={parseInt(obraId)}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Apenas supervisores já cadastrados podem ser vinculados à obra.
-                </p>
-              </div>
-
-              {/* Data de Início */}
-              <div>
-                <Label htmlFor="supervisorDataInicio">Data de Início (opcional)</Label>
-                <Input
-                  id="supervisorDataInicio"
-                  type="date"
-                  value={novoSupervisorData.dataInicio}
-                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, dataInicio: e.target.value })}
-                />
-              </div>
-
-              {/* Observações */}
-              <div>
-                <Label htmlFor="supervisorObservacoes">Observações (opcional)</Label>
-                <Textarea
-                  id="supervisorObservacoes"
-                  placeholder="Observações sobre o supervisor..."
-                  value={novoSupervisorData.observacoes}
-                  onChange={(e) => setNovoSupervisorData({ ...novoSupervisorData, observacoes: e.target.value })}
-                />
-              </div>
-
-              {/* Upload de Arquivo */}
-              <div>
-                <Label htmlFor="supervisorArquivo">Documento/Arquivo (opcional)</Label>
-                <DocumentoUpload
-                  accept="application/pdf,image/*"
-                  maxSize={10 * 1024 * 1024}
-                  onUpload={(file) => setArquivoSupervisor(file)}
-                  onRemove={() => setArquivoSupervisor(null)}
-                  label="Clique para fazer upload de documento"
-                  currentFile={arquivoSupervisor}
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4 border-t">
-              <Button type="button" variant="outline" onClick={handleCancelarAdicionarSupervisor}>
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={loadingSupervisor || !supervisorSelecionado}>
-                {loadingSupervisor ? (
-                  <>
-                    <InlineLoader size="sm" />
-                    Adicionando...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Adicionar Supervisor
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Modal para editar supervisor */}
-      <Dialog open={isEditarSupervisorOpen} onOpenChange={setIsEditarSupervisorOpen}>
-        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Edit className="w-5 h-5" />
-              Editar Supervisor
-            </DialogTitle>
-            <DialogDescription>
-              Atualize as informações do supervisor na obra.
-            </DialogDescription>
-          </DialogHeader>
-
-          {supervisorEditando && (
-            <form onSubmit={handleSalvarEdicaoSupervisor} className="space-y-6">
-              <div className="space-y-4">
-                {/* Nome */}
-                <div>
-                  <Label htmlFor="editarNome">Nome *</Label>
-                  <Input
-                    id="editarNome"
-                    placeholder="Nome completo do supervisor"
-                    value={editarSupervisorData.nome}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, nome: e.target.value })}
-                    required
-                  />
-                </div>
-
-                {/* Email */}
-                <div>
-                  <Label htmlFor="editarEmail">Email *</Label>
-                  <Input
-                    id="editarEmail"
-                    type="email"
-                    placeholder="email@exemplo.com"
-                    value={editarSupervisorData.email}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, email: e.target.value })}
-                    required
-                  />
-                </div>
-
-                {/* Telefone */}
-                <div>
-                  <Label htmlFor="editarTelefone">Telefone (opcional)</Label>
-                  <Input
-                    id="editarTelefone"
-                    placeholder="(00) 00000-0000"
-                    value={editarSupervisorData.telefone}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, telefone: e.target.value })}
-                  />
-                </div>
-
-                {/* Data de Início */}
-                <div>
-                  <Label htmlFor="editarDataInicio">Data de Início *</Label>
-                  <Input
-                    id="editarDataInicio"
-                    type="date"
-                    value={editarSupervisorData.dataInicio}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, dataInicio: e.target.value })}
-                    required
-                  />
-                </div>
-
-                {/* Data de Fim */}
-                <div>
-                  <Label htmlFor="editarDataFim">Data de Fim (opcional)</Label>
-                  <Input
-                    id="editarDataFim"
-                    type="date"
-                    value={editarSupervisorData.dataFim}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, dataFim: e.target.value })}
-                  />
-                </div>
-
-                {/* Observações */}
-                <div>
-                  <Label htmlFor="editarObservacoes">Observações (opcional)</Label>
-                  <Textarea
-                    id="editarObservacoes"
-                    placeholder="Observações sobre o supervisor..."
-                    value={editarSupervisorData.observacoes}
-                    onChange={(e) => setEditarSupervisorData({ ...editarSupervisorData, observacoes: e.target.value })}
-                  />
-                </div>
-
-                {/* Upload de Arquivo */}
-                <div>
-                  <Label htmlFor="editarSupervisorArquivo">Documento/Arquivo (opcional)</Label>
-                  <DocumentoUpload
-                    accept="application/pdf,image/*"
-                    maxSize={10 * 1024 * 1024}
-                    onUpload={(file) => setArquivoSupervisorEditando(file)}
-                    onRemove={() => setArquivoSupervisorEditando(null)}
-                    label="Clique para fazer upload de documento"
-                    currentFile={arquivoSupervisorEditando}
-                  />
-                </div>
-
-                {/* Reenviar Senha */}
-                <div className="flex items-center space-x-2 p-4 bg-blue-50 rounded-lg border border-blue-200">
-                  <Checkbox
-                    id="reenviarSenha"
-                    checked={reenviarSenha}
-                    onCheckedChange={(checked) => setReenviarSenha(checked === true)}
-                  />
-                  <Label htmlFor="reenviarSenha" className="text-sm font-medium cursor-pointer">
-                    Reenviar senha de acesso por email
-                  </Label>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-4 border-t">
-                <Button type="button" variant="outline" onClick={handleCancelarEditarSupervisor}>
-                  Cancelar
-                </Button>
-                <Button type="submit" disabled={loadingSupervisor || !editarSupervisorData.nome || !editarSupervisorData.email || !editarSupervisorData.dataInicio}>
-                  {loadingSupervisor ? (
-                    <>
-                      <InlineLoader size="sm" />
-                      Salvando...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle className="w-4 h-4 mr-2" />
-                      Salvar Alterações
-                    </>
-                  )}
-                </Button>
-              </div>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Modal de Novo Mês */}
       <Dialog open={isNovoMesOpen} onOpenChange={setIsNovoMesOpen}>
