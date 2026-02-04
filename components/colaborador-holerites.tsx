@@ -49,15 +49,14 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const [mesReferencia, setMesReferencia] = useState('')
   const [uploading, setUploading] = useState(false)
   
-  // Estado para filtro de mês/ano - inicializar com mês atual
-  const [filtroMesAno, setFiltroMesAno] = useState<string>(() => {
-    const agora = new Date()
-    return `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, '0')}`
-  })
+  // Estado para filtro de mês/ano - inicializar com "Todos os meses"
+  const [filtroMesAno, setFiltroMesAno] = useState<string>('all')
   
   // Gerar opções de meses e anos
   const gerarOpcoesMesAno = () => {
-    const opcoes: { value: string; label: string }[] = []
+    const opcoes: { value: string; label: string }[] = [
+      { value: 'all', label: 'Todos os meses' }
+    ]
     const agora = new Date()
     const anoAtual = agora.getFullYear()
     const mesAtual = agora.getMonth() + 1
@@ -91,8 +90,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     try {
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
       const response = await colaboradoresDocumentosApi.holerites.listar(colaboradorId)
-      if (response.success && response.data) {
-        const holeritesConvertidos: Holerite[] = response.data.map((h: any) => ({
+      if (response.success) {
+        const holeritesConvertidos: Holerite[] = (response.data || []).map((h: any) => ({
           id: h.id,
           colaborador_id: h.funcionario_id,
           mes: h.mes_referencia ? new Date(h.mes_referencia + '-01').toLocaleString('pt-BR', { month: 'long' }) : '',
@@ -112,6 +111,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
         description: error.message || "Erro ao carregar holerites",
         variant: "destructive"
       })
+      // Garantir que o filtro seja aplicado mesmo em caso de erro
+      aplicarFiltro([], filtroMesAno)
     } finally {
       setLoading(false)
     }
@@ -119,7 +120,8 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
 
   // Função para aplicar filtro
   const aplicarFiltro = (listaHolerites: Holerite[], filtro: string) => {
-    if (!filtro) {
+    // Se filtro for "all" ou vazio, mostrar todos
+    if (!filtro || filtro === '' || filtro === 'all') {
       setHoleritesFiltrados(listaHolerites)
       return
     }
@@ -140,9 +142,11 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
 
   // Efeito para aplicar filtro quando mudar
   useEffect(() => {
-    aplicarFiltro(holerites, filtroMesAno)
+    if (holerites.length > 0 || filtroMesAno === 'all') {
+      aplicarFiltro(holerites, filtroMesAno)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filtroMesAno, holerites.length])
+  }, [filtroMesAno, holerites])
 
   const handleAssinar = async (holerite: Holerite) => {
     if (!assinaturaDataUrl) {
@@ -330,6 +334,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
         title: "Sucesso",
         description: "Holerite enviado com sucesso!",
       })
+      
+      // Atualizar filtro para o mês do holerite enviado
+      setFiltroMesAno(mesReferencia)
       
       // Recarregar holerites
       await loadHolerites()
