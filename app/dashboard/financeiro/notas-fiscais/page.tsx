@@ -587,13 +587,59 @@ export default function NotasFiscaisPage() {
           }
         }
 
+        // Criar boleto automaticamente vinculado à nota fiscal
+        try {
+          const { boletosApi } = await import('@/lib/api-boletos')
+          
+          // Determinar tipo do boleto baseado no tipo da nota fiscal
+          // Entrada = boleto a pagar, Saída = boleto a receber
+          const tipoBoleto = activeTab === 'entrada' ? 'pagar' : 'receber'
+          
+          // Usar data de vencimento da nota fiscal ou adicionar 30 dias à data de emissão
+          const dataVencimento = formData.data_vencimento || (() => {
+            const dataEmissao = new Date(formData.data_emissao)
+            dataEmissao.setDate(dataEmissao.getDate() + 30)
+            return dataEmissao.toISOString().split('T')[0]
+          })()
+          
+          const boletoData = {
+            numero_boleto: `NF-${formData.numero_nf}${formData.serie ? `-${formData.serie}` : ''}`,
+            descricao: `Boleto - Nota Fiscal ${formData.numero_nf}${formData.serie ? ` Série ${formData.serie}` : ''}`,
+            valor: formData.valor_total,
+            data_emissao: formData.data_emissao,
+            data_vencimento: dataVencimento,
+            tipo: tipoBoleto,
+            nota_fiscal_id: notaId,
+            cliente_id: activeTab === 'saida' ? formData.cliente_id : undefined,
+            observacoes: formData.observacoes || undefined
+          }
+          
+          const boletoResponse = await boletosApi.create(boletoData)
+          
+          if (!boletoResponse.success) {
+            console.error('Erro ao criar boleto:', boletoResponse)
+            toast({
+              title: "Aviso",
+              description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado",
+              variant: "destructive"
+            })
+          }
+        } catch (boletoError: any) {
+          console.error('Erro ao criar boleto:', boletoError)
+          toast({
+            title: "Aviso",
+            description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado: " + (boletoError.message || "Erro desconhecido"),
+            variant: "destructive"
+          })
+        }
+
         // Se houver arquivo, fazer upload após criar
         if (formFile) {
           try {
             await notasFiscaisApi.uploadFile(notaId, formFile)
             toast({
               title: "Sucesso",
-              description: "Nota fiscal criada, itens salvos e arquivo enviado com sucesso"
+              description: "Nota fiscal criada, boleto vinculado, itens salvos e arquivo enviado com sucesso"
             })
           } catch (uploadError: any) {
             toast({
@@ -605,7 +651,9 @@ export default function NotasFiscaisPage() {
         } else {
           toast({
             title: "Sucesso",
-            description: itens.length > 0 ? "Nota fiscal criada e itens salvos com sucesso" : "Nota fiscal criada com sucesso"
+            description: itens.length > 0 
+              ? "Nota fiscal criada, boleto vinculado e itens salvos com sucesso" 
+              : "Nota fiscal criada e boleto vinculado com sucesso"
           })
         }
         setIsCreateDialogOpen(false)

@@ -7,6 +7,7 @@ export interface Boleto {
   cliente_id?: number
   obra_id?: number
   medicao_id?: number
+  nota_fiscal_id?: number
   descricao: string
   valor: number
   data_emissao: string
@@ -41,6 +42,12 @@ export interface Boleto {
     numero: string
     periodo: string
   }
+  notas_fiscais?: {
+    id: number
+    numero_nf: string
+    serie?: string
+    tipo: 'entrada' | 'saida'
+  }
   contas_bancarias?: {
     id: number
     banco: string
@@ -55,6 +62,7 @@ export interface BoletoCreate {
   cliente_id?: number
   obra_id?: number
   medicao_id?: number
+  nota_fiscal_id?: number
   descricao: string
   valor: number
   data_emissao: string

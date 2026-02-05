@@ -1178,10 +1178,13 @@ router.get('/download/:arquivoId', authenticateToken, async (req, res) => {
 /**
  * GET /api/arquivos/url-assinada
  * Gera URL assinada para download a partir do caminho do arquivo
+ * Query params:
+ *   - caminho: Caminho do arquivo no storage (obrigatório)
+ *   - bucket: Nome do bucket (opcional, padrão: 'arquivos-obras')
  */
 router.get('/url-assinada', authenticateToken, async (req, res) => {
   try {
-    const { caminho } = req.query
+    const { caminho, bucket } = req.query
 
     if (!caminho || typeof caminho !== 'string') {
       return res.status(400).json({
@@ -1190,9 +1193,12 @@ router.get('/url-assinada', authenticateToken, async (req, res) => {
       })
     }
 
+    // Usar bucket fornecido ou padrão
+    const bucketName = bucket || 'arquivos-obras'
+
     // Gerar URL assinada para download
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
-      .from('arquivos-obras')
+      .from(bucketName)
       .createSignedUrl(caminho, 3600) // URL válida por 1 hora
 
     if (urlError) {

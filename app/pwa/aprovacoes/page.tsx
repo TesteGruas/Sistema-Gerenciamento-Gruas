@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { 
   Clock, 
   CheckCircle, 
@@ -19,15 +22,23 @@ import {
   Eye,
   ExternalLink,
   CheckSquare,
-  Loader2
+  Loader2,
+  Filter,
+  X
 } from 'lucide-react'
 import { useCurrentUser } from '@/hooks/use-current-user'
-import { apiRegistrosPonto, type RegistroPonto } from '@/lib/api-ponto-eletronico'
+import { apiRegistrosPonto, type RegistroPonto, apiFuncionarios } from '@/lib/api-ponto-eletronico'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 
 // Funções utilitárias para formatação
 function formatarData(data: string): string {
+  // Se a data já está no formato YYYY-MM-DD, usar diretamente sem conversão de timezone
+  if (data.match(/^\d{4}-\d{2}-\d{2}$/)) {
+    const [ano, mes, dia] = data.split('-');
+    return `${dia}/${mes}/${ano}`;
+  }
+  // Caso contrário, usar Date normalmente
   return new Date(data).toLocaleDateString('pt-BR');
 }
 
@@ -76,6 +87,10 @@ interface AprovacaoDisplay {
     nome: string;
     cargo: string;
     obra: string;
+    turno?: string;
+    email?: string;
+    telefone?: string;
+    status?: string;
   };
   supervisor?: {
     nome: string;
@@ -87,30 +102,70 @@ interface AprovacaoDisplay {
 }
 
 function converterParaDisplay(registro: RegistroPonto): AprovacaoDisplay {
+  // Mapear status da API para status de aprovação
+  // Um registro está assinado se:
+  // 1. Tem aprovado_por E data_aprovacao (método antigo com supervisor)
+  // 2. OU tem assinatura_digital_path E status é "Aprovado" (método novo sem supervisor)
+  let statusAprovacao = 'Pendente Aprovação';
+  
+  const foiAssinadoComSupervisor = registro.aprovado_por && registro.data_aprovacao;
+  // Normalizar status para comparação (trim e case-insensitive)
+  const statusNormalizado = registro.status?.trim() || '';
+  const foiAssinadoSemSupervisor = registro.assinatura_digital_path && statusNormalizado.toLowerCase() === 'aprovado';
+  
+  // Debug: log para verificar a lógica
+  if (registro.id === 'REG113199S954') {
+    console.log('🔍 [Aprovações] Debug registro REG113199S954:', {
+      id: registro.id,
+      assinatura_digital_path: registro.assinatura_digital_path,
+      status: registro.status,
+      foiAssinadoSemSupervisor,
+      foiAssinadoComSupervisor
+    });
+  }
+  
+  if (foiAssinadoComSupervisor || foiAssinadoSemSupervisor) {
+    statusAprovacao = 'Aprovado';
+  } else {
+    // Se não foi assinado, sempre é "Pendente Aprovação" para fins de assinatura
+    statusAprovacao = 'Pendente Aprovação';
+  }
+  
   return {
     id: registro.id?.toString() || '',
     funcionario_id: registro.funcionario_id,
     data_trabalho: registro.data,
     horas_extras: registro.horas_extras || 0,
-    status: registro.aprovado_por ? 'Aprovado' : (registro.status || 'Pendente Aprovação'),
+    status: statusAprovacao,
     registro: {
       entrada: registro.entrada || '08:00',
       saida: registro.saida || '17:00',
       horas_trabalhadas: registro.horas_trabalhadas || 0
     },
     funcionario: {
-      nome: registro.funcionario?.nome || 'Funcionário',
-      cargo: registro.funcionario?.cargo || 'Cargo',
-      obra: registro.funcionario?.obra_atual_id?.toString() || 'Obra'
+      nome: registro.funcionario?.nome || 'Funcionário não identificado',
+      cargo: registro.funcionario?.cargo || 'Cargo não informado',
+      obra: registro.funcionario?.obra_atual_id?.toString() || 'Obra não informada',
+      turno: registro.funcionario?.turno,
+      email: registro.funcionario?.email,
+      telefone: registro.funcionario?.telefone,
+      status: registro.funcionario?.status
     },
     supervisor: registro.aprovador ? {
-      nome: registro.aprovador.nome,
+      nome: registro.aprovador?.nome || 'Supervisor',
       cargo: 'Supervisor'
     } : undefined,
     observacoes: registro.observacoes,
-    data_aprovacao: registro.data_aprovacao,
+    // Se não tem data_aprovacao mas tem assinatura_digital_path, usar updated_at como data de aprovação
+    data_aprovacao: registro.data_aprovacao || (registro.assinatura_digital_path ? registro.updated_at : undefined),
     data_limite: undefined // Não há prazo limite para assinatura de registros normais
   };
+}
+
+interface Funcionario {
+  id: number;
+  nome: string;
+  cargo?: string;
 }
 
 export default function PWAAprovacoesPage() {
@@ -121,38 +176,106 @@ export default function PWAAprovacoesPage() {
   const [activeTab, setActiveTab] = useState('todas');
   const [showDetalhes, setShowDetalhes] = useState(false);
   const [aprovacaoSelecionada, setAprovacaoSelecionada] = useState<AprovacaoDisplay | null>(null);
+  
+  // Estados dos filtros
+  const [dataInicio, setDataInicio] = useState<string>(() => {
+    const hoje = new Date();
+    return hoje.toISOString().split('T')[0];
+  });
+  const [dataFim, setDataFim] = useState<string>(() => {
+    const hoje = new Date();
+    return hoje.toISOString().split('T')[0];
+  });
+  const [funcionarioFiltro, setFuncionarioFiltro] = useState<string>('all');
+  const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
+  const [loadingFuncionarios, setLoadingFuncionarios] = useState(false);
 
-  // Carregar TODOS os registros do dia pendentes de assinatura (não apenas com horas extras)
+  // Carregar lista de funcionários para o filtro
   useEffect(() => {
-    const carregarAprovacoes = async () => {
-      if (loadingUser || !user?.funcionario_id) return;
-      
-      setLoading(true);
+    const carregarFuncionarios = async () => {
+      setLoadingFuncionarios(true);
       try {
-        // Buscar registros do dia atual que ainda não foram assinados
-        const hoje = new Date().toISOString().split('T')[0];
-        const { data } = await apiRegistrosPonto.listar({
-          data_inicio: hoje,
-          data_fim: hoje,
-          limit: 1000 // Aumentar limite para pegar todos os registros do dia
+        const response = await apiFuncionarios.listarParaPonto(user?.id || 0, {
+          limit: 1000,
+          page: 1
         });
-        
-        // Filtrar apenas registros que ainda não foram assinados (sem aprovado_por)
-        // Removido o filtro de horas_extras > 0 para incluir TODOS os registros
-        const aprovacoesConvertidas = data
-          .filter(r => !r.aprovado_por || !r.data_aprovacao) // Não foi assinado ainda
-          .map(converterParaDisplay);
-        
-        setAprovacoes(aprovacoesConvertidas);
+        setFuncionarios(response.funcionarios || []);
       } catch (error: any) {
-        console.error('Erro ao carregar aprovações:', error);
-        toast.error('Erro ao carregar registros pendentes de assinatura');
+        console.error('Erro ao carregar funcionários:', error);
       } finally {
-        setLoading(false);
+        setLoadingFuncionarios(false);
       }
     };
 
-    carregarAprovacoes();
+    if (user?.id) {
+      carregarFuncionarios();
+    }
+  }, [user]);
+
+  // Carregar registros com filtros
+  const carregarAprovacoes = async () => {
+    if (loadingUser || !user?.funcionario_id) return;
+    
+    setLoading(true);
+    try {
+      // Preparar parâmetros de filtro
+      const params: any = {
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        limit: 1000
+      };
+
+      // Adicionar filtro de funcionário se selecionado
+      if (funcionarioFiltro && funcionarioFiltro !== 'all') {
+        params.funcionario_id = parseInt(funcionarioFiltro);
+      }
+
+      const { data } = await apiRegistrosPonto.listar(params);
+      
+      // Converter TODOS os registros para o formato de display
+      const aprovacoesConvertidas = data.map(converterParaDisplay);
+      
+      setAprovacoes(aprovacoesConvertidas);
+    } catch (error: any) {
+      console.error('Erro ao carregar aprovações:', error);
+      toast.error('Erro ao carregar registros');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Carregar registros quando filtros mudarem
+  useEffect(() => {
+    if (!loadingUser && user?.funcionario_id && dataInicio && dataFim) {
+      carregarAprovacoes();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loadingUser, dataInicio, dataFim, funcionarioFiltro]);
+
+  // Recarregar quando a página ganhar foco (útil após voltar da página de assinatura)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (!loadingUser && user?.funcionario_id) {
+        const carregarAprovacoes = async () => {
+          try {
+            const hoje = new Date().toISOString().split('T')[0];
+            const { data } = await apiRegistrosPonto.listar({
+              data_inicio: hoje,
+              data_fim: hoje,
+              limit: 1000
+            });
+            const aprovacoesConvertidas = data.map(converterParaDisplay);
+            setAprovacoes(aprovacoesConvertidas);
+          } catch (error: any) {
+            console.error('Erro ao recarregar aprovações:', error);
+          }
+        };
+        carregarAprovacoes();
+      }
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => window.removeEventListener('focus', handleFocus);
   }, [user, loadingUser]);
 
   // Separar por status
@@ -162,35 +285,14 @@ export default function PWAAprovacoesPage() {
   const canceladas: AprovacaoDisplay[] = []; // Canceladas não vêm da API atual
 
   const handleRefresh = async () => {
-    setLoading(true);
-    try {
-      if (!user?.funcionario_id) return;
-      
-      // Buscar registros do dia atual que ainda não foram assinados
-      const hoje = new Date().toISOString().split('T')[0];
-      const { data } = await apiRegistrosPonto.listar({
-        data_inicio: hoje,
-        data_fim: hoje,
-        limit: 1000
-      });
-      
-      // Filtrar apenas registros que ainda não foram assinados (sem aprovado_por)
-      // Removido o filtro de horas_extras > 0 para incluir TODOS os registros
-      const aprovacoesConvertidas = data
-        .filter(r => !r.aprovado_por || !r.data_aprovacao) // Não foi assinado ainda
-        .map(converterParaDisplay);
-      
-      setAprovacoes(aprovacoesConvertidas);
-    } catch (error: any) {
-      toast.error('Erro ao atualizar registros');
-    } finally {
-      setLoading(false);
-    }
+    await carregarAprovacoes();
   };
 
   const handleVerDetalhes = (aprovacao: AprovacaoDisplay) => {
+    console.log('🔍 [Aprovações] Clicou em aprovação:', aprovacao);
     // Se for aprovação pendente, vai direto para assinatura
     if (aprovacao.status === 'Pendente Aprovação') {
+      console.log('🔄 [Aprovações] Redirecionando para assinatura com ID:', aprovacao.id);
       router.push(`/pwa/aprovacao-assinatura?id=${aprovacao.id}`);
     } else {
       // Se for outro status, mostra detalhes
@@ -217,11 +319,20 @@ export default function PWAAprovacoesPage() {
       case 'Aprovado':
         return 'Aprovado';
       case 'Pendente Aprovação':
-        return 'Aguardando Aprovação';
+      case 'Pendente':
+        return 'Aguardando Assinatura';
       case 'Rejeitado':
         return 'Rejeitado';
+      case 'Atraso':
+        return 'Aguardando Assinatura';
+      case 'Em Andamento':
+        return 'Aguardando Assinatura';
+      case 'Completo':
+        return 'Aguardando Assinatura';
+      case 'Incompleto':
+        return 'Aguardando Assinatura';
       default:
-        return 'Desconhecido';
+        return 'Aguardando Assinatura';
     }
   };
 
@@ -280,6 +391,85 @@ export default function PWAAprovacoesPage() {
           <h1 className="text-xl font-bold text-gray-900">Assinar Registros de Ponto</h1>
         </div>
         <p className="text-sm text-gray-600">Assine todos os registros de ponto do dia dos funcionários</p>
+      </div>
+
+      {/* Filtros */}
+      <div className="bg-white border-b border-gray-200 p-4">
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Filter className="w-4 h-4" />
+              Filtros
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {/* Filtro de Data Início */}
+              <div className="space-y-2">
+                <Label htmlFor="data-inicio" className="text-sm">Data Início</Label>
+                <Input
+                  id="data-inicio"
+                  type="date"
+                  value={dataInicio}
+                  onChange={(e) => setDataInicio(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Filtro de Data Fim */}
+              <div className="space-y-2">
+                <Label htmlFor="data-fim" className="text-sm">Data Fim</Label>
+                <Input
+                  id="data-fim"
+                  type="date"
+                  value={dataFim}
+                  onChange={(e) => setDataFim(e.target.value)}
+                  className="w-full"
+                />
+              </div>
+
+              {/* Filtro de Funcionário */}
+              <div className="space-y-2">
+                <Label htmlFor="funcionario" className="text-sm">Funcionário</Label>
+                <Select
+                  value={funcionarioFiltro}
+                  onValueChange={setFuncionarioFiltro}
+                  disabled={loadingFuncionarios}
+                >
+                  <SelectTrigger id="funcionario" className="w-full">
+                    <SelectValue placeholder="Todos os funcionários" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os funcionários</SelectItem>
+                    {funcionarios.map((func) => (
+                      <SelectItem key={func.id} value={func.id.toString()}>
+                        {func.nome} {func.cargo ? `- ${func.cargo}` : ''}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Botão Limpar Filtros */}
+              <div className="space-y-2">
+                <Label className="text-sm opacity-0">Limpar</Label>
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    const hoje = new Date().toISOString().split('T')[0];
+                    setDataInicio(hoje);
+                    setDataFim(hoje);
+                    setFuncionarioFiltro('all');
+                  }}
+                  className="w-full"
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Limpar Filtros
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Botão de Aprovação em Massa - Posição Fixa */}
@@ -368,6 +558,10 @@ export default function PWAAprovacoesPage() {
                       <div>
                         <h3 className="font-semibold text-gray-900">{formatarData(aprovacao.data_trabalho)}</h3>
                         <p className="text-sm text-gray-600">{aprovacao.registro.entrada} - {aprovacao.registro.saida}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          <User className="w-3 h-3 inline mr-1" />
+                          {aprovacao.funcionario.nome}
+                        </p>
                       </div>
                     </div>
                     <Badge className={getStatusColor(aprovacao.status)}>
@@ -377,13 +571,18 @@ export default function PWAAprovacoesPage() {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Funcionário:</span>
+                      <span className="font-medium">{aprovacao.funcionario.nome}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Horas Extras:</span>
                       <span className="font-bold text-orange-600">{aprovacao.horas_extras}h</span>
                     </div>
                     
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Total Trabalhado:</span>
-                      <span className="font-medium">{aprovacao.registro.horas_trabalhadas}h</span>
+                      <span className="font-medium">{aprovacao.registro.horas_trabalhadas.toFixed(2)}h</span>
                     </div>
 
                     <div className="text-xs text-gray-500">
@@ -430,6 +629,10 @@ export default function PWAAprovacoesPage() {
                       <div>
                         <h3 className="font-semibold text-gray-900">{formatarData(aprovacao.data_trabalho)}</h3>
                         <p className="text-sm text-gray-600">{aprovacao.registro.entrada} - {aprovacao.registro.saida}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          <User className="w-3 h-3 inline mr-1" />
+                          {aprovacao.funcionario.nome}
+                        </p>
                       </div>
                     </div>
                     <Badge className="bg-orange-50 text-orange-600 border-orange-200">
@@ -439,8 +642,18 @@ export default function PWAAprovacoesPage() {
 
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Funcionário:</span>
+                      <span className="font-medium">{aprovacao.funcionario.nome}</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
                       <span className="text-gray-600">Horas Extras:</span>
                       <span className="font-bold text-orange-600">{aprovacao.horas_extras}h</span>
+                    </div>
+                    
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Total Trabalhado:</span>
+                      <span className="font-medium">{aprovacao.registro.horas_trabalhadas.toFixed(2)}h</span>
                     </div>
 
                     <div className="bg-orange-50 border border-orange-200 rounded p-2">
@@ -504,12 +717,16 @@ export default function PWAAprovacoesPage() {
                       <div className="flex items-center gap-2">
                         <CheckCircle className="w-4 h-4 text-green-600" />
                         <span className="text-xs text-green-800 font-medium">
-                          Aprovado por {aprovacao.supervisor.nome}
+                          {aprovacao.supervisor 
+                            ? `Aprovado por ${aprovacao.supervisor.nome}`
+                            : 'Aprovado'}
                         </span>
                       </div>
-                      <p className="text-xs text-green-700 mt-1">
-                        Em {formatarDataHora(aprovacao.data_aprovacao!)}
-                      </p>
+                      {aprovacao.data_aprovacao && (
+                        <p className="text-xs text-green-700 mt-1">
+                          Em {formatarDataHora(aprovacao.data_aprovacao)}
+                        </p>
+                      )}
                     </div>
 
                     {aprovacao.observacoes && (
@@ -588,7 +805,9 @@ export default function PWAAprovacoesPage() {
                           aprovacao.status === 'rejeitado' ? 'text-red-800' : 'text-gray-800'
                         }`}>
                           {aprovacao.status === 'rejeitado' 
-                            ? `Rejeitado por ${aprovacao.supervisor.nome}`
+                            ? aprovacao.supervisor 
+                              ? `Rejeitado por ${aprovacao.supervisor.nome}`
+                              : 'Rejeitado'
                             : 'Cancelado automaticamente'
                           }
                         </span>
@@ -658,6 +877,56 @@ export default function PWAAprovacoesPage() {
                   </Badge>
                 </div>
 
+                {/* Informações do Funcionário */}
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <h4 className="font-medium text-sm text-blue-800 mb-3 flex items-center gap-2">
+                    <User className="w-4 h-4" />
+                    Dados do Funcionário
+                  </h4>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-gray-600 text-sm">Nome:</span>
+                      <span className="font-medium text-sm">{aprovacaoSelecionada.funcionario.nome}</span>
+                    </div>
+                    {aprovacaoSelecionada.funcionario.cargo && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 text-sm">Cargo:</span>
+                        <span className="font-medium text-sm">{aprovacaoSelecionada.funcionario.cargo}</span>
+                      </div>
+                    )}
+                    {aprovacaoSelecionada.funcionario.turno && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 text-sm">Turno:</span>
+                        <span className="font-medium text-sm">{aprovacaoSelecionada.funcionario.turno}</span>
+                      </div>
+                    )}
+                    {aprovacaoSelecionada.funcionario.email && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 text-sm">Email:</span>
+                        <span className="font-medium text-sm text-blue-600">{aprovacaoSelecionada.funcionario.email}</span>
+                      </div>
+                    )}
+                    {aprovacaoSelecionada.funcionario.telefone && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 text-sm">Telefone:</span>
+                        <span className="font-medium text-sm">{aprovacaoSelecionada.funcionario.telefone}</span>
+                      </div>
+                    )}
+                    {aprovacaoSelecionada.funcionario.status && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-gray-600 text-sm">Status:</span>
+                        <Badge className={
+                          aprovacaoSelecionada.funcionario.status === 'Ativo' 
+                            ? 'bg-green-50 text-green-600 border-green-200'
+                            : 'bg-gray-50 text-gray-600 border-gray-200'
+                        }>
+                          {aprovacaoSelecionada.funcionario.status}
+                        </Badge>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
                 {/* Informações principais */}
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -674,7 +943,7 @@ export default function PWAAprovacoesPage() {
                   
                   <div className="flex items-center justify-between">
                     <span className="text-gray-600">Total Trabalhado:</span>
-                    <span className="font-medium">{aprovacaoSelecionada.registro.horas_trabalhadas}h</span>
+                    <span className="font-medium">{aprovacaoSelecionada.registro.horas_trabalhadas.toFixed(2)}h</span>
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -730,7 +999,9 @@ export default function PWAAprovacoesPage() {
                       <span className="font-medium text-sm text-green-800">Aprovado</span>
                     </div>
                     <p className="text-xs text-green-700">
-                      Aprovado em {formatarDataHora(aprovacaoSelecionada.data_aprovacao)} por {aprovacaoSelecionada.supervisor.nome}
+                      {aprovacaoSelecionada.data_aprovacao 
+                        ? `Aprovado em ${formatarDataHora(aprovacaoSelecionada.data_aprovacao)}${aprovacaoSelecionada.supervisor ? ` por ${aprovacaoSelecionada.supervisor.nome}` : ''}`
+                        : 'Aprovado'}
                     </p>
                   </div>
                 )}

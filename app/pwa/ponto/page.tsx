@@ -47,6 +47,7 @@ export default function PWAPontoPage() {
     saida: null as string | null
   })
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingRegistros, setIsLoadingRegistros] = useState(true) // Loading específico para carregar registros
   const [user, setUser] = useState<any>(null)
   const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
@@ -220,6 +221,7 @@ export default function PWAPontoPage() {
 
   // Carregar registros do dia
   const carregarRegistrosHoje = async () => {
+    setIsLoadingRegistros(true) // Iniciar loading
     try {
       // Carregar do cache primeiro se offline
       if (!isOnline) {
@@ -228,14 +230,25 @@ export default function PWAPontoPage() {
         if (cachedRegistros) {
           const registros = JSON.parse(cachedRegistros)
           setRegistrosHoje(registros)
+        } else {
+          // Se não tem cache e está offline, definir valores vazios
+          setRegistrosHoje({
+            entrada: null,
+            saida_almoco: null,
+            volta_almoco: null,
+            saida: null
+          })
         }
-        
+        setIsLoadingRegistros(false)
         return
       }
 
       const hoje = new Date().toISOString().split('T')[0]
       const token = localStorage.getItem('access_token')
-      if (!token) return
+      if (!token) {
+        setIsLoadingRegistros(false)
+        return
+      }
       
       const funcionarioId = await getFuncionarioIdWithFallback(
         user, 
@@ -281,11 +294,31 @@ export default function PWAPontoPage() {
       
       if (cachedRegistros) {
         setRegistrosHoje(JSON.parse(cachedRegistros))
+      } else {
+        // Se não tem cache, definir valores vazios
+        setRegistrosHoje({
+          entrada: null,
+          saida_almoco: null,
+          volta_almoco: null,
+          saida: null
+        })
       }
+    } finally {
+      setIsLoadingRegistros(false) // Finalizar loading
     }
   }
 
   const registrarPonto = async (tipo: string) => {
+    // VALIDAÇÃO: Verificar se já existe um registro completo (entrada + saída)
+    if (registrosHoje.entrada && registrosHoje.saida) {
+      toast({
+        title: "Registro já completo",
+        description: "Você já possui um registro completo para hoje (entrada e saída). Não é possível registrar novos pontos no mesmo dia.",
+        variant: "destructive"
+      })
+      return
+    }
+    
     // Se for entrada e ainda não perguntou sobre feriado, perguntar primeiro
     if (tipo === 'entrada' && !registrosHoje.entrada && isFeriado === null) {
       setTipoRegistroConfirmacao(tipo)
@@ -364,6 +397,45 @@ export default function PWAPontoPage() {
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
+      
+      // VALIDAÇÃO: Verificar se já existe um registro completo (entrada + saída) para hoje
+      if (isOnline) {
+        const registrosExistentes = await pontoApi.getRegistros({
+          funcionario_id: funcionarioId,
+          data_inicio: hoje,
+          data_fim: hoje
+        })
+        
+        if (registrosExistentes && registrosExistentes.length > 0) {
+          const registroExistente = registrosExistentes[0]
+          
+          // Se já existe entrada E saída, não permitir novos registros
+          if (registroExistente.entrada && registroExistente.saida) {
+            setIsLoading(false)
+            toast({
+              title: "Registro já completo",
+              description: "Você já possui um registro completo para hoje (entrada e saída). Não é possível registrar novos pontos no mesmo dia.",
+              variant: "destructive"
+            })
+            return
+          }
+        }
+      } else {
+        // Validação offline: verificar cache
+        const cachedRegistrosStr = localStorage.getItem('cached_registros_ponto_hoje')
+        if (cachedRegistrosStr) {
+          const cachedRegistros = JSON.parse(cachedRegistrosStr)
+          if (cachedRegistros.entrada && cachedRegistros.saida) {
+            setIsLoading(false)
+            toast({
+              title: "Registro já completo",
+              description: "Você já possui um registro completo para hoje (entrada e saída). Não é possível registrar novos pontos no mesmo dia.",
+              variant: "destructive"
+            })
+            return
+          }
+        }
+      }
       
       // Calcular horas extras se for saída
       if (tipo === 'saida' && registrosHoje.entrada) {
@@ -480,6 +552,18 @@ export default function PWAPontoPage() {
           await pontoApi.criarRegistro(dadosRegistro)
         }
       } catch (apiError: any) {
+        // Tratar erro específico de registro completo (409 - Conflito)
+        if (apiError.response?.status === 409) {
+          const errorMessage = apiError.response?.data?.message || 'Já existe um registro completo para hoje. Não é possível registrar novos pontos no mesmo dia.'
+          toast({
+            title: "Registro já completo",
+            description: errorMessage,
+            variant: "destructive"
+          })
+          setIsLoading(false)
+          return
+        }
+        
         // Tratar erro específico de geolocalização
         if (apiError.response?.status === 403 && apiError.response?.data?.error === 'FORA_DO_PERIMETRO') {
           const errorData = apiError.response.data
@@ -503,9 +587,31 @@ export default function PWAPontoPage() {
         [campoTipo]: horaAtual
       }
       localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
+      
+      // Mensagem de sucesso
+      toast({
+        title: "Ponto registrado",
+        description: `${tipo.charAt(0).toUpperCase() + tipo.slice(1)} registrado com sucesso às ${horaAtual}`,
+        variant: "default"
+      })
 
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
+      
+      // Mostrar mensagem de erro se não foi tratado anteriormente
+      if (error.message) {
+        toast({
+          title: "Erro ao registrar",
+          description: error.message,
+          variant: "destructive"
+        })
+      } else {
+        toast({
+          title: "Erro ao registrar",
+          description: "Ocorreu um erro ao registrar o ponto. Tente novamente.",
+          variant: "destructive"
+        })
+      }
     } finally {
       setIsLoading(false)
     }
@@ -567,8 +673,21 @@ export default function PWAPontoPage() {
       if (responseExistente.ok) {
         const dataExistente = await responseExistente.json()
         if (dataExistente.data && dataExistente.data.length > 0) {
+          const registroExistente = dataExistente.data[0]
+          
+          // VALIDAÇÃO: Se já existe um registro completo (entrada + saída), não permitir novos registros
+          if (registroExistente.entrada && registroExistente.saida) {
+            setIsLoading(false)
+            toast({
+              title: "Registro já completo",
+              description: "Você já possui um registro completo para hoje (entrada e saída). Não é possível registrar novos pontos no mesmo dia.",
+              variant: "destructive"
+            })
+            return
+          }
+          
           // Atualizar registro existente
-          const registroId = dataExistente.data[0].id
+          const registroId = registroExistente.id
           response = await fetch(
             `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}`,
             {
@@ -586,20 +705,51 @@ export default function PWAPontoPage() {
         }
       }
 
-      if (response && response.ok) {
-        // Atualizar registros localmente
-        setRegistrosHoje(prev => ({
-          ...prev,
-          [tipo.toLowerCase().replace(' ', '_')]: horaAtual
-        }))
+      if (response) {
+        if (response.ok) {
+          // Atualizar registros localmente
+          setRegistrosHoje(prev => ({
+            ...prev,
+            [tipo.toLowerCase().replace(' ', '_')]: horaAtual
+          }))
 
-        // Resetar estados
-        setHorasExtras(0)
-        setTipoRegistroPendente(null)
-        setAssinaturaDataUrl(null)
+          // Resetar estados
+          setHorasExtras(0)
+          setTipoRegistroPendente(null)
+          setAssinaturaDataUrl(null)
+          
+          toast({
+            title: "Registro realizado",
+            description: `Ponto registrado com sucesso. ${horasExtras > 0 ? `${horasExtras.toFixed(1)}h extras aguardando aprovação.` : ''}`,
+            variant: "default"
+          })
+        } else {
+          // Tratar erros da API
+          const errorData = await response.json().catch(() => ({}))
+          
+          if (response.status === 409) {
+            // Registro já completo
+            toast({
+              title: "Registro já completo",
+              description: errorData.message || 'Já existe um registro completo para hoje. Não é possível registrar novos pontos no mesmo dia.',
+              variant: "destructive"
+            })
+          } else {
+            toast({
+              title: "Erro ao registrar",
+              description: errorData.message || 'Ocorreu um erro ao registrar o ponto. Tente novamente.',
+              variant: "destructive"
+            })
+          }
+        }
       }
     } catch (error: any) {
       console.error('Erro ao registrar ponto:', error)
+      toast({
+        title: "Erro ao registrar",
+        description: error.message || 'Ocorreu um erro ao registrar o ponto. Tente novamente.',
+        variant: "destructive"
+      })
     } finally {
       setIsLoading(false)
     }
@@ -670,6 +820,50 @@ export default function PWAPontoPage() {
 
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
+
+  // Mostrar loading enquanto carrega os registros
+  if (isLoadingRegistros) {
+    return (
+      <ProtectedRoute permission="ponto_eletronico:visualizar">
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Ponto Eletrônico</h1>
+              <p className="text-gray-600">Registre sua entrada e saída</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                isOnline 
+                  ? "bg-green-100 text-green-700" 
+                  : "bg-red-100 text-red-700"
+              }`}>
+                {isOnline ? (
+                  <Wifi className="w-3 h-3" />
+                ) : (
+                  <WifiOff className="w-3 h-3" />
+                )}
+                <span>{isOnline ? "Online" : "Offline"}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Loading State */}
+          <Card>
+            <CardContent className="p-12">
+              <div className="flex flex-col items-center justify-center space-y-4">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                <div className="text-center">
+                  <p className="text-lg font-medium text-gray-900">Carregando registros...</p>
+                  <p className="text-sm text-gray-600 mt-1">Aguarde enquanto buscamos seus registros do dia</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </ProtectedRoute>
+    )
+  }
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">

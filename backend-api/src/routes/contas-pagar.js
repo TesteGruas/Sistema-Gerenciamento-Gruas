@@ -128,31 +128,65 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       });
     }
 
+    // Buscar boletos vinculados às notas fiscais de entrada
+    const notasIds = notasFiltradas.map(n => n.id);
+    let boletosVinculados = [];
+    if (notasIds.length > 0) {
+      const { data: boletosData, error: boletosError } = await supabaseAdmin
+        .from('boletos')
+        .select('*')
+        .in('nota_fiscal_id', notasIds)
+        .eq('tipo', 'pagar');
+      
+      if (!boletosError && boletosData) {
+        boletosVinculados = boletosData;
+      }
+    }
+
     // Transformar notas fiscais em formato de contas a pagar
-    const notasFormatadas = notasFiltradas.map(nota => ({
-      id: `nf_${nota.id}`, // Prefixo para identificar que é nota fiscal
-      tipo: 'nota_fiscal',
-      descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0), // Usar valor_liquido se disponível
-      data_vencimento: nota.data_vencimento || nota.data_emissao,
-      data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
-      status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
-      fornecedor: nota.fornecedor ? {
-        id: nota.fornecedor.id,
-        nome: nota.fornecedor.nome,
-        cnpj: nota.fornecedor.cnpj
-      } : null,
-      categoria: null,
-      observacoes: nota.observacoes,
-      created_at: nota.created_at,
-      updated_at: nota.updated_at,
-      // Campos específicos da nota fiscal
-      numero_nf: nota.numero_nf,
-      serie: nota.serie,
-      data_emissao: nota.data_emissao,
-      valor_total: parseFloat(nota.valor_total || 0),
-      valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0)
-    }));
+    const notasFormatadas = notasFiltradas.map(nota => {
+      // Buscar boleto vinculado a esta nota fiscal
+      const boletoVinculado = boletosVinculados.find(b => b.nota_fiscal_id === nota.id);
+      
+      return {
+        id: boletoVinculado ? `boleto_${boletoVinculado.id}` : `nf_${nota.id}`, // Priorizar boleto se existir
+        tipo: boletoVinculado ? 'boleto' : 'nota_fiscal',
+        descricao: boletoVinculado 
+          ? `Boleto ${boletoVinculado.numero_boleto} - NF ${nota.numero_nf}${nota.serie ? ` Série ${nota.serie}` : ''}`
+          : `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
+        valor: boletoVinculado 
+          ? parseFloat(boletoVinculado.valor || 0)
+          : parseFloat(nota.valor_liquido || nota.valor_total || 0),
+        data_vencimento: boletoVinculado 
+          ? boletoVinculado.data_vencimento 
+          : (nota.data_vencimento || nota.data_emissao),
+        data_pagamento: boletoVinculado 
+          ? (boletoVinculado.status === 'pago' ? boletoVinculado.data_pagamento : null)
+          : (nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null),
+        status: boletoVinculado
+          ? (boletoVinculado.status === 'pago' ? 'pago' : boletoVinculado.status === 'vencido' ? 'vencido' : 'pendente')
+          : (nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente'),
+        fornecedor: nota.fornecedor ? {
+          id: nota.fornecedor.id,
+          nome: nota.fornecedor.nome,
+          cnpj: nota.fornecedor.cnpj
+        } : null,
+        categoria: null,
+        observacoes: boletoVinculado?.observacoes || nota.observacoes,
+        created_at: boletoVinculado?.created_at || nota.created_at,
+        updated_at: boletoVinculado?.updated_at || nota.updated_at,
+        // Campos específicos da nota fiscal
+        numero_nf: nota.numero_nf,
+        serie: nota.serie,
+        data_emissao: nota.data_emissao,
+        valor_total: parseFloat(nota.valor_total || 0),
+        valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0),
+        // Campos específicos do boleto
+        numero_boleto: boletoVinculado?.numero_boleto,
+        boleto_id: boletoVinculado?.id,
+        nota_fiscal_id: nota.id
+      };
+    });
 
     // Combinar contas e notas fiscais
     const todasContas = [

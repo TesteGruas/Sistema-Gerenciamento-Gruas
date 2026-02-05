@@ -66,12 +66,10 @@ export default function RedirectPage() {
         const role = (userData.role || userRole || '').toLowerCase()
 
         // Determinar redirecionamento baseado no nível
-        // Níveis 8+ ou Cliente (nível 1) → Dashboard (web)
+        // Apenas Admin (nível 10) → Dashboard (web)
         // Demais níveis → PWA
         let redirectPath = '/pwa'
-        if (level >= 8) {
-          redirectPath = '/dashboard'
-        } else if (level === 1 && role.includes('cliente')) {
+        if (level === 10 || role === 'admin' || role === 'administrador') {
           redirectPath = '/dashboard'
         }
 

@@ -147,7 +147,7 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       }
     }
 
-    // Buscar usuários por nome ou email
+    // Buscar usuários por nome ou email (ou todos se não houver busca)
     let query = supabaseAdmin
       .from('usuarios')
       .select('*', { count: 'exact' })
@@ -156,10 +156,14 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       const searchTerm = decodeURIComponent(search.replace(/\+/g, ' '))
       query = query.or(`nome.ilike.%${searchTerm}%,email.ilike.%${searchTerm}%`)
     }
+    // Se não houver busca, retornar todos os usuários (sem filtro de busca)
 
     if (status) {
       query = query.eq('status', status)
     }
+
+    // Ordenar por data de criação (mais recentes primeiro) para garantir ordem consistente
+    query = query.order('created_at', { ascending: false })
 
     const { data: usuariosPorNomeEmail, error: error1, count: count1 } = await query
 
@@ -236,8 +240,8 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
     // Buscar perfis e clientes relacionados para cada usuário paginado
     const usuariosComPerfis = await Promise.all(
       (usuariosPaginados || []).map(async (usuario) => {
-        // Buscar perfil do usuário
-        const { data: perfilData } = await supabaseAdmin
+        // Buscar perfil do usuário (usar maybeSingle para não falhar se não tiver perfil)
+        const { data: perfilData, error: perfilError } = await supabaseAdmin
           .from('usuario_perfis')
           .select(`
             id,
@@ -253,7 +257,29 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
           `)
           .eq('usuario_id', usuario.id)
           .eq('status', 'Ativa')
-          .single()
+          .maybeSingle()
+        
+        // Se não encontrou perfil ativo, tentar buscar qualquer perfil (pode estar inativo)
+        let perfilFinal = perfilData
+        if (!perfilData && !perfilError) {
+          const { data: perfilInativo } = await supabaseAdmin
+            .from('usuario_perfis')
+            .select(`
+              id,
+              perfil_id,
+              status,
+              data_atribuicao,
+              perfis!inner(
+                id,
+                nome,
+                nivel_acesso,
+                descricao
+              )
+            `)
+            .eq('usuario_id', usuario.id)
+            .maybeSingle()
+          perfilFinal = perfilInativo
+        }
 
         // Buscar cliente relacionado (se o usuário for contato de algum cliente)
         const { data: clienteData } = await supabaseAdmin
@@ -273,7 +299,7 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
 
         return {
           ...usuario,
-          usuario_perfis: perfilData,
+          usuario_perfis: perfilFinal || null,
           cliente: clienteData || null
         }
       })
@@ -345,8 +371,8 @@ router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), 
       })
     }
 
-    // Buscar perfil do usuário
-    const { data: perfilData } = await supabaseAdmin
+    // Buscar perfil do usuário (usar maybeSingle para não falhar se não tiver perfil)
+    const { data: perfilData, error: perfilError } = await supabaseAdmin
       .from('usuario_perfis')
       .select(`
         id,
@@ -362,7 +388,29 @@ router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), 
       `)
       .eq('usuario_id', id)
       .eq('status', 'Ativa')
-      .single()
+      .maybeSingle()
+    
+    // Se não encontrou perfil ativo, tentar buscar qualquer perfil
+    let perfilFinal = perfilData
+    if (!perfilData && !perfilError) {
+      const { data: perfilInativo } = await supabaseAdmin
+        .from('usuario_perfis')
+        .select(`
+          id,
+          perfil_id,
+          status,
+          data_atribuicao,
+          perfis!inner(
+            id,
+            nome,
+            nivel_acesso,
+            descricao
+          )
+        `)
+        .eq('usuario_id', id)
+        .maybeSingle()
+      perfilFinal = perfilInativo
+    }
 
     // Buscar cliente relacionado (se o usuário for contato de algum cliente)
     const { data: clienteData } = await supabaseAdmin
@@ -382,7 +430,7 @@ router.get('/:id', authenticateToken, requirePermission('usuarios:visualizar'), 
 
     const data = {
       ...usuario,
-      usuario_perfis: perfilData,
+      usuario_perfis: perfilFinal || null,
       cliente: clienteData || null
     }
 

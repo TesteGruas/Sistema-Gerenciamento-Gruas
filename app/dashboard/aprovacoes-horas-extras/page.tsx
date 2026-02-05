@@ -51,11 +51,11 @@ export default function AprovacoesHorasExtrasPage() {
     return true;
   });
 
-  // Separar por status (normalizar para comparação)
-  const pendentes = aprovacoesFiltradas.filter(a => a.status === 'Pendente Aprovação');
-  const aprovadas = aprovacoesFiltradas.filter(a => a.status === 'Aprovado');
-  const rejeitadas = aprovacoesFiltradas.filter(a => a.status === 'Rejeitado');
-  const canceladas = aprovacoesFiltradas.filter(a => a.status === 'Cancelado');
+  // Separar por status (o status vem em minúsculo: 'pendente', 'aprovado', 'rejeitado', 'cancelado')
+  const pendentes = aprovacoesFiltradas.filter(a => a.status === 'pendente' || a.status === 'Pendente Aprovação');
+  const aprovadas = aprovacoesFiltradas.filter(a => a.status === 'aprovado' || a.status === 'Aprovado');
+  const rejeitadas = aprovacoesFiltradas.filter(a => a.status === 'rejeitado' || a.status === 'Rejeitado');
+  const canceladas = aprovacoesFiltradas.filter(a => a.status === 'cancelado' || a.status === 'Cancelado');
 
   const handleRefresh = async () => {
     await refetch();

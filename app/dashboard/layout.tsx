@@ -414,6 +414,18 @@ function DashboardLayoutContent({
     }
   }, [isClientSide])
   
+  // Redirecionar usuários que não são Admin para o PWA
+  // Apenas Admin (level 10) pode acessar o dashboard
+  useEffect(() => {
+    if (!permissionsLoading) {
+      // Se não é admin, redirecionar para PWA
+      if (!isAdminFromPermissions() && level !== 10) {
+        console.log(`🚫 [Dashboard] Acesso negado. Redirecionando para PWA. (Level: ${level}, isAdmin: ${isAdminFromPermissions()})`)
+        router.replace('/pwa')
+      }
+    }
+  }, [permissionsLoading, isAdminFromPermissions, level, router])
+  
   // Redirecionar Operários para o PWA - não devem ter acesso ao dashboard web
   useEffect(() => {
     if (!permissionsLoading && isOperator()) {

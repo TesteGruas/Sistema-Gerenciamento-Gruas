@@ -21,7 +21,8 @@ import {
   FileDown,
   ArrowLeft,
   Loader2,
-  Share2
+  Share2,
+  FileSignature
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -39,6 +40,12 @@ interface RegistroPonto {
   horas_trabalhadas?: number
   horas_extras?: number
   status: string
+  aprovado_por?: number | null
+  data_aprovacao?: string | null
+  assinatura_digital_path?: string | null
+  aprovador?: {
+    nome?: string
+  } | null
 }
 
 export default function PWAEspelhoPontoPage() {
@@ -49,8 +56,6 @@ export default function PWAEspelhoPontoPage() {
   const [loading, setLoading] = useState(false)
   const [dataInicio, setDataInicio] = useState("")
   const [dataFim, setDataFim] = useState("")
-  const [assinaturaFuncionario, setAssinaturaFuncionario] = useState("")
-  const [assinaturaGestor, setAssinaturaGestor] = useState("")
   const [registroDetalhes, setRegistroDetalhes] = useState<RegistroPonto | null>(null)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
 
@@ -252,13 +257,7 @@ export default function PWAEspelhoPontoPage() {
       doc.text(`Total de horas trabalhadas: ${totalHoras.toFixed(2)}h`, 14, finalY + 5)
       doc.text(`Total de horas extras: ${totalExtras.toFixed(2)}h`, 14, finalY + 10)
 
-      // Assinaturas
-      if (assinaturaFuncionario) {
-        doc.text(`Assinatura do Funcionário: ${assinaturaFuncionario}`, 14, finalY + 20)
-      }
-      if (assinaturaGestor) {
-        doc.text(`Assinatura do Gestor: ${assinaturaGestor}`, 14, finalY + 25)
-      }
+      // Assinaturas removidas - não são mais necessárias
 
       // Adicionar rodapé com informações da empresa
       const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
@@ -432,7 +431,21 @@ export default function PWAEspelhoPontoPage() {
                         </p>
                       </div>
                     </div>
-                    {getStatusBadge(registro.status)}
+                    <div className="flex flex-col items-end gap-2">
+                      {getStatusBadge(registro.status)}
+                      {/* Badge de assinatura do gestor/cliente */}
+                      {registro.aprovado_por && registro.data_aprovacao ? (
+                        <Badge className="bg-green-100 text-green-800 border-green-300 flex items-center gap-1">
+                          <FileSignature className="w-3 h-3" />
+                          <span>Assinado</span>
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-gray-300 text-gray-600 flex items-center gap-1">
+                          <FileSignature className="w-3 h-3" />
+                          <span>Não assinado</span>
+                        </Badge>
+                      )}
+                    </div>
                   </div>
 
                   {/* Horários principais */}
@@ -517,34 +530,6 @@ export default function PWAEspelhoPontoPage() {
         </Card>
       )}
 
-      {/* Assinaturas */}
-      {registros.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Assinaturas (Opcional)</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 gap-4">
-            <div>
-              <Label htmlFor="assinatura-funcionario">Assinatura do Funcionário</Label>
-              <Input
-                id="assinatura-funcionario"
-                placeholder="Digite seu nome completo"
-                value={assinaturaFuncionario}
-                onChange={(e) => setAssinaturaFuncionario(e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="assinatura-gestor">Assinatura do Gestor</Label>
-              <Input
-                id="assinatura-gestor"
-                placeholder="Digite seu nome completo"
-                value={assinaturaGestor}
-                onChange={(e) => setAssinaturaGestor(e.target.value)}
-              />
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Modal de Detalhes do Registro */}
       <Dialog open={showDetalhesModal} onOpenChange={setShowDetalhesModal}>

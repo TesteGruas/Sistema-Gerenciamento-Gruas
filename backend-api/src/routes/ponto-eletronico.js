@@ -1782,6 +1782,14 @@ router.post('/registros', async (req, res) => {
       .single();
 
     if (existingRecord) {
+      // VALIDAÇÃO: Se já existe um registro completo (entrada + saída), não permitir novos registros
+      if (existingRecord.entrada && existingRecord.saida) {
+        return res.status(409).json({
+          success: false,
+          message: 'Já existe um registro completo para este funcionário nesta data (entrada e saída). Não é possível registrar novos pontos no mesmo dia.'
+        });
+      }
+
       // Se está tentando registrar uma entrada e já existe uma entrada sem saída
       if (entrada && existingRecord.entrada && !existingRecord.saida) {
         return res.status(409).json({
@@ -4730,12 +4738,8 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
  *           schema:
  *             type: object
  *             required:
- *               - supervisor_id
  *               - assinatura_digital
  *             properties:
- *               supervisor_id:
- *                 type: integer
- *                 description: ID do supervisor que está assinando
  *               assinatura_digital:
  *                 type: string
  *                 description: Assinatura digital em base64
@@ -4755,12 +4759,14 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
 router.post('/registros/:id/assinar', async (req, res) => {
   try {
     const { id } = req.params;
-    const { supervisor_id, assinatura_digital, observacoes } = req.body;
+    const { assinatura_digital, observacoes } = req.body;
 
-    if (!supervisor_id || !assinatura_digital) {
+    console.log(`[Assinatura] Iniciando assinatura do registro ${id}`);
+
+    if (!assinatura_digital) {
       return res.status(400).json({
         success: false,
-        message: 'ID do supervisor e assinatura digital são obrigatórios'
+        message: 'Assinatura digital é obrigatória'
       });
     }
 
@@ -4784,28 +4790,18 @@ router.post('/registros/:id/assinar', async (req, res) => {
       console.error('Erro ao buscar registro:', errorBusca);
       return res.status(500).json({
         success: false,
-        message: 'Erro interno do servidor'
+        message: 'Erro interno do servidor',
+        error: errorBusca.message
       });
     }
 
-    // Verificar se o supervisor existe
-    const { data: supervisor, error: supervisorError } = await supabaseAdmin
-      .from('funcionarios')
-      .select('id, nome, cargo')
-      .eq('id', supervisor_id)
-      .eq('status', 'Ativo')
-      .single();
-
-    if (supervisorError || !supervisor) {
-      return res.status(404).json({
-        success: false,
-        message: 'Supervisor não encontrado ou inativo'
-      });
-    }
+    console.log(`[Assinatura] Registro encontrado:`, { id: registro.id, status: registro.status });
 
     // Salvar assinatura digital no storage
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const fileName = `assinatura_ponto_${id}_${supervisor_id}_${timestamp}.png`;
+    const fileName = `assinatura_ponto_${id}_${timestamp}.png`;
+    
+    console.log(`[Assinatura] Preparando upload da assinatura: ${fileName}`);
     
     // Converter base64 para buffer
     const base64Data = assinatura_digital.replace(/^data:image\/png;base64,/, '');
@@ -4823,40 +4819,104 @@ router.post('/registros/:id/assinar', async (req, res) => {
       console.error('Erro ao fazer upload da assinatura:', uploadError);
       return res.status(500).json({
         success: false,
-        message: 'Erro ao salvar assinatura digital'
+        message: 'Erro ao salvar assinatura digital',
+        error: uploadError.message || uploadError.details
       });
     }
+
+    console.log(`[Assinatura] Upload concluído: ${uploadData.path}`);
 
     // Determinar novo status baseado no registro
     // Se já estava aprovado, mantém aprovado. Se não, atualiza para aprovado
     const novoStatus = registro.status === 'Aprovado' ? 'Aprovado' : 'Aprovado';
 
-    // Atualizar registro com assinatura
-    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+    console.log(`[Assinatura] Atualizando registro com status: ${novoStatus}`);
+
+    // Preparar dados para atualização
+    // Não definir data_aprovacao nem aprovado_por, pois não há supervisor
+    const dadosUpdate = {
+      status: novoStatus,
+      observacoes: observacoes || registro.observacoes || null,
+      updated_at: new Date().toISOString()
+    };
+
+    // Tentar adicionar assinatura_digital_path se o campo existir
+    // Se o campo não existir, o update ainda funcionará sem ele
+    try {
+      dadosUpdate.assinatura_digital_path = uploadData.path;
+    } catch (e) {
+      console.warn('[Assinatura] Campo assinatura_digital_path pode não existir na tabela');
+    }
+
+    console.log(`[Assinatura] Dados para atualização:`, dadosUpdate);
+
+    // Atualizar registro com assinatura (sem supervisor_id)
+    let registroAtualizado = null;
+    let errorUpdate = null;
+    
+    const { data, error } = await supabaseAdmin
       .from('registros_ponto')
-      .update({
-        status: novoStatus,
-        aprovado_por: supervisor_id,
-        data_aprovacao: new Date().toISOString(),
-        observacoes: observacoes || registro.observacoes,
-        assinatura_digital_path: uploadData.path,
-        updated_at: new Date().toISOString()
-      })
+      .update(dadosUpdate)
       .eq('id', id)
       .select(`
         *,
-        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno),
-        aprovador:funcionarios!registros_ponto_aprovado_por_fkey(nome, cargo)
+        funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
       `)
       .single();
 
+    registroAtualizado = data;
+    errorUpdate = error;
+
     if (errorUpdate) {
-      console.error('Erro ao assinar registro:', errorUpdate);
-      return res.status(500).json({
-        success: false,
-        message: 'Erro ao assinar registro'
-      });
+      console.error('❌ [Assinatura] Erro ao assinar registro:', errorUpdate);
+      console.error('❌ [Assinatura] Código do erro:', errorUpdate.code);
+      console.error('❌ [Assinatura] Mensagem:', errorUpdate.message);
+      console.error('❌ [Assinatura] Detalhes:', errorUpdate.details);
+      console.error('❌ [Assinatura] Hint:', errorUpdate.hint);
+      
+      // Se o erro for sobre campo inexistente, tentar sem assinatura_digital_path
+      if (errorUpdate.code === '42703' || errorUpdate.message?.includes('column') || errorUpdate.message?.includes('does not exist')) {
+        console.log('[Assinatura] Tentando atualizar sem campo assinatura_digital_path...');
+        const dadosUpdateSemAssinatura = {
+          status: novoStatus,
+          observacoes: observacoes || registro.observacoes || null,
+          updated_at: new Date().toISOString()
+        };
+        
+        const { data: registroAtualizado2, error: errorUpdate2 } = await supabaseAdmin
+          .from('registros_ponto')
+          .update(dadosUpdateSemAssinatura)
+          .eq('id', id)
+          .select(`
+            *,
+            funcionario:funcionarios!fk_registros_ponto_funcionario(nome, cargo, turno)
+          `)
+          .single();
+        
+        if (errorUpdate2) {
+          return res.status(500).json({
+            success: false,
+            message: 'Erro ao assinar registro',
+            error: errorUpdate2.message || errorUpdate2.details || 'Erro desconhecido',
+            code: errorUpdate2.code,
+            hint: errorUpdate2.hint
+          });
+        }
+        
+        // Sucesso sem campo assinatura_digital_path
+        registroAtualizado = registroAtualizado2;
+      } else {
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao assinar registro',
+          error: errorUpdate.message || errorUpdate.details || 'Erro desconhecido',
+          code: errorUpdate.code,
+          hint: errorUpdate.hint
+        });
+      }
     }
+
+    console.log(`✅ [Assinatura] Registro atualizado com sucesso`);
 
     // Criar notificação para o funcionário
     const { error: notifError } = await supabaseAdmin
@@ -4865,7 +4925,7 @@ router.post('/registros/:id/assinar', async (req, res) => {
         usuario_id: registro.funcionario_id,
         tipo: 'success',
         titulo: 'Registro de Ponto Assinado',
-        mensagem: `Seu registro de ponto de ${registro.data} foi assinado por ${supervisor.nome}`,
+        mensagem: `Seu registro de ponto de ${registro.data} foi assinado com sucesso`,
         link: `/dashboard/ponto`,
         lida: false,
         created_at: new Date().toISOString()

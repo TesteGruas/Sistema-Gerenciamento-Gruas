@@ -167,6 +167,8 @@ async function buscarTelefoneWhatsAppUsuario(usuario_id) {
  */
 async function buscarTelefoneWhatsAppSupervisor(supervisor_id) {
   try {
+    console.log(`[whatsapp-service] 🔍 Buscando telefone WhatsApp para supervisor ${supervisor_id}...`);
+    
     // Primeiro, tentar buscar em funcionarios (se o supervisor for um funcionário)
     const { data: funcionario, error: funcError } = await supabaseAdmin
       .from('funcionarios')
@@ -178,6 +180,7 @@ async function buscarTelefoneWhatsAppSupervisor(supervisor_id) {
       // Priorizar telefone_whatsapp, senão usar telefone comum
       const telefone = funcionario.telefone_whatsapp || funcionario.telefone;
       if (telefone) {
+        console.log(`[whatsapp-service] ✅ Telefone encontrado em funcionarios: ${telefone}`);
         return formatarTelefone(telefone);
       }
     }
@@ -190,13 +193,28 @@ async function buscarTelefoneWhatsAppSupervisor(supervisor_id) {
       .single();
     
     if (!userError && usuario && usuario.telefone) {
+      console.log(`[whatsapp-service] ✅ Telefone encontrado em usuarios: ${usuario.telefone}`);
       return formatarTelefone(usuario.telefone);
     }
     
-    console.warn(`[whatsapp-service] Telefone WhatsApp não encontrado para supervisor ${supervisor_id}`);
+    // Se não encontrou em usuarios, buscar em clientes (se o supervisor for um cliente)
+    // Buscar cliente que tem contato_usuario_id igual ao supervisor_id
+    const { data: cliente, error: clienteError } = await supabaseAdmin
+      .from('clientes')
+      .select('telefone, id, nome')
+      .eq('contato_usuario_id', supervisor_id)
+      .single();
+    
+    if (!clienteError && cliente && cliente.telefone) {
+      console.log(`[whatsapp-service] ✅ Telefone encontrado em clientes: ${cliente.telefone}`);
+      return formatarTelefone(cliente.telefone);
+    }
+    
+    console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não encontrado para supervisor ${supervisor_id}`);
+    console.warn(`[whatsapp-service] ⚠️ Verificou: funcionarios (${funcError ? 'erro' : 'não encontrado'}), usuarios (${userError ? 'erro' : 'não encontrado'}), clientes (${clienteError ? 'erro' : 'não encontrado'})`);
     return null;
   } catch (error) {
-    console.error('[whatsapp-service] Erro ao buscar telefone WhatsApp:', error);
+    console.error('[whatsapp-service] ❌ Erro ao buscar telefone WhatsApp:', error);
     return null;
   }
 }

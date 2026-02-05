@@ -67,20 +67,17 @@ export function getUserLevel(userData: UserData | null): number {
 
 /**
  * Verifica se o usuário deve acessar o sistema web (dashboard)
- * Regra: Níveis 8+ ou Cliente (nível 1)
+ * Regra: APENAS ADMIN (nível 10) pode acessar o dashboard
  */
 export function shouldAccessWeb(userData: UserData | null): boolean {
   if (!userData) return false
 
   const level = getUserLevel(userData)
   
-  // Níveis 8 ou superior → Web
-  if (level >= 8) {
+  // Apenas Admin (nível 10) → Web/Dashboard
+  if (level === 10) {
     return true
   }
-
-  // Cliente (nível 6) → PWA (não web, mas tem acesso a aprovações)
-  // Clientes agora têm nível 6, então não entram aqui
 
   // Demais níveis → PWA
   return false
@@ -97,15 +94,15 @@ export function isGestorUser(userData: UserData | null): boolean {
 /**
  * Redireciona usuário para a página correta baseado no nível de acesso
  * 
- * - Níveis 8+ e Cliente (nível 1) → Dashboard (web)
- * - Níveis 7 ou menos (exceto Cliente) → PWA
+ * - Apenas Admin (nível 10) → Dashboard (web)
+ * - Demais níveis → PWA
  */
 export function getRedirectPath(userData: UserData | null): string {
   if (!userData) {
     return '/pwa/login'
   }
 
-  // Verificar se deve acessar web
+  // Verificar se deve acessar web (apenas Admin)
   if (shouldAccessWeb(userData)) {
     return '/dashboard'
   }

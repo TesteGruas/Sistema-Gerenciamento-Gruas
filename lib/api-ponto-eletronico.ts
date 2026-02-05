@@ -11,6 +11,8 @@ export interface Funcionario {
   status?: string;
   email?: string;
   telefone?: string;
+  obra_atual_id?: number;
+  turno?: string;
 }
 
 export interface RegistroPonto {
@@ -31,6 +33,9 @@ export interface RegistroPonto {
   data_aprovacao?: string;
   observacoes?: string;
   justificativa_alteracao?: string;
+  assinatura_digital_path?: string;
+  updated_at?: string;
+  created_at?: string;
   // Novos campos de tipo de dia e feriado
   tipo_dia?: 'normal' | 'sabado' | 'domingo' | 'feriado_nacional' | 'feriado_estadual' | 'feriado_local';
   is_feriado?: boolean;
@@ -177,7 +182,6 @@ export const apiRegistrosPonto = {
   async assinar(
     id: string | number,
     payload: {
-      supervisor_id: number | string;
       assinatura_digital: string;
       observacoes?: string;
     }

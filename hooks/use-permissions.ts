@@ -159,10 +159,11 @@ export const usePermissions = () => {
 
   /**
    * Verifica se tem acesso ao dashboard web
+   * APENAS ADMIN pode acessar o dashboard
    */
   const canAccessDashboard = (): boolean => {
-    // Admin, Gestores e Clientes têm acesso ao dashboard
-    return hasMinLevel(6 as AccessLevel) || hasPermission('dashboard:visualizar')
+    // Apenas Admin (level 10) tem acesso ao dashboard
+    return isAdmin() || level === 10
   }
 
   /**

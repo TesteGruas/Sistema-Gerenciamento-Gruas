@@ -2,42 +2,40 @@ import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { 
   apiAprovacoesHorasExtras, 
-  RegistroPontoAprovacao,
-  AprovacaoComAssinaturaPayload,
+  AprovacaoHorasExtras,
+  AprovacaoPayload,
   RejeicaoPayload
 } from '@/lib/api-aprovacoes-horas-extras'
 
 interface UseAprovacoesHorasExtrasReturn {
-  aprovacoes: RegistroPontoAprovacao[];
+  aprovacoes: AprovacaoHorasExtras[];
   loading: boolean;
   error: string | null;
   fetchAprovacoes: (gestor_id?: number) => Promise<void>;
-  aprovar: (registro_id: string, assinatura: string, observacoes?: string) => Promise<boolean>;
-  rejeitar: (registro_id: string, motivo: string) => Promise<boolean>;
+  aprovar: (aprovacao_id: string, assinatura: string, observacoes?: string) => Promise<boolean>;
+  rejeitar: (aprovacao_id: string, motivo: string) => Promise<boolean>;
   refetch: () => Promise<void>;
 }
 
 export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHorasExtrasReturn {
-  const [aprovacoes, setAprovacoes] = useState<RegistroPontoAprovacao[]>([]);
+  const [aprovacoes, setAprovacoes] = useState<AprovacaoHorasExtras[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastGestorId, setLastGestorId] = useState<number | undefined>(gestor_id);
 
   /**
-   * Busca lista de aprovações pendentes
+   * Busca lista de aprovações pendentes do supervisor logado
+   * A API usa automaticamente o req.user.id do token de autenticação
    */
   const fetchAprovacoes = useCallback(async (gestorIdParam?: number) => {
-    const idToUse = gestorIdParam ?? lastGestorId;
     setLoading(true);
     setError(null);
     
     try {
-      const { data } = await apiAprovacoesHorasExtras.listarPendentes({
-        gestor_id: idToUse
-      });
+      // A API /pendentes usa automaticamente o req.user.id do token
+      // Não precisa passar gestor_id, pois o backend já filtra pelo supervisor_id = req.user.id
+      const { data } = await apiAprovacoesHorasExtras.listarPendentes();
       
       setAprovacoes(data);
-      setLastGestorId(idToUse);
     } catch (err: any) {
       const errorMessage = err.response?.data?.message || 'Erro ao carregar aprovações';
       setError(errorMessage);
@@ -56,13 +54,13 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
     } finally {
       setLoading(false);
     }
-  }, [lastGestorId]);
+  }, []);
 
   /**
    * Aprova horas extras com assinatura digital
    */
   const aprovar = useCallback(async (
-    registro_id: string,
+    aprovacao_id: string,
     assinatura: string,
     observacoes?: string
   ): Promise<boolean> => {
@@ -72,25 +70,21 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
       return false;
     }
 
-    // TODO: Buscar do context de autenticação
-    const gestor_id = lastGestorId || 1; // Default para gestor ID 1 se não informado
-
     try {
-      const payload: AprovacaoComAssinaturaPayload = {
-        gestor_id: gestor_id,
-        assinatura_digital: assinatura,
-        observacoes_aprovacao: observacoes
+      const payload: AprovacaoPayload = {
+        assinatura: assinatura,
+        observacoes: observacoes
       };
 
-      const { message } = await apiAprovacoesHorasExtras.aprovarComAssinatura(
-        registro_id,
+      const { message } = await apiAprovacoesHorasExtras.aprovar(
+        aprovacao_id,
         payload
       );
 
       toast.success(message);
       
       // Recarregar lista completa para atualizar todos os status
-      await fetchAprovacoes(lastGestorId);
+      await fetchAprovacoes();
       
       return true;
     } catch (err: any) {
@@ -100,7 +94,7 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
       if (err.response?.status === 400) {
         toast.error(errorMessage);
       } else if (err.response?.status === 404) {
-        toast.error('Registro não encontrado');
+        toast.error('Aprovação não encontrada');
       } else if (err.response?.status === 500) {
         toast.error('Erro no servidor. Tente novamente.');
       } else {
@@ -110,13 +104,13 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
       console.error('Erro ao aprovar:', err);
       return false;
     }
-  }, [lastGestorId]);
+  }, [fetchAprovacoes]);
 
   /**
    * Rejeita horas extras com motivo
    */
   const rejeitar = useCallback(async (
-    registro_id: string,
+    aprovacao_id: string,
     motivo: string
   ): Promise<boolean> => {
     // Validação básica do motivo
@@ -127,18 +121,18 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
 
     try {
       const payload: RejeicaoPayload = {
-        motivo_rejeicao: motivo
+        motivo: motivo
       };
 
       const { message } = await apiAprovacoesHorasExtras.rejeitar(
-        registro_id,
+        aprovacao_id,
         payload
       );
 
       toast.success(message);
       
       // Recarregar lista completa para atualizar todos os status
-      await fetchAprovacoes(lastGestorId);
+      await fetchAprovacoes();
       
       return true;
     } catch (err: any) {
@@ -148,7 +142,7 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
       if (err.response?.status === 400) {
         toast.error(errorMessage);
       } else if (err.response?.status === 404) {
-        toast.error('Registro não encontrado');
+        toast.error('Aprovação não encontrada');
       } else {
         toast.error(errorMessage);
       }
@@ -156,14 +150,14 @@ export function useAprovacoesHorasExtras(gestor_id?: number): UseAprovacoesHoras
       console.error('Erro ao rejeitar:', err);
       return false;
     }
-  }, []);
+  }, [fetchAprovacoes]);
 
   /**
-   * Refetch - recarrega a lista usando o último gestor_id
+   * Refetch - recarrega a lista
    */
   const refetch = useCallback(async () => {
-    await fetchAprovacoes(lastGestorId);
-  }, [fetchAprovacoes, lastGestorId]);
+    await fetchAprovacoes();
+  }, [fetchAprovacoes]);
 
   return {
     aprovacoes,

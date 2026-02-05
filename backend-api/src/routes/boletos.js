@@ -183,6 +183,16 @@ router.get('/', authenticateToken, async (req, res) => {
         if (b.origem === 'medicao') {
           return req.query.tipo === 'receber';
         }
+        
+        // Se o boleto tem nota fiscal vinculada, usar o tipo da nota fiscal
+        if (b.notas_fiscais) {
+          // Nota fiscal de entrada = boleto a pagar
+          // Nota fiscal de saída = boleto a receber
+          const tipoEsperado = b.notas_fiscais.tipo === 'entrada' ? 'pagar' : 'receber';
+          return tipoEsperado === req.query.tipo;
+        }
+        
+        // Caso contrário, usar o tipo do boleto
         return b.tipo === req.query.tipo;
       });
       console.log(`Após filtro de tipo '${req.query.tipo}': ${allBoletos.length} boletos (era ${antesFiltro})`);

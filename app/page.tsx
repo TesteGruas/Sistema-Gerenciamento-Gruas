@@ -185,12 +185,10 @@ function LoginPageContent() {
       const userLevel = data.data.level || 0
       const userRole = (data.data.role || '').toLowerCase()
       
-      // Níveis 8+ ou Cliente (nível 1) → Dashboard (web)
+      // Apenas Admin (nível 10) → Dashboard (web)
       // Demais níveis → PWA
       let redirectPath = '/pwa'
-      if (userLevel >= 8) {
-        redirectPath = '/dashboard'
-      } else if (userLevel === 1 && userRole.includes('cliente')) {
+      if (userLevel === 10 || userRole === 'admin' || userRole === 'administrador') {
         redirectPath = '/dashboard'
       }
       

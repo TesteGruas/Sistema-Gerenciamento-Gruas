@@ -54,8 +54,9 @@ const clienteUpdateSchema = Joi.object({
   contato_email: Joi.string().email().allow('').optional(),
   contato_cpf: Joi.string().allow('').optional(),
   contato_telefone: Joi.string().allow('').optional(),
-  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').optional()
-  // Não incluir criar_usuario e usuario_senha no update
+  status: Joi.string().valid('ativo', 'inativo', 'bloqueado', 'pendente').optional(),
+  criar_usuario: Joi.boolean().optional(),
+  usuario_senha: Joi.string().min(8).optional()
 })
 
 /**
@@ -619,12 +620,194 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
       })
     }
 
-    // Usar todos os dados validados (não há campos de usuário no schema de update)
-    const clienteData = value
+    // Separar campos de usuário dos dados do cliente
+    const { criar_usuario, usuario_senha, ...clienteData } = value
 
+    // Buscar cliente atual para verificar se já tem usuário vinculado
+    const { data: clienteAtual, error: erroBusca } = await supabaseAdmin
+      .from('clientes')
+      .select('contato_usuario_id, contato, contato_email')
+      .eq('id', id)
+      .single()
+
+    if (erroBusca) {
+      if (erroBusca.code === 'PGRST116') {
+        return res.status(404).json({
+          error: 'Cliente não encontrado',
+          message: 'O cliente com o ID especificado não existe'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao buscar cliente',
+        message: erroBusca.message
+      })
+    }
+
+    // Se deve criar usuário e o cliente não tem usuário vinculado
+    let usuarioId = clienteAtual.contato_usuario_id
+    let senhaTemporaria = null
+    let usuarioJaExistia = false
+    let usuarioCriadoAgora = false
+
+    if (criar_usuario && !usuarioId && clienteData.contato && clienteData.contato_email) {
+      try {
+        // Verificar se já existe um usuário com este email
+        const { data: existingUser } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, nome')
+          .eq('email', clienteData.contato_email)
+          .maybeSingle()
+
+        if (existingUser) {
+          // Usuário já existe, apenas vincular ao cliente
+          console.log(`ℹ️ Usuário já existe com email ${clienteData.contato_email}, vinculando ao cliente`)
+          usuarioId = existingUser.id
+          usuarioJaExistia = true
+          
+          // Verificar se o usuário já tem perfil de cliente, se não tiver, adicionar
+          const { data: perfilExistente } = await supabaseAdmin
+            .from('usuario_perfis')
+            .select('id')
+            .eq('usuario_id', usuarioId)
+            .eq('perfil_id', 6) // ID do perfil "Cliente"
+            .eq('status', 'Ativa')
+            .maybeSingle()
+          
+          if (!perfilExistente) {
+            // Adicionar perfil de cliente ao usuário existente
+            const { error: perfilError } = await supabaseAdmin
+              .from('usuario_perfis')
+              .insert({
+                usuario_id: usuarioId,
+                perfil_id: 6, // ID do perfil "Cliente"
+                status: 'Ativa',
+                data_atribuicao: new Date().toISOString(),
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+            
+            if (perfilError) {
+              console.error('Erro ao atribuir perfil de cliente ao usuário existente:', perfilError)
+            }
+          }
+        } else {
+          // Usuário não existe, criar novo
+          senhaTemporaria = usuario_senha || generateSecurePassword()
+
+          // 1. Criar usuário no Supabase Auth primeiro
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: clienteData.contato_email,
+            password: senhaTemporaria,
+            email_confirm: true,
+            user_metadata: {
+              nome: clienteData.contato,
+              tipo: 'cliente'
+            }
+          })
+
+          if (authError) {
+            return res.status(500).json({
+              error: 'Erro ao criar usuário no sistema de autenticação',
+              message: authError.message
+            })
+          }
+
+          // 2. Criar usuário na tabela
+          const usuarioData = {
+            nome: clienteData.contato,
+            email: clienteData.contato_email,
+            cpf: clienteData.contato_cpf || null,
+            telefone: clienteData.contato_telefone || null,
+            endereco: clienteData.endereco || null,
+            cidade: clienteData.cidade || null,
+            estado: clienteData.estado || null,
+            cep: clienteData.cep || null,
+            status: 'Ativo',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          }
+
+          const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+            .from('usuarios')
+            .insert(usuarioData)
+            .select()
+            .single()
+
+          if (usuarioError) {
+            // Se falhou ao criar na tabela, remover do Auth
+            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+            
+            return res.status(500).json({
+              error: 'Erro ao criar usuário',
+              message: usuarioError.message
+            })
+          }
+
+          usuarioId = novoUsuario.id
+          usuarioCriadoAgora = true
+
+          // Atribuir perfil de cliente ao usuário
+          const { error: perfilError } = await supabaseAdmin
+            .from('usuario_perfis')
+            .insert({
+              usuario_id: usuarioId,
+              perfil_id: 6, // ID do perfil "Cliente"
+              status: 'Ativa',
+              data_atribuicao: new Date().toISOString(),
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            })
+
+          if (perfilError) {
+            console.error('Erro ao atribuir perfil ao usuário:', perfilError)
+          }
+
+          // Enviar email e WhatsApp se criou novo usuário
+          if (senhaTemporaria && clienteData.contato_email) {
+            // Enviar email de boas-vindas
+            try {
+              await sendWelcomeEmail({
+                nome: clienteData.contato,
+                email: clienteData.contato_email,
+                senha_temporaria: senhaTemporaria
+              })
+            } catch (emailError) {
+              console.error('❌ Erro ao enviar email de boas-vindas:', emailError)
+            }
+
+            // Enviar mensagem WhatsApp
+            try {
+              const { enviarMensagemNovoUsuarioCliente } = await import('../services/whatsapp-service.js');
+              await enviarMensagemNovoUsuarioCliente(
+                { ...clienteData, id: id, contato_usuario_id: usuarioId },
+                clienteData.contato_email,
+                senhaTemporaria
+              ).catch(whatsappError => {
+                console.error('❌ Erro ao enviar mensagem WhatsApp:', whatsappError);
+              });
+            } catch (importError) {
+              console.error('❌ Erro ao importar serviço WhatsApp:', importError);
+            }
+          }
+        }
+      } catch (usuarioError) {
+        console.error('Erro ao criar/vincular usuário:', usuarioError)
+        return res.status(500).json({
+          error: 'Erro ao criar/vincular usuário',
+          message: usuarioError.message
+        })
+      }
+    }
+
+    // Preparar dados de atualização
     const updateData = {
       ...clienteData,
       updated_at: new Date().toISOString()
+    }
+
+    // Se criou/vincular usuário, atualizar contato_usuario_id
+    if (usuarioId) {
+      updateData.contato_usuario_id = usuarioId
     }
 
     const { data, error: updateError } = await supabaseAdmin
@@ -635,22 +818,31 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
       .single()
 
     if (updateError) {
-      if (updateError.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Cliente não encontrado',
-          message: 'O cliente com o ID especificado não existe'
-        })
-      }
       return res.status(500).json({
         error: 'Erro ao atualizar cliente',
         message: updateError.message
       })
     }
 
+    // Preparar resposta
+    const responseData = {
+      ...data,
+      usuario_criado: usuarioCriadoAgora,
+      usuario_vinculado: usuarioJaExistia,
+      usuario_id: usuarioId
+    }
+
+    let mensagemSucesso = 'Cliente atualizado com sucesso'
+    if (usuarioCriadoAgora) {
+      mensagemSucesso = 'Cliente atualizado e usuário criado com sucesso. Email e WhatsApp com senha temporária enviados.'
+    } else if (usuarioJaExistia) {
+      mensagemSucesso = 'Cliente atualizado e usuário existente vinculado com sucesso'
+    }
+
     res.json({
       success: true,
-      data,
-      message: 'Cliente atualizado com sucesso'
+      data: responseData,
+      message: mensagemSucesso
     })
   } catch (error) {
     console.error('Erro ao atualizar cliente:', error)

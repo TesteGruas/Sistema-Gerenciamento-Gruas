@@ -286,11 +286,12 @@ router.get('/', authenticateToken, async (req, res) => {
       console.log(`[DEBUG] Buscando usuários sem funcionario_id com termo: "${searchTermClean || 'nenhum'}"`)
       
       // Fazer a query completa
+      // Usar a relação específica usuario_perfis_usuario_id_fkey para evitar ambiguidade (PGRST201)
       let usuariosQuery = supabaseAdmin
         .from('usuarios')
         .select(`
           *,
-          usuario_perfis(
+          usuario_perfis!usuario_perfis_usuario_id_fkey(
             id,
             perfil_id,
             status,

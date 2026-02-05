@@ -1046,39 +1046,8 @@ export default function PWAMainPage() {
                 // Ignorar erro
               }
             }
-            const cargoLower = cargoCheck?.toLowerCase() || pwaUserData.user?.cargo?.toLowerCase() || ''
-            const isSupervisorCheck = isSupervisorUser || cargoLower.includes('supervisor')
-            
-            return (
-              <div className={`grid gap-2 mt-6 ${isSupervisorCheck ? 'grid-cols-3' : 'grid-cols-3'}`}>
-                {!isSupervisorCheck && temObraAtiva !== false && (
-                  <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                    <p className="text-[10px] text-red-100 font-medium mb-1">Ponto</p>
-                    <p className="text-sm font-bold">
-                      {formatarHoraPonto(pwaUserData.pontoHoje?.entrada)}
-                    </p>
-                  </div>
-                )}
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                  <p className="text-[10px] text-red-100 font-medium mb-1">Horas</p>
-                  <p className="text-sm font-bold">
-                    {pwaUserData.horasTrabalhadas && typeof pwaUserData.horasTrabalhadas === 'string' 
-                      ? pwaUserData.horasTrabalhadas.split(' ')[0] || '0h'
-                      : '0h'}
-                  </p>
-                </div>
-                <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                  <p className="text-[10px] text-red-100 font-medium mb-1">Docs</p>
-                  <p className="text-sm font-bold">{pwaUserData.documentosPendentes}</p>
-                </div>
-                {isSupervisorCheck && (
-                  <div className="bg-white/10 backdrop-blur-md rounded-xl p-3 border border-white/20 shadow-lg">
-                    <p className="text-[10px] text-red-100 font-medium mb-1">Não lidas</p>
-                    <p className="text-sm font-bold">0</p>
-                  </div>
-                )}
-              </div>
-            )
+            // Grid removido - não deve haver barramento de ponto na home do app
+            return null
           })()}
         </div>
       </div>

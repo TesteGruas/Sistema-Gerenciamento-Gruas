@@ -58,18 +58,26 @@ function PWAAprovacaoAssinaturaPageContent() {
   // Carregar registro selecionado
   useEffect(() => {
     const carregarAprovacao = async () => {
-      if (!registroId || !user?.id) {
+      if (!registroId) {
+        console.error('❌ [Assinatura] ID do registro não encontrado na URL');
         toast.error('ID do registro não encontrado');
         router.push('/pwa/aprovacoes');
         return;
       }
 
+      // Não verificar user?.id aqui - pode não estar carregado ainda
+      // A verificação será feita apenas quando for assinar
+
       setLoadingAprovacao(true);
       try {
+        console.log('🔍 [Assinatura] Buscando registro com ID:', registroId);
         // Buscar registro diretamente pelo ID
         const registro = await apiRegistrosPonto.obter(registroId);
         
+        console.log('📋 [Assinatura] Registro encontrado:', registro);
+        
         if (!registro) {
+          console.error('❌ [Assinatura] Registro não encontrado na resposta');
           toast.error('Registro não encontrado');
           router.push('/pwa/aprovacoes');
           return;
@@ -77,23 +85,30 @@ function PWAAprovacaoAssinaturaPageContent() {
 
         // Verificar se já foi assinado
         if (registro.aprovado_por && registro.data_aprovacao) {
+          console.log('⚠️ [Assinatura] Registro já foi assinado');
           toast.error('Este registro já foi assinado');
           router.push('/pwa/aprovacoes');
           return;
         }
 
+        console.log('✅ [Assinatura] Registro carregado com sucesso');
         setAprovacaoSelecionada(registro);
       } catch (error: any) {
-        console.error('Erro ao carregar aprovação:', error);
-        toast.error('Erro ao carregar dados da aprovação');
-        router.push('/pwa/aprovacoes');
+        console.error('❌ [Assinatura] Erro ao carregar aprovação:', error);
+        console.error('❌ [Assinatura] Detalhes do erro:', {
+          message: error.message,
+          response: error.response?.data,
+          status: error.response?.status
+        });
+        toast.error(error.response?.data?.message || 'Erro ao carregar dados da aprovação');
+        // Não redirecionar imediatamente - deixar o usuário ver o erro
       } finally {
         setLoadingAprovacao(false);
       }
     };
 
     carregarAprovacao();
-  }, [registroId, user, router]);
+  }, [registroId, router]);
 
   const handleAprovar = async () => {
     if (!assinatura.trim()) {
@@ -101,7 +116,7 @@ function PWAAprovacaoAssinaturaPageContent() {
       return;
     }
 
-    if (!aprovacaoSelecionada || !user?.id) {
+    if (!aprovacaoSelecionada) {
       toast.error('Dados inválidos para aprovação');
       return;
     }
@@ -109,14 +124,10 @@ function PWAAprovacaoAssinaturaPageContent() {
     setIsLoading(true);
     
     try {
-      // Obter ID do funcionário (supervisor) logado
-      const funcionarioId = user.funcionario_id || user.id;
-      
-      // Usar endpoint de assinatura que funciona para TODOS os registros (com ou sem horas extras)
+      // Usar endpoint de assinatura (sem necessidade de supervisor_id)
       const { message } = await apiRegistrosPonto.assinar(
         aprovacaoSelecionada.id,
         {
-          supervisor_id: funcionarioId,
           assinatura_digital: assinatura,
           observacoes: undefined
         }
@@ -130,8 +141,8 @@ function PWAAprovacaoAssinaturaPageContent() {
       }, 1500);
       
     } catch (error: any) {
-      console.error('Erro ao assinar registro:', error);
-      const errorMessage = error.response?.data?.message || 'Erro ao assinar registro. Tente novamente.';
+      console.error('❌ [Assinatura] Erro ao assinar registro:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Erro ao assinar registro. Tente novamente.';
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
@@ -140,6 +151,35 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   // Função showSuccessNotification removida - usando toast agora
 
+  // Mostrar loading enquanto carrega
+  if (loadingAprovacao) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-4">
+        <div className="max-w-md mx-auto">
+          <div className="flex items-center gap-3 mb-4">
+            <Button variant="ghost" size="sm" onClick={() => router.back()}>
+              <ArrowLeft className="w-5 h-5" />
+            </Button>
+            <h1 className="text-xl font-bold">Assinar Registro de Ponto</h1>
+          </div>
+          
+          <Card>
+            <CardContent className="p-8 text-center">
+              <Loader2 className="w-12 h-12 text-blue-600 mx-auto mb-4 animate-spin" />
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                Carregando registro...
+              </h3>
+              <p className="text-gray-600">
+                Aguarde enquanto buscamos os dados do registro.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  // Se não encontrou o registro após carregar
   if (!aprovacaoSelecionada) {
     return (
       <div className="min-h-screen bg-gray-50 p-4">
@@ -148,18 +188,21 @@ function PWAAprovacaoAssinaturaPageContent() {
             <Button variant="ghost" size="sm" onClick={() => router.back()}>
               <ArrowLeft className="w-5 h-5" />
             </Button>
-            <h1 className="text-xl font-bold">Aprovação de Horas Extras</h1>
+            <h1 className="text-xl font-bold">Assinar Registro de Ponto</h1>
           </div>
           
           <Card>
             <CardContent className="p-8 text-center">
               <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">
-                Aprovação não encontrada
+                Registro não encontrado
               </h3>
-              <p className="text-gray-600">
-                Não foi possível encontrar a aprovação solicitada.
+              <p className="text-gray-600 mb-4">
+                Não foi possível encontrar o registro solicitado.
               </p>
+              <Button onClick={() => router.push('/pwa/aprovacoes')}>
+                Voltar para Aprovações
+              </Button>
             </CardContent>
           </Card>
         </div>

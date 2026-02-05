@@ -25,8 +25,6 @@ import {
   Plus, 
   Search, 
   Eye, 
-  Edit, 
-  Trash2,
   FileText,
   Building2,
   Receipt,
@@ -34,15 +32,11 @@ import {
   Upload,
   Filter,
   RefreshCw,
-  Calendar,
-  DollarSign,
   CheckCircle,
-  XCircle,
-  Clock,
   AlertTriangle,
   CreditCard
 } from "lucide-react"
-import { boletosApi, Boleto, BoletoCreate } from "@/lib/api-boletos"
+import { boletosApi, Boleto } from "@/lib/api-boletos"
 import { clientesApi } from "@/lib/api-clientes"
 import { obrasApi } from "@/lib/api-obras"
 import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
@@ -64,22 +58,18 @@ interface Obra {
 export default function BoletosPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState<'receber' | 'pagar' | 'todos' | 'medicoes' | 'independentes'>('receber')
+  const [activeTab, setActiveTab] = useState<'entrada' | 'saida'>('saida')
   
   // Estados
   const [boletos, setBoletos] = useState<Boleto[]>([])
   const [loading, setLoading] = useState(true)
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [isCreateBancoDialogOpen, setIsCreateBancoDialogOpen] = useState(false)
-  const [editingBoleto, setEditingBoleto] = useState<Boleto | null>(null)
   const [viewingBoleto, setViewingBoleto] = useState<Boleto | null>(null)
   const [uploadingBoleto, setUploadingBoleto] = useState<Boleto | null>(null)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [formFile, setFormFile] = useState<File | null>(null)
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -106,21 +96,6 @@ export default function BoletosPage() {
     status: 'ativa' as 'ativa' | 'inativa' | 'bloqueada'
   })
   
-  // Formulário
-  const [formData, setFormData] = useState<BoletoCreate>({
-    numero_boleto: '',
-    cliente_id: undefined,
-    obra_id: undefined,
-    medicao_id: undefined,
-    descricao: '',
-    valor: 0,
-    data_emissao: new Date().toISOString().split('T')[0],
-    data_vencimento: '',
-    tipo: 'receber',
-    forma_pagamento: '',
-    banco_origem_id: undefined,
-    observacoes: ''
-  })
 
   useEffect(() => {
     carregarDados()
@@ -170,12 +145,9 @@ export default function BoletosPage() {
       setLoading(true)
       
       // Determinar tipo baseado na aba ativa
-      let tipo: 'receber' | 'pagar' | undefined = undefined
-      if (activeTab === 'receber') {
-        tipo = 'receber'
-      } else if (activeTab === 'pagar') {
-        tipo = 'pagar'
-      }
+      // Entrada = boletos a pagar (tipo: 'pagar')
+      // Saída = boletos a receber (tipo: 'receber')
+      const tipo = activeTab === 'entrada' ? 'pagar' : 'receber'
       
       const response = await boletosApi.list({
         status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -183,18 +155,22 @@ export default function BoletosPage() {
         search: searchTerm || undefined,
         page: currentPage,
         limit: itemsPerPage,
-        include_medicoes: true
+        include_medicoes: activeTab === 'saida' // Incluir medições apenas em boletos de saída
       })
       
       if (response.success) {
         let boletosFiltrados = response.data || []
         
-        // Filtrar por aba (mantendo compatibilidade com abas antigas)
-        if (activeTab === 'medicoes') {
-          boletosFiltrados = boletosFiltrados.filter(b => b.medicao_id || (b as any).origem === 'medicao')
-        } else if (activeTab === 'independentes') {
-          boletosFiltrados = boletosFiltrados.filter(b => !b.medicao_id && (b as any).origem !== 'medicao')
-        }
+        // Filtrar apenas boletos vinculados a notas fiscais ou medições
+        // Remover boletos independentes (sem nota_fiscal_id e sem medicao_id)
+        boletosFiltrados = boletosFiltrados.filter(b => {
+          // Incluir boletos de medições (apenas em saída)
+          if ((b as any).origem === 'medicao' || b.medicao_id) {
+            return activeTab === 'saida'
+          }
+          // Incluir apenas boletos vinculados a notas fiscais
+          return (b as any).nota_fiscal_id || (b as any).notas_fiscais
+        })
         
         setBoletos(boletosFiltrados)
         setTotalPages(response.pagination?.pages || 1)
@@ -211,135 +187,6 @@ export default function BoletosPage() {
     }
   }, [activeTab, currentPage, statusFilter, searchTerm, toast])
 
-  const handleCreate = async () => {
-    try {
-      // Boletos podem ser criados sem cliente ou obra (opcional)
-      const response = await boletosApi.create(formData)
-      
-      if (response.success) {
-        // Se houver arquivo, fazer upload após criar
-        if (formFile && response.data?.id) {
-          try {
-            await boletosApi.uploadFile(response.data.id, formFile)
-            toast({
-              title: "Sucesso",
-              description: "Boleto criado e arquivo enviado com sucesso"
-            })
-          } catch (uploadError: any) {
-            toast({
-              title: "Aviso",
-              description: "Boleto criado, mas houve erro ao enviar o arquivo: " + (uploadError.message || "Erro desconhecido"),
-              variant: "destructive"
-            })
-          }
-        } else {
-          toast({
-            title: "Sucesso",
-            description: "Boleto criado com sucesso"
-          })
-        }
-        setIsCreateDialogOpen(false)
-        resetForm()
-        await carregarBoletos()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao criar boleto",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (!editingBoleto) return
-    
-    try {
-      const response = await boletosApi.update(editingBoleto.id, formData)
-      
-      if (response.success) {
-        // Se houver arquivo, fazer upload após atualizar
-        if (formFile) {
-          try {
-            await boletosApi.uploadFile(editingBoleto.id, formFile)
-            toast({
-              title: "Sucesso",
-              description: "Boleto atualizado e arquivo enviado com sucesso"
-            })
-          } catch (uploadError: any) {
-            toast({
-              title: "Aviso",
-              description: "Boleto atualizado, mas houve erro ao enviar o arquivo: " + (uploadError.message || "Erro desconhecido"),
-              variant: "destructive"
-            })
-          }
-        } else {
-          toast({
-            title: "Sucesso",
-            description: "Boleto atualizado com sucesso"
-          })
-        }
-        setIsEditDialogOpen(false)
-        setEditingBoleto(null)
-        resetForm()
-        await carregarBoletos()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao atualizar boleto",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleDelete = async (id: number) => {
-    try {
-      const response = await boletosApi.delete(id)
-      
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Boleto excluído com sucesso"
-        })
-        await carregarBoletos()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao excluir boleto",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleEdit = (boleto: Boleto) => {
-    // Não permitir editar boletos de medições
-    if ((boleto as any).origem === 'medicao' || boleto.id.toString().startsWith('medicao_')) {
-      toast({
-        title: "Aviso",
-        description: "Boletos de medições não podem ser editados aqui",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setEditingBoleto(boleto)
-    setFormData({
-      numero_boleto: boleto.numero_boleto,
-      cliente_id: boleto.cliente_id,
-      obra_id: boleto.obra_id,
-      descricao: boleto.descricao,
-      valor: boleto.valor,
-      data_emissao: boleto.data_emissao,
-      data_vencimento: boleto.data_vencimento,
-      tipo: boleto.tipo || 'receber',
-      forma_pagamento: boleto.forma_pagamento || '',
-      banco_origem_id: boleto.banco_origem_id,
-      observacoes: boleto.observacoes || ''
-    })
-    setIsEditDialogOpen(true)
-  }
 
   const handleView = (boleto: Boleto) => {
     setViewingBoleto(boleto)
@@ -422,23 +269,6 @@ export default function BoletosPage() {
     }
   }
 
-  const resetForm = () => {
-    setFormData({
-      numero_boleto: '',
-      cliente_id: undefined,
-      obra_id: undefined,
-      medicao_id: undefined,
-      descricao: '',
-      valor: 0,
-      data_emissao: new Date().toISOString().split('T')[0],
-      data_vencimento: '',
-      tipo: activeTab === 'pagar' ? 'pagar' : 'receber',
-      forma_pagamento: '',
-      banco_origem_id: undefined,
-      observacoes: ''
-    })
-    setFormFile(null)
-  }
   
   const handleCreateBanco = async () => {
     try {
@@ -528,7 +358,7 @@ export default function BoletosPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Boletos</h1>
-          <p className="text-gray-600">Gerenciamento de boletos a receber e a pagar</p>
+          <p className="text-gray-600">Boletos vinculados a notas fiscais de entrada ou saída e medições</p>
         </div>
         <div className="flex gap-2">
           <Button 
@@ -538,44 +368,26 @@ export default function BoletosPage() {
             <Building2 className="w-4 h-4 mr-2" />
             Novo Banco
           </Button>
-          <Button 
-            onClick={() => {
-              resetForm()
-              setIsCreateDialogOpen(true)
-            }}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            Novo Boleto
-          </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
         <TabsList>
-          <TabsTrigger value="receber">Boletos a Receber</TabsTrigger>
-          <TabsTrigger value="pagar">Boletos a Pagar</TabsTrigger>
-          <TabsTrigger value="todos">Todos os Boletos</TabsTrigger>
-          <TabsTrigger value="medicoes">Boletos de Medições</TabsTrigger>
-          <TabsTrigger value="independentes">Boletos Independentes</TabsTrigger>
+          <TabsTrigger value="saida">Boletos de Saída</TabsTrigger>
+          <TabsTrigger value="entrada">Boletos de Entrada</TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="space-y-4">
           <Card>
             <CardHeader>
               <CardTitle>
-                {activeTab === 'receber' ? 'Boletos a Receber' :
-                 activeTab === 'pagar' ? 'Boletos a Pagar' :
-                 activeTab === 'medicoes' ? 'Boletos de Medições' : 
-                 activeTab === 'independentes' ? 'Boletos Independentes' : 
-                 'Todos os Boletos'}
+                {activeTab === 'entrada' ? 'Boletos de Entrada' : 'Boletos de Saída'}
               </CardTitle>
               <CardDescription>
-                {activeTab === 'receber' ? 'Boletos que devem ser recebidos' :
-                 activeTab === 'pagar' ? 'Boletos que devem ser pagos' :
-                 activeTab === 'medicoes' ? 'Boletos vinculados às medições mensais' :
-                 activeTab === 'independentes' ? 'Boletos criados independentemente de medições' :
-                 'Todos os boletos do sistema'}
+                {activeTab === 'entrada' 
+                  ? 'Boletos vinculados a notas fiscais de entrada (contas a pagar)' 
+                  : 'Boletos vinculados a notas fiscais de saída e medições (contas a receber)'}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -641,7 +453,13 @@ export default function BoletosPage() {
                     <TableBody>
                       {filteredBoletos.map((boleto) => {
                         const vencido = isVencido(boleto.data_vencimento) && boleto.status === 'pendente'
-                        const origem = (boleto as any).origem === 'medicao' ? 'Medição' : boleto.medicao_id ? 'Medição' : 'Independente'
+                        const origem = (boleto as any).origem === 'medicao' || boleto.medicao_id 
+                          ? 'Medição' 
+                          : (boleto as any).notas_fiscais 
+                            ? `NF ${(boleto as any).notas_fiscais.numero_nf || (boleto as any).notas_fiscais.numero_nf || 'N/A'}` 
+                            : (boleto as any).nota_fiscal_id 
+                              ? `NF #${(boleto as any).nota_fiscal_id}` 
+                              : 'Nota Fiscal'
                         
                         return (
                           <TableRow key={boleto.id} className={vencido ? 'bg-red-50' : ''}>
@@ -666,7 +484,10 @@ export default function BoletosPage() {
                                   </span>
                                 </div>
                               ) : (
-                                <Badge variant="outline">Independente</Badge>
+                                <div className="flex items-center gap-2">
+                                  <FileText className="w-4 h-4 text-green-400" />
+                                  <span className="text-sm">{origem}</span>
+                                </div>
                               )}
                             </TableCell>
                             <TableCell>
@@ -710,7 +531,7 @@ export default function BoletosPage() {
                                     <Upload className="w-4 h-4" />
                                   </Button>
                                 )}
-                                {boleto.status === 'pendente' && !(boleto as any).origem && (
+                                {boleto.status === 'pendente' && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
@@ -729,48 +550,6 @@ export default function BoletosPage() {
                                 >
                                   <Eye className="w-4 h-4" />
                                 </Button>
-                                {!(boleto as any).origem && !boleto.id.toString().startsWith('medicao_') && (
-                                  <>
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() => handleEdit(boleto)}
-                                      title="Editar"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </Button>
-                                    <AlertDialog>
-                                      <AlertDialogTrigger asChild>
-                                        <Button
-                                          variant="ghost"
-                                          size="sm"
-                                          className="text-red-600 hover:text-red-700"
-                                          title="Excluir"
-                                        >
-                                          <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                      </AlertDialogTrigger>
-                                      <AlertDialogContent>
-                                        <AlertDialogHeader>
-                                          <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
-                                          <AlertDialogDescription>
-                                            Tem certeza que deseja excluir o boleto <strong>{boleto.numero_boleto}</strong>?
-                                            Esta ação não pode ser desfeita.
-                                          </AlertDialogDescription>
-                                        </AlertDialogHeader>
-                                        <AlertDialogFooter>
-                                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                          <AlertDialogAction
-                                            onClick={() => handleDelete(boleto.id)}
-                                            className="bg-red-600 hover:bg-red-700"
-                                          >
-                                            Excluir
-                                          </AlertDialogAction>
-                                        </AlertDialogFooter>
-                                      </AlertDialogContent>
-                                    </AlertDialog>
-                                  </>
-                                )}
                               </div>
                             </TableCell>
                           </TableRow>
@@ -815,271 +594,6 @@ export default function BoletosPage() {
         </TabsContent>
       </Tabs>
 
-      {/* Dialog de Criação/Edição */}
-      <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
-        if (!open) {
-          setIsCreateDialogOpen(false)
-          setIsEditDialogOpen(false)
-          setEditingBoleto(null)
-          resetForm()
-        }
-      }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-            <DialogTitle>
-              {isEditDialogOpen ? 'Editar Boleto' : 'Novo Boleto'}
-            </DialogTitle>
-            <DialogDescription>
-              {isEditDialogOpen ? 'Edite as informações do boleto' : 'Crie um novo boleto vinculado a cliente e/ou obra'}
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="tipo">Tipo *</Label>
-                <Select 
-                  value={formData.tipo || 'receber'} 
-                  onValueChange={(value) => setFormData({ ...formData, tipo: value as 'receber' | 'pagar' })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="receber">A Receber</SelectItem>
-                    <SelectItem value="pagar">A Pagar</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="numero_boleto">Número do Boleto *</Label>
-                <Input
-                  id="numero_boleto"
-                  value={formData.numero_boleto}
-                  onChange={(e) => setFormData({ ...formData, numero_boleto: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-            
-            <div>
-              <Label htmlFor="valor">Valor (R$) *</Label>
-              <Input
-                id="valor"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.valor}
-                onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="descricao">Descrição *</Label>
-              <Input
-                id="descricao"
-                value={formData.descricao}
-                onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="cliente_id">Cliente (Opcional)</Label>
-                <Select 
-                  value={formData.cliente_id?.toString() || 'none'} 
-                  onValueChange={(value) => setFormData({ ...formData, cliente_id: value && value !== 'none' ? parseInt(value) : undefined })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o cliente (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhum cliente</SelectItem>
-                    {clientes.map(cliente => (
-                      <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                        {cliente.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="obra_id">Obra (Opcional)</Label>
-                <Select 
-                  value={formData.obra_id?.toString() || 'none'} 
-                  onValueChange={(value) => setFormData({ ...formData, obra_id: value && value !== 'none' ? parseInt(value) : undefined })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra (opcional)" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">Nenhuma obra</SelectItem>
-                    {obras.map(obra => (
-                      <SelectItem key={obra.id} value={obra.id.toString()}>
-                        {obra.nome}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="data_emissao">Data de Emissão *</Label>
-                <Input
-                  id="data_emissao"
-                  type="date"
-                  value={formData.data_emissao}
-                  onChange={(e) => setFormData({ ...formData, data_emissao: e.target.value })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="data_vencimento">Data de Vencimento *</Label>
-                <Input
-                  id="data_vencimento"
-                  type="date"
-                  value={formData.data_vencimento}
-                  onChange={(e) => setFormData({ ...formData, data_vencimento: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="banco_origem_id">Banco de Origem</Label>
-                <div className="flex gap-2">
-                  <Select 
-                    value={formData.banco_origem_id?.toString() || 'none'} 
-                    onValueChange={(value) => setFormData({ ...formData, banco_origem_id: value && value !== 'none' ? parseInt(value) : undefined })}
-                  >
-                    <SelectTrigger className="flex-1">
-                      <SelectValue placeholder="Selecione o banco (opcional)" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Nenhum banco</SelectItem>
-                      {contasBancarias.map(conta => (
-                        <SelectItem key={conta.id} value={conta.id.toString()}>
-                          {conta.banco} - Ag: {conta.agencia} - Conta: {conta.conta}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setIsCreateBancoDialogOpen(true)}
-                    title="Criar novo banco"
-                  >
-                    <Plus className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
-                <Input
-                  id="forma_pagamento"
-                  value={formData.forma_pagamento}
-                  onChange={(e) => setFormData({ ...formData, forma_pagamento: e.target.value })}
-                  placeholder="Ex: Boleto bancário, PIX, etc."
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="observacoes">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={formData.observacoes}
-                onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="arquivo_boleto">Arquivo do Boleto (PDF, JPG ou PNG)</Label>
-              <Input
-                id="arquivo_boleto"
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png,.PDF,.JPG,.JPEG,.PNG"
-                onChange={(e) => {
-                  const file = e.target.files?.[0]
-                  if (file) {
-                    // Validar tamanho (10MB)
-                    if (file.size > 10 * 1024 * 1024) {
-                      toast({
-                        title: "Erro",
-                        description: "Arquivo muito grande. Tamanho máximo: 10MB",
-                        variant: "destructive"
-                      })
-                      e.target.value = ''
-                      return
-                    }
-                    // Validar tipo
-                    const validTypes = ['application/pdf', 'image/jpeg', 'image/jpg', 'image/png']
-                    const validExtensions = ['.pdf', '.jpg', '.jpeg', '.png']
-                    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
-                    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
-                      toast({
-                        title: "Erro",
-                        description: "Tipo de arquivo inválido. Use PDF, JPG ou PNG",
-                        variant: "destructive"
-                      })
-                      e.target.value = ''
-                      return
-                    }
-                    setFormFile(file)
-                  } else {
-                    setFormFile(null)
-                  }
-                }}
-              />
-              {formFile && (
-                <p className="text-sm text-gray-600 mt-2 flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Arquivo selecionado: {formFile.name} ({(formFile.size / 1024 / 1024).toFixed(2)} MB)
-                </p>
-              )}
-              {isEditDialogOpen && editingBoleto?.arquivo_boleto && !formFile && (
-                <div className="mt-2">
-                  <p className="text-sm text-green-600 flex items-center gap-2 mb-2">
-                    <FileText className="w-4 h-4" />
-                    Arquivo atual: {editingBoleto.arquivo_boleto.split('/').pop() || 'Arquivo anexado'}
-                  </p>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleDownload(editingBoleto)}
-                  >
-                    <Download className="w-4 h-4 mr-2" />
-                    Baixar Arquivo Atual
-                  </Button>
-                </div>
-              )}
-            </div>
-
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => {
-              setIsCreateDialogOpen(false)
-              setIsEditDialogOpen(false)
-              setEditingBoleto(null)
-              resetForm()
-            }}>
-              Cancelar
-            </Button>
-            <Button onClick={isEditDialogOpen ? handleUpdate : handleCreate}>
-              {isEditDialogOpen ? 'Atualizar' : 'Criar'} Boleto
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* Dialog de Visualização */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
@@ -1131,6 +645,19 @@ export default function BoletosPage() {
                   <Label className="text-sm font-medium text-gray-500">Medição Vinculada</Label>
                   <p className="text-lg">
                     {viewingBoleto.medicoes.numero} - {viewingBoleto.medicoes.periodo}
+                  </p>
+                </div>
+              )}
+
+              {(viewingBoleto as any).notas_fiscais && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">Nota Fiscal Vinculada</Label>
+                  <p className="text-lg">
+                    NF {(viewingBoleto as any).notas_fiscais.numero_nf || (viewingBoleto as any).notas_fiscais.numero_nf || 'N/A'}
+                    {(viewingBoleto as any).notas_fiscais.serie && ` - Série ${(viewingBoleto as any).notas_fiscais.serie}`}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    Tipo: {(viewingBoleto as any).notas_fiscais.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                   </p>
                 </div>
               )}

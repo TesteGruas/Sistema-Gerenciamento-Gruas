@@ -132,39 +132,9 @@ async function criarNotificacaoAprovacao(aprovacao, usuario_id, tipo, titulo, me
 
     console.log(`[aprovacoes-helpers] Notificação criada: ${tipo} para usuário ${usuario_id}`);
     
-    // Enviar via WhatsApp
-    try {
-      const { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } = await import('../services/whatsapp-service.js');
-      const telefone = await buscarTelefoneWhatsAppUsuario(usuario_id);
-      
-      if (telefone) {
-        const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
-        const linkAprovacao = `${FRONTEND_URL}/aprovacaop/${aprovacao.id}`;
-        
-        const mensagemWhatsApp = `🔔 *${titulo}*
-
-${mensagem}
-
-🔗 Acesse: ${linkAprovacao}
-
----
-_Sistema de Gestão de Gruas_`;
-
-        await enviarMensagemWebhook(
-          telefone,
-          mensagemWhatsApp,
-          linkAprovacao,
-          {
-            tipo: 'notificacao_aprovacao',
-            aprovacao_id: aprovacao.id,
-            destinatario_nome: `Usuário ${usuario_id}`
-          }
-        );
-      }
-    } catch (whatsappError) {
-      // Não falhar a criação da notificação se WhatsApp falhar
-      console.warn(`[aprovacoes-helpers] Erro ao enviar WhatsApp para usuário ${usuario_id}:`, whatsappError.message);
-    }
+    // Nota: O envio de WhatsApp é feito separadamente pela função enviarMensagemAprovacao
+    // para evitar duplicação e garantir que use a função mais completa que busca telefone
+    // em funcionarios, usuarios e clientes
     
     return data;
   } catch (error) {
