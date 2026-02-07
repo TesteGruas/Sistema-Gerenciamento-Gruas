@@ -1330,7 +1330,7 @@ export default function AlugueisIntegradoPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="alugueis">
             <List className="h-4 w-4 mr-2" />
@@ -1343,7 +1343,7 @@ export default function AlugueisIntegradoPage() {
         </TabsList>
 
         {/* Tab: Aluguéis */}
-        <TabsContent value="alugueis" className="space-y-4">
+        <TabsContent value="alugueis" className="space-y-6">
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">
@@ -1528,7 +1528,7 @@ export default function AlugueisIntegradoPage() {
         </TabsContent>
 
         {/* Tab: Residências */}
-        <TabsContent value="residencias" className="space-y-4">
+        <TabsContent value="residencias" className="space-y-6">
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">

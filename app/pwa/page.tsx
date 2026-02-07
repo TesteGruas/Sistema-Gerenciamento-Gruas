@@ -936,56 +936,6 @@ export default function PWAMainPage() {
                 })()}!
               </h2>
             </div>
-            <div className="flex items-center gap-2">
-              {(() => {
-                // Verificação inline para garantir que funcione
-                let cargoCheck: string | null = null
-                if (typeof window !== 'undefined') {
-                  try {
-                    const userDataStr = localStorage.getItem('user_data')
-                    if (userDataStr) {
-                      const userData = JSON.parse(userDataStr)
-                      cargoCheck = userData?.user_metadata?.cargo || userData?.cargo || null
-                    }
-                  } catch (e) {
-                    // Ignorar erro
-                  }
-                }
-                // Validação de supervisor removida - todos os funcionários podem bater ponto
-                
-                // Se não tiver próximo registro, não mostrar
-                if (!getProximoRegistro()) {
-                  return null
-                }
-                
-                // Se não tiver obra ativa, não mostrar
-                if (temObraAtiva === false) {
-                  return null
-                }
-                
-                // Validação de cargo removida - todos os funcionários podem bater ponto
-                
-                return (
-                  <button
-                    onClick={handleRegistrarPonto}
-                    disabled={isRegistrandoPonto}
-                    className="bg-white/20 backdrop-blur-md hover:bg-white/30 text-white font-semibold px-4 py-2 rounded-xl transition-all duration-200 shadow-lg ring-2 ring-white/30 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                  >
-                    {isRegistrandoPonto ? (
-                      <>
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                        Registrando...
-                      </>
-                    ) : (
-                      <>
-                        <Play className="w-4 h-4" />
-                        Registrar Ponto
-                      </>
-                    )}
-                  </button>
-                )
-              })()}
-            </div>
           </div>
           
           <div className="space-y-1 mb-4">

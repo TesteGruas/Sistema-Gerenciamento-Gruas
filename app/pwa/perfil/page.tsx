@@ -462,7 +462,7 @@ function PWAPerfilPageContent() {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
-      const response = await fetch(`${apiUrl}/api/auth/change-password`, {
+      const response = await fetch(`${apiUrl}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
