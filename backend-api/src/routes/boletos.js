@@ -93,6 +93,50 @@ router.get('/', authenticateToken, async (req, res) => {
 
     if (error) throw error;
 
+    // Buscar cobranças de aluguel vinculadas aos boletos
+    let cobrancasAluguelMap = {};
+    if (data && data.length > 0) {
+      const boletoIds = data.map(b => b.id).filter(id => id);
+      if (boletoIds.length > 0) {
+        const { data: cobrancas, error: cobrancasError } = await supabase
+          .from('cobrancas_aluguel')
+          .select(`
+            id,
+            boleto_id,
+            mes,
+            valor_aluguel,
+            valor_custos,
+            valor_total,
+            tipo_custo,
+            observacoes,
+            alugueis_residencias (
+              id,
+              residencias (id, nome, endereco)
+            )
+          `)
+          .in('boleto_id', boletoIds)
+          .neq('status', 'cancelado');
+
+        if (!cobrancasError && cobrancas) {
+          cobrancas.forEach(cobranca => {
+            if (cobranca.boleto_id) {
+              cobrancasAluguelMap[cobranca.boleto_id] = cobranca;
+            }
+          });
+        }
+      }
+    }
+
+    // Enriquecer boletos com informações de cobranças de aluguel
+    if (data) {
+      data.forEach(boleto => {
+        if (cobrancasAluguelMap[boleto.id]) {
+          boleto.cobranca_aluguel = cobrancasAluguelMap[boleto.id];
+          boleto.origem = 'aluguel';
+        }
+      });
+    }
+
     // Se incluir boletos de medições, buscar também da tabela medicao_documentos
     let boletosMedicoes = [];
     if (include_medicoes === 'true') {

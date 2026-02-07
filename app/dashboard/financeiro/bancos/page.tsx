@@ -25,10 +25,26 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Search,
-  X
+  X,
+  Receipt,
+  ExternalLink
 } from "lucide-react"
+import {
+  BarChart,
+  Bar,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer
+} from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import apiContasBancarias from "@/lib/api-contas-bancarias"
+import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
 
@@ -79,6 +95,9 @@ export default function BancosPage() {
   const [isCreateMovimentacaoOpen, setIsCreateMovimentacaoOpen] = useState(false)
   const [isEditMovimentacaoOpen, setIsEditMovimentacaoOpen] = useState(false)
   const [editingMovimentacao, setEditingMovimentacao] = useState<Movimentacao | null>(null)
+  const [isNotaFiscalDialogOpen, setIsNotaFiscalDialogOpen] = useState(false)
+  const [notaFiscalDetalhes, setNotaFiscalDetalhes] = useState<any>(null)
+  const [loadingNotaFiscal, setLoadingNotaFiscal] = useState(false)
   
   // Filtros
   const [filtroDataInicio, setFiltroDataInicio] = useState("")
@@ -113,20 +132,36 @@ export default function BancosPage() {
     carregarDados()
   }, [filtroDataInicio, filtroDataFim, filtroTipo, filtroBanco])
 
+  // Recarregar dados quando a página ganha foco (útil quando volta de outra página)
+  useEffect(() => {
+    const handleFocus = () => {
+      carregarDados()
+    }
+    window.addEventListener('focus', handleFocus)
+    return () => window.removeEventListener('focus', handleFocus)
+  }, [])
+
   const carregarDados = async () => {
     try {
       setLoading(true)
+      console.log('🔄 [BANCOS] Carregando dados...')
       
-      // Carregar contas bancárias
+      // Carregar contas bancárias com cache busting
       const contasResponse = await apiContasBancarias.listar()
+      console.log('📊 [BANCOS] Resposta das contas:', contasResponse)
       if (contasResponse.success) {
-        setContas(contasResponse.data || [])
+        const contasData = contasResponse.data || []
+        console.log('✅ [BANCOS] Contas carregadas:', contasData.length, contasData)
+        setContas(contasData)
+      } else {
+        console.error('❌ [BANCOS] Erro ao carregar contas:', contasResponse)
       }
       
       // Carregar movimentações
       await carregarMovimentacoes()
+      console.log('✅ [BANCOS] Dados carregados com sucesso')
     } catch (error) {
-      console.error('Erro ao carregar dados:', error)
+      console.error('❌ [BANCOS] Erro ao carregar dados:', error)
       toast({
         title: "Erro",
         description: "Erro ao carregar dados",
@@ -147,18 +182,30 @@ export default function BancosPage() {
       if (filtroTipo !== 'all') params.append('tipo', filtroTipo)
       if (filtroBanco !== 'all') params.append('conta_bancaria_id', filtroBanco)
       
-      const response = await fetch(`${API_URL}/api/contas-bancarias/movimentacoes/todas?${params.toString()}`, {
+      // Adicionar timestamp para evitar cache
+      params.append('_t', Date.now().toString())
+      
+      const url = `${API_URL}/api/contas-bancarias/movimentacoes/todas?${params.toString()}`
+      console.log('🔄 [BANCOS] Carregando movimentações:', url)
+      
+      const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Cache-Control': 'no-cache'
         }
       })
       
       const data = await response.json()
+      console.log('📊 [BANCOS] Resposta das movimentações:', data)
       if (data.success) {
-        setMovimentacoes(data.data || [])
+        const movimentacoesData = data.data || []
+        console.log('✅ [BANCOS] Movimentações carregadas:', movimentacoesData.length, movimentacoesData)
+        setMovimentacoes(movimentacoesData)
+      } else {
+        console.error('❌ [BANCOS] Erro ao carregar movimentações:', data)
       }
     } catch (error) {
-      console.error('Erro ao carregar movimentações:', error)
+      console.error('❌ [BANCOS] Erro ao carregar movimentações:', error)
     }
   }
 
@@ -364,6 +411,52 @@ export default function BancosPage() {
     }
   }
 
+  const handleViewNotaFiscal = async (movimentacao: Movimentacao) => {
+    // Extrair ID da nota fiscal da referência (ex: "NF-58" -> 58)
+    const referencia = movimentacao.referencia
+    if (!referencia || !referencia.startsWith('NF-')) {
+      toast({
+        title: "Aviso",
+        description: "Esta movimentação não está vinculada a uma nota fiscal",
+        variant: "default"
+      })
+      return
+    }
+
+    const notaFiscalId = parseInt(referencia.replace('NF-', ''))
+    if (isNaN(notaFiscalId)) {
+      toast({
+        title: "Erro",
+        description: "Não foi possível identificar a nota fiscal",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsNotaFiscalDialogOpen(true)
+    setLoadingNotaFiscal(true)
+    setNotaFiscalDetalhes(null)
+
+    try {
+      const response = await notasFiscaisApi.getById(notaFiscalId)
+      if (response.success && response.data) {
+        setNotaFiscalDetalhes(response.data)
+      } else {
+        throw new Error(response.message || 'Erro ao buscar nota fiscal')
+      }
+    } catch (error: any) {
+      console.error('Erro ao buscar nota fiscal:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao buscar detalhes da nota fiscal",
+        variant: "destructive"
+      })
+      setIsNotaFiscalDialogOpen(false)
+    } finally {
+      setLoadingNotaFiscal(false)
+    }
+  }
+
   // Reset forms
   const resetBancoForm = () => {
     setBancoForm({
@@ -432,6 +525,51 @@ export default function BancosPage() {
       .reduce((sum, c) => sum + parseFloat(String(c.saldo_atual)), 0)
   }, [contas])
 
+  // Dados para gráfico de transações por banco
+  const dadosGraficoTransacoes = useMemo(() => {
+    const dadosPorBanco: Record<number, { banco: string; entradas: number; saidas: number }> = {}
+    
+    // Inicializar com todas as contas
+    contas.forEach(conta => {
+      dadosPorBanco[conta.id] = {
+        banco: conta.banco,
+        entradas: 0,
+        saidas: 0
+      }
+    })
+    
+    // Somar movimentações por banco
+    movimentacoesFiltradas.forEach(mov => {
+      const bancoId = mov.conta_bancaria_id
+      if (dadosPorBanco[bancoId]) {
+        if (mov.tipo === 'entrada') {
+          dadosPorBanco[bancoId].entradas += mov.valor
+        } else {
+          dadosPorBanco[bancoId].saidas += mov.valor
+        }
+      }
+    })
+    
+    return Object.values(dadosPorBanco).map(dado => ({
+      ...dado,
+      saldo: dado.entradas - dado.saidas
+    }))
+  }, [contas, movimentacoesFiltradas])
+
+  // Dados para gráfico de saldo por banco
+  const dadosGraficoSaldo = useMemo(() => {
+    return contas
+      .filter(c => c.status === 'ativa')
+      .map(conta => ({
+        banco: conta.banco,
+        saldo: parseFloat(String(conta.saldo_atual))
+      }))
+      .sort((a, b) => b.saldo - a.saldo)
+  }, [contas])
+
+  // Cores para os gráficos
+  const CORES = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -450,6 +588,14 @@ export default function BancosPage() {
           <p className="text-gray-600">Gerencie contas bancárias e movimentações</p>
         </div>
         <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => carregarDados()}
+            className="gap-2"
+          >
+            <RefreshCw className="w-4 h-4" />
+            Atualizar
+          </Button>
           <Button variant="outline" onClick={() => setIsCreateMovimentacaoOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
             Nova Movimentação
@@ -519,6 +665,228 @@ export default function BancosPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Lista de Bancos */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Contas Bancárias ({contas.length})</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {contas.length === 0 ? (
+            <div className="text-center py-12 text-gray-500">
+              <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+              <p className="text-lg font-medium">Nenhum banco cadastrado</p>
+              <p className="text-sm mt-1">Clique em "Novo Banco" para adicionar uma conta</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {contas.map((conta) => {
+                const saldo = parseFloat(String(conta.saldo_atual))
+                const isSaldoPositivo = saldo >= 0
+                const tipoContaLabel = conta.tipo_conta === 'corrente' ? 'Conta Corrente' : 
+                                      conta.tipo_conta === 'poupanca' ? 'Poupança' : 
+                                      conta.tipo_conta === 'investimento' ? 'Investimento' : conta.tipo_conta
+                
+                return (
+                  <div
+                    key={conta.id}
+                    className="group relative p-5 border-2 rounded-xl bg-gradient-to-br from-white to-gray-50 hover:from-blue-50 hover:to-white transition-all duration-200 hover:shadow-lg hover:border-blue-200 hover:-translate-y-1"
+                  >
+                    {/* Ícone do banco com fundo colorido */}
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center shadow-md group-hover:shadow-lg transition-shadow">
+                          <Building2 className="w-6 h-6 text-white" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-lg text-gray-900">{conta.banco}</h3>
+                          <p className="text-xs text-gray-500 mt-0.5 font-medium">
+                            {tipoContaLabel}
+                          </p>
+                        </div>
+                      </div>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            variant="ghost" 
+                            className="opacity-0 group-hover:opacity-100 transition-opacity text-red-600 hover:text-red-700 hover:bg-red-50 h-8 w-8 p-0"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Excluir Banco</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Tem certeza que deseja excluir este banco? Esta ação não pode ser desfeita.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteBanco(conta.id)}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              Excluir
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+
+                    {/* Informações da conta */}
+                    <div className="space-y-3 mb-4">
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <div className="flex-1">
+                          <span className="font-medium">Agência:</span> {conta.agencia}
+                        </div>
+                        <div className="flex-1">
+                          <span className="font-medium">Conta:</span> {conta.conta}
+                        </div>
+                      </div>
+                      
+                      {/* Saldo */}
+                      <div className="pt-3 border-t border-gray-200">
+                        <p className="text-xs text-gray-500 mb-1">Saldo Atual</p>
+                        <p className={`text-2xl font-bold ${isSaldoPositivo ? 'text-green-600' : 'text-red-600'}`}>
+                          {formatarMoeda(saldo)}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Status */}
+                    <div className="flex items-center justify-between pt-3 border-t border-gray-200">
+                      <Badge 
+                        className={`${
+                          conta.status === 'ativa' 
+                            ? 'bg-green-500 hover:bg-green-600' 
+                            : conta.status === 'inativa'
+                            ? 'bg-gray-500 hover:bg-gray-600'
+                            : 'bg-red-500 hover:bg-red-600'
+                        } text-white font-medium`}
+                      >
+                        {conta.status === 'ativa' ? 'Ativa' : conta.status === 'inativa' ? 'Inativa' : 'Bloqueada'}
+                      </Badge>
+                      <div className="text-xs text-gray-400">
+                        ID: {conta.id}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Gráficos */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Gráfico de Transações por Banco */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Transações por Banco</CardTitle>
+            <CardDescription>Entradas e saídas por banco</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={dadosGraficoTransacoes}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis 
+                  dataKey="banco" 
+                  angle={-45}
+                  textAnchor="end"
+                  height={80}
+                />
+                <YAxis 
+                  tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+                />
+                <Tooltip 
+                  formatter={(value: number) => formatarMoeda(value)}
+                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb' }}
+                />
+                <Legend />
+                <Bar dataKey="entradas" fill="#10b981" name="Entradas" />
+                <Bar dataKey="saidas" fill="#ef4444" name="Saídas" />
+              </BarChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+
+        {/* Gráfico de Saldo por Banco */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Saldo por Banco</CardTitle>
+            <CardDescription>Distribuição do saldo atual</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
+                <Pie
+                  data={dadosGraficoSaldo}
+                  cx="50%"
+                  cy="50%"
+                  labelLine={false}
+                  label={({ banco, saldo, percent }) => 
+                    `${banco}: ${formatarMoeda(saldo)} (${(percent * 100).toFixed(1)}%)`
+                  }
+                  outerRadius={80}
+                  fill="#8884d8"
+                  dataKey="saldo"
+                >
+                  {dadosGraficoSaldo.map((entry, index) => (
+                    <Cell key={`cell-${index}`} fill={CORES[index % CORES.length]} />
+                  ))}
+                </Pie>
+                <Tooltip 
+                  formatter={(value: number) => formatarMoeda(value)}
+                  contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb' }}
+                />
+              </PieChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Gráfico de Barras Horizontal - Saldo por Banco */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Saldo Atual por Banco</CardTitle>
+          <CardDescription>Comparação visual dos saldos</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ResponsiveContainer width="100%" height={300}>
+            <BarChart 
+              data={dadosGraficoSaldo}
+              layout="vertical"
+            >
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                type="number"
+                tickFormatter={(value) => `R$ ${(value / 1000).toFixed(0)}k`}
+              />
+              <YAxis 
+                dataKey="banco" 
+                type="category"
+                width={100}
+              />
+              <Tooltip 
+                formatter={(value: number) => formatarMoeda(value)}
+                contentStyle={{ backgroundColor: 'white', border: '1px solid #e5e7eb' }}
+              />
+              <Bar 
+                dataKey="saldo" 
+                fill="#3b82f6"
+                radius={[0, 4, 4, 0]}
+              >
+                {dadosGraficoSaldo.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={CORES[index % CORES.length]} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </CardContent>
+      </Card>
 
       {/* Filtros */}
       <Card>
@@ -601,71 +969,6 @@ export default function BancosPage() {
         </CardContent>
       </Card>
 
-      {/* Lista de Bancos */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Contas Bancárias ({contas.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
-          {contas.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              Nenhum banco cadastrado
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {contas.map((conta) => (
-                <div
-                  key={conta.id}
-                  className="flex items-center justify-between p-4 border rounded-lg"
-                >
-                  <div className="flex items-center gap-4">
-                    <Building2 className="w-6 h-6 text-blue-600" />
-                    <div>
-                      <div className="font-semibold">{conta.banco}</div>
-                      <div className="text-sm text-gray-500">
-                        Ag: {conta.agencia} • Conta: {conta.conta} • {conta.tipo_conta}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-right">
-                      <div className="text-xl font-bold">{formatarMoeda(conta.saldo_atual)}</div>
-                      <Badge className={conta.status === 'ativa' ? 'bg-green-500' : 'bg-gray-500'}>
-                        {conta.status}
-                      </Badge>
-                    </div>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="outline" className="text-red-600">
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent>
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>Excluir Banco</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Tem certeza que deseja excluir este banco? Esta ação não pode ser desfeita.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={() => handleDeleteBanco(conta.id)}
-                            className="bg-red-600 hover:bg-red-700"
-                          >
-                            Excluir
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Lista de Movimentações */}
       <Card>
         <CardHeader>
@@ -685,6 +988,7 @@ export default function BancosPage() {
                   <TableHead>Banco</TableHead>
                   <TableHead>Tipo</TableHead>
                   <TableHead>Descrição</TableHead>
+                  <TableHead>Forma de Pagamento</TableHead>
                   <TableHead>Referência</TableHead>
                   <TableHead className="text-right">Valor</TableHead>
                   <TableHead>Ações</TableHead>
@@ -692,7 +996,11 @@ export default function BancosPage() {
               </TableHeader>
               <TableBody>
                 {movimentacoesFiltradas.map((mov) => (
-                  <TableRow key={mov.id}>
+                  <TableRow 
+                    key={mov.id}
+                    className={mov.referencia?.startsWith('NF-') ? 'cursor-pointer hover:bg-muted/50' : ''}
+                    onClick={() => mov.referencia?.startsWith('NF-') && handleViewNotaFiscal(mov)}
+                  >
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <Calendar className="w-4 h-4 text-gray-400" />
@@ -713,12 +1021,31 @@ export default function BancosPage() {
                       </Badge>
                     </TableCell>
                     <TableCell className="font-medium">{mov.descricao}</TableCell>
-                    <TableCell>{mov.referencia || '-'}</TableCell>
+                    <TableCell>
+                      {mov.categoria ? (
+                        <Badge variant="outline" className="text-xs">
+                          {mov.categoria}
+                        </Badge>
+                      ) : (
+                        <span className="text-gray-400 text-sm">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {mov.referencia?.startsWith('NF-') ? (
+                        <div className="flex items-center gap-2 text-blue-600 hover:text-blue-700">
+                          <Receipt className="w-4 h-4" />
+                          <span className="font-medium">{mov.referencia}</span>
+                          <ExternalLink className="w-3 h-3 opacity-50" />
+                        </div>
+                      ) : (
+                        mov.referencia || '-'
+                      )}
+                    </TableCell>
                     <TableCell className={`text-right font-bold ${mov.tipo === 'entrada' ? 'text-green-600' : 'text-red-600'}`}>
                       {mov.tipo === 'entrada' ? '+' : '-'}{formatarMoeda(mov.valor)}
                     </TableCell>
                     <TableCell>
-                      <div className="flex gap-2">
+                      <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
                         <Button
                           size="sm"
                           variant="outline"
@@ -1082,6 +1409,206 @@ export default function BancosPage() {
                 Atualizar
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Detalhes Nota Fiscal */}
+      <Dialog open={isNotaFiscalDialogOpen} onOpenChange={setIsNotaFiscalDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Detalhes da Nota Fiscal</DialogTitle>
+            <DialogDescription>
+              Informações completas da nota fiscal vinculada a esta movimentação
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingNotaFiscal ? (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
+              <span className="ml-2 text-muted-foreground">Carregando detalhes...</span>
+            </div>
+          ) : notaFiscalDetalhes ? (
+            <div className="space-y-6">
+              {/* Informações Principais */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Número da NF</Label>
+                  <p className="font-semibold">{notaFiscalDetalhes.numero_nf || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Série</Label>
+                  <p className="font-semibold">{notaFiscalDetalhes.serie || 'N/A'}</p>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Tipo</Label>
+                  <Badge className={notaFiscalDetalhes.tipo === 'saida' ? 'bg-blue-500' : 'bg-orange-500'}>
+                    {notaFiscalDetalhes.tipo === 'saida' ? 'Saída' : 'Entrada'}
+                  </Badge>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground">Status</Label>
+                  <Badge 
+                    className={
+                      notaFiscalDetalhes.status === 'paga' ? 'bg-green-500' :
+                      notaFiscalDetalhes.status === 'vencida' ? 'bg-red-500' :
+                      notaFiscalDetalhes.status === 'cancelada' ? 'bg-gray-500' :
+                      'bg-yellow-500'
+                    }
+                  >
+                    {notaFiscalDetalhes.status === 'paga' ? 'Paga' :
+                     notaFiscalDetalhes.status === 'vencida' ? 'Vencida' :
+                     notaFiscalDetalhes.status === 'cancelada' ? 'Cancelada' :
+                     'Pendente'}
+                  </Badge>
+                </div>
+              </div>
+
+              {/* Datas */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-xs text-muted-foreground">Data de Emissão</Label>
+                  <p className="font-medium">{formatarData(notaFiscalDetalhes.data_emissao)}</p>
+                </div>
+                {notaFiscalDetalhes.data_vencimento && (
+                  <div>
+                    <Label className="text-xs text-muted-foreground">Data de Vencimento</Label>
+                    <p className="font-medium">{formatarData(notaFiscalDetalhes.data_vencimento)}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Valor Total */}
+              <div className="border-t pt-4">
+                <Label className="text-xs text-muted-foreground">Valor Total</Label>
+                <p className="text-2xl font-bold text-primary">{formatarMoeda(notaFiscalDetalhes.valor_total || 0)}</p>
+              </div>
+
+              {/* Cliente/Fornecedor */}
+              {(notaFiscalDetalhes.clientes || notaFiscalDetalhes.fornecedores) && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold mb-2 block">
+                    {notaFiscalDetalhes.tipo === 'saida' ? 'Cliente' : 'Fornecedor'}
+                  </Label>
+                  {notaFiscalDetalhes.clientes && (
+                    <div className="space-y-1">
+                      <p className="font-medium">{notaFiscalDetalhes.clientes.nome || 'N/A'}</p>
+                      {notaFiscalDetalhes.clientes.cnpj && (
+                        <p className="text-sm text-muted-foreground">CNPJ: {notaFiscalDetalhes.clientes.cnpj}</p>
+                      )}
+                      {notaFiscalDetalhes.clientes.telefone && (
+                        <p className="text-sm text-muted-foreground">Telefone: {notaFiscalDetalhes.clientes.telefone}</p>
+                      )}
+                      {notaFiscalDetalhes.clientes.email && (
+                        <p className="text-sm text-muted-foreground">Email: {notaFiscalDetalhes.clientes.email}</p>
+                      )}
+                    </div>
+                  )}
+                  {notaFiscalDetalhes.fornecedores && (
+                    <div className="space-y-1">
+                      <p className="font-medium">{notaFiscalDetalhes.fornecedores.nome || 'N/A'}</p>
+                      {notaFiscalDetalhes.fornecedores.cnpj && (
+                        <p className="text-sm text-muted-foreground">CNPJ: {notaFiscalDetalhes.fornecedores.cnpj}</p>
+                      )}
+                      {notaFiscalDetalhes.fornecedores.telefone && (
+                        <p className="text-sm text-muted-foreground">Telefone: {notaFiscalDetalhes.fornecedores.telefone}</p>
+                      )}
+                      {notaFiscalDetalhes.fornecedores.email && (
+                        <p className="text-sm text-muted-foreground">Email: {notaFiscalDetalhes.fornecedores.email}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Venda/Compra Vinculada */}
+              {(notaFiscalDetalhes.vendas || notaFiscalDetalhes.compras) && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold mb-2 block">
+                    {notaFiscalDetalhes.vendas ? 'Venda Vinculada' : 'Compra Vinculada'}
+                  </Label>
+                  {notaFiscalDetalhes.vendas && (
+                    <div>
+                      <p className="font-medium">Número da Venda: {notaFiscalDetalhes.vendas.numero_venda || 'N/A'}</p>
+                      {notaFiscalDetalhes.vendas.data_venda && (
+                        <p className="text-sm text-muted-foreground">Data: {formatarData(notaFiscalDetalhes.vendas.data_venda)}</p>
+                      )}
+                    </div>
+                  )}
+                  {notaFiscalDetalhes.compras && (
+                    <div>
+                      <p className="font-medium">Número do Pedido: {notaFiscalDetalhes.compras.numero_pedido || 'N/A'}</p>
+                      {notaFiscalDetalhes.compras.data_pedido && (
+                        <p className="text-sm text-muted-foreground">Data: {formatarData(notaFiscalDetalhes.compras.data_pedido)}</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Boletos Vinculados */}
+              {notaFiscalDetalhes.boletos && Array.isArray(notaFiscalDetalhes.boletos) && notaFiscalDetalhes.boletos.length > 0 && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold mb-2 block">Boletos Vinculados</Label>
+                  <div className="space-y-2">
+                    {notaFiscalDetalhes.boletos.map((boleto: any) => (
+                      <div key={boleto.id} className="p-3 bg-muted rounded-lg">
+                        <p className="font-medium">Boleto: {boleto.numero_boleto || 'N/A'}</p>
+                        <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
+                          <p>Valor: {formatarMoeda(boleto.valor || 0)}</p>
+                          {boleto.data_vencimento && (
+                            <p>Vencimento: {formatarData(boleto.data_vencimento)}</p>
+                          )}
+                          <p>Status: 
+                            <Badge className="ml-2" variant={
+                              boleto.status === 'pago' ? 'default' :
+                              boleto.status === 'vencido' ? 'destructive' :
+                              'secondary'
+                            }>
+                              {boleto.status === 'pago' ? 'Pago' :
+                               boleto.status === 'vencido' ? 'Vencido' :
+                               'Pendente'}
+                            </Badge>
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Observações */}
+              {notaFiscalDetalhes.observacoes && (
+                <div className="border-t pt-4">
+                  <Label className="text-sm font-semibold mb-2 block">Observações</Label>
+                  <p className="text-sm whitespace-pre-wrap">{notaFiscalDetalhes.observacoes}</p>
+                </div>
+              )}
+
+              {/* Informações Adicionais */}
+              <div className="border-t pt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
+                <div>
+                  <Label className="text-xs">Criado em</Label>
+                  <p>{notaFiscalDetalhes.created_at ? new Date(notaFiscalDetalhes.created_at).toLocaleString('pt-BR') : 'N/A'}</p>
+                </div>
+                {notaFiscalDetalhes.updated_at && (
+                  <div>
+                    <Label className="text-xs">Atualizado em</Label>
+                    <p>{new Date(notaFiscalDetalhes.updated_at).toLocaleString('pt-BR')}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Não foi possível carregar os detalhes da nota fiscal
+            </div>
+          )}
+
+          <div className="flex justify-end gap-2 mt-6">
+            <Button variant="outline" onClick={() => setIsNotaFiscalDialogOpen(false)}>
+              Fechar
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

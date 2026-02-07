@@ -51,6 +51,7 @@ import { medicoesMensaisApi } from "@/lib/api-medicoes-mensais"
 import { locacoesApi, Locacao as LocacaoFull } from "@/lib/api-locacoes"
 import { gruasApi } from "@/lib/api-gruas"
 import { apiCompras } from "@/lib/api-compras"
+import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -126,6 +127,8 @@ export default function NotasFiscaisPage() {
   const [medicoes, setMedicoes] = useState<Medicao[]>([])
   const [locacoes, setLocacoes] = useState<Locacao[]>([])
   const [compras, setCompras] = useState<Compra[]>([])
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
+  const [contaBancariaSelecionada, setContaBancariaSelecionada] = useState<number | null>(null)
   
   // Formulário
   const [formData, setFormData] = useState<NotaFiscalCreate>({
@@ -451,6 +454,27 @@ export default function NotasFiscaisPage() {
       if (comprasResponse.success) {
         setCompras(comprasResponse.data || [])
       }
+      
+      // Carregar contas bancárias
+      try {
+        const contasResponse = await apiContasBancarias.listar({ limit: 1000 })
+        if (contasResponse.success) {
+          // Filtrar apenas contas ativas (pode ser campo 'ativa' ou 'status')
+          const contasAtivas = (contasResponse.data || []).filter((c: ContaBancaria) => {
+            // Verificar se tem campo 'ativa' ou 'status'
+            if ('ativa' in c) {
+              return c.ativa !== false
+            }
+            if ('status' in c && (c as any).status) {
+              return (c as any).status === 'ativa'
+            }
+            return true // Se não tiver nenhum dos campos, incluir
+          })
+          setContasBancarias(contasAtivas)
+        }
+      } catch (error) {
+        console.error('Erro ao carregar contas bancárias:', error)
+      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     }
@@ -594,6 +618,12 @@ export default function NotasFiscaisPage() {
 
       console.log('📋 [NOTAS-FISCAIS] Dados limpos para envio:', dadosLimpos)
 
+      console.log('📋 [NOTAS-FISCAIS] Estado do formulário antes de criar:')
+      console.log('  - formaPagamento:', formaPagamento)
+      console.log('  - tipoPagamentoPersonalizado:', tipoPagamentoPersonalizado)
+      console.log('  - contaBancariaSelecionada:', contaBancariaSelecionada)
+      console.log('  - valor_total:', formData.valor_total)
+      
       const response = await notasFiscaisApi.create(dadosLimpos)
       
       console.log('📋 [NOTAS-FISCAIS] Resposta da criação:', response)
@@ -603,6 +633,95 @@ export default function NotasFiscaisPage() {
         // Usar o tipo retornado pela API para garantir que está correto
         const tipoNotaFiscalCriada = response.data.tipo || tipoNotaFiscal
         console.log('📋 [NOTAS-FISCAIS] Tipo da nota fiscal criada (da API):', tipoNotaFiscalCriada)
+
+        // Criar movimentação bancária se uma conta foi selecionada
+        if (contaBancariaSelecionada && formData.valor_total > 0) {
+          try {
+            console.log('💰 [FLUXO-CAIXA] Criando movimentação bancária')
+            // Nota de Saída → Movimentação tipo "entrada" (incrementa saldo)
+            // Nota de Entrada → Movimentação tipo "saida" (decrementa saldo)
+            const tipoMovimentacao = tipoNotaFiscalCriada === 'saida' ? 'entrada' : 'saida'
+            const descricao = `Nota Fiscal ${formData.numero_nf}${formData.serie ? ` Série ${formData.serie}` : ''} - ${tipoNotaFiscalCriada === 'saida' ? 'Recebimento' : 'Pagamento'}`
+            
+            // Determinar forma de pagamento
+            let formaPagamentoTexto = ''
+            console.log('💰 [FLUXO-CAIXA] Forma de pagamento capturada:', formaPagamento)
+            console.log('💰 [FLUXO-CAIXA] Tipo pagamento personalizado:', tipoPagamentoPersonalizado)
+            console.log('💰 [FLUXO-CAIXA] Tipo de formaPagamento:', typeof formaPagamento)
+            console.log('💰 [FLUXO-CAIXA] Valor de formaPagamento:', JSON.stringify(formaPagamento))
+            
+            if (formaPagamento === 'boleto') {
+              formaPagamentoTexto = 'Boleto'
+            } else if (formaPagamento === 'outro' && tipoPagamentoPersonalizado && tipoPagamentoPersonalizado.trim()) {
+              formaPagamentoTexto = tipoPagamentoPersonalizado.trim()
+            } else if (formaPagamento && formaPagamento.trim()) {
+              // Processar diferentes formatos de forma de pagamento
+              const valorProcessado = formaPagamento.trim()
+              if (valorProcessado === 'pix') {
+                formaPagamentoTexto = 'PIX'
+              } else if (valorProcessado === 'transferencia') {
+                formaPagamentoTexto = 'Transferência Bancária'
+              } else if (valorProcessado === 'cartao_credito') {
+                formaPagamentoTexto = 'Cartão de Crédito'
+              } else if (valorProcessado === 'cartao_debito') {
+                formaPagamentoTexto = 'Cartão de Débito'
+              } else {
+                formaPagamentoTexto = valorProcessado.charAt(0).toUpperCase() + valorProcessado.slice(1).replace(/_/g, ' ')
+              }
+            }
+            
+            console.log('💰 [FLUXO-CAIXA] Forma de pagamento processada:', formaPagamentoTexto)
+            console.log('💰 [FLUXO-CAIXA] Forma de pagamento tem valor?', !!formaPagamentoTexto)
+            
+            // Construir objeto de dados da movimentação
+            // Sempre incluir categoria, mesmo que seja null, para garantir que seja enviado
+            const dadosMovimentacao: {
+              tipo: 'entrada' | 'saida'
+              valor: number
+              descricao: string
+              referencia: string
+              data: string
+              categoria: string | null
+            } = {
+              tipo: tipoMovimentacao,
+              valor: formData.valor_total,
+              descricao: descricao,
+              referencia: `NF-${notaId}`,
+              data: formData.data_emissao,
+              categoria: (formaPagamentoTexto && formaPagamentoTexto.trim().length > 0) 
+                ? formaPagamentoTexto.trim() 
+                : null
+            }
+            
+            console.log('💰 [FLUXO-CAIXA] Categoria final:', dadosMovimentacao.categoria)
+            console.log('💰 [FLUXO-CAIXA] Dados da movimentação a serem enviados:', JSON.stringify(dadosMovimentacao, null, 2))
+            
+            const movimentacaoResponse = await apiContasBancarias.registrarMovimentacao(contaBancariaSelecionada, dadosMovimentacao)
+            
+            if (movimentacaoResponse.success) {
+              console.log('✅ [FLUXO-CAIXA] Movimentação bancária criada com sucesso')
+              toast({
+                title: "Sucesso",
+                description: `Movimentação bancária registrada. Saldo da conta atualizado.`,
+                variant: "default"
+              })
+            } else {
+              console.error('❌ [FLUXO-CAIXA] Erro ao criar movimentação:', movimentacaoResponse)
+              toast({
+                title: "Aviso",
+                description: "Nota fiscal criada, mas houve erro ao registrar movimentação bancária.",
+                variant: "destructive"
+              })
+            }
+          } catch (movimentacaoError: any) {
+            console.error('❌ [FLUXO-CAIXA] Erro ao criar movimentação bancária:', movimentacaoError)
+            toast({
+              title: "Aviso",
+              description: "Nota fiscal criada, mas houve erro ao registrar movimentação bancária: " + (movimentacaoError.message || "Erro desconhecido"),
+              variant: "destructive"
+            })
+          }
+        }
 
         // Salvar itens se houver
         if (itens.length > 0) {
@@ -1268,6 +1387,7 @@ export default function NotasFiscaisPage() {
     setFormaPagamento('')
     setTipoPagamentoPersonalizado('')
     setBoletoFile(null)
+    setContaBancariaSelecionada(null)
   }
 
   // Função para preencher dados de teste do item
@@ -2173,6 +2293,51 @@ export default function NotasFiscaisPage() {
                 </div>
               </div>
             )}
+
+            {/* Campo de seleção de banco para fluxo de caixa */}
+            <div className="grid grid-cols-1 gap-4">
+              <div>
+                <Label htmlFor="conta_bancaria_id">Conta Bancária (para movimentação de caixa)</Label>
+                <Select 
+                  value={contaBancariaSelecionada?.toString() || undefined} 
+                  onValueChange={(value) => setContaBancariaSelecionada(value ? parseInt(value) : null)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a conta bancária (opcional)" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contasBancarias
+                      .filter(conta => {
+                        // Garantir que o ID existe, não é null/undefined, e quando convertido para string não é vazio
+                        const id = conta?.id
+                        if (id == null || id === undefined) return false
+                        const idStr = String(id).trim()
+                        return idStr.length > 0
+                      })
+                      .map(conta => {
+                        const nomeConta = (conta as any).nome || conta.banco
+                        const tipoConta = conta.tipo || (conta as any).tipo_conta || 'corrente'
+                        const saldoFormatado = conta.saldo_atual?.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '0,00'
+                        const contaId = String(conta.id).trim()
+                        // Validação adicional: garantir que contaId não está vazio
+                        if (!contaId || contaId.length === 0) return null
+                        return (
+                          <SelectItem key={conta.id} value={contaId}>
+                            {nomeConta} - {conta.agencia}/{conta.conta} ({tipoConta}) - Saldo: R$ {saldoFormatado}
+                          </SelectItem>
+                        )
+                      })
+                      .filter(Boolean) // Remove qualquer null retornado
+                    }
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {(formData.tipo || activeTab) === 'saida' 
+                    ? 'Nota de Saída: o valor será adicionado ao saldo da conta selecionada'
+                    : 'Nota de Entrada: o valor será subtraído do saldo da conta selecionada'}
+                </p>
+              </div>
+            </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>

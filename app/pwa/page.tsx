@@ -23,7 +23,6 @@ import {
   ChevronRight,
   Zap,
   Receipt,
-  Play,
   Gift,
   Award,
   FileCheck,
@@ -31,6 +30,7 @@ import {
   Loader2,
   Calculator
 } from "lucide-react"
+// Importações atualizadas - Play removido
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"

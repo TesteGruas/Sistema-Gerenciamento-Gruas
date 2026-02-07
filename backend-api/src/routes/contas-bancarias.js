@@ -702,12 +702,15 @@ router.get('/:id/movimentacoes', async (req, res) => {
 router.post('/:id/movimentacoes', async (req, res) => {
   try {
     const { id } = req.params;
+    console.log('💰 [BACKEND] Dados recebidos para criar movimentação:', req.body);
     const movimentacaoData = {
       ...req.body,
       conta_bancaria_id: parseInt(id)
     };
+    console.log('💰 [BACKEND] Dados após adicionar conta_bancaria_id:', movimentacaoData);
 
     const { error: validationError, value } = movimentacaoSchema.validate(movimentacaoData);
+    console.log('💰 [BACKEND] Dados após validação Joi:', value);
     if (validationError) {
       return res.status(400).json({
         success: false,
@@ -730,13 +733,39 @@ router.post('/:id/movimentacoes', async (req, res) => {
       });
     }
 
+    // Garantir que categoria seja incluída corretamente
+    // O Joi pode remover campos undefined, então precisamos garantir que categoria esteja presente
+    const dadosParaInserir = {
+      conta_bancaria_id: value.conta_bancaria_id,
+      tipo: value.tipo,
+      valor: value.valor,
+      descricao: value.descricao,
+      referencia: value.referencia || null,
+      data: value.data,
+      categoria: (value.categoria && value.categoria.trim && value.categoria.trim().length > 0) 
+        ? value.categoria.trim() 
+        : (req.body.categoria && req.body.categoria.trim && req.body.categoria.trim().length > 0)
+          ? req.body.categoria.trim()
+          : null,
+      observacoes: value.observacoes || null
+    };
+    console.log('💰 [BACKEND] Dados finais para inserir no banco:', JSON.stringify(dadosParaInserir, null, 2));
+    console.log('💰 [BACKEND] Categoria no req.body:', req.body.categoria);
+    console.log('💰 [BACKEND] Categoria no objeto value:', value.categoria);
+    console.log('💰 [BACKEND] Categoria no objeto dadosParaInserir:', dadosParaInserir.categoria);
+
     const { data, error } = await supabase
       .from('movimentacoes_bancarias')
-      .insert([value])
+      .insert([dadosParaInserir])
       .select()
       .single();
 
-    if (error) throw error;
+    if (error) {
+      console.error('💰 [BACKEND] Erro ao inserir movimentação:', error);
+      throw error;
+    }
+    
+    console.log('💰 [BACKEND] Movimentação criada com sucesso:', data);
 
     res.status(201).json({
       success: true,

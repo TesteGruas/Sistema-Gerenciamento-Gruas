@@ -188,10 +188,60 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       };
     });
 
-    // Combinar contas e notas fiscais
+    // Buscar cobranças de aluguel pendentes
+    const { data: cobrancasAluguel, error: cobrancasError } = await supabaseAdmin
+      .from('cobrancas_aluguel')
+      .select(`
+        id,
+        mes,
+        valor_total,
+        data_vencimento,
+        data_pagamento,
+        status,
+        observacoes,
+        created_at,
+        updated_at,
+        alugueis_residencias (
+          residencias (nome),
+          funcionarios (nome)
+        ),
+        boletos (id, numero_boleto, descricao, valor, data_vencimento, status)
+      `)
+      .in('status', ['pendente', 'atrasado']);
+
+    const cobrancasFormatadas = (cobrancasAluguel || []).map(cobranca => {
+      const boleto = cobranca.boletos;
+      const residencia = cobranca.alugueis_residencias?.residencias?.nome || 'Residência';
+      const funcionario = cobranca.alugueis_residencias?.funcionarios?.nome || '';
+      
+      return {
+        id: boleto ? `boleto_${boleto.id}` : `cobranca_aluguel_${cobranca.id}`,
+        tipo: boleto ? 'boleto' : 'cobranca_aluguel',
+        descricao: boleto 
+          ? `Boleto ${boleto.numero_boleto} - Aluguel ${residencia} - ${cobranca.mes}`
+          : `Aluguel ${residencia}${funcionario ? ` - ${funcionario}` : ''} - ${cobranca.mes}`,
+        valor: parseFloat(cobranca.valor_total || 0),
+        data_vencimento: boleto ? boleto.data_vencimento : cobranca.data_vencimento,
+        data_pagamento: cobranca.data_pagamento || (boleto && boleto.status === 'pago' ? boleto.data_pagamento : null),
+        status: cobranca.status === 'pago' ? 'pago' : cobranca.status === 'atrasado' ? 'vencido' : 'pendente',
+        fornecedor: null,
+        categoria: 'Aluguel',
+        observacoes: cobranca.observacoes,
+        created_at: cobranca.created_at,
+        updated_at: cobranca.updated_at,
+        // Campos específicos
+        cobranca_aluguel_id: cobranca.id,
+        mes: cobranca.mes,
+        numero_boleto: boleto?.numero_boleto,
+        boleto_id: boleto?.id
+      };
+    });
+
+    // Combinar contas, notas fiscais e cobranças de aluguel
     const todasContas = [
       ...(contasData || []).map(conta => ({ ...conta, tipo: 'conta_pagar' })),
-      ...notasFormatadas
+      ...notasFormatadas,
+      ...cobrancasFormatadas
     ];
 
     // Ordenar por data de vencimento
@@ -204,9 +254,9 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
     res.json({
       success: true,
       data: todasContas,
-      total: (contasCount || 0) + notasFormatadas.length,
+      total: (contasCount || 0) + notasFormatadas.length + cobrancasFormatadas.length,
       pagina: parseInt(pagina),
-      total_paginas: Math.ceil(((contasCount || 0) + notasFormatadas.length) / parseInt(limite))
+      total_paginas: Math.ceil(((contasCount || 0) + notasFormatadas.length + cobrancasFormatadas.length) / parseInt(limite))
     });
   } catch (error) {
     console.error('Erro ao listar contas a pagar:', error);

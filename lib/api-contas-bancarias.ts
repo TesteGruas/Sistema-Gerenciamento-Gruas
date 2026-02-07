@@ -82,8 +82,26 @@ export const apiContasBancarias = {
     if (filters?.page) params.append('page', filters.page.toString())
     if (filters?.limit) params.append('limit', filters.limit.toString())
 
-    const response = await api.get(`/contas-bancarias?${params.toString()}`)
-    return response.data
+    // Adicionar timestamp para evitar cache
+    params.append('_t', Date.now().toString())
+
+    const response = await api.get(`/contas-bancarias?${params.toString()}`, {
+      headers: {
+        'Cache-Control': 'no-cache'
+      }
+    })
+    
+    // Tratar diferentes formatos de resposta
+    const data = response.data
+    if (data?.success && Array.isArray(data.data)) {
+      return data.data
+    } else if (Array.isArray(data)) {
+      return data
+    } else if (data?.data && Array.isArray(data.data)) {
+      return data.data
+    }
+    
+    return []
   },
 
   // Obter conta bancária por ID
@@ -157,6 +175,8 @@ export const apiContasBancarias = {
     descricao: string
     referencia?: string
     data?: string
+    categoria?: string
+    observacoes?: string
   }) {
     const response = await api.post(`/contas-bancarias/${id}/movimentacoes`, dados)
     return response.data

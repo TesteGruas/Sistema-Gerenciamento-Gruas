@@ -131,6 +131,7 @@ import whatsappLogsRoutes from './routes/whatsapp-logs.js'
 import whatsappEvolutionRoutes from './routes/whatsapp-evolution.js'
 import complementosRoutes from './routes/complementos.js'
 import alugueisResidenciasRoutes from './routes/alugueis-residencias.js'
+import cobrancasAluguelRoutes from './routes/cobrancas-aluguel.js'
 import avatarRoutes from './routes/avatar.js'
 import chatIaRoutes from './routes/chat-ia.js'
 import configuracoesRoutes from './routes/configuracoes.js'
@@ -663,6 +664,7 @@ app.use('/api/whatsapp-logs', whatsappLogsRoutes)
 app.use('/api/whatsapp-evolution', whatsappEvolutionRoutes)
 app.use('/api/complementos', complementosRoutes)
 app.use('/api/alugueis-residencias', alugueisResidenciasRoutes)
+app.use('/api/cobrancas-aluguel', cobrancasAluguelRoutes)
 app.use('/api/geocoding', geocodingRoutes)
 app.use('/api/chat-ia', chatIaRoutes)
 

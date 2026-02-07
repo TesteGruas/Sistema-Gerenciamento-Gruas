@@ -28,6 +28,7 @@ import {
   FileText,
   Building2,
   Receipt,
+  Home,
   Download,
   Upload,
   Filter,
@@ -164,11 +165,15 @@ export default function BoletosPage() {
       if (response.success) {
         let boletosFiltrados = response.data || []
         
-        // Filtrar apenas boletos vinculados a notas fiscais ou medições
-        // Remover boletos independentes (sem nota_fiscal_id e sem medicao_id)
+        // Filtrar apenas boletos vinculados a notas fiscais, medições ou cobranças de aluguel
+        // Remover boletos independentes (sem nota_fiscal_id, sem medicao_id e sem cobranca_aluguel)
         boletosFiltrados = boletosFiltrados.filter((b: Boleto) => {
           // Incluir boletos de medições (apenas em saída)
           if (b.medicao_id) {
+            return activeTab === 'saida'
+          }
+          // Incluir boletos vinculados a cobranças de aluguel (tipo 'pagar' - saída)
+          if ((b as any).cobranca_aluguel || (b as any).origem === 'aluguel') {
             return activeTab === 'saida'
           }
           // Incluir apenas boletos vinculados a notas fiscais
@@ -496,18 +501,54 @@ export default function BoletosPage() {
                     <TableBody>
                       {filteredBoletos.map((boleto) => {
                         const vencido = isVencido(boleto.data_vencimento) && boleto.status === 'pendente'
-                        const origem = (boleto as any).origem === 'medicao' || boleto.medicao_id 
-                          ? 'Medição' 
-                          : (boleto as any).notas_fiscais 
-                            ? `NF ${(boleto as any).notas_fiscais.numero_nf || (boleto as any).notas_fiscais.numero_nf || 'N/A'}` 
-                            : (boleto as any).nota_fiscal_id 
-                              ? `NF #${(boleto as any).nota_fiscal_id}` 
-                              : 'Nota Fiscal'
+                        const cobrancaAluguel = (boleto as any).cobranca_aluguel
+                        const origem = (boleto as any).origem === 'aluguel' || cobrancaAluguel
+                          ? 'Aluguel'
+                          : (boleto as any).origem === 'medicao' || boleto.medicao_id 
+                            ? 'Medição' 
+                            : (boleto as any).notas_fiscais 
+                              ? `NF ${(boleto as any).notas_fiscais.numero_nf || (boleto as any).notas_fiscais.numero_nf || 'N/A'}` 
+                              : (boleto as any).nota_fiscal_id 
+                                ? `NF #${(boleto as any).nota_fiscal_id}` 
+                                : 'Nota Fiscal'
                         
                         return (
                           <TableRow key={boleto.id} className={vencido ? 'bg-red-50' : ''}>
                             <TableCell className="font-medium">{boleto.numero_boleto}</TableCell>
-                            <TableCell>{boleto.descricao}</TableCell>
+                            <TableCell>
+                              <div className="flex flex-col gap-1">
+                                <span>{boleto.descricao}</span>
+                                {cobrancaAluguel && (
+                                  <div className="text-xs text-gray-500 space-y-0.5">
+                                    {cobrancaAluguel.alugueis_residencias?.residencias && (
+                                      <div>
+                                        <span className="font-medium">Residência:</span> {cobrancaAluguel.alugueis_residencias.residencias.nome}
+                                      </div>
+                                    )}
+                                    {cobrancaAluguel.mes && (
+                                      <div>
+                                        <span className="font-medium">Mês/Ano:</span> {cobrancaAluguel.mes}
+                                      </div>
+                                    )}
+                                    {cobrancaAluguel.valor_aluguel > 0 && (
+                                      <div>
+                                        <span className="font-medium">Aluguel:</span> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cobrancaAluguel.valor_aluguel)}
+                                      </div>
+                                    )}
+                                    {cobrancaAluguel.valor_custos > 0 && (
+                                      <div>
+                                        <span className="font-medium">
+                                          {cobrancaAluguel.tipo_custo === 'luz' ? 'Luz' : 
+                                           cobrancaAluguel.tipo_custo === 'agua' ? 'Água' : 
+                                           cobrancaAluguel.tipo_custo === 'energia' ? 'Energia' : 
+                                           cobrancaAluguel.tipo_custo === 'outros' ? 'Outros' : 'Custos'}:
+                                        </span> {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(cobrancaAluguel.valor_custos)}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </TableCell>
                             <TableCell>
                               {boleto.clientes ? (
                                 <div className="flex items-center gap-2">
@@ -519,7 +560,18 @@ export default function BoletosPage() {
                               )}
                             </TableCell>
                             <TableCell>
-                              {origem === 'Medição' ? (
+                              {origem === 'Aluguel' ? (
+                                <div className="flex items-center gap-2">
+                                  <Home className="w-4 h-4 text-purple-400" />
+                                  <span className="text-sm">
+                                    {cobrancaAluguel?.alugueis_residencias?.residencias 
+                                      ? (Array.isArray(cobrancaAluguel.alugueis_residencias.residencias) 
+                                          ? cobrancaAluguel.alugueis_residencias.residencias[0]?.nome 
+                                          : cobrancaAluguel.alugueis_residencias.residencias.nome)
+                                      : 'Aluguel'}
+                                  </span>
+                                </div>
+                              ) : origem === 'Medição' ? (
                                 <div className="flex items-center gap-2">
                                   <Receipt className="w-4 h-4 text-blue-400" />
                                   <span className="text-sm">

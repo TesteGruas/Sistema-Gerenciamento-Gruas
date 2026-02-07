@@ -59,6 +59,7 @@ import {
 import { FuncionarioSearch } from '@/components/funcionario-search'
 import { useToast } from '@/hooks/use-toast'
 import { NotificacoesAPI } from '@/lib/api-notificacoes'
+import { useRouter } from 'next/navigation'
 
 // Função para calcular a próxima data de vencimento
 const calcularProximaDataVencimento = (diaVencimento: number, dataInicio: string): Date => {
@@ -102,6 +103,7 @@ const calcularDiasAteVencimento = (diaVencimento: number, dataInicio: string): n
 }
 
 export default function AlugueisIntegradoPage() {
+  const router = useRouter()
   const [alugueis, setAlugueis] = useState<AluguelResidencia[]>([])
   const [residencias, setResidencias] = useState<Residencia[]>([])
   const [loading, setLoading] = useState(true)
@@ -1398,7 +1400,11 @@ export default function AlugueisIntegradoPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                       {aluguelsFiltrados.map((aluguel) => (
-                        <tr key={aluguel.id} className="hover:bg-gray-50">
+                        <tr 
+                          key={aluguel.id} 
+                          className="hover:bg-gray-50 cursor-pointer"
+                          onClick={() => router.push(`/dashboard/financeiro/alugueis/${aluguel.id}`)}
+                        >
                           <td className="px-6 py-4">
                             <div>
                               <p className="font-medium text-sm">{aluguel.residencia.nome}</p>
@@ -1491,7 +1497,7 @@ export default function AlugueisIntegradoPage() {
                             </Badge>
                           </td>
                           <td className="px-6 py-4">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
                               <Button
                                 variant="outline"
                                 size="sm"
