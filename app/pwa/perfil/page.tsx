@@ -478,6 +478,12 @@ function PWAPerfilPageContent() {
       const data = await response.json()
 
       if (response.ok && data.success) {
+        // Notificação de sucesso
+        toast({
+          title: "Senha alterada com sucesso!",
+          description: "Sua senha foi alterada com sucesso. Use a nova senha no próximo login.",
+          variant: "default"
+        })
 
         // Limpar formulário
         setSenhaAtual('')
@@ -487,8 +493,13 @@ function PWAPerfilPageContent() {
       } else {
         throw new Error(data.error || 'Erro ao alterar senha')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao alterar senha:', error)
+      toast({
+        title: "Erro ao alterar senha",
+        description: error.message || "Ocorreu um erro ao alterar sua senha. Verifique se a senha atual está correta.",
+        variant: "destructive"
+      })
     } finally {
       setAlterandoSenha(false)
     }
