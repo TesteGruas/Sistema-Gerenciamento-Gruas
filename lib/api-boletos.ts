@@ -84,6 +84,7 @@ export const boletosApi = {
     cliente_id?: number
     obra_id?: number
     medicao_id?: number
+    nota_fiscal_id?: number
     status?: string
     tipo?: 'receber' | 'pagar'
     search?: string
@@ -96,6 +97,7 @@ export const boletosApi = {
     if (params?.cliente_id) searchParams.append('cliente_id', params.cliente_id.toString())
     if (params?.obra_id) searchParams.append('obra_id', params.obra_id.toString())
     if (params?.medicao_id) searchParams.append('medicao_id', params.medicao_id.toString())
+    if (params?.nota_fiscal_id) searchParams.append('nota_fiscal_id', params.nota_fiscal_id.toString())
     if (params?.status) searchParams.append('status', params.status)
     if (params?.tipo) searchParams.append('tipo', params.tipo)
     if (params?.search) searchParams.append('search', params.search)

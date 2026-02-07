@@ -154,6 +154,8 @@ function ObraDetailsPageContent() {
   const [errorDocumentos, setErrorDocumentos] = useState<string | null>(null)
   const [errorArquivos, setErrorArquivos] = useState<string | null>(null)
   const [notificandoEnvolvidos, setNotificandoEnvolvidos] = useState(false)
+  const [finalizandoObra, setFinalizandoObra] = useState(false)
+  const [showFinalizarObraDialog, setShowFinalizarObraDialog] = useState(false)
   
   // Estados para medições mensais
   const [medicoesMensais, setMedicoesMensais] = useState<MedicaoMensal[]>([])
@@ -3062,6 +3064,109 @@ useEffect(() => {
               </>
             )}
           </Button>
+          {obra?.status !== 'Concluída' && (
+            <>
+              <Button
+                variant="default"
+                size="sm"
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => setShowFinalizarObraDialog(true)}
+                disabled={finalizandoObra || !obra?.id || obra?.status === 'Concluída'}
+              >
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Finalizar Obra
+              </Button>
+
+              <Dialog open={showFinalizarObraDialog} onOpenChange={setShowFinalizarObraDialog}>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Finalizar Obra</DialogTitle>
+                    <DialogDescription>
+                      Tem certeza que deseja finalizar esta obra?
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="py-4">
+                    <p className="text-sm text-gray-600 mb-2">
+                      Ao finalizar a obra, as seguintes ações serão realizadas:
+                    </p>
+                    <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                      <li>O status da obra será alterado para &quot;Concluída&quot;</li>
+                      <li>Todas as gruas vinculadas serão liberadas</li>
+                      <li>O status das gruas será alterado para &quot;Disponível&quot;</li>
+                      <li>Os relacionamentos grua-obra serão marcados como &quot;Concluída&quot;</li>
+                    </ul>
+                  </div>
+                  <DialogFooter>
+                    <Button
+                      variant="outline"
+                      onClick={() => setShowFinalizarObraDialog(false)}
+                      disabled={finalizandoObra}
+                    >
+                      Cancelar
+                    </Button>
+                    <Button
+                      variant="default"
+                      className="bg-green-600 hover:bg-green-700 text-white"
+                      onClick={async () => {
+                        if (!obra?.id) {
+                          toast({
+                            title: "Erro",
+                            description: "Obra não encontrada",
+                            variant: "destructive"
+                          })
+                          setShowFinalizarObraDialog(false)
+                          return
+                        }
+
+                        setFinalizandoObra(true)
+                        try {
+                          const resultado = await obrasApi.finalizarObra(parseInt(obra.id))
+
+                          if (resultado.success) {
+                            toast({
+                              title: "Sucesso",
+                              description: resultado.message || "Obra finalizada com sucesso",
+                            })
+                            // Recarregar a obra para atualizar o status
+                            await carregarObra(obraId)
+                            setShowFinalizarObraDialog(false)
+                          } else {
+                            toast({
+                              title: "Erro",
+                              description: resultado.message || "Erro ao finalizar obra",
+                              variant: "destructive"
+                            })
+                          }
+                        } catch (error: any) {
+                          console.error('Erro ao finalizar obra:', error)
+                          toast({
+                            title: "Erro",
+                            description: error.message || "Erro ao finalizar obra",
+                            variant: "destructive"
+                          })
+                        } finally {
+                          setFinalizandoObra(false)
+                        }
+                      }}
+                      disabled={finalizandoObra}
+                    >
+                      {finalizandoObra ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                          Finalizando...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle className="w-4 h-4 mr-2" />
+                          Confirmar Finalização
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </>
+          )}
           <Button
             variant="outline"
             size="sm"

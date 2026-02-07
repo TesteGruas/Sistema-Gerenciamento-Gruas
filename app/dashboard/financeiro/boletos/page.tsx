@@ -145,9 +145,10 @@ export default function BoletosPage() {
       setLoading(true)
       
       // Determinar tipo baseado na aba ativa
-      // Entrada = boletos a pagar (tipo: 'pagar')
-      // Saída = boletos a receber (tipo: 'receber')
-      const tipo = activeTab === 'entrada' ? 'pagar' : 'receber'
+      // Boletos de ENTRADA = tipo 'receber' (a receber) - vinculados a notas fiscais de SAÍDA
+      // Boletos de SAÍDA = tipo 'pagar' (a pagar) - vinculados a notas fiscais de ENTRADA
+      const tipo = activeTab === 'entrada' ? 'receber' : 'pagar'
+      console.log('🔍 [BOLETOS] Carregando boletos - activeTab:', activeTab, 'tipo a buscar:', tipo)
       
       const response = await boletosApi.list({
         status: statusFilter !== 'all' ? statusFilter : undefined,
@@ -158,18 +159,22 @@ export default function BoletosPage() {
         include_medicoes: activeTab === 'saida' // Incluir medições apenas em boletos de saída
       })
       
+      console.log('🔍 [BOLETOS] Resposta da API - total:', response.data?.length || 0, 'tipo buscado:', tipo)
+      
       if (response.success) {
         let boletosFiltrados = response.data || []
         
         // Filtrar apenas boletos vinculados a notas fiscais ou medições
         // Remover boletos independentes (sem nota_fiscal_id e sem medicao_id)
-        boletosFiltrados = boletosFiltrados.filter(b => {
+        boletosFiltrados = boletosFiltrados.filter((b: Boleto) => {
           // Incluir boletos de medições (apenas em saída)
-          if ((b as any).origem === 'medicao' || b.medicao_id) {
+          if (b.medicao_id) {
             return activeTab === 'saida'
           }
           // Incluir apenas boletos vinculados a notas fiscais
-          return (b as any).nota_fiscal_id || (b as any).notas_fiscais
+          // Verificar tanto nota_fiscal_id quanto o objeto relacionado notas_fiscais
+          const temNotaFiscal = b.nota_fiscal_id !== null && b.nota_fiscal_id !== undefined
+          return temNotaFiscal
         })
         
         setBoletos(boletosFiltrados)
@@ -349,8 +354,46 @@ export default function BoletosPage() {
 
   // Filtrar boletos
   const filteredBoletos = useMemo(() => {
-    return boletos
-  }, [boletos])
+    // Filtrar por tipo da nota fiscal vinculada
+    // Boletos de ENTRADA (tipo "receber") devem mostrar boletos vinculados a notas fiscais de SAÍDA
+    // Boletos de SAÍDA (tipo "pagar") devem mostrar boletos vinculados a notas fiscais de ENTRADA
+    const tipoNotaEsperado = activeTab === 'entrada' ? 'saida' : 'entrada'
+    
+    console.log('🔍 [BOLETOS] Filtrando boletos - activeTab:', activeTab, 'tipoNotaEsperado:', tipoNotaEsperado, 'total boletos:', boletos.length)
+    
+    const filtrados = boletos.filter(b => {
+      // Se o boleto tem nota fiscal vinculada, verificar o tipo da nota
+      if ((b as any).notas_fiscais) {
+        const tipoNota = (b as any).notas_fiscais.tipo
+        const match = tipoNota === tipoNotaEsperado
+        console.log('🔍 [BOLETOS] Boleto ID:', b.id, 'tipoNota:', tipoNota, 'tipoNotaEsperado:', tipoNotaEsperado, 'match:', match)
+        return match
+      }
+      // Se não tem objeto notas_fiscais mas tem nota_fiscal_id, incluir baseado no tipo do boleto
+      // Boletos tipo "receber" são de entrada (vinculados a notas de saída)
+      // Boletos tipo "pagar" são de saída (vinculados a notas de entrada)
+      if (b.nota_fiscal_id) {
+        if (activeTab === 'entrada') {
+          const match = b.tipo === 'receber'
+          console.log('🔍 [BOLETOS] Boleto ID:', b.id, 'tipo:', b.tipo, 'activeTab: entrada, match:', match)
+          return match
+        } else {
+          const match = b.tipo === 'pagar'
+          console.log('🔍 [BOLETOS] Boleto ID:', b.id, 'tipo:', b.tipo, 'activeTab: saida, match:', match)
+          return match
+        }
+      }
+      // Se não tem nota fiscal vinculada, incluir apenas se for de medição (apenas em saída)
+      if ((b as any).origem === 'medicao' || b.medicao_id) {
+        return activeTab === 'saida'
+      }
+      // Caso contrário, não incluir (boletos sem origem definida)
+      return false
+    })
+    
+    console.log('🔍 [BOLETOS] Boletos filtrados:', filtrados.length)
+    return filtrados
+  }, [boletos, activeTab])
 
   return (
     <div className="space-y-6">
@@ -372,22 +415,22 @@ export default function BoletosPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+      <Tabs value={activeTab} onValueChange={(v) => {
+        console.log('🔍 [BOLETOS] Mudando aba de', activeTab, 'para', v)
+        setActiveTab(v as any)
+      }}>
         <TabsList>
           <TabsTrigger value="saida">Boletos de Saída</TabsTrigger>
           <TabsTrigger value="entrada">Boletos de Entrada</TabsTrigger>
         </TabsList>
 
-        <TabsContent value={activeTab} className="space-y-4">
+        {/* Tab: Boletos de Saída */}
+        <TabsContent value="saida" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>
-                {activeTab === 'entrada' ? 'Boletos de Entrada' : 'Boletos de Saída'}
-              </CardTitle>
+              <CardTitle>Boletos de Saída</CardTitle>
               <CardDescription>
-                {activeTab === 'entrada' 
-                  ? 'Boletos vinculados a notas fiscais de entrada (contas a pagar)' 
-                  : 'Boletos vinculados a notas fiscais de saída e medições (contas a receber)'}
+                Boletos vinculados a notas fiscais de saída e medições (contas a receber)
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -489,6 +532,212 @@ export default function BoletosPage() {
                                   <span className="text-sm">{origem}</span>
                                 </div>
                               )}
+                            </TableCell>
+                            <TableCell>
+                              {boleto.contas_bancarias ? (
+                                <div className="flex items-center gap-2">
+                                  <CreditCard className="w-4 h-4 text-gray-400" />
+                                  <span className="text-sm">{boleto.contas_bancarias.banco}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>{formatDate(boleto.data_emissao)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {formatDate(boleto.data_vencimento)}
+                                {vencido && <AlertTriangle className="w-4 h-4 text-red-500" />}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-semibold">{formatCurrency(boleto.valor)}</TableCell>
+                            <TableCell>{getStatusBadge(boleto.status)}</TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                {boleto.arquivo_boleto ? (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleDownload(boleto)}
+                                    title="Download do arquivo"
+                                    className="text-green-600 hover:text-green-700"
+                                  >
+                                    <Download className="w-4 h-4" />
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleUpload(boleto)}
+                                    title="Upload do arquivo"
+                                  >
+                                    <Upload className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                {boleto.status === 'pendente' && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleMarcarComoPago(boleto.id)}
+                                    title="Marcar como pago"
+                                    className="text-green-600 hover:text-green-700"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </Button>
+                                )}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleView(boleto)}
+                                  title="Visualizar"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                  
+                  {/* Paginação */}
+                  {!loading && filteredBoletos.length > 0 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <div className="text-sm text-gray-600">
+                        Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} boletos
+                      </div>
+                      <Pagination>
+                        <PaginationContent>
+                          <PaginationItem>
+                            <PaginationPrevious 
+                              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                              className={currentPage === 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            />
+                          </PaginationItem>
+                          <PaginationItem>
+                            <span className="px-4 text-sm text-muted-foreground">
+                              Página {currentPage} de {totalPages}
+                            </span>
+                          </PaginationItem>
+                          <PaginationItem>
+                            <PaginationNext 
+                              onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                              className={currentPage === totalPages ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                            />
+                          </PaginationItem>
+                        </PaginationContent>
+                      </Pagination>
+                    </div>
+                  )}
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Tab: Boletos de Entrada */}
+        <TabsContent value="entrada" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Boletos de Entrada</CardTitle>
+              <CardDescription>
+                Boletos vinculados a notas fiscais de entrada (contas a pagar)
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Filtros */}
+              <div className="border-b pb-4">
+                <div className="flex items-center gap-2 mb-4">
+                  <Filter className="w-5 h-5" />
+                  <h3 className="font-semibold">Filtros</h3>
+                </div>
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
+                  <div className="lg:col-span-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Buscar por número, descrição, fornecedor..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <Select value={statusFilter} onValueChange={setStatusFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Status</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="pago">Pago</SelectItem>
+                      <SelectItem value="vencido">Vencido</SelectItem>
+                      <SelectItem value="cancelado">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Button variant="outline" onClick={carregarBoletos}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Atualizar
+                  </Button>
+                </div>
+              </div>
+
+              {/* Tabela */}
+              {loading ? (
+                <div className="text-center py-8">Carregando...</div>
+              ) : filteredBoletos.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">Nenhum boleto encontrado</div>
+              ) : (
+                <>
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Número</TableHead>
+                        <TableHead>Descrição</TableHead>
+                        <TableHead>Fornecedor</TableHead>
+                        <TableHead>Origem</TableHead>
+                        <TableHead>Banco</TableHead>
+                        <TableHead>Emissão</TableHead>
+                        <TableHead>Vencimento</TableHead>
+                        <TableHead>Valor</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {filteredBoletos.map((boleto) => {
+                        const vencido = isVencido(boleto.data_vencimento) && boleto.status === 'pendente'
+                        const origem = (boleto as any).notas_fiscais 
+                          ? `NF ${(boleto as any).notas_fiscais.numero_nf || 'N/A'}` 
+                          : (boleto as any).nota_fiscal_id 
+                            ? `NF #${(boleto as any).nota_fiscal_id}` 
+                            : 'Nota Fiscal'
+                        
+                        return (
+                          <TableRow key={boleto.id} className={vencido ? 'bg-red-50' : ''}>
+                            <TableCell className="font-medium">{boleto.numero_boleto}</TableCell>
+                            <TableCell>{boleto.descricao}</TableCell>
+                            <TableCell>
+                              {(boleto as any).fornecedores ? (
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-gray-400" />
+                                  <span>{(boleto as any).fornecedores.nome}</span>
+                                </div>
+                              ) : (boleto as any).clientes ? (
+                                <div className="flex items-center gap-2">
+                                  <Building2 className="w-4 h-4 text-gray-400" />
+                                  <span>{(boleto as any).clientes.nome}</span>
+                                </div>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <div className="flex items-center gap-2">
+                                <FileText className="w-4 h-4 text-green-400" />
+                                <span className="text-sm">{origem}</span>
+                              </div>
                             </TableCell>
                             <TableCell>
                               {boleto.contas_bancarias ? (

@@ -43,6 +43,7 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 // Orçamentos removidos - não devem aparecer em contas a receber
 // import { getOrcamentos, Orcamento, formatarStatusOrcamento } from "@/lib/api-orcamentos"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
+import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 
 // Interface local para obras com campos adicionais
 interface Obra {
@@ -125,6 +126,7 @@ export default function ContasReceberPage() {
   const [editingReceita, setEditingReceita] = useState<ReceitaComRelacionamentos | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [viewingItem, setViewingItem] = useState<any>(null)
+  const [loadingDetalhesNota, setLoadingDetalhesNota] = useState(false)
 
   // Estados para Contas a Receber
   const [contas, setContas] = useState<ContaReceber[]>([])
@@ -1243,9 +1245,85 @@ export default function ContasReceberPage() {
                                 <Button
                                   size="sm"
                                   variant="outline"
-                                  onClick={() => {
+                                  onClick={async () => {
+                                    console.log('🔍 [CONTAS-RECEBER] Botão visualizar clicado')
+                                    console.log('🔍 [CONTAS-RECEBER] Dados da nota:', nota)
+                                    
+                                    // Buscar detalhes completos da nota fiscal
                                     setViewingItem({ tipo: 'nota_fiscal', data: nota })
                                     setIsViewDialogOpen(true)
+                                    setLoadingDetalhesNota(true)
+                                    
+                                    try {
+                                      // Extrair o ID da nota fiscal
+                                      // Prioridade: nota_fiscal_id > id (extraindo número se for string "nf_123")
+                                      let notaId: number | null = null
+                                      
+                                      console.log('🔍 [CONTAS-RECEBER] Tentando extrair ID...')
+                                      console.log('🔍 [CONTAS-RECEBER] nota.nota_fiscal_id:', nota.nota_fiscal_id)
+                                      console.log('🔍 [CONTAS-RECEBER] nota.id:', nota.id)
+                                      console.log('🔍 [CONTAS-RECEBER] Tipo de nota.id:', typeof nota.id)
+                                      
+                                      // Primeiro tentar nota_fiscal_id (campo direto do backend)
+                                      if (nota.nota_fiscal_id) {
+                                        notaId = typeof nota.nota_fiscal_id === 'number' 
+                                          ? nota.nota_fiscal_id 
+                                          : parseInt(String(nota.nota_fiscal_id))
+                                        console.log('🔍 [CONTAS-RECEBER] ID extraído de nota_fiscal_id:', notaId)
+                                      }
+                                      // Se não tiver nota_fiscal_id, tentar extrair do id
+                                      else if (nota.id) {
+                                        if (typeof nota.id === 'number') {
+                                          notaId = nota.id
+                                          console.log('🔍 [CONTAS-RECEBER] ID numérico direto:', notaId)
+                                        } 
+                                        // Se o ID é uma string como "nf_123", extrair o número
+                                        else if (typeof nota.id === 'string' && nota.id.startsWith('nf_')) {
+                                          notaId = parseInt(nota.id.replace('nf_', ''))
+                                          console.log('🔍 [CONTAS-RECEBER] ID extraído de string nf_*:', notaId)
+                                        }
+                                        // Tentar parsear se for string numérica
+                                        else if (typeof nota.id === 'string') {
+                                          notaId = parseInt(nota.id)
+                                          console.log('🔍 [CONTAS-RECEBER] ID parseado de string:', notaId)
+                                        }
+                                      }
+                                      
+                                      console.log('🔍 [CONTAS-RECEBER] ID final extraído:', notaId)
+                                      
+                                      if (notaId && !isNaN(notaId)) {
+                                        console.log('🔍 [CONTAS-RECEBER] Chamando API getById com ID:', notaId)
+                                        const detalhesResponse = await notasFiscaisApi.getById(notaId)
+                                        console.log('🔍 [CONTAS-RECEBER] Resposta da API:', detalhesResponse)
+                                        
+                                        if (detalhesResponse.success && detalhesResponse.data) {
+                                          console.log('✅ [CONTAS-RECEBER] Dados recebidos com sucesso:', detalhesResponse.data)
+                                          setViewingItem({ 
+                                            tipo: 'nota_fiscal', 
+                                            data: detalhesResponse.data 
+                                          })
+                                        } else {
+                                          // Se não conseguir buscar detalhes, usar os dados que já temos
+                                          console.warn('⚠️ [CONTAS-RECEBER] Não foi possível buscar detalhes completos, usando dados disponíveis')
+                                          console.warn('⚠️ [CONTAS-RECEBER] Resposta:', detalhesResponse)
+                                        }
+                                      } else {
+                                        console.warn('⚠️ [CONTAS-RECEBER] ID da nota fiscal não encontrado ou inválido')
+                                        console.warn('⚠️ [CONTAS-RECEBER] nota completa:', nota)
+                                        // Usar os dados que já temos
+                                      }
+                                    } catch (error) {
+                                      console.error('❌ [CONTAS-RECEBER] Erro ao buscar detalhes da nota fiscal:', error)
+                                      console.error('❌ [CONTAS-RECEBER] Stack:', error instanceof Error ? error.stack : 'N/A')
+                                      toast({
+                                        title: "Aviso",
+                                        description: "Não foi possível carregar todos os detalhes. Exibindo informações disponíveis.",
+                                        variant: "default"
+                                      })
+                                    } finally {
+                                      console.log('🔍 [CONTAS-RECEBER] Finalizando loading...')
+                                      setLoadingDetalhesNota(false)
+                                    }
                                   }}
                                 >
                                   <Eye className="w-4 h-4" />
@@ -1606,16 +1684,31 @@ export default function ContasReceberPage() {
       </Dialog>
 
       {/* Dialog de Visualização de Detalhes */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+      <Dialog open={isViewDialogOpen} onOpenChange={(open) => {
+        setIsViewDialogOpen(open)
+        if (!open) {
+          setViewingItem(null)
+          setLoadingDetalhesNota(false)
+        }
+      }}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Detalhes do Registro</DialogTitle>
+            <DialogTitle>
+              {viewingItem?.tipo === 'nota_fiscal' ? 'Detalhes da Nota Fiscal' : 'Detalhes do Registro'}
+            </DialogTitle>
             <DialogDescription>
-              Informações completas do registro selecionado
+              {viewingItem?.tipo === 'nota_fiscal' ? 'Informações completas da nota fiscal' : 'Informações completas do registro selecionado'}
             </DialogDescription>
           </DialogHeader>
           
-          {viewingItem && (
+          {loadingDetalhesNota && (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <span className="ml-2 text-sm text-gray-600">Carregando detalhes...</span>
+            </div>
+          )}
+          
+          {viewingItem && !loadingDetalhesNota && (
             <div className="space-y-4">
               {viewingItem.tipo === 'receita' && (
                 <>
@@ -1740,6 +1833,262 @@ export default function ContasReceberPage() {
               )}
 
               {/* Orçamentos removidos - não devem aparecer em contas a receber */}
+
+              {viewingItem.tipo === 'nota_fiscal' && (
+                <>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Número</Label>
+                      <p className="text-lg font-semibold">{viewingItem.data.numero_nf}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Série</Label>
+                      <p className="text-lg">{viewingItem.data.serie || '-'}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Tipo</Label>
+                      <p className="text-lg">{viewingItem.data.tipo === 'saida' ? 'Saída' : 'Entrada'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Tipo de Nota</Label>
+                      <p className="text-lg">{viewingItem.data.tipo_nota === 'nf_locacao' ? 'NF Locação' : viewingItem.data.tipo_nota || '-'}</p>
+                    </div>
+                  </div>
+
+                  {viewingItem.data.tipo === 'saida' && viewingItem.data.clientes && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Cliente</Label>
+                      <p className="text-lg font-semibold">{viewingItem.data.clientes.nome}</p>
+                      {viewingItem.data.clientes.cnpj && (
+                        <p className="text-sm text-gray-600">CNPJ: {viewingItem.data.clientes.cnpj}</p>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-3 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Data de Emissão</Label>
+                      <p className="text-lg">{viewingItem.data.data_emissao ? new Date(viewingItem.data.data_emissao).toLocaleDateString('pt-BR') : '-'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Data de Vencimento</Label>
+                      <p className="text-lg">{viewingItem.data.data_vencimento ? new Date(viewingItem.data.data_vencimento).toLocaleDateString('pt-BR') : '-'}</p>
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Valor Total</Label>
+                      <p className="text-lg font-semibold text-green-600">{formatarMoeda(viewingItem.data.valor_total || 0)}</p>
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-sm font-medium text-gray-500">Status</Label>
+                    <div className="mt-2">{getStatusBadge(viewingItem.data.status)}</div>
+                  </div>
+
+                  {/* Seção de Impostos - Sempre mostrar para notas fiscais */}
+                  <div className="border-t pt-4 mt-4">
+                    <h3 className="text-lg font-semibold mb-4">Detalhes dos Impostos</h3>
+                      
+                      {/* Impostos Estaduais */}
+                      {(viewingItem.data.valor_icms !== undefined || viewingItem.data.valor_icms_st !== undefined || viewingItem.data.base_calculo_icms !== undefined) && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Impostos Estaduais</h4>
+                          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
+                            {viewingItem.data.base_calculo_icms > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Base de Cálculo ICMS</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.base_calculo_icms || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_icms > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">ICMS</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_icms || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.base_calculo_icms_st > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Base de Cálculo ICMS ST</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.base_calculo_icms_st || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_icms_st > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">ICMS ST</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_icms_st || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_fcp_st > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">FCP ST</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_fcp_st || 0)}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Impostos Federais */}
+                      {(viewingItem.data.valor_ipi !== undefined || viewingItem.data.valor_pis !== undefined || viewingItem.data.valor_cofins !== undefined || 
+                        viewingItem.data.valor_inss !== undefined || viewingItem.data.valor_ir !== undefined || viewingItem.data.valor_csll !== undefined) && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Impostos Federais</h4>
+                          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
+                            {viewingItem.data.valor_ipi > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">IPI</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_ipi || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_pis > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">PIS</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_pis || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_cofins > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">COFINS</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_cofins || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_inss > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">INSS</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_inss || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_ir > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">IR</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_ir || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_csll > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">CSLL</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_csll || 0)}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Impostos Municipais */}
+                      {(viewingItem.data.valor_issqn !== undefined || viewingItem.data.base_calculo_issqn !== undefined) && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Impostos Municipais</h4>
+                          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
+                            {viewingItem.data.base_calculo_issqn > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Base de Cálculo ISSQN</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.base_calculo_issqn || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_issqn > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">ISSQN</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_issqn || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.aliquota_issqn > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Alíquota ISSQN</Label>
+                                <p className="text-sm font-medium">{(viewingItem.data.aliquota_issqn || 0).toFixed(2)}%</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Retenções */}
+                      {(viewingItem.data.retencoes_federais !== undefined || viewingItem.data.outras_retencoes !== undefined) && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Retenções</h4>
+                          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
+                            {viewingItem.data.retencoes_federais > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Retenções Federais</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.retencoes_federais || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.outras_retencoes > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Outras Retenções</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.outras_retencoes || 0)}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Outros Valores */}
+                      {(viewingItem.data.valor_frete !== undefined || viewingItem.data.valor_seguro !== undefined || viewingItem.data.valor_desconto !== undefined || 
+                        viewingItem.data.outras_despesas_acessorias !== undefined) && (
+                        <div className="mb-4">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-2">Outros Valores</h4>
+                          <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-md">
+                            {viewingItem.data.valor_frete > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Frete</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_frete || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_seguro > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Seguro</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.valor_seguro || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.valor_desconto > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Desconto</Label>
+                                <p className="text-sm font-medium text-red-600">{formatarMoeda(viewingItem.data.valor_desconto || 0)}</p>
+                              </div>
+                            )}
+                            {viewingItem.data.outras_despesas_acessorias > 0 && (
+                              <div>
+                                <Label className="text-xs text-gray-600">Outras Despesas</Label>
+                                <p className="text-sm font-medium">{formatarMoeda(viewingItem.data.outras_despesas_acessorias || 0)}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Valor Líquido - Sempre mostrar se existir */}
+                      {viewingItem.data.valor_liquido !== undefined && viewingItem.data.valor_liquido !== null && (
+                        <div className="border-t pt-4 mt-4">
+                          <div className="flex justify-between items-center bg-green-50 p-3 rounded-md">
+                            <Label className="text-sm font-semibold text-gray-700">Valor Líquido</Label>
+                            <p className="text-lg font-bold text-green-600">{formatarMoeda(viewingItem.data.valor_liquido || 0)}</p>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Mensagem quando não há impostos cadastrados */}
+                      {!viewingItem.data.valor_icms && !viewingItem.data.valor_ipi && !viewingItem.data.valor_issqn && 
+                       !viewingItem.data.valor_pis && !viewingItem.data.valor_cofins && !viewingItem.data.valor_inss && 
+                       !viewingItem.data.valor_ir && !viewingItem.data.valor_csll && !viewingItem.data.retencoes_federais &&
+                       !viewingItem.data.outras_retencoes && !viewingItem.data.base_calculo_icms && !viewingItem.data.valor_icms_st &&
+                       !viewingItem.data.base_calculo_issqn && (
+                        <div className="text-center py-4 text-sm text-gray-500">
+                          Nenhum imposto cadastrado para esta nota fiscal
+                        </div>
+                      )}
+                    </div>
+
+                  {viewingItem.data.observacoes && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-500">Observações</Label>
+                      <p className="text-sm bg-gray-50 p-3 rounded-md mt-2">{viewingItem.data.observacoes}</p>
+                    </div>
+                  )}
+                </>
+              )}
 
               {viewingItem.tipo === 'conta' && (
                 <>

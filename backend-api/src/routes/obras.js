@@ -2429,6 +2429,157 @@ router.post('/:id/notificar-envolvidos', authenticateToken, requirePermission('o
   }
 });
 
+/**
+ * @swagger
+ * /api/obras/{id}/finalizar:
+ *   post:
+ *     summary: Finalizar obra e liberar gruas
+ *     tags: [Obras]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID da obra
+ *     responses:
+ *       200:
+ *         description: Obra finalizada com sucesso
+ *       404:
+ *         description: Obra não encontrada
+ *       500:
+ *         description: Erro ao finalizar obra
+ */
+router.post('/:id/finalizar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const obraId = parseInt(id)
+
+    if (isNaN(obraId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID da obra inválido'
+      })
+    }
+
+    // Verificar se a obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome, status')
+      .eq('id', obraId)
+      .single()
+
+    if (obraError || !obra) {
+      return res.status(404).json({
+        success: false,
+        error: 'Obra não encontrada'
+      })
+    }
+
+    // Verificar se a obra já está finalizada
+    if (obra.status === 'Concluída') {
+      return res.status(400).json({
+        success: false,
+        error: 'A obra já está finalizada'
+      })
+    }
+
+    // Buscar todas as gruas vinculadas à obra com status "Ativa" ou "Pausada"
+    const { data: gruasObra, error: gruasError } = await supabaseAdmin
+      .from('grua_obra')
+      .select('id, grua_id, status')
+      .eq('obra_id', obraId)
+      .in('status', ['Ativa', 'Pausada'])
+
+    if (gruasError) {
+      console.error('Erro ao buscar gruas da obra:', gruasError)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao buscar gruas da obra',
+        message: gruasError.message
+      })
+    }
+
+    const gruasIds = gruasObra?.map(go => go.grua_id) || []
+
+    // Atualizar relacionamentos grua_obra para "Concluída" (tanto "Ativa" quanto "Pausada")
+    if (gruasObra && gruasObra.length > 0) {
+      const { error: updateRelacionamentosError } = await supabaseAdmin
+        .from('grua_obra')
+        .update({
+          status: 'Concluída',
+          data_fim_locacao: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('obra_id', obraId)
+        .in('status', ['Ativa', 'Pausada'])
+
+      if (updateRelacionamentosError) {
+        console.error('Erro ao atualizar relacionamentos grua_obra:', updateRelacionamentosError)
+        return res.status(500).json({
+          success: false,
+          error: 'Erro ao atualizar relacionamentos',
+          message: updateRelacionamentosError.message
+        })
+      }
+
+      // Atualizar status das gruas para "disponivel" e limpar campos de obra atual
+      if (gruasIds.length > 0) {
+        const { error: updateGruasError } = await supabaseAdmin
+          .from('gruas')
+          .update({
+            status: 'disponivel',
+            current_obra_id: null,
+            current_obra_name: null,
+            updated_at: new Date().toISOString()
+          })
+          .in('id', gruasIds)
+
+        if (updateGruasError) {
+          console.error('Erro ao atualizar status das gruas:', updateGruasError)
+          // Não falhar a operação, apenas logar o erro
+        }
+      }
+    }
+
+    // Atualizar status da obra para "Concluída"
+    const { data: obraAtualizada, error: updateObraError } = await supabaseAdmin
+      .from('obras')
+      .update({
+        status: 'Concluída',
+        data_fim: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', obraId)
+      .select()
+      .single()
+
+    if (updateObraError) {
+      console.error('Erro ao atualizar status da obra:', updateObraError)
+      return res.status(500).json({
+        success: false,
+        error: 'Erro ao atualizar status da obra',
+        message: updateObraError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: obraAtualizada,
+      message: `Obra finalizada com sucesso. ${gruasIds.length} grua(s) liberada(s).`
+    })
+  } catch (error) {
+    console.error('Erro ao finalizar obra:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
     const { id } = req.params

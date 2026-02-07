@@ -95,9 +95,36 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
         status,
         cliente_id,
         observacoes,
+        tipo,
+        tipo_nota,
         created_at,
         updated_at,
-        cliente:clientes(id, nome, cnpj)
+        cliente:clientes(id, nome, cnpj),
+        // Campos de impostos estaduais
+        base_calculo_icms,
+        valor_icms,
+        base_calculo_icms_st,
+        valor_icms_st,
+        valor_fcp_st,
+        // Campos de impostos federais
+        valor_ipi,
+        valor_pis,
+        valor_cofins,
+        valor_inss,
+        valor_ir,
+        valor_csll,
+        // Campos de impostos municipais
+        base_calculo_issqn,
+        valor_issqn,
+        aliquota_issqn,
+        // Retenções
+        retencoes_federais,
+        outras_retencoes,
+        // Outros valores
+        valor_frete,
+        valor_seguro,
+        valor_desconto,
+        outras_despesas_acessorias
       `)
       .eq('tipo', 'saida')
       .neq('status', 'cancelada');
@@ -194,6 +221,33 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
         data_emissao: nota.data_emissao,
         valor_total: parseFloat(nota.valor_total || 0),
         valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0),
+        tipo: nota.tipo,
+        tipo_nota: nota.tipo_nota,
+        // Campos de impostos estaduais
+        base_calculo_icms: parseFloat(nota.base_calculo_icms || 0),
+        valor_icms: parseFloat(nota.valor_icms || 0),
+        base_calculo_icms_st: parseFloat(nota.base_calculo_icms_st || 0),
+        valor_icms_st: parseFloat(nota.valor_icms_st || 0),
+        valor_fcp_st: parseFloat(nota.valor_fcp_st || 0),
+        // Campos de impostos federais
+        valor_ipi: parseFloat(nota.valor_ipi || 0),
+        valor_pis: parseFloat(nota.valor_pis || 0),
+        valor_cofins: parseFloat(nota.valor_cofins || 0),
+        valor_inss: parseFloat(nota.valor_inss || 0),
+        valor_ir: parseFloat(nota.valor_ir || 0),
+        valor_csll: parseFloat(nota.valor_csll || 0),
+        // Campos de impostos municipais
+        base_calculo_issqn: parseFloat(nota.base_calculo_issqn || 0),
+        valor_issqn: parseFloat(nota.valor_issqn || 0),
+        aliquota_issqn: parseFloat(nota.aliquota_issqn || 0),
+        // Retenções
+        retencoes_federais: parseFloat(nota.retencoes_federais || 0),
+        outras_retencoes: parseFloat(nota.outras_retencoes || 0),
+        // Outros valores
+        valor_frete: parseFloat(nota.valor_frete || 0),
+        valor_seguro: parseFloat(nota.valor_seguro || 0),
+        valor_desconto: parseFloat(nota.valor_desconto || 0),
+        outras_despesas_acessorias: parseFloat(nota.outras_despesas_acessorias || 0),
         // Campos específicos do boleto
         numero_boleto: boletoVinculado?.numero_boleto,
         boleto_id: boletoVinculado?.id,
@@ -207,11 +261,11 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       ...notasFormatadas
     ];
 
-    // Ordenar por data de vencimento
+    // Ordenar por data de vencimento (decrescente - mais recentes primeiro)
     todasContas.sort((a, b) => {
       const dataA = new Date(a.data_vencimento);
       const dataB = new Date(b.data_vencimento);
-      return dataA - dataB;
+      return dataB - dataA; // Invertido para ordem decrescente
     });
 
     // Aplicar paginação no resultado combinado

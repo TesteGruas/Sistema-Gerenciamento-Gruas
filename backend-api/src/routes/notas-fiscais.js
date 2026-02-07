@@ -588,6 +588,32 @@ router.post('/', async (req, res) => {
     // Limpar dados antes de inserir no banco
     const dadosLimpos = limparDadosParaBanco(value);
     
+    // Verificar se já existe nota fiscal com mesmo número
+    // A constraint UNIQUE está apenas no campo numero_nf (não na combinação numero_nf + serie)
+    const { data: notaExistente, error: checkError } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select('id, numero_nf, serie')
+      .eq('numero_nf', dadosLimpos.numero_nf)
+      .limit(1)
+      .maybeSingle();
+    
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Erro ao verificar nota fiscal existente:', checkError);
+    }
+    
+    if (notaExistente) {
+      return res.status(400).json({
+        success: false,
+        message: 'Já existe uma nota fiscal com este número',
+        error: `Nota fiscal ${dadosLimpos.numero_nf}${notaExistente.serie ? ` série ${notaExistente.serie}` : ''} já está cadastrada`,
+        data: {
+          id: notaExistente.id,
+          numero_nf: notaExistente.numero_nf,
+          serie: notaExistente.serie
+        }
+      });
+    }
+    
     // Garantir que datas sejam strings no formato YYYY-MM-DD (sem conversão de timezone)
     if (dadosLimpos.data_emissao) {
       if (typeof dadosLimpos.data_emissao === 'string') {
@@ -684,41 +710,8 @@ router.post('/', async (req, res) => {
       }
     }
 
-    // Criar boleto automaticamente para a nota fiscal
-    try {
-      const tipoBoleto = dadosLimpos.tipo === 'saida' ? 'receber' : 'pagar';
-      const valorBoleto = dadosLimpos.valor_liquido || dadosLimpos.valor_total || 0;
-      
-      const boletoData = {
-        numero_boleto: `NF-${data.numero_nf}${data.serie ? `-${data.serie}` : ''}`,
-        nota_fiscal_id: data.id,
-        cliente_id: dadosLimpos.cliente_id || null,
-        obra_id: dadosLimpos.obra_id || null,
-        descricao: `Boleto - Nota Fiscal ${data.numero_nf}${data.serie ? ` Série ${data.serie}` : ''}`,
-        valor: valorBoleto,
-        data_emissao: dadosLimpos.data_emissao || new Date().toISOString().split('T')[0],
-        data_vencimento: dadosLimpos.data_vencimento || dadosLimpos.data_emissao || new Date().toISOString().split('T')[0],
-        tipo: tipoBoleto,
-        status: 'pendente',
-        observacoes: `Boleto gerado automaticamente para a nota fiscal ${data.numero_nf}`
-      };
-
-      const { data: boleto, error: boletoError } = await supabaseAdmin
-        .from('boletos')
-        .insert([boletoData])
-        .select()
-        .single();
-
-      if (boletoError) {
-        console.warn('Erro ao criar boleto automaticamente:', boletoError.message);
-        // Não falhar a criação da nota fiscal se o boleto não puder ser criado
-      } else {
-        console.log(`Boleto ${boleto.numero_boleto} criado automaticamente para nota fiscal ${data.numero_nf}`);
-      }
-    } catch (boletoErr) {
-      console.warn('Erro ao criar boleto automaticamente:', boletoErr.message);
-      // Não falhar a criação da nota fiscal se o boleto não puder ser criado
-    }
+    // NOTA: A criação de boleto agora é controlada pelo frontend através do checkbox "Criar boleto"
+    // O boleto só será criado se o usuário marcar essa opção no formulário de criação da nota fiscal
 
     res.status(201).json({
       success: true,

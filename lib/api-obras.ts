@@ -605,6 +605,18 @@ export const obrasApi = {
     })
   },
 
+  // Finalizar obra e liberar gruas
+  async finalizarObra(obraId: number): Promise<{
+    success: boolean
+    data: ObraBackend
+    message: string
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${obraId}/finalizar`)
+    return apiRequest(url, {
+      method: 'POST',
+    })
+  },
+
   // Funções de supervisores removidas - sistema não utiliza mais supervisores terceirizados
 }
 

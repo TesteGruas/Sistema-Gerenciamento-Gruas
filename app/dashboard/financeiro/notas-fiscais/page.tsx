@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -98,6 +99,8 @@ export default function NotasFiscaisPage() {
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [editingNota, setEditingNota] = useState<NotaFiscal | null>(null)
   const [viewingNota, setViewingNota] = useState<NotaFiscal | null>(null)
+  const [loadingDetalhesNota, setLoadingDetalhesNota] = useState(false)
+  const [viewingItens, setViewingItens] = useState<NotaFiscalItem[]>([])
   const [uploadingNota, setUploadingNota] = useState<NotaFiscal | null>(null)
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -180,6 +183,10 @@ export default function NotasFiscaisPage() {
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
   const [isCreateFornecedorDialogOpen, setIsCreateFornecedorDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<NotaFiscalItem | null>(null)
+  const [criarBoleto, setCriarBoleto] = useState(false)
+  const [formaPagamento, setFormaPagamento] = useState<string>('')
+  const [tipoPagamentoPersonalizado, setTipoPagamentoPersonalizado] = useState<string>('')
+  const [boletoFile, setBoletoFile] = useState<File | null>(null)
   const [itemFormData, setItemFormData] = useState<NotaFiscalItem>({
     descricao: '',
     unidade: 'UN',
@@ -322,10 +329,11 @@ export default function NotasFiscaisPage() {
   // Buscar grua automaticamente quando tipo for locação e cliente for selecionado
   useEffect(() => {
     const buscarGruaAutomatica = async () => {
+      const tipoNotaFiscal = formData.tipo || activeTab
       if (
         formData.tipo_nota === 'nf_locacao' && 
         formData.cliente_id && 
-        activeTab === 'saida'
+        tipoNotaFiscal === 'saida'
       ) {
         try {
           // Buscar locações ativas do cliente
@@ -529,16 +537,22 @@ export default function NotasFiscaisPage() {
       camposFaltando.push('Valor Total (R$)')
     }
 
-    if (activeTab === 'saida' && !formData.cliente_id) {
+    const tipoNotaFiscal = formData.tipo || activeTab
+    if (tipoNotaFiscal === 'saida' && !formData.cliente_id) {
       camposFaltando.push('Cliente')
     }
 
-    if (activeTab === 'entrada' && !formData.fornecedor_id) {
+    if (tipoNotaFiscal === 'entrada' && !formData.fornecedor_id) {
       camposFaltando.push('Fornecedor')
     }
 
     if (!formData.tipo_nota || !formData.tipo_nota.trim()) {
       camposFaltando.push('Tipo de Nota')
+    }
+
+    // Validar forma de pagamento personalizada
+    if (formaPagamento === 'outro' && (!tipoPagamentoPersonalizado || !tipoPagamentoPersonalizado.trim())) {
+      camposFaltando.push('Tipo de Pagamento Personalizado')
     }
 
     if (camposFaltando.length > 0) {
@@ -555,93 +569,268 @@ export default function NotasFiscaisPage() {
     }
 
     try {
+      // Log dos dados antes de enviar
+      console.log('📋 [NOTAS-FISCAIS] Dados do formulário antes de enviar:', {
+        formData,
+        activeTab,
+        formaPagamento,
+        criarBoleto,
+        tipoPagamentoPersonalizado,
+        boletoFile: boletoFile ? { name: boletoFile.name, size: boletoFile.size } : null,
+        itens: itens.length,
+        formFile: formFile ? { name: formFile.name, size: formFile.size } : null
+      })
 
       // Limpar dados antes de enviar
+      // Usar formData.tipo que foi definido quando o botão foi clicado
+      // Garantir que o tipo está correto
+      const tipoNotaFiscal = formData.tipo || activeTab
+      console.log('📋 [NOTAS-FISCAIS] Tipo da nota fiscal:', tipoNotaFiscal, 'formData.tipo:', formData.tipo, 'activeTab:', activeTab)
+      
       const dadosLimpos = limparDadosNotaFiscal({
         ...formData,
-        tipo: activeTab
+        tipo: tipoNotaFiscal
       })
+
+      console.log('📋 [NOTAS-FISCAIS] Dados limpos para envio:', dadosLimpos)
 
       const response = await notasFiscaisApi.create(dadosLimpos)
       
+      console.log('📋 [NOTAS-FISCAIS] Resposta da criação:', response)
+      
       if (response.success && response.data?.id) {
         const notaId = response.data.id
+        // Usar o tipo retornado pela API para garantir que está correto
+        const tipoNotaFiscalCriada = response.data.tipo || tipoNotaFiscal
+        console.log('📋 [NOTAS-FISCAIS] Tipo da nota fiscal criada (da API):', tipoNotaFiscalCriada)
 
         // Salvar itens se houver
         if (itens.length > 0) {
           try {
+            console.log('📋 [NOTAS-FISCAIS] Salvando itens:', itens.length)
             for (const item of itens) {
               // Limpar dados do item antes de enviar
               const itemLimpo = limparDadosNotaFiscal({
                 ...item,
                 nota_fiscal_id: notaId
               })
-              await notasFiscaisApi.adicionarItem(notaId, itemLimpo)
+              console.log('📋 [NOTAS-FISCAIS] Enviando item:', itemLimpo)
+              const itemResponse = await notasFiscaisApi.adicionarItem(notaId, itemLimpo)
+              console.log('📋 [NOTAS-FISCAIS] Resposta do item:', itemResponse)
             }
+            console.log('✅ [NOTAS-FISCAIS] Todos os itens salvos com sucesso')
           } catch (itensError: any) {
+            console.error('❌ [NOTAS-FISCAIS] Erro ao salvar itens:', itensError)
             toast({
               title: "Aviso",
               description: "Nota fiscal criada, mas houve erro ao salvar os itens: " + (itensError.message || "Erro desconhecido"),
               variant: "destructive"
             })
           }
+        } else {
+          console.log('📋 [NOTAS-FISCAIS] Nenhum item para salvar')
         }
 
-        // Criar boleto automaticamente vinculado à nota fiscal
-        try {
-          const { boletosApi } = await import('@/lib/api-boletos')
-          
-          // Determinar tipo do boleto baseado no tipo da nota fiscal
-          // Entrada = boleto a pagar, Saída = boleto a receber
-          const tipoBoleto = activeTab === 'entrada' ? 'pagar' : 'receber'
-          
-          // Usar data de vencimento da nota fiscal ou adicionar 30 dias à data de emissão
-          const dataVencimento = formData.data_vencimento || (() => {
-            const dataEmissao = new Date(formData.data_emissao)
-            dataEmissao.setDate(dataEmissao.getDate() + 30)
-            return dataEmissao.toISOString().split('T')[0]
-          })()
-          
-          const boletoData = {
-            numero_boleto: `NF-${formData.numero_nf}${formData.serie ? `-${formData.serie}` : ''}`,
-            descricao: `Boleto - Nota Fiscal ${formData.numero_nf}${formData.serie ? ` Série ${formData.serie}` : ''}`,
-            valor: formData.valor_total,
-            data_emissao: formData.data_emissao,
-            data_vencimento: dataVencimento,
-            tipo: tipoBoleto,
-            nota_fiscal_id: notaId,
-            cliente_id: activeTab === 'saida' ? formData.cliente_id : undefined,
-            observacoes: formData.observacoes || undefined
-          }
-          
-          const boletoResponse = await boletosApi.create(boletoData)
-          
-          if (!boletoResponse.success) {
-            console.error('Erro ao criar boleto:', boletoResponse)
+        // Criar boleto vinculado à nota fiscal (se forma de pagamento for boleto e solicitado)
+        if (formaPagamento === 'boleto' && criarBoleto) {
+          console.log('📋 [NOTAS-FISCAIS] Criando boleto vinculado à nota fiscal')
+          try {
+            const { boletosApi } = await import('@/lib/api-boletos')
+            
+            // Verificar se já existe boleto vinculado a esta nota fiscal
+            let boletoJaExiste = null
+            try {
+              console.log('📋 [NOTAS-FISCAIS] Verificando se já existe boleto para nota fiscal:', notaId)
+              const boletosResponse = await boletosApi.list({ nota_fiscal_id: notaId })
+              console.log('📋 [NOTAS-FISCAIS] Resposta da verificação de boletos:', boletosResponse)
+              if (boletosResponse.success && boletosResponse.data && boletosResponse.data.length > 0) {
+                boletoJaExiste = boletosResponse.data[0] // Pegar o primeiro boleto encontrado
+                console.log('📋 [NOTAS-FISCAIS] Boleto já existe:', boletoJaExiste)
+              }
+            } catch (checkError) {
+              // Se não conseguir buscar, continuar tentando criar
+              console.log('⚠️ [NOTAS-FISCAIS] Não foi possível verificar boletos existentes, tentando criar novo:', checkError)
+            }
+            
+            if (boletoJaExiste) {
+              console.log('📋 [NOTAS-FISCAIS] Boleto já existe, apenas fazendo upload do arquivo se houver')
+              // Se já existe boleto, apenas fazer upload do arquivo se houver
+              if (boletoFile) {
+                try {
+                  console.log('📋 [NOTAS-FISCAIS] Fazendo upload do arquivo do boleto:', boletoFile.name)
+                  await boletosApi.uploadFile(boletoJaExiste.id, boletoFile)
+                  console.log('✅ [NOTAS-FISCAIS] Upload do arquivo do boleto concluído')
+                  toast({
+                    title: "Sucesso",
+                    description: "Arquivo do boleto enviado com sucesso. O boleto já estava vinculado à nota fiscal.",
+                    variant: "default"
+                  })
+                } catch (uploadBoletoError: any) {
+                  console.error('❌ [NOTAS-FISCAIS] Erro ao fazer upload do boleto:', uploadBoletoError)
+                  toast({
+                    title: "Aviso",
+                    description: "Boleto já existe, mas houve erro ao fazer upload do arquivo: " + (uploadBoletoError.message || "Erro desconhecido"),
+                    variant: "destructive"
+                  })
+                }
+              } else {
+                console.log('📋 [NOTAS-FISCAIS] Boleto já existe, mas nenhum arquivo para upload')
+                toast({
+                  title: "Info",
+                  description: "Boleto já existe vinculado a esta nota fiscal.",
+                  variant: "default"
+                })
+              }
+            } else {
+              console.log('📋 [NOTAS-FISCAIS] Criando novo boleto')
+              // Determinar tipo do boleto baseado no tipo da nota fiscal
+              // Nota Fiscal de SAÍDA -> Boleto tipo "receber" (aparece em Boletos de Entrada)
+              // Nota Fiscal de ENTRADA -> Boleto tipo "pagar" (aparece em Boletos de Saída)
+              // Usar o tipo retornado pela API da nota fiscal para garantir que está correto
+              const tipoNotaFiscalParaBoleto = tipoNotaFiscalCriada || formData.tipo || activeTab
+              const tipoBoleto = tipoNotaFiscalParaBoleto === 'saida' ? 'receber' : 'pagar'
+              console.log('📋 [NOTAS-FISCAIS] Criando boleto - Tipo da nota fiscal:', tipoNotaFiscalParaBoleto, 'Tipo do boleto a ser criado:', tipoBoleto, 'tipoNotaFiscalCriada:', tipoNotaFiscalCriada, 'formData.tipo:', formData.tipo, 'activeTab:', activeTab)
+              
+              // Usar data de vencimento da nota fiscal ou adicionar 30 dias à data de emissão
+              const dataVencimento = formData.data_vencimento || (() => {
+                const dataEmissao = new Date(formData.data_emissao)
+                dataEmissao.setDate(dataEmissao.getDate() + 30)
+                return dataEmissao.toISOString().split('T')[0]
+              })()
+              
+              // Gerar número único do boleto incluindo o ID da nota fiscal para garantir unicidade
+              const numeroBoleto = `NF-${notaId}-${formData.numero_nf}${formData.serie ? `-${formData.serie}` : ''}`
+              
+              const boletoData = {
+                numero_boleto: numeroBoleto,
+                descricao: `Boleto - Nota Fiscal ${formData.numero_nf}${formData.serie ? ` Série ${formData.serie}` : ''}`,
+                valor: formData.valor_total,
+                data_emissao: formData.data_emissao,
+                data_vencimento: dataVencimento,
+                tipo: tipoBoleto, // Garantir que o tipo está correto: 'pagar' para saída, 'receber' para entrada
+                forma_pagamento: 'Boleto',
+                nota_fiscal_id: notaId,
+                cliente_id: (formData.tipo || activeTab) === 'saida' ? formData.cliente_id : undefined,
+                observacoes: formData.observacoes || undefined
+              }
+              
+              console.log('📋 [NOTAS-FISCAIS] Dados do boleto a ser criado:', boletoData)
+              console.log('📋 [NOTAS-FISCAIS] Validação - tipoNotaFiscal:', tipoNotaFiscal, 'tipoBoleto:', tipoBoleto, 'boletoData.tipo:', boletoData.tipo)
+              
+              const boletoResponse = await boletosApi.create(boletoData)
+              
+              console.log('📋 [NOTAS-FISCAIS] Resposta da criação do boleto:', boletoResponse)
+              
+              if (!boletoResponse.success) {
+                console.error('❌ [NOTAS-FISCAIS] Erro ao criar boleto:', boletoResponse)
+                // Se o erro for de duplicata, tentar com número diferente incluindo timestamp
+                if (boletoResponse.error && (boletoResponse.error.includes('duplicate') || boletoResponse.error.includes('unique'))) {
+                  console.log('⚠️ [NOTAS-FISCAIS] Número de boleto duplicado, tentando com timestamp')
+                  const numeroBoletoAlternativo = `NF-${notaId}-${formData.numero_nf}${formData.serie ? `-${formData.serie}` : ''}-${Date.now()}`
+                  try {
+                    const boletoDataAlternativo = { ...boletoData, numero_boleto: numeroBoletoAlternativo }
+                    console.log('📋 [NOTAS-FISCAIS] Tentando criar boleto com número alternativo:', numeroBoletoAlternativo)
+                    const boletoResponseAlternativo = await boletosApi.create(boletoDataAlternativo)
+                    console.log('📋 [NOTAS-FISCAIS] Resposta do boleto alternativo:', boletoResponseAlternativo)
+                    if (boletoResponseAlternativo.success) {
+                      if (boletoFile && boletoResponseAlternativo.data?.id) {
+                        console.log('📋 [NOTAS-FISCAIS] Fazendo upload do arquivo do boleto alternativo')
+                        await boletosApi.uploadFile(boletoResponseAlternativo.data.id, boletoFile)
+                        console.log('✅ [NOTAS-FISCAIS] Upload do arquivo do boleto alternativo concluído')
+                      }
+                    }
+                  } catch (retryError: any) {
+                    console.error('❌ [NOTAS-FISCAIS] Erro ao criar boleto alternativo:', retryError)
+                    toast({
+                      title: "Aviso",
+                      description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado: " + (retryError.message || "Erro desconhecido"),
+                      variant: "destructive"
+                    })
+                  }
+                } else {
+                  toast({
+                    title: "Aviso",
+                    description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado: " + (boletoResponse.error || "Erro desconhecido"),
+                    variant: "destructive"
+                  })
+                }
+              } else {
+                console.log('✅ [NOTAS-FISCAIS] Boleto criado com sucesso')
+                // Se houver arquivo do boleto, fazer upload
+                if (boletoFile && boletoResponse.data?.id) {
+                  try {
+                    console.log('📋 [NOTAS-FISCAIS] Fazendo upload do arquivo do boleto:', boletoFile.name)
+                    await boletosApi.uploadFile(boletoResponse.data.id, boletoFile)
+                    console.log('✅ [NOTAS-FISCAIS] Upload do arquivo do boleto concluído')
+                  } catch (uploadBoletoError: any) {
+                    console.error('❌ [NOTAS-FISCAIS] Erro ao fazer upload do boleto:', uploadBoletoError)
+                    toast({
+                      title: "Aviso",
+                      description: "Boleto criado, mas houve erro ao fazer upload do arquivo: " + (uploadBoletoError.message || "Erro desconhecido"),
+                      variant: "destructive"
+                    })
+                  }
+                }
+              }
+            }
+          } catch (boletoError: any) {
+            console.error('❌ [NOTAS-FISCAIS] Erro ao criar boleto:', boletoError)
             toast({
               title: "Aviso",
-              description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado",
+              description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado: " + (boletoError.message || "Erro desconhecido"),
               variant: "destructive"
             })
           }
-        } catch (boletoError: any) {
-          console.error('Erro ao criar boleto:', boletoError)
-          toast({
-            title: "Aviso",
-            description: "Nota fiscal criada, mas houve erro ao criar o boleto vinculado: " + (boletoError.message || "Erro desconhecido"),
-            variant: "destructive"
-          })
+        } else {
+          console.log('📋 [NOTAS-FISCAIS] Boleto não será criado (forma de pagamento:', formaPagamento, ', criarBoleto:', criarBoleto, ')')
+        }
+        
+        // Salvar forma de pagamento nas observações se não for boleto
+        if (formaPagamento && formaPagamento !== 'boleto') {
+          console.log('📋 [NOTAS-FISCAIS] Salvando forma de pagamento nas observações:', formaPagamento)
+          try {
+            const formaPagamentoTexto = formaPagamento === 'outro' 
+              ? tipoPagamentoPersonalizado 
+              : formaPagamento.charAt(0).toUpperCase() + formaPagamento.slice(1).replace('_', ' ')
+            
+            const observacoesAtualizadas = formData.observacoes 
+              ? `${formData.observacoes}\n\nForma de Pagamento: ${formaPagamentoTexto}`
+              : `Forma de Pagamento: ${formaPagamentoTexto}`
+            
+            console.log('📋 [NOTAS-FISCAIS] Observações atualizadas:', observacoesAtualizadas)
+            const updateResponse = await notasFiscaisApi.update(notaId, {
+              observacoes: observacoesAtualizadas
+            })
+            console.log('✅ [NOTAS-FISCAIS] Forma de pagamento salva:', updateResponse)
+          } catch (updateError: any) {
+            console.error('❌ [NOTAS-FISCAIS] Erro ao atualizar forma de pagamento:', updateError)
+            // Não mostrar erro ao usuário, pois a nota já foi criada
+          }
         }
 
         // Se houver arquivo, fazer upload após criar
         if (formFile) {
+          console.log('📋 [NOTAS-FISCAIS] Fazendo upload do arquivo da nota fiscal:', formFile.name)
           try {
-            await notasFiscaisApi.uploadFile(notaId, formFile)
+            const uploadResponse = await notasFiscaisApi.uploadFile(notaId, formFile)
+            console.log('✅ [NOTAS-FISCAIS] Upload do arquivo concluído:', uploadResponse)
+            const temBoleto = formaPagamento === 'boleto' && criarBoleto
+            const temItens = itens.length > 0
+            const temFormaPagamento = formaPagamento && formaPagamento !== '' && !temBoleto
+            
+            let mensagemSucesso = "Nota fiscal criada"
+            if (temBoleto) mensagemSucesso += ", boleto vinculado"
+            if (temItens) mensagemSucesso += " e itens salvos"
+            mensagemSucesso += " e arquivo enviado"
+            if (temFormaPagamento) mensagemSucesso += ` (Forma de pagamento: ${formaPagamento === 'outro' ? tipoPagamentoPersonalizado : formaPagamento.charAt(0).toUpperCase() + formaPagamento.slice(1).replace('_', ' ')})`
+            mensagemSucesso += " com sucesso"
+            
             toast({
               title: "Sucesso",
-              description: "Nota fiscal criada, boleto vinculado, itens salvos e arquivo enviado com sucesso"
+              description: mensagemSucesso
             })
           } catch (uploadError: any) {
+            console.error('❌ [NOTAS-FISCAIS] Erro ao fazer upload do arquivo:', uploadError)
             toast({
               title: "Aviso",
               description: "Nota fiscal criada, mas houve erro ao enviar o arquivo: " + (uploadError.message || "Erro desconhecido"),
@@ -649,11 +838,19 @@ export default function NotasFiscaisPage() {
             })
           }
         } else {
+          const temBoleto = formaPagamento === 'boleto' && criarBoleto
+          const temItens = itens.length > 0
+          const temFormaPagamento = formaPagamento && formaPagamento !== ''
+          
+          let mensagem = "Nota fiscal criada"
+          if (temBoleto) mensagem += ", boleto vinculado"
+          if (temItens) mensagem += " e itens salvos"
+          if (temFormaPagamento && !temBoleto) mensagem += ` (Forma de pagamento: ${formaPagamento === 'outro' ? tipoPagamentoPersonalizado : formaPagamento.charAt(0).toUpperCase() + formaPagamento.slice(1).replace('_', ' ')})`
+          mensagem += " com sucesso"
+          
           toast({
             title: "Sucesso",
-            description: itens.length > 0 
-              ? "Nota fiscal criada, boleto vinculado e itens salvos com sucesso" 
-              : "Nota fiscal criada e boleto vinculado com sucesso"
+            description: mensagem
           })
         }
         setIsCreateDialogOpen(false)
@@ -894,9 +1091,67 @@ export default function NotasFiscaisPage() {
     setIsEditDialogOpen(true)
   }
 
-  const handleView = (nota: NotaFiscal) => {
+  const handleView = async (nota: NotaFiscal) => {
+    console.log('🔍 [NOTAS-FISCAIS] Botão visualizar clicado')
+    console.log('🔍 [NOTAS-FISCAIS] Dados da nota:', nota)
+    
+    // Abrir modal imediatamente com dados básicos
     setViewingNota(nota)
     setIsViewDialogOpen(true)
+    setLoadingDetalhesNota(true)
+    setViewingItens([]) // Limpar itens anteriores
+    
+    try {
+      // Buscar detalhes completos da nota fiscal e itens em paralelo
+      console.log('🔍 [NOTAS-FISCAIS] Chamando API getById com ID:', nota.id)
+      const [detalhesResponse, itensResponse] = await Promise.all([
+        notasFiscaisApi.getById(nota.id),
+        notasFiscaisApi.listarItens(nota.id)
+      ])
+      
+      console.log('🔍 [NOTAS-FISCAIS] Resposta da API:', detalhesResponse)
+      console.log('🔍 [NOTAS-FISCAIS] Resposta dos itens:', itensResponse)
+      
+      if (detalhesResponse.success && detalhesResponse.data) {
+        console.log('✅ [NOTAS-FISCAIS] Dados recebidos com sucesso:', detalhesResponse.data)
+        setViewingNota(detalhesResponse.data)
+      } else {
+        console.warn('⚠️ [NOTAS-FISCAIS] Não foi possível buscar detalhes completos, usando dados disponíveis')
+        console.warn('⚠️ [NOTAS-FISCAIS] Resposta:', detalhesResponse)
+      }
+      
+      if (itensResponse.success && itensResponse.data) {
+        console.log('✅ [NOTAS-FISCAIS] Itens recebidos com sucesso:', itensResponse.data)
+        // Processar impostos dinâmicos se vierem como string JSON
+        const itensProcessados = itensResponse.data.map((item: any) => {
+          if (item.impostos_dinamicos && typeof item.impostos_dinamicos === 'string') {
+            try {
+              item.impostos_dinamicos = JSON.parse(item.impostos_dinamicos)
+            } catch (e) {
+              console.error('Erro ao fazer parse de impostos_dinamicos:', e)
+              item.impostos_dinamicos = []
+            }
+          }
+          return item
+        })
+        setViewingItens(itensProcessados)
+      } else {
+        console.warn('⚠️ [NOTAS-FISCAIS] Não foi possível buscar itens')
+        setViewingItens([])
+      }
+    } catch (error) {
+      console.error('❌ [NOTAS-FISCAIS] Erro ao buscar detalhes da nota fiscal:', error)
+      console.error('❌ [NOTAS-FISCAIS] Stack:', error instanceof Error ? error.stack : 'N/A')
+      toast({
+        title: "Aviso",
+        description: "Não foi possível carregar todos os detalhes. Exibindo informações disponíveis.",
+        variant: "default"
+      })
+      setViewingItens([])
+    } finally {
+      console.log('🔍 [NOTAS-FISCAIS] Finalizando loading...')
+      setLoadingDetalhesNota(false)
+    }
   }
 
   const handleUpload = (nota: NotaFiscal) => {
@@ -1009,6 +1264,10 @@ export default function NotasFiscaisPage() {
     setFormFile(null)
     setItens([])
     setGruaInfo(null)
+    setCriarBoleto(false)
+    setFormaPagamento('')
+    setTipoPagamentoPersonalizado('')
+    setBoletoFile(null)
   }
 
   // Função para preencher dados de teste do item
@@ -1067,18 +1326,21 @@ export default function NotasFiscaisPage() {
     const totalImpostosFixos = valorICMS + valorIPI + valorISSQN + valorINSS + valorCBS
     const valorLiquido = precoTotal - totalImpostosFixos
     
+    // Usar formData.tipo se disponível, senão usar activeTab
+    const tipoNotaFiscal = formData.tipo || activeTab
+    
     const dadosTeste: NotaFiscalCreate = {
       numero_nf: `NF${Date.now().toString().slice(-8)}`,
       serie: '001',
       data_emissao: hoje.toISOString().split('T')[0],
       data_vencimento: vencimento.toISOString().split('T')[0],
       valor_total: precoTotal,
-      tipo: activeTab,
+      tipo: tipoNotaFiscal,
       status: 'pendente',
-      tipo_nota: activeTab === 'saida' ? 'nf_locacao' : 'nf_servico',
+      tipo_nota: tipoNotaFiscal === 'saida' ? 'nf_locacao' : 'nf_servico',
       observacoes: 'Nota fiscal de teste - dados preenchidos automaticamente',
-      cliente_id: activeTab === 'saida' && clientes.length > 0 ? clientes[0].id : undefined,
-      fornecedor_id: activeTab === 'entrada' && fornecedores.length > 0 ? fornecedores[0].id : undefined
+      cliente_id: tipoNotaFiscal === 'saida' && clientes.length > 0 ? clientes[0].id : undefined,
+      fornecedor_id: tipoNotaFiscal === 'entrada' && fornecedores.length > 0 ? fornecedores[0].id : undefined
     }
     
     setFormData(dadosTeste)
@@ -1187,12 +1449,15 @@ export default function NotasFiscaisPage() {
   const filteredNotas = useMemo(() => {
     let filtered = notasFiscais
     
+    // Filtrar por tipo (entrada/saída) baseado na aba ativa
+    filtered = filtered.filter(nf => nf.tipo === activeTab)
+    
     if (tipoNotaFilter !== 'all') {
       filtered = filtered.filter(nf => nf.tipo_nota === tipoNotaFilter)
     }
     
     return filtered
-  }, [notasFiscais, tipoNotaFilter])
+  }, [notasFiscais, tipoNotaFilter, activeTab])
 
   return (
     <div className="space-y-6">
@@ -1213,9 +1478,13 @@ export default function NotasFiscaisPage() {
           <Button 
             variant="outline" 
             onClick={() => {
-              resetForm()
-              setFormData(prev => ({ ...prev, tipo: 'saida' }))
-              setIsCreateDialogOpen(true)
+              setActiveTab('saida')
+              // Usar setTimeout para garantir que activeTab seja atualizado antes do resetForm
+              setTimeout(() => {
+                resetForm()
+                setFormData(prev => ({ ...prev, tipo: 'saida' }))
+                setIsCreateDialogOpen(true)
+              }, 0)
             }}
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -1223,9 +1492,13 @@ export default function NotasFiscaisPage() {
           </Button>
           <Button 
             onClick={() => {
-              resetForm()
-              setFormData(prev => ({ ...prev, tipo: 'entrada' }))
-              setIsCreateDialogOpen(true)
+              setActiveTab('entrada')
+              // Usar setTimeout para garantir que activeTab seja atualizado antes do resetForm
+              setTimeout(() => {
+                resetForm()
+                setFormData(prev => ({ ...prev, tipo: 'entrada' }))
+                setIsCreateDialogOpen(true)
+              }, 0)
             }}
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -1235,7 +1508,14 @@ export default function NotasFiscaisPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'saida' | 'entrada')}>
+      <Tabs value={activeTab} onValueChange={(v) => {
+        const novoActiveTab = v as 'saida' | 'entrada'
+        setActiveTab(novoActiveTab)
+        // Sincronizar formData.tipo quando mudar de aba (apenas se o modal não estiver aberto)
+        if (!isCreateDialogOpen && !isEditDialogOpen) {
+          setFormData(prev => ({ ...prev, tipo: novoActiveTab }))
+        }
+      }}>
         <TabsList>
           <TabsTrigger value="saida">Notas Fiscais de Saída</TabsTrigger>
           <TabsTrigger value="entrada">Notas Fiscais de Entrada</TabsTrigger>
@@ -1701,10 +1981,10 @@ export default function NotasFiscaisPage() {
             <div className="flex items-center justify-between">
               <div className="flex-1">
                 <DialogTitle>
-                  {isEditDialogOpen ? 'Editar Nota Fiscal' : activeTab === 'saida' ? 'Nova Nota Fiscal de Saída' : 'Nova Nota Fiscal de Entrada'}
+                  {isEditDialogOpen ? 'Editar Nota Fiscal' : (formData.tipo || activeTab) === 'saida' ? 'Nova Nota Fiscal de Saída' : 'Nova Nota Fiscal de Entrada'}
                 </DialogTitle>
                 <DialogDescription>
-                  {activeTab === 'saida' 
+                  {(formData.tipo || activeTab) === 'saida' 
                     ? 'Preencha os dados da nota fiscal de saída (locação, circulação de equipamentos, outros equipamentos ou medição)'
                     : 'Preencha os dados da nota fiscal de entrada (fornecedor)'}
                 </DialogDescription>
@@ -1745,7 +2025,7 @@ export default function NotasFiscaisPage() {
               </div>
             </div>
 
-            {activeTab === 'saida' && (
+            {(formData.tipo || activeTab) === 'saida' && (
               <>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -1841,7 +2121,7 @@ export default function NotasFiscaisPage() {
               </>
             )}
 
-            {activeTab === 'entrada' && (
+            {(formData.tipo || activeTab) === 'entrada' && (
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <div className="flex items-center gap-2">
@@ -1944,6 +2224,104 @@ export default function NotasFiscaisPage() {
                   </SelectContent>
                 </Select>
               </div>
+            </div>
+
+            {/* Forma de Pagamento */}
+            <div className="border-t pt-4">
+              <div>
+                <Label htmlFor="forma_pagamento">Forma de Pagamento</Label>
+                <Select 
+                  value={formaPagamento} 
+                  onValueChange={(value) => {
+                    setFormaPagamento(value)
+                    setCriarBoleto(value === 'boleto')
+                    if (value !== 'boleto') {
+                      setBoletoFile(null)
+                    }
+                    if (value === 'outro') {
+                      setTipoPagamentoPersonalizado('')
+                    }
+                  }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a forma de pagamento" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="transferencia">Transferência Bancária</SelectItem>
+                    <SelectItem value="dinheiro">Dinheiro</SelectItem>
+                    <SelectItem value="cartao_credito">Cartão de Crédito</SelectItem>
+                    <SelectItem value="cartao_debito">Cartão de Débito</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Se for Boleto */}
+              {formaPagamento === 'boleto' && (
+                <div className="mt-4 space-y-4">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="criar_boleto"
+                      checked={criarBoleto}
+                      onCheckedChange={(checked) => setCriarBoleto(checked === true)}
+                    />
+                    <Label htmlFor="criar_boleto" className="text-sm font-medium cursor-pointer">
+                      Criar boleto vinculado a esta nota fiscal
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground ml-6">
+                    {(formData.tipo || activeTab) === 'saida' 
+                      ? 'O boleto será criado como "A Receber" (tipo receber) e aparecerá na lista de boletos de entrada.'
+                      : 'O boleto será criado como "A Pagar" (tipo pagar) e aparecerá na lista de boletos de saída.'}
+                  </p>
+                  
+                  {criarBoleto && (
+                    <div>
+                      <Label htmlFor="arquivo_boleto">Upload do Boleto (PDF ou Imagem)</Label>
+                      <Input
+                        id="arquivo_boleto"
+                        type="file"
+                        accept=".pdf,.png,.jpg,.jpeg"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          if (file) {
+                            if (file.size > 10 * 1024 * 1024) {
+                              toast({
+                                title: "Erro",
+                                description: "Arquivo muito grande. Tamanho máximo: 10MB",
+                                variant: "destructive"
+                              })
+                              return
+                            }
+                            setBoletoFile(file)
+                          }
+                        }}
+                      />
+                      {boletoFile && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Arquivo selecionado: {boletoFile.name} ({(boletoFile.size / 1024 / 1024).toFixed(2)} MB)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Se for outro tipo de pagamento */}
+              {formaPagamento === 'outro' && (
+                <div className="mt-4">
+                  <Label htmlFor="tipo_pagamento_personalizado">Especifique o tipo de pagamento *</Label>
+                  <Input
+                    id="tipo_pagamento_personalizado"
+                    value={tipoPagamentoPersonalizado}
+                    onChange={(e) => setTipoPagamentoPersonalizado(e.target.value)}
+                    placeholder="Ex: Boleto parcelado, Cartão corporativo, etc."
+                  />
+                </div>
+              )}
             </div>
 
             {/* Seção de Itens/Produtos/Serviços */}
@@ -2183,7 +2561,14 @@ export default function NotasFiscaisPage() {
       </Dialog>
 
       {/* Dialog de Visualização */}
-      <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
+      <Dialog open={isViewDialogOpen} onOpenChange={(open) => {
+        setIsViewDialogOpen(open)
+        if (!open) {
+          setViewingNota(null)
+          setLoadingDetalhesNota(false)
+          setViewingItens([])
+        }
+      }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Detalhes da Nota Fiscal</DialogTitle>
@@ -2192,7 +2577,14 @@ export default function NotasFiscaisPage() {
             </DialogDescription>
           </DialogHeader>
           
-          {viewingNota && (
+          {loadingDetalhesNota && (
+            <div className="flex items-center justify-center py-8">
+              <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+              <span className="ml-2 text-sm text-gray-600">Carregando detalhes...</span>
+            </div>
+          )}
+          
+          {viewingNota && !loadingDetalhesNota && (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -2287,6 +2679,154 @@ export default function NotasFiscaisPage() {
                 <div>
                   <Label className="text-sm font-medium text-gray-500">Observações</Label>
                   <p className="text-sm bg-gray-50 p-3 rounded-md">{viewingNota.observacoes}</p>
+                </div>
+              )}
+
+              {/* Seção de Itens da Nota Fiscal */}
+              {viewingItens.length > 0 && (
+                <div className="border-t pt-4 mt-4">
+                  <h3 className="text-lg font-semibold mb-4">Itens da Nota Fiscal</h3>
+                  <div className="space-y-4">
+                    {viewingItens.map((item, index) => (
+                      <div key={item.id || index} className="border rounded-lg p-4 bg-gray-50">
+                        <div className="flex justify-between items-start mb-3">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="text-sm font-semibold text-gray-700">Item {index + 1}</span>
+                              {item.codigo_produto && (
+                                <Badge variant="outline" className="text-xs">
+                                  Código: {item.codigo_produto}
+                                </Badge>
+                              )}
+                              {item.ncm_sh && (
+                                <Badge variant="outline" className="text-xs">
+                                  NCM/SH: {item.ncm_sh}
+                                </Badge>
+                              )}
+                            </div>
+                            <p className="text-sm font-medium text-gray-900 mb-2">{item.descricao}</p>
+                            <div className="grid grid-cols-4 gap-2 text-xs text-gray-600">
+                              <div>
+                                <span className="font-medium">Quantidade:</span> {item.quantidade} {item.unidade}
+                              </div>
+                              <div>
+                                <span className="font-medium">Valor Unitário:</span> {formatCurrency(item.preco_unitario)}
+                              </div>
+                              <div>
+                                <span className="font-medium">Valor Total:</span> <span className="font-semibold text-green-600">{formatCurrency(item.preco_total)}</span>
+                              </div>
+                              {item.valor_liquido !== undefined && item.valor_liquido !== null && (
+                                <div>
+                                  <span className="font-medium">Valor Líquido:</span> <span className="font-semibold text-blue-600">{formatCurrency(item.valor_liquido)}</span>
+                                </div>
+                              )}
+                            </div>
+                            {(item.cfop || item.csosn) && (
+                              <div className="mt-2 flex gap-2 text-xs text-gray-500">
+                                {item.cfop && <span>CFOP: {item.cfop}</span>}
+                                {item.csosn && <span>CSOSN: {item.csosn}</span>}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Impostos do Item */}
+                        {(item.valor_icms || item.valor_ipi || item.valor_issqn || item.valor_inss || item.valor_cbs || 
+                          (item.impostos_dinamicos && item.impostos_dinamicos.length > 0)) && (
+                          <div className="mt-3 pt-3 border-t border-gray-200">
+                            <h4 className="text-xs font-semibold text-gray-700 mb-2">Impostos do Item</h4>
+                            <div className="grid grid-cols-2 gap-2 text-xs">
+                              {/* Impostos de Produtos */}
+                              {item.base_calculo_icms > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Base Cálculo ICMS:</span> <span className="font-medium">{formatCurrency(item.base_calculo_icms)}</span>
+                                </div>
+                              )}
+                              {item.percentual_icms > 0 && (
+                                <div>
+                                  <span className="text-gray-600">% ICMS:</span> <span className="font-medium">{item.percentual_icms.toFixed(2)}%</span>
+                                </div>
+                              )}
+                              {item.valor_icms > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Valor ICMS:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_icms)}</span>
+                                </div>
+                              )}
+                              {item.percentual_ipi > 0 && (
+                                <div>
+                                  <span className="text-gray-600">% IPI:</span> <span className="font-medium">{item.percentual_ipi.toFixed(2)}%</span>
+                                </div>
+                              )}
+                              {item.valor_ipi > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Valor IPI:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_ipi)}</span>
+                                </div>
+                              )}
+                              
+                              {/* Impostos de Serviços */}
+                              {item.base_calculo_issqn > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Base Cálculo ISSQN:</span> <span className="font-medium">{formatCurrency(item.base_calculo_issqn)}</span>
+                                </div>
+                              )}
+                              {item.aliquota_issqn > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Alíquota ISSQN:</span> <span className="font-medium">{item.aliquota_issqn.toFixed(2)}%</span>
+                                </div>
+                              )}
+                              {item.valor_issqn > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Valor ISSQN:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_issqn)}</span>
+                                </div>
+                              )}
+                              {item.valor_inss > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Valor INSS:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_inss)}</span>
+                                </div>
+                              )}
+                              {item.valor_cbs > 0 && (
+                                <div>
+                                  <span className="text-gray-600">Valor CBS:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_cbs)}</span>
+                                </div>
+                              )}
+                              
+                              {/* Impostos Dinâmicos */}
+                              {item.impostos_dinamicos && item.impostos_dinamicos.length > 0 && (
+                                <>
+                                  {item.impostos_dinamicos.map((imposto: any, impIndex: number) => (
+                                    <div key={imposto.id || impIndex} className="col-span-2">
+                                      <span className="text-gray-600">{imposto.nome}:</span> <span className="font-medium text-red-600">{formatCurrency(imposto.valor_calculado || 0)}</span>
+                                      {imposto.tipo_calculo === 'porcentagem' && imposto.aliquota > 0 && (
+                                        <span className="text-gray-500 ml-1">({imposto.aliquota.toFixed(2)}%)</span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  
+                  {/* Resumo dos Itens */}
+                  <div className="mt-4 pt-4 border-t">
+                    <div className="flex justify-between items-center bg-blue-50 p-3 rounded-md">
+                      <span className="text-sm font-semibold text-gray-700">Total dos Itens:</span>
+                      <span className="text-lg font-bold text-blue-600">
+                        {formatCurrency(viewingItens.reduce((sum, item) => sum + item.preco_total, 0))}
+                      </span>
+                    </div>
+                    {viewingItens.some(item => item.valor_liquido !== undefined && item.valor_liquido !== null) && (
+                      <div className="flex justify-between items-center bg-green-50 p-3 rounded-md mt-2">
+                        <span className="text-sm font-semibold text-gray-700">Total Líquido dos Itens:</span>
+                        <span className="text-lg font-bold text-green-600">
+                          {formatCurrency(viewingItens.reduce((sum, item) => sum + (item.valor_liquido || item.preco_total), 0))}
+                        </span>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
 
