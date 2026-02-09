@@ -35,31 +35,38 @@ async function verificarServidor() {
 }
 
 // 2. Verificar processos Node.js na porta 3001
-function verificarProcesso() {
+async function verificarProcesso() {
   console.log('\n2️⃣ Verificando processos na porta 3001...');
   
-  const { execSync } = require('child_process');
-  
   try {
-    // macOS/Linux
-    const processos = execSync(`lsof -ti:${PORT} 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
+    // Usar import dinâmico para child_process
+    const { execSync } = await import('child_process');
     
-    if (processos) {
-      console.log(`✅ Processo encontrado na porta ${PORT}`);
-      console.log(`   PID(s): ${processos}`);
+    try {
+      // macOS/Linux
+      const processos = execSync(`lsof -ti:${PORT} 2>/dev/null || echo ""`, { encoding: 'utf-8' }).trim();
       
-      // Tentar obter mais informações do processo
-      try {
-        const info = execSync(`ps -p ${processos.split('\n')[0]} -o command=`, { encoding: 'utf-8' }).trim();
-        console.log(`   Comando: ${info.substring(0, 80)}...`);
-      } catch (e) {
-        // Ignorar erro
+      if (processos) {
+        console.log(`✅ Processo encontrado na porta ${PORT}`);
+        console.log(`   PID(s): ${processos}`);
+        
+        // Tentar obter mais informações do processo
+        try {
+          const info = execSync(`ps -p ${processos.split('\n')[0]} -o command=`, { encoding: 'utf-8' }).trim();
+          console.log(`   Comando: ${info.substring(0, 80)}...`);
+        } catch (e) {
+          // Ignorar erro
+        }
+      } else {
+        console.log(`⚠️  Nenhum processo encontrado na porta ${PORT}`);
       }
-    } else {
-      console.log(`⚠️  Nenhum processo encontrado na porta ${PORT}`);
+    } catch (error) {
+      console.log('⚠️  Não foi possível verificar processos');
+      console.log(`   Dica: Execute 'lsof -ti:${PORT}' manualmente para verificar`);
     }
   } catch (error) {
-    console.log('⚠️  Não foi possível verificar processos (pode ser normal no Windows)');
+    console.log('⚠️  Não foi possível importar módulo child_process');
+    console.log(`   Dica: Execute 'lsof -ti:${PORT}' manualmente para verificar`);
   }
 }
 
@@ -120,7 +127,7 @@ function instrucoesTeste() {
 // Executar todas as verificações
 async function main() {
   const servidorOk = await verificarServidor();
-  verificarProcesso();
+  await verificarProcesso();
   verificarLogs();
   verificarAgendamento();
   instrucoesTeste();
@@ -129,6 +136,7 @@ async function main() {
   if (servidorOk) {
     console.log('✅ RESUMO: Servidor está rodando');
     console.log('⚠️  Verifique os logs para confirmar que os jobs foram iniciados');
+    console.log('💡 Execute: pm2 logs | grep scheduler');
   } else {
     console.log('❌ RESUMO: Servidor NÃO está rodando');
     console.log('💡 Execute: cd backend-api && npm start');
