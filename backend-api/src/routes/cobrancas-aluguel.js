@@ -357,7 +357,7 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
  *               mes:
  *                 type: string
  *                 pattern: '^\d{4}-\d{2}$'
- *                 description: Mês para gerar cobranças (padrão: mês atual)
+ *                 description: 'Mês para gerar cobranças (padrão: mês atual)'
  *               conta_bancaria_id:
  *                 type: integer
  *                 description: Conta bancária padrão (opcional)

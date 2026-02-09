@@ -5,7 +5,10 @@
  */
 
 const PORT = process.env.PORT || 3001;
-const API_URL = `http://localhost:${PORT}`;
+// Tentar detectar IP do servidor ou usar localhost
+const SERVER_IP = process.env.SERVER_IP || '72.60.60.118';
+const API_URL = process.env.API_URL || `http://${SERVER_IP}:${PORT}`;
+const LOCAL_URL = `http://localhost:${PORT}`;
 
 console.log('🔍 Verificando status do servidor e jobs...\n');
 
@@ -13,22 +16,50 @@ console.log('🔍 Verificando status do servidor e jobs...\n');
 async function verificarServidor() {
   try {
     console.log('1️⃣ Verificando se o servidor está rodando...');
-    const response = await fetch(`${API_URL}/health`);
+    console.log(`   Tentando: ${API_URL}/health`);
     
-    if (response.ok) {
-      const data = await response.json();
-      console.log('✅ Servidor está RODANDO');
-      console.log(`   Status: ${data.status}`);
-      console.log(`   Timestamp: ${data.timestamp}`);
-      console.log(`   Ambiente: ${data.environment}`);
-      return true;
-    } else {
-      console.log('❌ Servidor não está respondendo corretamente');
-      return false;
+    let response;
+    let data;
+    
+    // Tentar primeiro pelo IP do servidor
+    try {
+      response = await fetch(`${API_URL}/health`);
+      if (response.ok) {
+        data = await response.json();
+        console.log('✅ Servidor está RODANDO (via IP do servidor)');
+        console.log(`   URL: ${API_URL}`);
+        console.log(`   Status: ${data.status}`);
+        console.log(`   Timestamp: ${data.timestamp}`);
+        console.log(`   Ambiente: ${data.environment}`);
+        return true;
+      }
+    } catch (ipError) {
+      // Se falhar, tentar localhost
+      console.log(`   ⚠️  Falha ao conectar via IP, tentando localhost...`);
+      try {
+        response = await fetch(`${LOCAL_URL}/health`);
+        if (response.ok) {
+          data = await response.json();
+          console.log('✅ Servidor está RODANDO (via localhost)');
+          console.log(`   URL: ${LOCAL_URL}`);
+          console.log(`   Status: ${data.status}`);
+          console.log(`   Timestamp: ${data.timestamp}`);
+          console.log(`   Ambiente: ${data.environment}`);
+          console.log(`   ⚠️  Nota: Servidor acessível apenas via localhost`);
+          return true;
+        }
+      } catch (localError) {
+        throw ipError; // Usar erro original
+      }
     }
+    
+    console.log('❌ Servidor não está respondendo corretamente');
+    return false;
   } catch (error) {
     console.log('❌ Servidor NÃO está rodando');
     console.log(`   Erro: ${error.message}`);
+    console.log(`   Tentou: ${API_URL}/health`);
+    console.log(`   Tentou: ${LOCAL_URL}/health`);
     console.log(`   💡 Execute: cd backend-api && npm start`);
     return false;
   }

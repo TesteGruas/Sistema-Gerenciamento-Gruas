@@ -11,6 +11,15 @@ cd backend-api
 node verificar-servidor.js
 ```
 
+**No servidor (IP: 72.60.60.118):**
+```bash
+# Script shell simples
+bash verificar-servidor-ip.sh
+
+# Ou verificar diretamente
+curl http://72.60.60.118:3001/health
+```
+
 Este script verifica:
 - ✅ Se o servidor está respondendo
 - ✅ Se há processos rodando na porta 3001
