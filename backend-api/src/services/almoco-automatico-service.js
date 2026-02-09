@@ -95,16 +95,28 @@ export async function buscarFuncionariosParaNotificacaoAlmoco() {
       const chave = `${r.id}_${r.funcionario_id}`;
       const funcionario = r.funcionario;
       
+      // Log de debug
+      console.log(`[almoco-automatico] 🔍 Analisando registro ${r.id} - Funcionário: ${funcionario?.nome || 'N/A'}`);
+      
+      // Verificar se funcionário existe
+      if (!funcionario) {
+        console.log(`[almoco-automatico] ⚠️  Registro ${r.id}: Funcionário não encontrado`);
+        return false;
+      }
+      
       // Verificar se funcionário está ativo
-      if (!funcionario || funcionario.status !== 'Ativo') {
+      if (funcionario.status !== 'Ativo') {
+        console.log(`[almoco-automatico] ⚠️  Registro ${r.id}: Funcionário ${funcionario.nome} não está ativo (status: ${funcionario.status})`);
         return false;
       }
       
       // Verificar se já recebeu notificação
       if (idsComNotificacao.has(chave)) {
+        console.log(`[almoco-automatico] ⚠️  Registro ${r.id}: Funcionário ${funcionario.nome} já recebeu notificação hoje`);
         return false;
       }
       
+      console.log(`[almoco-automatico] ✅ Registro ${r.id}: Funcionário ${funcionario.nome} precisa receber notificação`);
       return true;
     });
     
