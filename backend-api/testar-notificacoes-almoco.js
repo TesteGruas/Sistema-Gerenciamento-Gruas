@@ -5,6 +5,9 @@
  * SEM tentar iniciar o servidor
  */
 
+// Definir variável de ambiente para evitar import do server.js
+process.env.SKIP_SERVER_IMPORT = 'true';
+
 import { enviarNotificacoesAlmoco } from './src/services/almoco-automatico-service.js';
 
 console.log('🧪 Testando envio de notificações de almoço...\n');

@@ -1,9 +1,26 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { enviarMensagemWebhook } from './whatsapp-service.js';
 import { buscarTelefoneWhatsAppUsuario } from './whatsapp-service.js';
-import { emitirNotificacao } from '../server.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+
+// Função auxiliar para emitir notificação via WebSocket (opcional)
+async function tentarEmitirNotificacao(usuarioId, notificacao) {
+  // Se SKIP_SERVER_IMPORT estiver definido, não tentar importar
+  if (process.env.SKIP_SERVER_IMPORT === 'true') {
+    return false;
+  }
+  
+  try {
+    // Import dinâmico apenas quando necessário
+    const { emitirNotificacao } = await import('../server.js');
+    emitirNotificacao(usuarioId, notificacao);
+    return true;
+  } catch (error) {
+    // Se falhar (servidor já rodando ou outro erro), continuar sem WebSocket
+    return false;
+  }
+}
 
 /**
  * Busca funcionários que precisam receber notificação de almoço
@@ -210,23 +227,23 @@ _Sistema de Gestão de Gruas_`;
           } else {
             console.log(`[almoco-automatico] ✅ Notificação criada no app para ${funcionario.nome}`);
             
-            // Emitir notificação via WebSocket para tempo real
-            try {
-              emitirNotificacao(funcionario.usuario_id, {
-                id: String(notificacaoApp.id),
-                titulo: tituloNotificacao,
-                mensagem: mensagemNotificacao,
-                tipo: 'info',
-                link: '/pwa/ponto',
-                lida: false,
-                data: notificacaoApp.data || notificacaoApp.created_at,
-                remetente: 'Sistema',
-                destinatarios: []
-              });
+            // Emitir notificação via WebSocket para tempo real (se disponível)
+            const wsEnviado = await tentarEmitirNotificacao(funcionario.usuario_id, {
+              id: String(notificacaoApp.id),
+              titulo: tituloNotificacao,
+              mensagem: mensagemNotificacao,
+              tipo: 'info',
+              link: '/pwa/ponto',
+              lida: false,
+              data: notificacaoApp.data || notificacaoApp.created_at,
+              remetente: 'Sistema',
+              destinatarios: []
+            });
+            
+            if (wsEnviado) {
               console.log(`[almoco-automatico] ✅ Notificação WebSocket emitida para ${funcionario.nome}`);
-            } catch (wsError) {
-              console.error('[almoco-automatico] ⚠️ Erro ao emitir WebSocket:', wsError);
-              // Não falhar se WebSocket falhar
+            } else {
+              console.log(`[almoco-automatico] ℹ️ WebSocket não disponível (servidor pode já estar rodando ou em modo de teste)`);
             }
           }
         } catch (error) {
