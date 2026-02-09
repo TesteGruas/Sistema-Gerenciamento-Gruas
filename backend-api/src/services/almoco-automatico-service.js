@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { enviarMensagemWebhook } from './whatsapp-service.js';
 import { buscarTelefoneWhatsAppUsuario } from './whatsapp-service.js';
+import { emitirNotificacao } from '../server.js';
 
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
@@ -161,7 +162,7 @@ _Sistema de Gestão de Gruas_`;
     );
     
     if (resultado.sucesso) {
-      // Registrar notificação no banco
+      // Registrar notificação de almoço no banco
       const { error: insertError } = await supabaseAdmin
         .from('notificacoes_almoco')
         .insert({
@@ -179,6 +180,59 @@ _Sistema de Gestão de Gruas_`;
         console.error('[almoco-automatico] ❌ Erro ao registrar notificação:', insertError);
       } else {
         console.log(`[almoco-automatico] ✅ Notificação registrada para ${funcionario.nome}`);
+      }
+
+      // Criar notificação no app (tabela notificacoes) se o funcionário tiver usuario_id
+      if (funcionario.usuario_id) {
+        try {
+          const tituloNotificacao = '🍽️ Notificação de Almoço';
+          const mensagemNotificacao = `Olá, ${funcionario.nome}!\n\nEstá se aproximando o horário de almoço (12:00).\n\nComo você prefere?\n\n• PAUSA - Para parada para almoço\n• CORRIDO - Para trabalho corrido (sem pausa)\n\n⚠️ Se não responder até 12:00, será registrado como pausa para almoço.`;
+
+          // Criar notificação no banco
+          const { data: notificacaoApp, error: notifAppError } = await supabaseAdmin
+            .from('notificacoes')
+            .insert({
+              titulo: tituloNotificacao,
+              mensagem: mensagemNotificacao,
+              tipo: 'info',
+              usuario_id: funcionario.usuario_id,
+              link: '/pwa/ponto',
+              icone: '🍽️',
+              lida: false,
+              remetente: 'Sistema',
+              destinatarios: []
+            })
+            .select()
+            .single();
+
+          if (notifAppError) {
+            console.error('[almoco-automatico] ❌ Erro ao criar notificação no app:', notifAppError);
+          } else {
+            console.log(`[almoco-automatico] ✅ Notificação criada no app para ${funcionario.nome}`);
+            
+            // Emitir notificação via WebSocket para tempo real
+            try {
+              emitirNotificacao(funcionario.usuario_id, {
+                id: String(notificacaoApp.id),
+                titulo: tituloNotificacao,
+                mensagem: mensagemNotificacao,
+                tipo: 'info',
+                link: '/pwa/ponto',
+                lida: false,
+                data: notificacaoApp.data || notificacaoApp.created_at,
+                remetente: 'Sistema',
+                destinatarios: []
+              });
+              console.log(`[almoco-automatico] ✅ Notificação WebSocket emitida para ${funcionario.nome}`);
+            } catch (wsError) {
+              console.error('[almoco-automatico] ⚠️ Erro ao emitir WebSocket:', wsError);
+              // Não falhar se WebSocket falhar
+            }
+          }
+        } catch (error) {
+          console.error('[almoco-automatico] ⚠️ Erro ao criar notificação no app:', error);
+          // Não falhar o processo se a notificação do app falhar
+        }
       }
     }
     
