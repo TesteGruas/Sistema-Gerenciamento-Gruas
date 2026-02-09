@@ -53,7 +53,9 @@ export async function buscarFuncionariosParaNotificacaoAlmoco() {
           nome,
           telefone,
           status,
-          usuario_id
+          usuarios:usuarios!funcionario_id(
+            id
+          )
         )
       `)
       .eq('data', hoje)
@@ -129,9 +131,16 @@ export async function enviarNotificacaoAlmoco(registro) {
     // Buscar telefone WhatsApp do funcionário
     let telefone = funcionario.telefone;
     
+    // Buscar usuario_id do relacionamento usuario (que tem funcionario_id)
+    // usuarios pode ser um array ou objeto único dependendo do Supabase
+    const usuarios = funcionario.usuarios;
+    const usuarioId = Array.isArray(usuarios) && usuarios.length > 0 
+      ? usuarios[0].id 
+      : (usuarios?.id || null);
+    
     // Se não tiver telefone direto, buscar via usuário
-    if (!telefone && funcionario.usuario_id) {
-      const telefoneUsuario = await buscarTelefoneWhatsAppUsuario(funcionario.usuario_id);
+    if (!telefone && usuarioId) {
+      const telefoneUsuario = await buscarTelefoneWhatsAppUsuario(usuarioId);
       telefone = telefoneUsuario;
     }
     
@@ -199,8 +208,11 @@ _Sistema de Gestão de Gruas_`;
         console.log(`[almoco-automatico] ✅ Notificação registrada para ${funcionario.nome}`);
       }
 
+      // Buscar usuario_id do relacionamento
+      const usuarioId = registro.usuario?.id || null;
+      
       // Criar notificação no app (tabela notificacoes) se o funcionário tiver usuario_id
-      if (funcionario.usuario_id) {
+      if (usuarioId) {
         try {
           const tituloNotificacao = '🍽️ Notificação de Almoço';
           const mensagemNotificacao = `Olá, ${funcionario.nome}!\n\nEstá se aproximando o horário de almoço (12:00).\n\nComo você prefere?\n\n• PAUSA - Para parada para almoço\n• CORRIDO - Para trabalho corrido (sem pausa)\n\n⚠️ Se não responder até 12:00, será registrado como pausa para almoço.`;
@@ -212,7 +224,7 @@ _Sistema de Gestão de Gruas_`;
               titulo: tituloNotificacao,
               mensagem: mensagemNotificacao,
               tipo: 'info',
-              usuario_id: funcionario.usuario_id,
+              usuario_id: usuarioId,
               link: '/pwa/ponto',
               icone: '🍽️',
               lida: false,
@@ -228,7 +240,7 @@ _Sistema de Gestão de Gruas_`;
             console.log(`[almoco-automatico] ✅ Notificação criada no app para ${funcionario.nome}`);
             
             // Emitir notificação via WebSocket para tempo real (se disponível)
-            const wsEnviado = await tentarEmitirNotificacao(funcionario.usuario_id, {
+            const wsEnviado = await tentarEmitirNotificacao(usuarioId, {
               id: String(notificacaoApp.id),
               titulo: tituloNotificacao,
               mensagem: mensagemNotificacao,
