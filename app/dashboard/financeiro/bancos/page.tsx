@@ -149,13 +149,19 @@ export default function BancosPage() {
       // Carregar contas bancárias com cache busting
       const contasResponse = await apiContasBancarias.listar()
       console.log('📊 [BANCOS] Resposta das contas:', contasResponse)
-      if (contasResponse.success) {
-        const contasData = contasResponse.data || []
-        console.log('✅ [BANCOS] Contas carregadas:', contasData.length, contasData)
-        setContas(contasData)
-      } else {
-        console.error('❌ [BANCOS] Erro ao carregar contas:', contasResponse)
+      
+      // apiContasBancarias.listar() pode retornar array direto ou { success, data }
+      let contasData: ContaBancaria[] = []
+      if (Array.isArray(contasResponse)) {
+        contasData = contasResponse
+      } else if (contasResponse?.success && Array.isArray(contasResponse.data)) {
+        contasData = contasResponse.data
+      } else if (Array.isArray(contasResponse?.data)) {
+        contasData = contasResponse.data
       }
+      
+      console.log('✅ [BANCOS] Contas carregadas:', contasData.length, contasData)
+      setContas(contasData)
       
       // Carregar movimentações
       await carregarMovimentacoes()

@@ -458,20 +458,27 @@ export default function NotasFiscaisPage() {
       // Carregar contas bancárias
       try {
         const contasResponse = await apiContasBancarias.listar({ limit: 1000 })
-        if (contasResponse.success) {
-          // Filtrar apenas contas ativas (pode ser campo 'ativa' ou 'status')
-          const contasAtivas = (contasResponse.data || []).filter((c: ContaBancaria) => {
-            // Verificar se tem campo 'ativa' ou 'status'
-            if ('ativa' in c) {
-              return c.ativa !== false
-            }
-            if ('status' in c && (c as any).status) {
-              return (c as any).status === 'ativa'
-            }
-            return true // Se não tiver nenhum dos campos, incluir
-          })
-          setContasBancarias(contasAtivas)
+        
+        // apiContasBancarias.listar() retorna array direto ou { success, data }
+        let contasArr: any[] = []
+        if (Array.isArray(contasResponse)) {
+          contasArr = contasResponse
+        } else if (contasResponse?.success && Array.isArray(contasResponse.data)) {
+          contasArr = contasResponse.data
+        } else if (Array.isArray(contasResponse?.data)) {
+          contasArr = contasResponse.data
         }
+        
+        const contasAtivas = contasArr.filter((c: any) => {
+          if ('ativa' in c) {
+            return c.ativa !== false
+          }
+          if ('status' in c && c.status) {
+            return c.status === 'ativa'
+          }
+          return true
+        })
+        setContasBancarias(contasAtivas)
       } catch (error) {
         console.error('Erro ao carregar contas bancárias:', error)
       }

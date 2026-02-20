@@ -163,7 +163,7 @@ export default function FinanceiroPage() {
 
       // Carregar contas bancárias
       const contasResponse = await apiContasBancarias.listar()
-      const todasContas = (contasResponse.data || contasResponse || []) as any[]
+      const todasContas = (Array.isArray(contasResponse) ? contasResponse : (contasResponse?.data || [])) as any[]
       // Filtrar apenas contas ativas
       const contas = todasContas.filter((c: any) => (c.status === 'ativa' || c.ativa === true))
       const saldoTotal = contas.reduce((sum: number, c: any) => sum + (c.saldo_atual || 0), 0)
