@@ -89,11 +89,123 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
 
     if (error) throw error;
 
-    // Atualizar status para atrasado se vencido
+    // Agregar impostos das notas fiscais (que não existem em impostos_financeiros)
+    let impostosNF = [];
+    try {
+      const { data: notasComItens, error: nfError } = await supabaseAdmin
+        .from('notas_fiscais')
+        .select(`
+          id, numero_nf, serie, tipo, data_emissao, data_vencimento, status,
+          notas_fiscais_itens (
+            id, valor_icms, percentual_icms, base_calculo_icms,
+            valor_issqn, aliquota_issqn, base_calculo_issqn,
+            valor_ipi, percentual_ipi,
+            valor_inss, valor_cbs, preco_total
+          )
+        `)
+        .neq('status', 'cancelada');
+
+      if (!nfError && notasComItens) {
+        const idsJaCadastrados = new Set((data || []).map(i => i.referencia).filter(Boolean));
+
+        for (const nf of notasComItens) {
+          if (!nf.notas_fiscais_itens || nf.notas_fiscais_itens.length === 0) continue;
+          const refNF = nf.numero_nf;
+          const comp = nf.data_emissao ? nf.data_emissao.substring(0, 7) : null;
+          if (competencia && comp !== competencia) continue;
+
+          let totalICMS = 0, totalISSQN = 0, totalIPI = 0, totalINSS = 0, totalCBS = 0;
+          let baseICMS = 0, baseISSQN = 0, aliqICMS = 0, aliqISSQN = 0;
+
+          for (const item of nf.notas_fiscais_itens) {
+            totalICMS += parseFloat(item.valor_icms || 0);
+            totalISSQN += parseFloat(item.valor_issqn || 0);
+            totalIPI += parseFloat(item.valor_ipi || 0);
+            totalINSS += parseFloat(item.valor_inss || 0);
+            totalCBS += parseFloat(item.valor_cbs || 0);
+            baseICMS += parseFloat(item.base_calculo_icms || item.preco_total || 0);
+            baseISSQN += parseFloat(item.base_calculo_issqn || item.preco_total || 0);
+            if (item.percentual_icms) aliqICMS = parseFloat(item.percentual_icms);
+            if (item.aliquota_issqn) aliqISSQN = parseFloat(item.aliquota_issqn);
+          }
+
+          const tipoNF = nf.tipo === 'saida' ? 'Saída' : 'Entrada';
+          const statusNF = nf.status === 'paga' ? 'pago' : 'pendente';
+
+          if (totalICMS > 0 && !idsJaCadastrados.has(`ICMS-${refNF}`)) {
+            if (!tipo || tipo === 'ICMS') {
+              if (!status || status === statusNF) {
+                impostosNF.push({
+                  id: `nf-icms-${nf.id}`,
+                  tipo: 'ICMS',
+                  descricao: `ICMS - NF ${refNF} (${tipoNF})`,
+                  valor: totalICMS,
+                  valor_base: baseICMS,
+                  aliquota: aliqICMS,
+                  competencia: comp,
+                  data_vencimento: nf.data_vencimento || nf.data_emissao,
+                  status: statusNF,
+                  referencia: `ICMS-${refNF}`,
+                  nota_fiscal_id: nf.id,
+                  origem: 'nota_fiscal'
+                });
+              }
+            }
+          }
+
+          if (totalISSQN > 0 && !idsJaCadastrados.has(`ISSQN-${refNF}`)) {
+            if (!tipo || tipo === 'ISSQN' || tipo === 'ISS') {
+              if (!status || status === statusNF) {
+                impostosNF.push({
+                  id: `nf-issqn-${nf.id}`,
+                  tipo: 'ISSQN',
+                  descricao: `ISSQN - NF ${refNF} (${tipoNF})`,
+                  valor: totalISSQN,
+                  valor_base: baseISSQN,
+                  aliquota: aliqISSQN,
+                  competencia: comp,
+                  data_vencimento: nf.data_vencimento || nf.data_emissao,
+                  status: statusNF,
+                  referencia: `ISSQN-${refNF}`,
+                  nota_fiscal_id: nf.id,
+                  origem: 'nota_fiscal'
+                });
+              }
+            }
+          }
+
+          if (totalIPI > 0 && !idsJaCadastrados.has(`IPI-${refNF}`)) {
+            if (!tipo || tipo === 'IPI') {
+              if (!status || status === statusNF) {
+                impostosNF.push({
+                  id: `nf-ipi-${nf.id}`,
+                  tipo: 'IPI',
+                  descricao: `IPI - NF ${refNF} (${tipoNF})`,
+                  valor: totalIPI,
+                  valor_base: baseICMS,
+                  aliquota: 0,
+                  competencia: comp,
+                  data_vencimento: nf.data_vencimento || nf.data_emissao,
+                  status: statusNF,
+                  referencia: `IPI-${refNF}`,
+                  nota_fiscal_id: nf.id,
+                  origem: 'nota_fiscal'
+                });
+              }
+            }
+          }
+        }
+      }
+    } catch (nfAggError) {
+      console.error('Aviso: erro ao agregar impostos de NFs:', nfAggError.message);
+    }
+
+    const todosImpostos = [...(data || []), ...impostosNF];
+
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
     
-    const dataComStatus = (data || []).map(imposto => {
+    const dataComStatus = todosImpostos.map(imposto => {
       const vencimento = new Date(imposto.data_vencimento);
       vencimento.setHours(0, 0, 0, 0);
       
@@ -109,8 +221,8 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
-        total: count || 0,
-        pages: Math.ceil((count || 0) / limit)
+        total: (count || 0) + impostosNF.length,
+        pages: Math.ceil(((count || 0) + impostosNF.length) / limit)
       }
     });
   } catch (error) {
@@ -293,17 +405,90 @@ router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'
 
     if (error) throw error;
 
-    // Calcular totais
+    // Agregar impostos de NFs para o período
+    let impostosNF = [];
+    try {
+      const { data: notasComItens, error: nfError } = await supabaseAdmin
+        .from('notas_fiscais')
+        .select(`
+          id, numero_nf, tipo, data_emissao, data_vencimento, status,
+          notas_fiscais_itens (
+            valor_icms, percentual_icms, base_calculo_icms,
+            valor_issqn, aliquota_issqn, base_calculo_issqn,
+            valor_ipi, preco_total
+          )
+        `)
+        .neq('status', 'cancelada');
+
+      if (!nfError && notasComItens) {
+        const idsJaCadastrados = new Set((data || []).map(i => i.referencia).filter(Boolean));
+
+        for (const nf of notasComItens) {
+          if (!nf.notas_fiscais_itens || nf.notas_fiscais_itens.length === 0) continue;
+          const comp = nf.data_emissao ? nf.data_emissao.substring(0, 7) : null;
+          if (comp !== competencia) continue;
+
+          let totalICMS = 0, totalISSQN = 0, totalIPI = 0;
+          let baseICMS = 0, baseISSQN = 0, aliqICMS = 0, aliqISSQN = 0;
+
+          for (const item of nf.notas_fiscais_itens) {
+            totalICMS += parseFloat(item.valor_icms || 0);
+            totalISSQN += parseFloat(item.valor_issqn || 0);
+            totalIPI += parseFloat(item.valor_ipi || 0);
+            baseICMS += parseFloat(item.base_calculo_icms || item.preco_total || 0);
+            baseISSQN += parseFloat(item.base_calculo_issqn || item.preco_total || 0);
+            if (item.percentual_icms) aliqICMS = parseFloat(item.percentual_icms);
+            if (item.aliquota_issqn) aliqISSQN = parseFloat(item.aliquota_issqn);
+          }
+
+          const tipoNF = nf.tipo === 'saida' ? 'Saída' : 'Entrada';
+          const statusNF = nf.status === 'paga' ? 'pago' : 'pendente';
+
+          if (totalICMS > 0 && !idsJaCadastrados.has(`ICMS-${nf.numero_nf}`)) {
+            impostosNF.push({
+              id: `nf-icms-${nf.id}`, tipo: 'ICMS',
+              descricao: `ICMS - NF ${nf.numero_nf} (${tipoNF})`,
+              valor: totalICMS, valor_base: baseICMS, aliquota: aliqICMS,
+              competencia: comp, data_vencimento: nf.data_vencimento || nf.data_emissao,
+              status: statusNF, referencia: `ICMS-${nf.numero_nf}`, origem: 'nota_fiscal'
+            });
+          }
+          if (totalISSQN > 0 && !idsJaCadastrados.has(`ISSQN-${nf.numero_nf}`)) {
+            impostosNF.push({
+              id: `nf-issqn-${nf.id}`, tipo: 'ISSQN',
+              descricao: `ISSQN - NF ${nf.numero_nf} (${tipoNF})`,
+              valor: totalISSQN, valor_base: baseISSQN, aliquota: aliqISSQN,
+              competencia: comp, data_vencimento: nf.data_vencimento || nf.data_emissao,
+              status: statusNF, referencia: `ISSQN-${nf.numero_nf}`, origem: 'nota_fiscal'
+            });
+          }
+          if (totalIPI > 0 && !idsJaCadastrados.has(`IPI-${nf.numero_nf}`)) {
+            impostosNF.push({
+              id: `nf-ipi-${nf.id}`, tipo: 'IPI',
+              descricao: `IPI - NF ${nf.numero_nf} (${tipoNF})`,
+              valor: totalIPI, valor_base: baseICMS, aliquota: 0,
+              competencia: comp, data_vencimento: nf.data_vencimento || nf.data_emissao,
+              status: statusNF, referencia: `IPI-${nf.numero_nf}`, origem: 'nota_fiscal'
+            });
+          }
+        }
+      }
+    } catch (nfAggError) {
+      console.error('Aviso: erro ao agregar impostos de NFs no relatório:', nfAggError.message);
+    }
+
+    const todosImpostos = [...(data || []), ...impostosNF];
+
     const totais = {
       valor_total: 0,
       valor_pago: 0,
       valor_pendente: 0
     };
 
-    data.forEach(imposto => {
+    todosImpostos.forEach(imposto => {
       totais.valor_total += parseFloat(imposto.valor || 0);
       if (imposto.status === 'pago') {
-        totais.valor_pago += parseFloat(imposto.valor_pago || 0);
+        totais.valor_pago += parseFloat(imposto.valor || 0);
       } else {
         totais.valor_pendente += parseFloat(imposto.valor || 0);
       }
@@ -313,7 +498,7 @@ router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'
       success: true,
       data: {
         competencia: `${mes}/${ano}`,
-        impostos: data,
+        impostos: todosImpostos,
         totais
       }
     });
@@ -333,9 +518,112 @@ router.get('/relatorio', authenticateToken, requirePermission('obras:visualizar'
  *     summary: Buscar imposto por ID
  *     tags: [Impostos]
  */
+// Helper: resolver imposto virtual de NF para dados reais
+async function resolverImpostoNF(virtualId) {
+  const match = virtualId.match(/^nf-(icms|issqn|ipi)-(\d+)$/);
+  if (!match) return null;
+
+  const tipoImposto = match[1].toUpperCase();
+  const nfId = parseInt(match[2]);
+
+  const { data: nf, error } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select(`
+      id, numero_nf, tipo, data_emissao, data_vencimento, status,
+      notas_fiscais_itens (
+        valor_icms, percentual_icms, base_calculo_icms,
+        valor_issqn, aliquota_issqn, base_calculo_issqn,
+        valor_ipi, percentual_ipi, preco_total
+      )
+    `)
+    .eq('id', nfId)
+    .single();
+
+  if (error || !nf || !nf.notas_fiscais_itens) return null;
+
+  let valor = 0, valorBase = 0, aliquota = 0;
+  for (const item of nf.notas_fiscais_itens) {
+    if (tipoImposto === 'ICMS') {
+      valor += parseFloat(item.valor_icms || 0);
+      valorBase += parseFloat(item.base_calculo_icms || item.preco_total || 0);
+      if (item.percentual_icms) aliquota = parseFloat(item.percentual_icms);
+    } else if (tipoImposto === 'ISSQN') {
+      valor += parseFloat(item.valor_issqn || 0);
+      valorBase += parseFloat(item.base_calculo_issqn || item.preco_total || 0);
+      if (item.aliquota_issqn) aliquota = parseFloat(item.aliquota_issqn);
+    } else if (tipoImposto === 'IPI') {
+      valor += parseFloat(item.valor_ipi || 0);
+      valorBase += parseFloat(item.preco_total || 0);
+    }
+  }
+
+  const tipoNF = nf.tipo === 'saida' ? 'Saída' : 'Entrada';
+  const comp = nf.data_emissao ? nf.data_emissao.substring(0, 7) : null;
+
+  return {
+    tipo: tipoImposto,
+    descricao: `${tipoImposto} - NF ${nf.numero_nf} (${tipoNF})`,
+    valor,
+    valor_base: valorBase,
+    aliquota,
+    competencia: comp,
+    data_vencimento: nf.data_vencimento || nf.data_emissao,
+    referencia: `${tipoImposto}-${nf.numero_nf}`,
+    nota_fiscal_id: nf.id,
+    status: nf.status === 'paga' ? 'pago' : 'pendente'
+  };
+}
+
+// Helper: materializar imposto virtual (criar registro real em impostos_financeiros)
+async function materializarImpostoNF(virtualId) {
+  const dados = await resolverImpostoNF(virtualId);
+  if (!dados) return null;
+
+  const { referencia } = dados;
+  const { data: existente } = await supabaseAdmin
+    .from('impostos_financeiros')
+    .select('id')
+    .eq('referencia', referencia)
+    .maybeSingle();
+
+  if (existente) return existente.id;
+
+  const { data: novo, error } = await supabaseAdmin
+    .from('impostos_financeiros')
+    .insert({
+      tipo: dados.tipo,
+      descricao: dados.descricao,
+      valor: dados.valor,
+      valor_base: dados.valor_base,
+      aliquota: dados.aliquota,
+      competencia: dados.competencia,
+      data_vencimento: dados.data_vencimento,
+      referencia: dados.referencia,
+      status: dados.status,
+      observacoes: `Gerado automaticamente a partir da NF (nota_fiscal_id: ${dados.nota_fiscal_id})`
+    })
+    .select('id')
+    .single();
+
+  if (error) throw error;
+  return novo.id;
+}
+
 router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
   try {
     const { id } = req.params;
+
+    // Imposto virtual derivado de NF
+    if (id.startsWith('nf-')) {
+      const dados = await resolverImpostoNF(id);
+      if (!dados) {
+        return res.status(404).json({ error: 'Imposto não encontrado' });
+      }
+      return res.json({
+        success: true,
+        data: { id, ...dados, origem: 'nota_fiscal' }
+      });
+    }
 
     const { data, error } = await supabaseAdmin
       .from('impostos_financeiros')
@@ -417,7 +705,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
  */
 router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
     const { error: validationError, value } = impostoUpdateSchema.validate(req.body);
     
     if (validationError) {
@@ -425,6 +713,15 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
         error: 'Dados inválidos',
         message: validationError.details[0].message
       });
+    }
+
+    // Imposto virtual derivado de NF: materializar antes de atualizar
+    if (id.startsWith('nf-')) {
+      const realId = await materializarImpostoNF(id);
+      if (!realId) {
+        return res.status(404).json({ error: 'Imposto de NF não encontrado' });
+      }
+      id = realId;
     }
 
     const { data, error: updateError } = await supabaseAdmin
@@ -469,7 +766,14 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
  */
 router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), async (req, res) => {
   try {
-    const { id } = req.params;
+    let { id } = req.params;
+
+    // Imposto virtual de NF não pode ser excluído diretamente
+    if (id.startsWith('nf-')) {
+      return res.status(400).json({
+        error: 'Impostos derivados de notas fiscais não podem ser excluídos diretamente. Exclua ou altere a nota fiscal correspondente.'
+      });
+    }
 
     const { error: deleteError } = await supabaseAdmin
       .from('impostos_financeiros')
