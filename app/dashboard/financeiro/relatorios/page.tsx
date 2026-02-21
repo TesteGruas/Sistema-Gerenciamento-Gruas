@@ -68,6 +68,7 @@ import { custosApi } from "@/lib/api-custos"
 import { getVendas } from "@/lib/api-financial"
 import { locacoesApi } from "@/lib/api-locacoes"
 import { estoqueAPI } from "@/lib/api-estoque"
+import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 
 // Cores para gráficos
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
@@ -232,41 +233,81 @@ export default function RelatoriosPage() {
       // Carregar relatório de faturamento
       await carregarRelatorioFaturamento()
       
-      // Carregar relatório financeiro
+      // Carregar relatório financeiro (usando notas fiscais como fonte de dados)
       try {
-        console.log('📅 Buscando receitas e custos de:', dataInicio, 'até:', dataFim)
+        console.log('📅 Buscando dados financeiros de:', dataInicio, 'até:', dataFim)
         
-        const receitasResponse = await receitasApi.list({ data_inicio: dataInicio, data_fim: dataFim })
-        const custosResponse = await custosApi.list({ data_inicio: dataInicio, data_fim: dataFim })
+        const [receitasRes, custosRes, nfSaidaRes, nfEntradaRes] = await Promise.all([
+          receitasApi.list({ data_inicio: dataInicio, data_fim: dataFim }).catch(() => ({ receitas: [] })),
+          custosApi.list({ data_inicio: dataInicio, data_fim: dataFim }).catch(() => ({ custos: [] })),
+          notasFiscaisApi.list({ tipo: 'saida', limit: 200 }).catch(() => ({ data: [] })),
+          notasFiscaisApi.list({ tipo: 'entrada', limit: 200 }).catch(() => ({ data: [] }))
+        ])
         
-        console.log('✅ Receitas response:', receitasResponse)
-        console.log('✅ Custos response:', custosResponse)
+        const receitas = receitasRes.receitas || []
+        const custos = custosRes.custos || []
+        const nfSaida = (nfSaidaRes.data || []).filter((nf: any) => nf.status !== 'cancelada')
+        const nfEntrada = (nfEntradaRes.data || []).filter((nf: any) => nf.status !== 'cancelada')
         
-        const receitas = receitasResponse.receitas || []
-        const custos = custosResponse.custos || []
-        
-        // Agrupar por mês
         const dadosPorMes = new Map()
         
+        // Receitas da tabela receitas
         receitas.forEach((receita: any) => {
           const dataReceita = receita.data_receita || receita.data || receita.created_at
           if (dataReceita && new Date(dataReceita).toString() !== 'Invalid Date') {
-            const mes = new Date(dataReceita).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-            if (!dadosPorMes.has(mes)) {
-              dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+            const d = new Date(dataReceita)
+            if (d >= new Date(dataInicio) && d <= new Date(dataFim)) {
+              const mes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+              if (!dadosPorMes.has(mes)) {
+                dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+              }
+              dadosPorMes.get(mes).receitas += receita.valor || 0
             }
-            dadosPorMes.get(mes).receitas += receita.valor || 0
           }
         })
         
+        // Receitas das NFs de saída (a receber)
+        nfSaida.forEach((nf: any) => {
+          const dataNF = nf.data_emissao || nf.created_at
+          if (dataNF && new Date(dataNF).toString() !== 'Invalid Date') {
+            const d = new Date(dataNF)
+            if (d >= new Date(dataInicio) && d <= new Date(dataFim)) {
+              const mes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+              if (!dadosPorMes.has(mes)) {
+                dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+              }
+              dadosPorMes.get(mes).receitas += parseFloat(nf.valor_total || 0)
+            }
+          }
+        })
+        
+        // Despesas da tabela custos
         custos.forEach((custo: any) => {
           const dataCusto = custo.data_custo || custo.data || custo.created_at
           if (dataCusto && new Date(dataCusto).toString() !== 'Invalid Date') {
-            const mes = new Date(dataCusto).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
-            if (!dadosPorMes.has(mes)) {
-              dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+            const d = new Date(dataCusto)
+            if (d >= new Date(dataInicio) && d <= new Date(dataFim)) {
+              const mes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+              if (!dadosPorMes.has(mes)) {
+                dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+              }
+              dadosPorMes.get(mes).despesas += custo.valor || 0
             }
-            dadosPorMes.get(mes).despesas += custo.valor || 0
+          }
+        })
+        
+        // Despesas das NFs de entrada (a pagar)
+        nfEntrada.forEach((nf: any) => {
+          const dataNF = nf.data_emissao || nf.created_at
+          if (dataNF && new Date(dataNF).toString() !== 'Invalid Date') {
+            const d = new Date(dataNF)
+            if (d >= new Date(dataInicio) && d <= new Date(dataFim)) {
+              const mes = d.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+              if (!dadosPorMes.has(mes)) {
+                dadosPorMes.set(mes, { mes, receitas: 0, despesas: 0, saldo: 0, crescimento: 0 })
+              }
+              dadosPorMes.get(mes).despesas += parseFloat(nf.valor_total || 0)
+            }
           }
         })
         
@@ -275,11 +316,10 @@ export default function RelatoriosPage() {
           saldo: item.receitas - item.despesas
         }))
         
+        console.log('✅ Dados financeiros agregados:', dadosFinanceiros)
         setRelatorioFinanceiro(dadosFinanceiros)
       } catch (error: any) {
         console.error('❌ Erro ao carregar relatório financeiro:', error)
-        console.error('❌ Resposta do erro:', error.response?.data)
-        console.error('❌ Status do erro:', error.response?.status)
         setRelatorioFinanceiro([])
       }
       

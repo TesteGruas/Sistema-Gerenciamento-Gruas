@@ -100,6 +100,10 @@ export default function ImpostosPage() {
   const [tiposImpostos, setTiposImpostos] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [isTipoDialogOpen, setIsTipoDialogOpen] = useState(false)
+  const [isPagoDialogOpen, setIsPagoDialogOpen] = useState(false)
+  const [impostoParaPagar, setImpostoParaPagar] = useState<any>(null)
+  const [contaBancariaPago, setContaBancariaPago] = useState('')
+  const [contasBancariasMain, setContasBancariasMain] = useState<any[]>([])
 
   // Tipos padrão
   const tiposPadrao = [
@@ -115,7 +119,24 @@ export default function ImpostosPage() {
   useEffect(() => {
     loadImpostos()
     loadTiposImpostos()
+    loadContasBancarias()
   }, [])
+
+  const loadContasBancarias = async () => {
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = getAuthToken()
+      const res = await fetch(`${API_URL}/api/contas-bancarias`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setContasBancariasMain((data.data || []).filter((c: any) => c.status === 'ativa'))
+      }
+    } catch (err) {
+      console.error('Erro ao carregar contas bancárias:', err)
+    }
+  }
 
   const loadImpostos = async () => {
     setIsLoading(true)
@@ -169,13 +190,74 @@ export default function ImpostosPage() {
     }
   }
 
-  const marcarComoPago = async (imposto: any) => {
+  const isImpostoDeNF = (imposto: any) => {
+    return typeof imposto?.id === 'string' && imposto.id.startsWith('nf-')
+  }
+
+  const abrirDialogPago = (imposto: any) => {
+    setImpostoParaPagar(imposto)
+    setContaBancariaPago('')
+    if (isImpostoDeNF(imposto)) {
+      // Impostos de NF já tiveram o saldo decrementado na NF — marcar direto
+      confirmarPagamentoDireto(imposto)
+    } else {
+      setIsPagoDialogOpen(true)
+    }
+  }
+
+  const confirmarPagamentoDireto = async (imposto: any) => {
     try {
       const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = getAuthToken()
       const hoje = new Date().toISOString().split('T')[0]
 
       const response = await fetch(`${API_URL}/api/impostos-financeiros/${imposto.id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ status: 'pago', data_pagamento: hoje })
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.message || 'Erro ao marcar como pago')
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Imposto de NF marcado como pago (saldo já decrementado pela nota fiscal)",
+      })
+      loadImpostos()
+    } catch (error: any) {
+      console.error('Erro ao marcar como pago:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao marcar imposto como pago.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const confirmarPagamento = async () => {
+    if (!impostoParaPagar) return
+
+    if (!contaBancariaPago) {
+      toast({
+        title: "Atenção",
+        description: "Selecione uma conta bancária para débito",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = getAuthToken()
+      const hoje = new Date().toISOString().split('T')[0]
+
+      const response = await fetch(`${API_URL}/api/impostos-financeiros/${impostoParaPagar.id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -192,12 +274,41 @@ export default function ImpostosPage() {
         throw new Error(error.message || 'Erro ao marcar como pago')
       }
 
+      // Registrar movimentação bancária (saída) — apenas para impostos manuais (não NF)
+      try {
+        await fetch(`${API_URL}/api/contas-bancarias/${contaBancariaPago}/movimentacoes`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tipo: 'saida',
+            valor: parseFloat(impostoParaPagar.valor),
+            descricao: `Pagamento de imposto: ${impostoParaPagar.tipo || ''} - ${impostoParaPagar.descricao || ''}`.trim(),
+            referencia: impostoParaPagar.referencia || `IMP-${impostoParaPagar.id}`,
+            data: hoje,
+            categoria: 'impostos'
+          })
+        })
+      } catch (movErr) {
+        console.error('Erro ao registrar movimentação bancária:', movErr)
+        toast({
+          title: "Aviso",
+          description: "Imposto marcado como pago, mas houve erro ao registrar movimentação bancária",
+          variant: "destructive"
+        })
+      }
+
       toast({
         title: "Sucesso",
-        description: "Imposto marcado como pago com sucesso",
+        description: "Imposto marcado como pago e movimentação bancária registrada",
       })
 
+      setIsPagoDialogOpen(false)
+      setImpostoParaPagar(null)
       loadImpostos()
+      loadContasBancarias()
     } catch (error: any) {
       console.error('Erro ao marcar como pago:', error)
       toast({
@@ -315,7 +426,7 @@ export default function ImpostosPage() {
                 Novo Pagamento
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-2xl">
+            <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Novo Pagamento de Imposto</DialogTitle>
                 <DialogDescription>
@@ -476,7 +587,7 @@ export default function ImpostosPage() {
                                 <Button 
                                   variant="outline" 
                                   size="sm"
-                                  onClick={() => marcarComoPago(imposto)}
+                                  onClick={() => abrirDialogPago(imposto)}
                                   title="Marcar como pago"
                                   className="text-green-600 hover:text-green-700 hover:bg-green-50 border-green-200"
                                 >
@@ -689,7 +800,7 @@ export default function ImpostosPage() {
 
       {/* Dialog para editar imposto */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Editar Imposto</DialogTitle>
             <DialogDescription>
@@ -706,6 +817,54 @@ export default function ImpostosPage() {
                 loadImpostos()
               }}
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog para confirmar pagamento com seleção de conta bancária */}
+      <Dialog open={isPagoDialogOpen} onOpenChange={setIsPagoDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirmar Pagamento</DialogTitle>
+            <DialogDescription>
+              Selecione a conta bancária para débito do pagamento
+            </DialogDescription>
+          </DialogHeader>
+          {impostoParaPagar && (
+            <div className="space-y-4">
+              <div className="bg-muted p-3 rounded-lg space-y-1">
+                <p className="text-sm"><strong>Imposto:</strong> {impostoParaPagar.tipo} - {impostoParaPagar.descricao}</p>
+                <p className="text-sm"><strong>Valor:</strong> R$ {parseFloat(impostoParaPagar.valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+              </div>
+
+              <div>
+                <Label>Conta Bancária para débito *</Label>
+                <Select value={contaBancariaPago} onValueChange={setContaBancariaPago}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione a conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contasBancariasMain.map((conta: any) => (
+                      <SelectItem key={conta.id} value={String(conta.id)}>
+                        {conta.banco} - Ag: {conta.agencia} / CC: {conta.conta} (Saldo: R$ {parseFloat(conta.saldo_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {contasBancariasMain.length === 0 && (
+                  <p className="text-sm text-muted-foreground mt-1">Nenhuma conta bancária ativa encontrada</p>
+                )}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setIsPagoDialogOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button onClick={confirmarPagamento} disabled={!contaBancariaPago}>
+                  Confirmar Pagamento
+                </Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>
@@ -821,6 +980,7 @@ function ViewImpostoForm({ imposto }: { imposto: any }) {
 }
 
 function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; tiposImpostos: string[]; onClose: () => void }) {
+  const statusAnterior = imposto.status || 'pendente'
   const [formData, setFormData] = useState({
     tipo: imposto.tipo || '',
     descricao: imposto.descricao || '',
@@ -832,11 +992,32 @@ function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; ti
     dataPagamento: imposto.data_pagamento || imposto.dataPagamento || '',
     numeroNota: imposto.referencia || imposto.numeroNota || '',
     status: imposto.status || 'pendente',
-    observacoes: imposto.observacoes || ''
+    observacoes: imposto.observacoes || '',
+    contaBancariaId: ''
   })
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [contasBancarias, setContasBancarias] = useState<any[]>([])
   const { toast } = useToast()
+
+  useEffect(() => {
+    const loadContas = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = getAuthToken()
+        const res = await fetch(`${API_URL}/api/contas-bancarias`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setContasBancarias((data.data || []).filter((c: any) => c.status === 'ativa'))
+        }
+      } catch (err) {
+        console.error('Erro ao carregar contas bancárias:', err)
+      }
+    }
+    loadContas()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -898,6 +1079,31 @@ function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; ti
       }
 
       const result = await response.json()
+
+      // Registrar movimentação bancária se status mudou para pago
+      // Impostos derivados de NF (id começa com "nf-") já tiveram saldo decrementado pela nota fiscal
+      const impostoDeNF = typeof imposto.id === 'string' && imposto.id.startsWith('nf-')
+      if (formData.status === 'pago' && statusAnterior !== 'pago' && formData.contaBancariaId && !impostoDeNF) {
+        try {
+          await fetch(`${API_URL}/api/contas-bancarias/${formData.contaBancariaId}/movimentacoes`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              tipo: 'saida',
+              valor: parseFloat(formData.valor),
+              descricao: `Pagamento de imposto: ${formData.tipo} - ${formData.descricao}`,
+              referencia: formData.numeroNota || `IMP-${result.data?.id || imposto.id}`,
+              data: formData.dataPagamento || new Date().toISOString().split('T')[0],
+              categoria: 'impostos'
+            })
+          })
+        } catch (movErr) {
+          console.error('Erro ao registrar movimentação bancária:', movErr)
+        }
+      }
 
       // Se houver arquivo, fazer upload
       if (uploadFile && result.data?.id) {
@@ -1090,6 +1296,31 @@ function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; ti
         />
       </div>
 
+      {/* Conta Bancária para débito (visível quando muda para pago e NÃO é imposto de NF) */}
+      {formData.status === 'pago' && statusAnterior !== 'pago' && !(typeof imposto.id === 'string' && imposto.id.startsWith('nf-')) && (
+        <div>
+          <Label htmlFor="contaBancaria_edit">Conta Bancária (débito)</Label>
+          <Select
+            value={formData.contaBancariaId}
+            onValueChange={(value) => setFormData({ ...formData, contaBancariaId: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a conta para débito" />
+            </SelectTrigger>
+            <SelectContent>
+              {contasBancarias.map((conta: any) => (
+                <SelectItem key={conta.id} value={String(conta.id)}>
+                  {conta.banco} - Ag: {conta.agencia} / CC: {conta.conta} (Saldo: R$ {parseFloat(conta.saldo_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {contasBancarias.length === 0 && (
+            <p className="text-sm text-muted-foreground mt-1">Nenhuma conta bancária ativa encontrada</p>
+          )}
+        </div>
+      )}
+
       {/* Upload de Arquivo */}
       <div>
         <Label htmlFor="arquivo_edit">Anexar Arquivo (Comprovante, Nota Fiscal, etc.)</Label>
@@ -1264,10 +1495,31 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
     vencimento: '',
     dataPagamento: '',
     numeroNota: '',
-    status: 'pendente'
+    status: 'pendente',
+    contaBancariaId: ''
   })
   const [uploadFile, setUploadFile] = useState<File | null>(null)
+  const [contasBancarias, setContasBancarias] = useState<any[]>([])
   const { toast } = useToast()
+
+  useEffect(() => {
+    const loadContas = async () => {
+      try {
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const token = getAuthToken()
+        const res = await fetch(`${API_URL}/api/contas-bancarias`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setContasBancarias((data.data || []).filter((c: any) => c.status === 'ativa'))
+        }
+      } catch (err) {
+        console.error('Erro ao carregar contas bancárias:', err)
+      }
+    }
+    loadContas()
+  }, [])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1343,6 +1595,29 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
           }
         } catch (updateError) {
           console.error('Erro ao atualizar data de pagamento:', updateError)
+        }
+
+        // Registrar movimentação bancária (saída) na conta selecionada
+        if (formData.contaBancariaId) {
+          try {
+            await fetch(`${API_URL}/api/contas-bancarias/${formData.contaBancariaId}/movimentacoes`, {
+              method: 'POST',
+              headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({
+                tipo: 'saida',
+                valor: parseFloat(formData.valor),
+                descricao: `Pagamento de imposto: ${formData.tipo} - ${formData.descricao}`,
+                referencia: formData.numeroNota || `IMP-${result.data.id}`,
+                data: formData.dataPagamento,
+                categoria: 'impostos'
+              })
+            })
+          } catch (movErr) {
+            console.error('Erro ao registrar movimentação bancária:', movErr)
+          }
         }
       }
 
@@ -1478,6 +1753,31 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
         </div>
       </div>
 
+      {/* Conta Bancária para débito */}
+      {formData.status === 'pago' && (
+        <div>
+          <Label htmlFor="contaBancaria">Conta Bancária (débito)</Label>
+          <Select
+            value={formData.contaBancariaId}
+            onValueChange={(value) => setFormData({ ...formData, contaBancariaId: value })}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione a conta para débito" />
+            </SelectTrigger>
+            <SelectContent>
+              {contasBancarias.map((conta: any) => (
+                <SelectItem key={conta.id} value={String(conta.id)}>
+                  {conta.banco} - Ag: {conta.agencia} / CC: {conta.conta} (Saldo: R$ {parseFloat(conta.saldo_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {contasBancarias.length === 0 && (
+            <p className="text-sm text-muted-foreground mt-1">Nenhuma conta bancária ativa encontrada</p>
+          )}
+        </div>
+      )}
+
       {/* Upload de Arquivo */}
       <div>
         <Label htmlFor="arquivo">Anexar Arquivo (Comprovante, Nota Fiscal, etc.)</Label>
@@ -1488,7 +1788,6 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
           onChange={(e) => {
             const file = e.target.files?.[0]
             if (file) {
-              // Validar tamanho (10MB)
               if (file.size > 10 * 1024 * 1024) {
                 toast({
                   title: "Erro",
@@ -1498,7 +1797,6 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
                 e.target.value = ''
                 return
               }
-              // Validar tipo
               const validTypes = [
                 'application/pdf',
                 'image/jpeg',

@@ -567,6 +567,21 @@ router.post('/:id/pagar', authenticateToken, async (req, res) => {
       });
     }
 
+    // Sincronizar status da nota fiscal vinculada
+    if (data.nota_fiscal_id) {
+      try {
+        await supabase
+          .from('notas_fiscais')
+          .update({
+            status: 'paga',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', data.nota_fiscal_id);
+      } catch (syncErr) {
+        console.error('Aviso: não foi possível sincronizar status da NF:', syncErr.message);
+      }
+    }
+
     res.json({
       success: true,
       data,
