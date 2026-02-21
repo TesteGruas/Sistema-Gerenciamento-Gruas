@@ -44,6 +44,7 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 // import { getOrcamentos, Orcamento, formatarStatusOrcamento } from "@/lib/api-orcamentos"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
+import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 
 // Interface local para obras com campos adicionais
 interface Obra {
@@ -139,6 +140,9 @@ export default function ContasReceberPage() {
   // Estados para Medições
   const [medicoes, setMedicoes] = useState<MedicaoMensal[]>([])
   
+  // Estados para Contas Bancárias
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
+
   // Estados para Paginação
   const [currentPage, setCurrentPage] = useState(1)
   const [itemsPerPage] = useState(20)
@@ -153,6 +157,7 @@ export default function ContasReceberPage() {
     valor: 0,
     data_receita: new Date().toISOString().split('T')[0],
     funcionario_id: 'none',
+    conta_bancaria_id: 'none',
     observacoes: ''
   })
 
@@ -193,19 +198,20 @@ export default function ContasReceberPage() {
     try {
       setLoading(true)
       
-      // Carregar receitas, obras, funcionários e medições em paralelo (orçamentos removidos)
-      const [receitasData, obrasData, funcionariosData, medicoesData] = await Promise.all([
+      // Carregar receitas, obras, funcionários, medições e contas bancárias em paralelo
+      const [receitasData, obrasData, funcionariosData, medicoesData, contasBancariasData] = await Promise.all([
         receitasApi.list(),
         apiObras.listarObras(),
         funcionariosApi.listarFuncionarios(),
-        medicoesMensaisApi.listar({ page: currentPage, limit: itemsPerPage })
+        medicoesMensaisApi.listar({ page: currentPage, limit: itemsPerPage }),
+        apiContasBancarias.listar({ ativa: true })
       ])
 
       setReceitas(receitasData.receitas || [])
       setObras(obrasData.data || [])
       setFuncionarios(funcionariosData.data || [])
-      // setOrcamentos removido - orçamentos não devem aparecer em contas a receber
       setMedicoes(medicoesData.data || [])
+      setContasBancarias(contasBancariasData || [])
       if (medicoesData.pagination) {
         setTotalItems(medicoesData.pagination.total || 0)
         setTotalPages(medicoesData.pagination.pages || 1)
@@ -432,6 +438,30 @@ export default function ContasReceberPage() {
       }
 
       await receitasApi.create(receitaData)
+
+      // Registrar movimentação bancária (entrada) se conta bancária selecionada
+      if (receitaForm.conta_bancaria_id && receitaForm.conta_bancaria_id !== 'none') {
+        try {
+          await apiContasBancarias.registrarMovimentacao(
+            parseInt(receitaForm.conta_bancaria_id),
+            {
+              tipo: 'entrada',
+              valor: receitaForm.valor,
+              descricao: `Receita: ${receitaForm.descricao}`,
+              categoria: 'receita',
+              data: receitaForm.data_receita
+            }
+          )
+        } catch (err) {
+          console.error('Erro ao registrar movimentação bancária:', err)
+          toast({
+            title: "Aviso",
+            description: "Receita criada, mas houve erro ao atualizar o saldo bancário",
+            variant: "default"
+          })
+        }
+      }
+
       await carregarDados()
       setIsCreateDialogOpen(false)
       resetForm()
@@ -616,6 +646,7 @@ export default function ContasReceberPage() {
       valor: 0,
       data_receita: new Date().toISOString().split('T')[0],
       funcionario_id: 'none',
+      conta_bancaria_id: 'none',
       observacoes: ''
     })
     setObraFilter('')
@@ -626,56 +657,51 @@ export default function ContasReceberPage() {
   const marcarComoPago = async (id: number | string) => {
     try {
       const token = getAuthToken()
+      const dataPagamento = new Date().toISOString().split('T')[0]
       
-      // Verificar se é uma nota fiscal (ID começa com "nf_")
+      let response: Response
+
       if (typeof id === 'string' && id.startsWith('nf_')) {
         const notaId = id.replace('nf_', '')
-        const response = await fetch(`${API_URL}/api/notas-fiscais/${notaId}`, {
+        response = await fetch(`${API_URL}/api/notas-fiscais/${notaId}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            status: 'paga'
-          })
+          body: JSON.stringify({ status: 'paga' })
         })
-
-        if (response.ok) {
-          carregarContas()
-          carregarAlertas()
-          toast({
-            title: "Sucesso",
-            description: "Nota fiscal marcada como paga"
-          })
-        } else {
-          const errorData = await response.json()
-          throw new Error(errorData.message || 'Erro ao marcar nota fiscal como paga')
-        }
-      } else {
-        // É uma conta a receber normal
-        const response = await fetch(`${API_URL}/api/contas-receber/${id}/pagar`, {
+      } else if (typeof id === 'string' && id.startsWith('boleto_')) {
+        const boletoId = id.replace('boleto_', '')
+        response = await fetch(`${API_URL}/api/boletos/${boletoId}/pagar`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            data_pagamento: new Date().toISOString().split('T')[0]
-          })
+          body: JSON.stringify({ data_pagamento: dataPagamento })
         })
+      } else {
+        response = await fetch(`${API_URL}/api/contas-receber/${id}/pagar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ data_pagamento: dataPagamento })
+        })
+      }
 
-        if (response.ok) {
-          carregarContas()
-          carregarAlertas()
-          toast({
-            title: "Sucesso",
-            description: "Conta marcada como paga"
-          })
-        } else {
-          const errorData = await response.json()
-          throw new Error(errorData.message || 'Erro ao marcar conta como paga')
-        }
+      if (response.ok) {
+        carregarContas()
+        carregarAlertas()
+        toast({
+          title: "Sucesso",
+          description: "Conta marcada como paga"
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Erro ao marcar como pago')
       }
     } catch (error) {
       console.error('Erro ao marcar como pago:', error)
@@ -1187,7 +1213,7 @@ export default function ContasReceberPage() {
                                     className="bg-green-500 hover:bg-green-600"
                                   >
                                     <CheckCircle className="w-4 h-4 mr-1" />
-                                    Pagar
+                                    Receber
                                   </Button>
                                 )}
                               </div>
@@ -1335,7 +1361,7 @@ export default function ContasReceberPage() {
                                     className="bg-green-500 hover:bg-green-600"
                                   >
                                     <CheckCircle className="w-4 h-4 mr-1" />
-                                    Pagar
+                                    Receber
                                   </Button>
                                 )}
                               </div>
@@ -1518,6 +1544,26 @@ export default function ContasReceberPage() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="conta_bancaria_id">Conta Bancária (crédito)</Label>
+              <Select
+                value={receitaForm.conta_bancaria_id}
+                onValueChange={(value) => setReceitaForm({ ...receitaForm, conta_bancaria_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a conta bancária" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {contasBancarias.map(conta => (
+                    <SelectItem key={conta.id} value={conta.id.toString()}>
+                      {conta.nome} - {conta.banco} ({conta.agencia}/{conta.conta}) • Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conta.saldo_atual || 0)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

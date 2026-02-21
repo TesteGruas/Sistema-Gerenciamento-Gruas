@@ -38,6 +38,7 @@ import { custosApi, custosUtils, Custo, CustoCreate, CustoUpdate } from "@/lib/a
 import apiObras from "@/lib/api-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { impostosApi, Imposto } from "@/lib/api-impostos"
+import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 
 // Interface local para obras com campos adicionais
 interface Obra {
@@ -131,6 +132,9 @@ export default function ContasPagarPage() {
   
   // Estados para Impostos
   const [impostos, setImpostos] = useState<Imposto[]>([])
+
+  // Estados para Contas Bancárias
+  const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
   
   // Estados para Paginação
   const [currentPage, setCurrentPage] = useState(1)
@@ -146,6 +150,7 @@ export default function ContasPagarPage() {
     valor: 0,
     data_custo: new Date().toISOString().split('T')[0],
     funcionario_id: 'none',
+    conta_bancaria_id: 'none',
     observacoes: ''
   })
 
@@ -154,18 +159,20 @@ export default function ContasPagarPage() {
     try {
       setLoading(true)
       
-      // Carregar custos, obras, funcionários e impostos em paralelo
-      const [custosData, obrasData, funcionariosData, impostosData] = await Promise.all([
+      // Carregar custos, obras, funcionários, impostos e contas bancárias em paralelo
+      const [custosData, obrasData, funcionariosData, impostosData, contasBancariasData] = await Promise.all([
         custosApi.list(),
         apiObras.listarObras(),
         funcionariosApi.listarFuncionarios(),
-        impostosApi.list({ limit: 1000 })
+        impostosApi.list({ limit: 1000 }),
+        apiContasBancarias.listar({ ativa: true })
       ])
 
       setCustos(custosData.custos || [])
       setObras(obrasData.data || [])
       setFuncionarios(funcionariosData.data || [])
       setImpostos(impostosData.impostos || [])
+      setContasBancarias(contasBancariasData || [])
       
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -280,7 +287,7 @@ export default function ContasPagarPage() {
   const fim = inicio + itemsPerPage
   const registrosPaginados = todosRegistros.slice(inicio, fim)
 
-  // Calcular totais
+  // Calcular totais dos custos
   const totaisCustos = useMemo(() => {
     const total = filteredCustos.reduce((sum, c) => sum + (c.valor || 0), 0)
     const confirmados = filteredCustos
@@ -291,10 +298,35 @@ export default function ContasPagarPage() {
       .reduce((sum, c) => sum + (c.valor || 0), 0)
     return { total, confirmados, pendentes }
   }, [filteredCustos])
-  
-  const totalCustos = totaisCustos.total
-  const totalConfirmados = totaisCustos.confirmados
-  const totalPendentes = totaisCustos.pendentes
+
+  // Calcular totais das contas a pagar (boletos + notas fiscais de entrada)
+  const totaisContas = useMemo(() => {
+    const total = contas.reduce((sum, c) => sum + (c.valor || 0), 0)
+    const pagos = contas
+      .filter(c => c.status === 'pago')
+      .reduce((sum, c) => sum + (c.valor || 0), 0)
+    const pendentes = contas
+      .filter(c => c.status === 'pendente' || c.status === 'vencido')
+      .reduce((sum, c) => sum + (c.valor || 0), 0)
+    return { total, pagos, pendentes }
+  }, [contas])
+
+  // Calcular totais dos impostos
+  const totaisImpostos = useMemo(() => {
+    const total = filteredImpostos.reduce((sum, i) => sum + (i.valor || 0), 0)
+    const pagos = filteredImpostos
+      .filter(i => i.status === 'pago')
+      .reduce((sum, i) => sum + (i.valor || 0), 0)
+    const pendentes = filteredImpostos
+      .filter(i => i.status === 'pendente' || i.status === 'vencido' || i.status === 'atrasado')
+      .reduce((sum, i) => sum + (i.valor || 0), 0)
+    return { total, pagos, pendentes }
+  }, [filteredImpostos])
+
+  // Totais combinados (custos + contas + impostos)
+  const totalCustos = totaisCustos.total + totaisContas.total + totaisImpostos.total
+  const totalConfirmados = totaisCustos.confirmados + totaisContas.pagos + totaisImpostos.pagos
+  const totalPendentes = totaisCustos.pendentes + totaisContas.pendentes + totaisImpostos.pendentes
 
   // Filtrar obras para seleção nos formulários
   const obrasFiltradas = obras.filter(obra => {
@@ -365,6 +397,30 @@ export default function ContasPagarPage() {
       }
 
       const novaCusto = await custosApi.create(custoData)
+
+      // Registrar movimentação bancária (saída) se conta bancária selecionada
+      if (custoForm.conta_bancaria_id && custoForm.conta_bancaria_id !== 'none') {
+        try {
+          await apiContasBancarias.registrarMovimentacao(
+            parseInt(custoForm.conta_bancaria_id),
+            {
+              tipo: 'saida',
+              valor: custoForm.valor,
+              descricao: `Custo: ${custoForm.descricao}`,
+              categoria: 'custo',
+              data: custoForm.data_custo
+            }
+          )
+        } catch (err) {
+          console.error('Erro ao registrar movimentação bancária:', err)
+          toast({
+            title: "Aviso",
+            description: "Custo criado, mas houve erro ao atualizar o saldo bancário",
+            variant: "default"
+          })
+        }
+      }
+
       setCustos([novaCusto, ...(custos || [])])
       setIsCreateDialogOpen(false)
       resetForm()
@@ -556,6 +612,7 @@ export default function ContasPagarPage() {
       valor: 0,
       data_custo: new Date().toISOString().split('T')[0],
       funcionario_id: 'none',
+      conta_bancaria_id: 'none',
       observacoes: ''
     })
     setObraFilter('')
@@ -566,59 +623,57 @@ export default function ContasPagarPage() {
   const marcarComoPago = async (id: number | string) => {
     try {
       const token = getAuthToken()
+      const dataPagamento = new Date().toISOString().split('T')[0]
       
-      // Verificar se é uma nota fiscal (ID começa com "nf_")
+      let response: Response
+
       if (typeof id === 'string' && id.startsWith('nf_')) {
         const notaId = id.replace('nf_', '')
-        const response = await fetch(`${API_URL}/api/notas-fiscais/${notaId}`, {
+        response = await fetch(`${API_URL}/api/notas-fiscais/${notaId}`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            status: 'paga'
-          })
+          body: JSON.stringify({ status: 'paga' })
         })
-
-        if (response.ok) {
-          carregarContas()
-          carregarAlertas()
-          toast({
-            title: "Sucesso",
-            description: "Nota fiscal marcada como paga"
-          })
-        } else {
-          const errorData = await response.json()
-          throw new Error(errorData.message || 'Erro ao marcar nota fiscal como paga')
-        }
-      } else {
-        // É uma conta a pagar normal
-        const response = await fetch(`${API_URL}/api/contas-pagar/${id}/pagar`, {
+      } else if (typeof id === 'string' && id.startsWith('boleto_')) {
+        const boletoId = id.replace('boleto_', '')
+        response = await fetch(`${API_URL}/api/boletos/${boletoId}/pagar`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
           },
-          body: JSON.stringify({
-            data_pagamento: new Date().toISOString().split('T')[0]
-          })
+          body: JSON.stringify({ data_pagamento: dataPagamento })
         })
+      } else {
+        response = await fetch(`${API_URL}/api/contas-pagar/${id}/pagar`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ data_pagamento: dataPagamento })
+        })
+      }
 
-        if (response.ok) {
-          carregarContas()
-          carregarAlertas()
-          toast({
-            title: "Sucesso",
-            description: "Conta marcada como paga"
-          })
-        }
+      if (response.ok) {
+        carregarContas()
+        carregarAlertas()
+        toast({
+          title: "Sucesso",
+          description: "Conta marcada como paga"
+        })
+      } else {
+        const errorData = await response.json()
+        throw new Error(errorData.message || 'Erro ao marcar como pago')
       }
     } catch (error) {
       console.error('Erro ao marcar como pago:', error)
       toast({
         title: "Erro",
-        description: "Erro ao marcar conta como paga",
+        description: error instanceof Error ? error.message : "Erro ao marcar conta como paga",
         variant: "destructive"
       })
     }
@@ -726,7 +781,7 @@ export default function ContasPagarPage() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Total de Custos</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    R$ {totalCustos.toLocaleString('pt-BR')}
+                    {formatarMoeda(totalCustos)}
                   </p>
                 </div>
               </div>
@@ -740,7 +795,7 @@ export default function ContasPagarPage() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Confirmados</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    R$ {totalConfirmados.toLocaleString('pt-BR')}
+                    {formatarMoeda(totalConfirmados)}
                   </p>
                 </div>
               </div>
@@ -754,7 +809,7 @@ export default function ContasPagarPage() {
                 <div className="ml-4">
                   <p className="text-sm font-medium text-gray-600">Pendentes</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    R$ {totalPendentes.toLocaleString('pt-BR')}
+                    {formatarMoeda(totalPendentes)}
                   </p>
                 </div>
               </div>
@@ -1362,6 +1417,26 @@ export default function ContasPagarPage() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="conta_bancaria_id">Conta Bancária (débito)</Label>
+              <Select
+                value={custoForm.conta_bancaria_id}
+                onValueChange={(value) => setCustoForm({ ...custoForm, conta_bancaria_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a conta bancária" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhuma</SelectItem>
+                  {contasBancarias.map(conta => (
+                    <SelectItem key={conta.id} value={conta.id.toString()}>
+                      {conta.nome} - {conta.banco} ({conta.agencia}/{conta.conta}) • Saldo: {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(conta.saldo_atual || 0)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div>

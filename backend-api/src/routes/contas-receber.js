@@ -100,27 +100,22 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
         created_at,
         updated_at,
         cliente:clientes(id, nome, cnpj),
-        // Campos de impostos estaduais
         base_calculo_icms,
         valor_icms,
         base_calculo_icms_st,
         valor_icms_st,
         valor_fcp_st,
-        // Campos de impostos federais
         valor_ipi,
         valor_pis,
         valor_cofins,
         valor_inss,
         valor_ir,
         valor_csll,
-        // Campos de impostos municipais
         base_calculo_issqn,
         valor_issqn,
         aliquota_issqn,
-        // Retenções
         retencoes_federais,
         outras_retencoes,
-        // Outros valores
         valor_frete,
         valor_seguro,
         valor_desconto,
