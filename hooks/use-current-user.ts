@@ -1,13 +1,22 @@
 import { useState, useEffect, useRef } from 'react'
 import { livroGruaApi } from '@/lib/api-livro-grua'
 
+interface ObraResponsavel {
+  responsavel_id: number
+  obra_id: number
+  obra_nome: string
+  obra_status: string
+}
+
 interface CurrentUser {
   id: number
   nome: string
   cargo: string
   role?: string
   email?: string
-  funcionario_id?: number // CORREÇÃO: incluir funcionario_id
+  funcionario_id?: number
+  obras_responsavel?: ObraResponsavel[]
+  is_responsavel_obra?: boolean
   isAdmin?: boolean
   isGestor?: boolean
 }
@@ -41,6 +50,14 @@ export function useCurrentUser() {
           isAdmin: userData.role === 'admin' || userData.cargo?.toLowerCase().includes('admin'),
           isGestor: userData.role === 'gestor' || userData.cargo?.toLowerCase().includes('gestor')
         }
+        
+        console.log('🔍 [useCurrentUser] Dados do usuário:', {
+          id: userWithFlags.id,
+          role: userWithFlags.role,
+          funcionario_id: userWithFlags.funcionario_id,
+          is_responsavel_obra: userWithFlags.is_responsavel_obra,
+          obras_responsavel: userWithFlags.obras_responsavel
+        })
         
         setUser(userWithFlags)
         setDadosIniciaisCarregados(true)

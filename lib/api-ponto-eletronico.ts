@@ -34,6 +34,11 @@ export interface RegistroPonto {
   observacoes?: string;
   justificativa_alteracao?: string;
   assinatura_digital_path?: string;
+  assinatura_responsavel_path?: string;
+  assinatura_responsavel_por?: number;
+  data_assinatura_responsavel?: string;
+  assinatura_funcionario_path?: string;
+  data_assinatura_funcionario?: string;
   updated_at?: string;
   created_at?: string;
   // Novos campos de tipo de dia e feriado
@@ -136,7 +141,7 @@ export const apiRegistrosPonto = {
     search?: string;
     recalcular?: boolean;
     // Novos parâmetros de filtro
-    obra_id?: number;
+    obra_id?: number | string;
     cargo?: string;
     turno?: string;
     horas_extras_min?: number;
@@ -191,6 +196,65 @@ export const apiRegistrosPonto = {
     message: string;
   }> {
     const response = await api.post(`ponto-eletronico/registros/${id}/assinar`, payload);
+    return response.data;
+  },
+
+  async assinarResponsavel(
+    id: string | number,
+    payload: {
+      assinatura_digital: string;
+      observacoes?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: RegistroPonto;
+    message: string;
+  }> {
+    const response = await api.post(`ponto-eletronico/registros/${id}/assinar-responsavel`, payload);
+    return response.data;
+  },
+
+  async assinarFuncionario(
+    id: string | number,
+    payload: {
+      assinatura_digital: string;
+      observacoes?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: RegistroPonto;
+    message: string;
+  }> {
+    const response = await api.post(`ponto-eletronico/registros/${id}/assinar-funcionario`, payload);
+    return response.data;
+  },
+
+  async rejeitarResponsavel(
+    id: string | number,
+    payload: { comentario: string }
+  ): Promise<{
+    success: boolean;
+    data: RegistroPonto;
+    message: string;
+  }> {
+    const response = await api.post(`ponto-eletronico/registros/${id}/rejeitar-responsavel`, payload);
+    return response.data;
+  },
+
+  async corrigirHoras(
+    id: string | number,
+    payload: {
+      entrada?: string;
+      saida_almoco?: string;
+      volta_almoco?: string;
+      saida?: string;
+    }
+  ): Promise<{
+    success: boolean;
+    data: RegistroPonto;
+    message: string;
+  }> {
+    const response = await api.put(`ponto-eletronico/registros/${id}/corrigir-horas`, payload);
     return response.data;
   },
 

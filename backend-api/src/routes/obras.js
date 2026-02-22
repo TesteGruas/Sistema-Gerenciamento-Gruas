@@ -4177,4 +4177,266 @@ router.get('/:obra_id/supervisores/:id', authenticateToken, requirePermission('o
 })
 */
 
+// ==========================================
+// RESPONSÁVEIS DE OBRA
+// ==========================================
+
+const responsavelObraSchema = Joi.object({
+  nome: Joi.string().min(2).required(),
+  usuario: Joi.string().allow('', null).optional(),
+  email: Joi.string().email().allow('', null).optional(),
+  telefone: Joi.string().allow('', null).optional(),
+  ativo: Joi.boolean().optional()
+})
+
+/**
+ * GET /api/obras/:id/responsaveis-obra
+ * Listar responsáveis de uma obra
+ */
+router.get('/:id/responsaveis-obra', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('*')
+      .eq('obra_id', id)
+      .order('created_at', { ascending: true })
+
+    if (error) {
+      console.error('Erro ao buscar responsáveis de obra:', error)
+      return res.status(500).json({ success: false, error: 'Erro ao buscar responsáveis de obra', message: error.message })
+    }
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar responsáveis de obra:', error)
+    res.status(500).json({ success: false, error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * POST /api/obras/:id/responsaveis-obra
+ * Adicionar responsável a uma obra, criar usuário no sistema e enviar email com credenciais
+ */
+router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { error: validationError, value } = responsavelObraSchema.validate(req.body, { stripUnknown: true })
+
+    if (validationError) {
+      return res.status(400).json({ success: false, error: 'Dados inválidos', message: validationError.details[0].message })
+    }
+
+    // Verificar se a obra existe
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome')
+      .eq('id', id)
+      .single()
+
+    if (obraError || !obra) {
+      return res.status(404).json({ success: false, error: 'Obra não encontrada' })
+    }
+
+    // Salvar na tabela responsaveis_obra
+    const { data, error } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .insert({
+        obra_id: parseInt(id),
+        nome: value.nome,
+        usuario: value.usuario || null,
+        email: value.email || null,
+        telefone: value.telefone || null,
+        ativo: value.ativo !== undefined ? value.ativo : true
+      })
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro ao criar responsável de obra:', error)
+      return res.status(500).json({ success: false, error: 'Erro ao criar responsável de obra', message: error.message })
+    }
+
+    // Se o responsável tem email, criar conta de acesso e enviar credenciais
+    let usuarioCriado = null
+    let emailEnviado = false
+
+    if (value.email) {
+      try {
+        // Verificar se já existe usuário com esse email
+        const { data: usuarioExistente } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, email')
+          .eq('email', value.email.toLowerCase())
+          .maybeSingle()
+
+        if (usuarioExistente) {
+          console.log(`ℹ️ Usuário com email ${value.email} já existe no sistema. Pulando criação de conta.`)
+          usuarioCriado = usuarioExistente
+        } else {
+          // Verificar se existe no Supabase Auth
+          const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers()
+          if (authUsers?.users) {
+            const authExistente = authUsers.users.find(u => u.email?.toLowerCase() === value.email.toLowerCase())
+            if (authExistente) {
+              console.log(`⚠️ Email ${value.email} já existe no Auth. Removendo para reutilização...`)
+              await supabaseAdmin.auth.admin.deleteUser(authExistente.id)
+            }
+          }
+
+          // Gerar senha temporária
+          const senhaTemporaria = generateSecurePassword()
+
+          // Criar usuário no Supabase Auth
+          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+            email: value.email,
+            password: senhaTemporaria,
+            email_confirm: true,
+            user_metadata: {
+              nome: value.nome,
+              tipo: 'responsavel_obra'
+            }
+          })
+
+          if (authError) {
+            console.error('Erro ao criar usuário no Auth para responsável de obra:', authError)
+          } else {
+            // Criar na tabela usuarios
+            const { data: novoUsuario, error: novoUsuarioError } = await supabaseAdmin
+              .from('usuarios')
+              .insert({
+                nome: value.nome,
+                email: value.email,
+                telefone: value.telefone || null,
+                status: 'Ativo',
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString()
+              })
+              .select()
+              .single()
+
+            if (novoUsuarioError) {
+              console.error('Erro ao criar registro do usuário:', novoUsuarioError)
+              await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+            } else {
+              usuarioCriado = novoUsuario
+
+              // Atribuir perfil de Cliente (para ter acesso limitado)
+              await supabaseAdmin
+                .from('usuario_perfis')
+                .insert({
+                  usuario_id: novoUsuario.id,
+                  perfil_id: 6,
+                  status: 'Ativa',
+                  data_atribuicao: new Date().toISOString(),
+                  created_at: new Date().toISOString(),
+                  updated_at: new Date().toISOString()
+                })
+                .then(() => console.log(`✅ Perfil atribuído ao responsável de obra: ${value.nome}`))
+                .catch(err => console.error('Erro ao atribuir perfil:', err))
+
+              // Enviar email com credenciais (assíncrono)
+              sendWelcomeEmail({
+                nome: value.nome,
+                email: value.email,
+                senha_temporaria: senhaTemporaria
+              }).then(() => {
+                console.log(`✅ Email de acesso enviado para responsável de obra: ${value.email}`)
+                emailEnviado = true
+              }).catch((emailError) => {
+                console.error(`❌ Erro ao enviar email para ${value.email}:`, emailError)
+              })
+            }
+          }
+        }
+      } catch (userError) {
+        console.error('Erro ao criar conta para responsável de obra (não impede o cadastro):', userError)
+      }
+    }
+
+    res.status(201).json({
+      success: true,
+      data,
+      usuario_criado: !!usuarioCriado,
+      message: usuarioCriado
+        ? `Responsável cadastrado. ${value.email ? 'Email com credenciais de acesso será enviado em breve.' : ''}`
+        : 'Responsável cadastrado com sucesso.'
+    })
+  } catch (error) {
+    console.error('Erro ao adicionar responsável de obra:', error)
+    res.status(500).json({ success: false, error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/obras/:obra_id/responsaveis-obra/:id
+ * Atualizar responsável de uma obra
+ */
+router.put('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { obra_id, id } = req.params
+    const { error: validationError, value } = responsavelObraSchema.validate(req.body, { stripUnknown: true })
+
+    if (validationError) {
+      return res.status(400).json({ success: false, error: 'Dados inválidos', message: validationError.details[0].message })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .update({
+        nome: value.nome,
+        usuario: value.usuario || null,
+        email: value.email || null,
+        telefone: value.telefone || null,
+        ativo: value.ativo !== undefined ? value.ativo : true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .eq('obra_id', obra_id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('Erro ao atualizar responsável de obra:', error)
+      return res.status(500).json({ success: false, error: 'Erro ao atualizar responsável de obra', message: error.message })
+    }
+
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Responsável não encontrado' })
+    }
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao atualizar responsável de obra:', error)
+    res.status(500).json({ success: false, error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * DELETE /api/obras/:obra_id/responsaveis-obra/:id
+ * Remover responsável de uma obra
+ */
+router.delete('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { obra_id, id } = req.params
+
+    const { error } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .delete()
+      .eq('id', id)
+      .eq('obra_id', obra_id)
+
+    if (error) {
+      console.error('Erro ao remover responsável de obra:', error)
+      return res.status(500).json({ success: false, error: 'Erro ao remover responsável de obra', message: error.message })
+    }
+
+    res.json({ success: true, message: 'Responsável removido com sucesso' })
+  } catch (error) {
+    console.error('Erro ao remover responsável de obra:', error)
+    res.status(500).json({ success: false, error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
 export default router

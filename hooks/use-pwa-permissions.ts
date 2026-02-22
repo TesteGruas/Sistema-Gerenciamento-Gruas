@@ -54,8 +54,8 @@ export const usePWAPermissions = () => {
   
   // Determinar role: verificar user_metadata.tipo primeiro, depois role do perfil
   const userRole = useMemo(() => {
-    // Se user_metadata.tipo === 'cliente', mapear para 'Clientes'
-    if (userTipo === 'cliente') {
+    // Se user_metadata.tipo === 'cliente' ou 'responsavel_obra', mapear para 'Clientes'
+    if (userTipo === 'cliente' || userTipo === 'responsavel_obra') {
       return 'Clientes' as RoleName
     }
     

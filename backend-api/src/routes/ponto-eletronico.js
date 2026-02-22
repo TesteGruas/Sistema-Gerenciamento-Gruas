@@ -22,6 +22,7 @@ import {
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
+import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado } from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 import { processarRespostaAlmoco } from '../services/almoco-automatico-service.js';
@@ -524,11 +525,18 @@ router.get('/registros', async (req, res) => {
       });
     }
 
-    // Filtro por obra (através do funcionário)
+    // Filtro por obra (através do funcionário) - suporta múltiplos IDs separados por vírgula
     if (obra_id) {
-      filteredData = filteredData.filter(registro => 
-        registro.funcionario?.obra_atual_id === parseInt(obra_id)
-      );
+      const obraIds = obra_id.toString().split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      if (obraIds.length === 1) {
+        filteredData = filteredData.filter(registro => 
+          registro.funcionario?.obra_atual_id === obraIds[0]
+        );
+      } else if (obraIds.length > 1) {
+        filteredData = filteredData.filter(registro => 
+          obraIds.includes(registro.funcionario?.obra_atual_id)
+        );
+      }
     }
 
     // Filtro por cargo
@@ -1929,6 +1937,34 @@ router.post('/registros', async (req, res) => {
         }
       }
 
+      // Dupla assinatura: se dia foi fechado (saída registrada), notificar responsáveis e alterar status
+      if (saida && registro.entrada && registro.saida) {
+        try {
+          const obraId = registro.obra_id || funcionario.obra_atual_id;
+          if (obraId) {
+            const { data: responsaveisAtivos } = await supabaseAdmin
+              .from('responsaveis_obra')
+              .select('id')
+              .eq('obra_id', obraId)
+              .eq('ativo', true);
+
+            if (responsaveisAtivos && responsaveisAtivos.length > 0) {
+              await supabaseAdmin
+                .from('registros_ponto')
+                .update({ status: 'Pendente Assinatura' })
+                .eq('id', registro.id);
+              registro.status = 'Pendente Assinatura';
+
+              notificarResponsaveisObraPontoConcluido(registro, funcionario)
+                .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
+              console.log(`[ponto-eletronico] Dia fechado — notificação enviada a responsáveis da obra ${obraId}`);
+            }
+          }
+        } catch (errNotif) {
+          console.error('[ponto-eletronico] Erro ao notificar responsáveis (update path):', errNotif);
+        }
+      }
+
       return res.status(200).json({
         success: true,
         data: registro,
@@ -2096,6 +2132,34 @@ router.post('/registros', async (req, res) => {
         }
       } catch (errorHorasExtras) {
         console.error('[ponto-eletronico] Erro ao processar horas extras:', errorHorasExtras);
+      }
+    }
+
+    // Dupla assinatura: se novo registro já veio com saída (dia fechado), notificar responsáveis
+    if (saida && entrada && registro.saida) {
+      try {
+        const obraId = registro.obra_id || funcionario.obra_atual_id;
+        if (obraId) {
+          const { data: responsaveisAtivos } = await supabaseAdmin
+            .from('responsaveis_obra')
+            .select('id')
+            .eq('obra_id', obraId)
+            .eq('ativo', true);
+
+          if (responsaveisAtivos && responsaveisAtivos.length > 0) {
+            await supabaseAdmin
+              .from('registros_ponto')
+              .update({ status: 'Pendente Assinatura' })
+              .eq('id', registro.id);
+            registro.status = 'Pendente Assinatura';
+
+            notificarResponsaveisObraPontoConcluido(registro, funcionario)
+              .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
+            console.log(`[ponto-eletronico] Novo registro com saída — notificação enviada a responsáveis da obra ${obraId}`);
+          }
+        }
+      } catch (errNotif) {
+        console.error('[ponto-eletronico] Erro ao notificar responsáveis (insert path):', errNotif);
       }
     }
 
@@ -4713,6 +4777,411 @@ router.post('/registros/:id/aprovar-assinatura', async (req, res) => {
       success: false,
       message: 'Erro interno do servidor'
     });
+  }
+});
+
+// =========================================================
+// ENDPOINT: Assinatura do RESPONSÁVEL DE OBRA
+// =========================================================
+router.post('/registros/:id/assinar-responsavel', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assinatura_digital, observacoes } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+
+    console.log(`[Assinatura-Responsavel] Iniciando para registro ${id}, usuário ${userId}`);
+
+    if (!assinatura_digital) {
+      return res.status(400).json({ success: false, message: 'Assinatura digital é obrigatória' });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone, user_id)`)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    // Verificar que o usuário é responsável da obra deste registro
+    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    if (!obraId) {
+      return res.status(400).json({ success: false, message: 'Registro sem obra vinculada' });
+    }
+
+    // Buscar o email do usuário logado para verificar se é responsável
+    const { data: usuarioLogado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email, nome')
+      .eq('id', userId)
+      .single();
+
+    if (!usuarioLogado) {
+      return res.status(403).json({ success: false, message: 'Usuário não encontrado' });
+    }
+
+    const { data: responsavel } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id, nome, email, telefone')
+      .eq('obra_id', obraId)
+      .eq('email', usuarioLogado.email)
+      .eq('ativo', true)
+      .single();
+
+    if (!responsavel) {
+      return res.status(403).json({ success: false, message: 'Você não é responsável desta obra' });
+    }
+
+    // Upload assinatura digital
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `assinatura_responsavel_${id}_${timestamp}.png`;
+    const base64Data = assinatura_digital.replace(/^data:image\/png;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('assinaturas-digitais')
+      .upload(fileName, buffer, { contentType: 'image/png', upsert: false });
+
+    if (uploadError) {
+      console.error('[Assinatura-Responsavel] Erro upload:', uploadError);
+      return res.status(500).json({ success: false, message: 'Erro ao salvar assinatura digital' });
+    }
+
+    // Atualizar registro
+    const dadosUpdate = {
+      assinatura_responsavel_path: uploadData.path,
+      assinatura_responsavel_por: userId,
+      data_assinatura_responsavel: new Date().toISOString(),
+      status: 'Pendente Assinatura Funcionário',
+      observacoes: observacoes || registro.observacoes || null,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update(dadosUpdate)
+      .eq('id', id)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone, user_id)`)
+      .single();
+
+    if (errorUpdate) {
+      console.error('[Assinatura-Responsavel] Erro update:', errorUpdate);
+      return res.status(500).json({ success: false, message: 'Erro ao atualizar registro', error: errorUpdate.message });
+    }
+
+    console.log(`✅ [Assinatura-Responsavel] Registro ${id} assinado pelo responsável ${responsavel.nome}`);
+
+    // Notificar funcionário (não bloqueia a resposta)
+    notificarFuncionarioPontoAssinado(
+      registroAtualizado,
+      registroAtualizado.funcionario || { id: registro.funcionario_id },
+      { nome: responsavel.nome || usuarioLogado.nome }
+    ).catch(e => console.error('[Assinatura-Responsavel] Erro notificação funcionário:', e.message));
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Registro assinado pelo responsável com sucesso'
+    });
+
+  } catch (error) {
+    console.error('[Assinatura-Responsavel] Erro:', error);
+    res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
+  }
+});
+
+// =========================================================
+// ENDPOINT: Assinatura do FUNCIONÁRIO (dupla assinatura)
+// =========================================================
+router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assinatura_digital, observacoes } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+
+    console.log(`[Assinatura-Funcionario] Iniciando para registro ${id}, usuário ${userId}`);
+
+    if (!assinatura_digital) {
+      return res.status(400).json({ success: false, message: 'Assinatura digital é obrigatória' });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, user_id)`)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    // Verificar que o responsável já assinou
+    if (!registro.assinatura_responsavel_path) {
+      return res.status(400).json({ success: false, message: 'O responsável ainda não assinou este registro. Aguarde a assinatura do responsável.' });
+    }
+
+    // Verificar que o usuário é o funcionário dono do registro
+    const funcUserId = registro.funcionario?.user_id;
+    const { data: usuarioLogado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, funcionario_id')
+      .eq('id', userId)
+      .single();
+
+    const isFuncionarioDono = (
+      (usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id) ||
+      (funcUserId && funcUserId === userId)
+    );
+
+    if (!isFuncionarioDono) {
+      return res.status(403).json({ success: false, message: 'Você não é o funcionário dono deste registro' });
+    }
+
+    // Upload assinatura digital
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `assinatura_funcionario_${id}_${timestamp}.png`;
+    const base64Data = assinatura_digital.replace(/^data:image\/png;base64,/, '');
+    const buffer = Buffer.from(base64Data, 'base64');
+
+    const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
+      .from('assinaturas-digitais')
+      .upload(fileName, buffer, { contentType: 'image/png', upsert: false });
+
+    if (uploadError) {
+      console.error('[Assinatura-Funcionario] Erro upload:', uploadError);
+      return res.status(500).json({ success: false, message: 'Erro ao salvar assinatura digital' });
+    }
+
+    // Atualizar registro — ambos assinaram = Aprovado
+    const dadosUpdate = {
+      assinatura_funcionario_path: uploadData.path,
+      data_assinatura_funcionario: new Date().toISOString(),
+      status: 'Aprovado',
+      observacoes: observacoes || registro.observacoes || null,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update(dadosUpdate)
+      .eq('id', id)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno)`)
+      .single();
+
+    if (errorUpdate) {
+      console.error('[Assinatura-Funcionario] Erro update:', errorUpdate);
+      return res.status(500).json({ success: false, message: 'Erro ao atualizar registro', error: errorUpdate.message });
+    }
+
+    console.log(`✅ [Assinatura-Funcionario] Registro ${id} assinado pelo funcionário — status: Aprovado`);
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Registro assinado com sucesso! Ambas assinaturas concluídas.'
+    });
+
+  } catch (error) {
+    console.error('[Assinatura-Funcionario] Erro:', error);
+    res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
+  }
+});
+
+// =========================================================
+// ENDPOINT: Rejeição pelo RESPONSÁVEL DE OBRA ("Não Concordo")
+// =========================================================
+router.post('/registros/:id/rejeitar-responsavel', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { comentario } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+
+    console.log(`[Rejeitar-Responsavel] Registro ${id}, usuário ${userId}`);
+
+    if (!comentario || !comentario.trim()) {
+      return res.status(400).json({ success: false, message: 'O comentário é obrigatório para explicar o motivo' });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone, user_id)`)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    // Verificar que o usuário é responsável da obra
+    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    if (!obraId) {
+      return res.status(400).json({ success: false, message: 'Registro sem obra vinculada' });
+    }
+
+    const { data: usuarioLogado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email, nome')
+      .eq('id', userId)
+      .single();
+
+    if (!usuarioLogado) {
+      return res.status(403).json({ success: false, message: 'Usuário não encontrado' });
+    }
+
+    const { data: responsavel } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id, nome, email, telefone')
+      .eq('obra_id', obraId)
+      .eq('email', usuarioLogado.email)
+      .eq('ativo', true)
+      .single();
+
+    if (!responsavel) {
+      return res.status(403).json({ success: false, message: 'Você não é responsável desta obra' });
+    }
+
+    // Atualizar registro para "Pendente Correção"
+    const dadosUpdate = {
+      status: 'Pendente Correção',
+      observacoes: `[Não concordo — ${responsavel.nome || usuarioLogado.nome}]: ${comentario.trim()}`,
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update(dadosUpdate)
+      .eq('id', id)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone, user_id)`)
+      .single();
+
+    if (errorUpdate) {
+      console.error('[Rejeitar-Responsavel] Erro update:', errorUpdate);
+      return res.status(500).json({ success: false, message: 'Erro ao atualizar registro', error: errorUpdate.message });
+    }
+
+    console.log(`[Rejeitar-Responsavel] Registro ${id} rejeitado pelo responsável ${responsavel.nome}`);
+
+    // Notificar funcionário (não bloqueia)
+    notificarFuncionarioPontoRejeitado(
+      registroAtualizado,
+      registroAtualizado.funcionario || { id: registro.funcionario_id },
+      { nome: responsavel.nome || usuarioLogado.nome },
+      comentario.trim()
+    ).catch(e => console.error('[Rejeitar-Responsavel] Erro notificação:', e.message));
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Registro rejeitado. O funcionário será notificado para corrigir as horas.'
+    });
+
+  } catch (error) {
+    console.error('[Rejeitar-Responsavel] Erro:', error);
+    res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
+  }
+});
+
+// =========================================================
+// ENDPOINT: Correção de horas pelo FUNCIONÁRIO após rejeição
+// =========================================================
+router.put('/registros/:id/corrigir-horas', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { entrada, saida_almoco, volta_almoco, saida } = req.body;
+    const userId = req.user?.id || req.user?.userId;
+
+    console.log(`[Corrigir-Horas] Registro ${id}, usuário ${userId}`);
+
+    if (!entrada && !saida_almoco && !volta_almoco && !saida) {
+      return res.status(400).json({ success: false, message: 'Informe pelo menos um horário para corrigir' });
+    }
+
+    // Buscar registro
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, user_id)`)
+      .eq('id', id)
+      .single();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    // Verificar que está em status de correção
+    if (registro.status !== 'Pendente Correção') {
+      return res.status(400).json({ success: false, message: 'Este registro não está pendente de correção' });
+    }
+
+    // Verificar que o usuário é o funcionário dono do registro
+    const { data: usuarioLogado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, funcionario_id')
+      .eq('id', userId)
+      .single();
+
+    const funcUserId = registro.funcionario?.user_id;
+    const isFuncionarioDono = (
+      (usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id) ||
+      (funcUserId && funcUserId === userId)
+    );
+
+    if (!isFuncionarioDono) {
+      return res.status(403).json({ success: false, message: 'Você não é o funcionário dono deste registro' });
+    }
+
+    // Calcular novos valores
+    const novaEntrada = entrada || registro.entrada;
+    const novaSaida = saida || registro.saida;
+    const novaSaidaAlmoco = saida_almoco !== undefined ? saida_almoco : registro.saida_almoco;
+    const novaVoltaAlmoco = volta_almoco !== undefined ? volta_almoco : registro.volta_almoco;
+
+    const horasTrabalhadas = calcularHorasTrabalhadas(novaEntrada, novaSaida, novaSaidaAlmoco, novaVoltaAlmoco);
+    const horasExtras = calcularHorasExtras(novaEntrada, novaSaida, registro.tipo_dia || 'normal', horasTrabalhadas, novaSaidaAlmoco, novaVoltaAlmoco);
+
+    const dadosUpdate = {
+      entrada: novaEntrada,
+      saida_almoco: novaSaidaAlmoco,
+      volta_almoco: novaVoltaAlmoco,
+      saida: novaSaida,
+      horas_trabalhadas: horasTrabalhadas,
+      horas_extras: horasExtras,
+      status: 'Pendente Assinatura',
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update(dadosUpdate)
+      .eq('id', id)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, obra_atual_id)`)
+      .single();
+
+    if (errorUpdate) {
+      console.error('[Corrigir-Horas] Erro update:', errorUpdate);
+      return res.status(500).json({ success: false, message: 'Erro ao atualizar registro', error: errorUpdate.message });
+    }
+
+    console.log(`[Corrigir-Horas] Registro ${id} corrigido — reenviado para assinatura`);
+
+    // Renotificar responsáveis da obra (mesmo fluxo de quando fecha o dia)
+    const funcionario = registroAtualizado.funcionario || { id: registro.funcionario_id, nome: 'Funcionário', obra_atual_id: registro.obra_id };
+    notificarResponsaveisObraPontoConcluido(registroAtualizado, funcionario)
+      .catch(e => console.error('[Corrigir-Horas] Erro notificação responsáveis:', e.message));
+
+    res.json({
+      success: true,
+      data: registroAtualizado,
+      message: 'Horas corrigidas com sucesso! O responsável será notificado novamente.'
+    });
+
+  } catch (error) {
+    console.error('[Corrigir-Horas] Erro:', error);
+    res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
   }
 });
 

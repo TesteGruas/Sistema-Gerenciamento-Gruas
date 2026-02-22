@@ -63,7 +63,12 @@ function getStatusColor(status: string): string {
     case 'Aprovado':
       return 'text-green-600 bg-green-50 border-green-200';
     case 'Pendente Aprovação':
+    case 'Pendente Assinatura':
       return 'text-orange-600 bg-orange-50 border-orange-200';
+    case 'Pendente Assinatura Funcionário':
+      return 'text-blue-600 bg-blue-50 border-blue-200';
+    case 'Pendente Correção':
+      return 'text-red-600 bg-red-50 border-red-200';
     case 'Rejeitado':
       return 'text-red-600 bg-red-50 border-red-200';
     default:
@@ -106,29 +111,25 @@ function converterParaDisplay(registro: RegistroPonto): AprovacaoDisplay {
   // Um registro está assinado se:
   // 1. Tem aprovado_por E data_aprovacao (método antigo com supervisor)
   // 2. OU tem assinatura_digital_path E status é "Aprovado" (método novo sem supervisor)
+  const statusNormalizado = registro.status?.trim() || '';
   let statusAprovacao = 'Pendente Aprovação';
   
-  const foiAssinadoComSupervisor = registro.aprovado_por && registro.data_aprovacao;
-  // Normalizar status para comparação (trim e case-insensitive)
-  const statusNormalizado = registro.status?.trim() || '';
-  const foiAssinadoSemSupervisor = registro.assinatura_digital_path && statusNormalizado.toLowerCase() === 'aprovado';
-  
-  // Debug: log para verificar a lógica
-  if (registro.id === 'REG113199S954') {
-    console.log('🔍 [Aprovações] Debug registro REG113199S954:', {
-      id: registro.id,
-      assinatura_digital_path: registro.assinatura_digital_path,
-      status: registro.status,
-      foiAssinadoSemSupervisor,
-      foiAssinadoComSupervisor
-    });
-  }
-  
-  if (foiAssinadoComSupervisor || foiAssinadoSemSupervisor) {
+  if (statusNormalizado === 'Pendente Assinatura') {
+    statusAprovacao = 'Pendente Assinatura';
+  } else if (statusNormalizado === 'Pendente Assinatura Funcionário') {
+    statusAprovacao = 'Pendente Assinatura Funcionário';
+  } else if (statusNormalizado === 'Pendente Correção') {
+    statusAprovacao = 'Pendente Correção';
+  } else if (statusNormalizado.toLowerCase() === 'aprovado') {
     statusAprovacao = 'Aprovado';
   } else {
-    // Se não foi assinado, sempre é "Pendente Aprovação" para fins de assinatura
-    statusAprovacao = 'Pendente Aprovação';
+    const foiAssinadoComSupervisor = registro.aprovado_por && registro.data_aprovacao;
+    const foiAssinadoSemSupervisor = registro.assinatura_digital_path && statusNormalizado.toLowerCase() === 'aprovado';
+    if (foiAssinadoComSupervisor || foiAssinadoSemSupervisor) {
+      statusAprovacao = 'Aprovado';
+    } else {
+      statusAprovacao = 'Pendente Aprovação';
+    }
   }
   
   return {
@@ -214,11 +215,18 @@ export default function PWAAprovacoesPage() {
 
   // Carregar registros com filtros
   const carregarAprovacoes = async () => {
-    if (loadingUser || !user?.funcionario_id) return;
+    if (loadingUser || !user) return;
+    
+    // Responsável de obra: precisa ter obras vinculadas
+    // Usuário normal: precisa ter funcionario_id
+    const isResponsavel = user.is_responsavel_obra && user.obras_responsavel && user.obras_responsavel.length > 0;
+    if (!isResponsavel && !user.funcionario_id) {
+      setLoading(false);
+      return;
+    }
     
     setLoading(true);
     try {
-      // Preparar parâmetros de filtro
       const params: any = {
         data_inicio: dataInicio,
         data_fim: dataFim,
@@ -230,9 +238,17 @@ export default function PWAAprovacoesPage() {
         params.funcionario_id = parseInt(funcionarioFiltro);
       }
 
+      // Responsável de obra: filtrar pelos IDs das obras que é responsável
+      if (isResponsavel) {
+        const obraIds = user.obras_responsavel!.map(o => o.obra_id).join(',');
+        params.obra_id = obraIds;
+      } else if (user.funcionario_id && !funcionarioFiltro) {
+        // Funcionário normal: mostrar apenas seus próprios registros
+        params.funcionario_id = user.funcionario_id;
+      }
+
       const { data } = await apiRegistrosPonto.listar(params);
       
-      // Converter TODOS os registros para o formato de display
       const aprovacoesConvertidas = data.map(converterParaDisplay);
       
       setAprovacoes(aprovacoesConvertidas);
@@ -244,10 +260,24 @@ export default function PWAAprovacoesPage() {
     }
   };
 
+  // Finalizar loading quando user terminar de carregar mas não tem permissão para ver registros
+  useEffect(() => {
+    if (!loadingUser && !user) {
+      setLoading(false);
+    }
+  }, [loadingUser, user]);
+
   // Carregar registros quando filtros mudarem
   useEffect(() => {
-    if (!loadingUser && user?.funcionario_id && dataInicio && dataFim) {
-      carregarAprovacoes();
+    if (!loadingUser && user && dataInicio && dataFim) {
+      const isResponsavel = user.is_responsavel_obra && user.obras_responsavel && user.obras_responsavel.length > 0;
+      if (isResponsavel || user.funcionario_id) {
+        carregarAprovacoes();
+      } else {
+        setLoading(false);
+      }
+    } else if (!loadingUser) {
+      setLoading(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, loadingUser, dataInicio, dataFim, funcionarioFiltro]);
@@ -255,22 +285,29 @@ export default function PWAAprovacoesPage() {
   // Recarregar quando a página ganhar foco (útil após voltar da página de assinatura)
   useEffect(() => {
     const handleFocus = () => {
-      if (!loadingUser && user?.funcionario_id) {
-        const carregarAprovacoes = async () => {
+      if (!loadingUser && user) {
+        const isResponsavel = user.is_responsavel_obra && user.obras_responsavel && user.obras_responsavel.length > 0;
+        if (!isResponsavel && !user.funcionario_id) return;
+        
+        const recarregar = async () => {
           try {
             const hoje = new Date().toISOString().split('T')[0];
-            const { data } = await apiRegistrosPonto.listar({
+            const params: any = {
               data_inicio: hoje,
               data_fim: hoje,
               limit: 1000
-            });
+            };
+            if (isResponsavel) {
+              params.obra_id = user.obras_responsavel!.map(o => o.obra_id).join(',');
+            }
+            const { data } = await apiRegistrosPonto.listar(params);
             const aprovacoesConvertidas = data.map(converterParaDisplay);
             setAprovacoes(aprovacoesConvertidas);
           } catch (error: any) {
             console.error('Erro ao recarregar aprovações:', error);
           }
         };
-        carregarAprovacoes();
+        recarregar();
       }
     };
 
@@ -279,10 +316,15 @@ export default function PWAAprovacoesPage() {
   }, [user, loadingUser]);
 
   // Separar por status
-  const pendentes = aprovacoes.filter(a => a.status === 'Pendente Aprovação');
+  const pendentes = aprovacoes.filter(a => 
+    a.status === 'Pendente Aprovação' || 
+    a.status === 'Pendente Assinatura' || 
+    a.status === 'Pendente Assinatura Funcionário' ||
+    a.status === 'Pendente Correção'
+  );
   const aprovadas = aprovacoes.filter(a => a.status === 'Aprovado');
   const rejeitadas = aprovacoes.filter(a => a.status === 'Rejeitado');
-  const canceladas: AprovacaoDisplay[] = []; // Canceladas não vêm da API atual
+  const canceladas: AprovacaoDisplay[] = [];
 
   const handleRefresh = async () => {
     await carregarAprovacoes();
@@ -290,12 +332,10 @@ export default function PWAAprovacoesPage() {
 
   const handleVerDetalhes = (aprovacao: AprovacaoDisplay) => {
     console.log('🔍 [Aprovações] Clicou em aprovação:', aprovacao);
-    // Se for aprovação pendente, vai direto para assinatura
-    if (aprovacao.status === 'Pendente Aprovação') {
+    if (aprovacao.status === 'Pendente Aprovação' || aprovacao.status === 'Pendente Assinatura' || aprovacao.status === 'Pendente Assinatura Funcionário' || aprovacao.status === 'Pendente Correção') {
       console.log('🔄 [Aprovações] Redirecionando para assinatura com ID:', aprovacao.id);
       router.push(`/pwa/aprovacao-assinatura?id=${aprovacao.id}`);
     } else {
-      // Se for outro status, mostra detalhes
       setAprovacaoSelecionada(aprovacao);
       setShowDetalhes(true);
     }
@@ -306,7 +346,12 @@ export default function PWAAprovacoesPage() {
       case 'Aprovado':
         return <CheckCircle className="w-5 h-5 text-green-600" />;
       case 'Pendente Aprovação':
+      case 'Pendente Assinatura':
         return <Clock className="w-5 h-5 text-orange-600" />;
+      case 'Pendente Assinatura Funcionário':
+        return <Clock className="w-5 h-5 text-blue-600" />;
+      case 'Pendente Correção':
+        return <XCircle className="w-5 h-5 text-red-600" />;
       case 'Rejeitado':
         return <XCircle className="w-5 h-5 text-red-600" />;
       default:
@@ -319,18 +364,14 @@ export default function PWAAprovacoesPage() {
       case 'Aprovado':
         return 'Aprovado';
       case 'Pendente Aprovação':
-      case 'Pendente':
+      case 'Pendente Assinatura':
         return 'Aguardando Assinatura';
+      case 'Pendente Assinatura Funcionário':
+        return 'Aguardando Assinatura Funcionário';
+      case 'Pendente Correção':
+        return 'Corrigir Horas';
       case 'Rejeitado':
         return 'Rejeitado';
-      case 'Atraso':
-        return 'Aguardando Assinatura';
-      case 'Em Andamento':
-        return 'Aguardando Assinatura';
-      case 'Completo':
-        return 'Aguardando Assinatura';
-      case 'Incompleto':
-        return 'Aguardando Assinatura';
       default:
         return 'Aguardando Assinatura';
     }
@@ -635,8 +676,12 @@ export default function PWAAprovacoesPage() {
                         </p>
                       </div>
                     </div>
-                    <Badge className="bg-orange-50 text-orange-600 border-orange-200">
-                      AGUARDANDO
+                    <Badge className={
+                      aprovacao.status === 'Pendente Assinatura Funcionário'
+                        ? 'bg-blue-50 text-blue-600 border-blue-200'
+                        : 'bg-orange-50 text-orange-600 border-orange-200'
+                    }>
+                      {getStatusText(aprovacao.status)}
                     </Badge>
                   </div>
 
@@ -656,16 +701,23 @@ export default function PWAAprovacoesPage() {
                       <span className="font-medium">{aprovacao.registro.horas_trabalhadas.toFixed(2)}h</span>
                     </div>
 
-                    <div className="bg-orange-50 border border-orange-200 rounded p-2">
+                    <div className={`border rounded p-2 ${
+                      aprovacao.status === 'Pendente Assinatura Funcionário'
+                        ? 'bg-blue-50 border-blue-200'
+                        : 'bg-orange-50 border-orange-200'
+                    }`}>
                       <div className="flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-orange-600" />
-                        <span className="text-xs text-orange-800 font-medium">
-                          Aguardando aprovação do supervisor
+                        <AlertTriangle className={`w-4 h-4 ${
+                          aprovacao.status === 'Pendente Assinatura Funcionário' ? 'text-blue-600' : 'text-orange-600'
+                        }`} />
+                        <span className={`text-xs font-medium ${
+                          aprovacao.status === 'Pendente Assinatura Funcionário' ? 'text-blue-800' : 'text-orange-800'
+                        }`}>
+                          {aprovacao.status === 'Pendente Assinatura Funcionário'
+                            ? 'Responsável já assinou — aguardando sua assinatura'
+                            : 'Aguardando assinatura do responsável'}
                         </span>
                       </div>
-                      <p className="text-xs text-orange-700 mt-1">
-                        Prazo limite: {formatarDataHora(aprovacao.data_limite)}
-                      </p>
                     </div>
                   </div>
                 </Card>

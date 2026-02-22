@@ -513,8 +513,23 @@ function PWALayoutContent({ children }: PWALayoutProps) {
 
   const isSupervisorUser = verificarSeSupervisor()
   
-  // Se for cliente, usar apenas Documentos, Home e Perfil (sem Ponto e Espelho)
-  const isClientUser = isClientRole()
+  // Verificar se é responsável de obra (tipo especial de cliente que aprova horas)
+  const isResponsavelObraUser = (() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        const ud = JSON.parse(userDataStr)
+        const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
+        return tipo === 'responsavel_obra'
+      }
+    } catch { /* ignore */ }
+    return false
+  })()
+
+  // Se for cliente (mas NÃO responsavel_obra), usar layout de cliente
+  // Responsável de obra usa layout de supervisor (com Aprovações)
+  const isClientUser = isClientRole() && !isResponsavelObraUser
   
   // Se for cliente, usar Documentos, Medições, Home e Perfil
   const essentialNavItems = isClientUser ? [

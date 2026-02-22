@@ -54,6 +54,7 @@ export default function PWAMainPage() {
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
+  const [registrosPendentesAssinatura, setRegistrosPendentesAssinatura] = useState<number>(0)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -104,14 +105,30 @@ export default function PWAMainPage() {
                          pwaUserData.user?.role || 
                          pwaUserData.user?.cargo
 
+  // Verificar se é responsável de obra (via user_metadata.tipo)
+  const isResponsavelObra = useMemo(() => {
+    if (typeof window === 'undefined') return false
+    try {
+      const userDataStr = localStorage.getItem('user_data')
+      if (userDataStr) {
+        const ud = JSON.parse(userDataStr)
+        const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
+        return tipo === 'responsavel_obra'
+      }
+    } catch { /* ignore */ }
+    return false
+  }, [])
+
   // Função auxiliar para verificar se é cliente/dono da obra (quem aprova horas extras)
   // Supervisor não é mais um cargo, é uma atribuição. Quem aprova horas extras é o cliente da obra.
   const isSupervisorUser = useMemo(() => {
     if (typeof window === 'undefined') return false
     
     try {
+      // Responsável de obra é tratado como cliente
+      if (isResponsavelObra) return true
+
       // Verificar se é cliente (level 1 ou role cliente)
-      // Clientes são quem aprovam horas extras como donos das obras
       const userLevel = parseInt(localStorage.getItem('user_level') || '0', 10)
       const hookRole = userRole?.toLowerCase() || ''
       const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
@@ -139,7 +156,7 @@ export default function PWAMainPage() {
       console.error('Erro ao verificar se é cliente/supervisor:', error)
       return false
     }
-  }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role])
+  }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role, isResponsavelObra])
 
   // Função de navegação direta
   const handleNavigation = (href: string) => {
@@ -274,6 +291,34 @@ export default function PWAMainPage() {
 
     verificarObraAtiva()
   }, [pwaUserData.user])
+
+  // Buscar registros pendentes de assinatura do funcionário (dupla assinatura)
+  useEffect(() => {
+    const verificarPendentesAssinatura = async () => {
+      if (typeof window === 'undefined' || isResponsavelObra) return
+      try {
+        const funcionarioId = await getFuncionarioIdWithFallback()
+        if (!funcionarioId) return
+
+        const hoje = new Date()
+        const trintaDiasAtras = new Date(hoje)
+        trintaDiasAtras.setDate(trintaDiasAtras.getDate() - 30)
+
+        const { data } = await pontoApi.apiRegistrosPonto.listar({
+          funcionario_id: funcionarioId,
+          data_inicio: trintaDiasAtras.toISOString().split('T')[0],
+          data_fim: hoje.toISOString().split('T')[0],
+          limit: 100
+        })
+
+        const pendentes = data.filter(r => r.status === 'Pendente Assinatura Funcionário' || r.status === 'Pendente Correção')
+        setRegistrosPendentesAssinatura(pendentes.length)
+      } catch (e) {
+        console.warn('[PWA] Erro ao verificar pendentes de assinatura:', e)
+      }
+    }
+    verificarPendentesAssinatura()
+  }, [isResponsavelObra])
 
   // Autenticação é gerenciada pelo PWAAuthGuard no layout
 
@@ -969,7 +1014,7 @@ export default function PWAMainPage() {
                 if (userDataStr) {
                   const userData = JSON.parse(userDataStr)
                   const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-                  if (tipo === 'cliente') return true
+                  if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
                 }
               } catch (error) {
                 // Ignorar erro
@@ -1017,7 +1062,7 @@ export default function PWAMainPage() {
             if (userDataStr) {
               const userData = JSON.parse(userDataStr)
               const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-              if (tipo === 'cliente') return true
+              if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
             }
           } catch (error) {
             // Ignorar erro
@@ -1079,6 +1124,31 @@ export default function PWAMainPage() {
         )
       })()}
 
+      {/* Alerta: registros pendentes de assinatura do funcionário */}
+      {registrosPendentesAssinatura > 0 && !isResponsavelObra && (
+        <Card 
+          className="border-orange-300 bg-orange-50 cursor-pointer hover:shadow-md transition-shadow"
+          onClick={() => router.push('/pwa/aprovacoes')}
+        >
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
+                <FileSignature className="w-5 h-5 text-orange-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-orange-900 text-sm">
+                  {registrosPendentesAssinatura} registro{registrosPendentesAssinatura > 1 ? 's' : ''} pendente{registrosPendentesAssinatura > 1 ? 's' : ''}
+                </h3>
+                <p className="text-xs text-orange-700 mt-0.5">
+                  Toque para assinar ou corrigir seus registros de ponto.
+                </p>
+              </div>
+              <ChevronRight className="w-5 h-5 text-orange-400" />
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Ações Rápidas - Filtradas por permissões */}
       <div>
         <div className="grid grid-cols-2 gap-3">
@@ -1095,7 +1165,7 @@ export default function PWAMainPage() {
                   if (userDataStr) {
                     const userData = JSON.parse(userDataStr)
                     const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-                    if (tipo === 'cliente') return true
+                    if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
                   }
                 } catch (error) {
                   // Ignorar erro
@@ -1207,8 +1277,14 @@ export default function PWAMainPage() {
                 return true
               }
               
-              // Filtrar Aprovações - apenas Supervisor para cima (NÃO para Operador)
+              // Filtrar Aprovações - Supervisor para cima, Responsável de obra, ou funcionário com pendentes
               if (action.requiresSupervisor) {
+                // Responsável de obra sempre pode ver aprovações
+                if (isResponsavelObra) return true
+
+                // Funcionário com registros pendentes de assinatura
+                if (registrosPendentesAssinatura > 0) return true
+
                 // Obter cargo do user_metadata (mais confiável que perfil)
                 let cargoFromMetadata: string | null = null
                 try {
@@ -1291,8 +1367,6 @@ export default function PWAMainPage() {
                   role === 'admin' || 
                   role === 'administrador'
                 )
-                
-                return canSee
                 
                 return canSee
               }

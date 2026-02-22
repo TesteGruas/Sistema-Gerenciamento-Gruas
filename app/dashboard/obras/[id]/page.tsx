@@ -47,7 +47,10 @@ import {
   XCircle,
   Check,
   Loader2,
-  Settings
+  Settings,
+  UserCheck,
+  Phone,
+  Mail
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -86,6 +89,7 @@ import { sinaleirosApi, type SinaleiroBackend, type DocumentoSinaleiroBackend } 
 import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
 import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
+import { responsaveisObraApi, type ResponsavelObra, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
 
 function ObraDetailsPageContent() {
 
@@ -191,6 +195,20 @@ function ObraDetailsPageContent() {
   const [responsaveisAdicionais, setResponsaveisAdicionais] = useState<Array<ResponsavelTecnicoData & { tipo?: string; area?: string }>>([])
   const [responsaveisTecnicosExistentes, setResponsaveisTecnicosExistentes] = useState<any[]>([])
   const [loadingResponsaveisTecnicos, setLoadingResponsaveisTecnicos] = useState(false)
+  
+  // Estado para responsáveis de obra (aprovadores de horas)
+  const [responsaveisObra, setResponsaveisObra] = useState<ResponsavelObra[]>([])
+  const [loadingResponsaveisObra, setLoadingResponsaveisObra] = useState(false)
+  const [isModalResponsavelObraOpen, setIsModalResponsavelObraOpen] = useState(false)
+  const [editandoResponsavelObra, setEditandoResponsavelObra] = useState<ResponsavelObra | null>(null)
+  const [salvandoResponsavelObra, setSalvandoResponsavelObra] = useState(false)
+  const [formResponsavelObra, setFormResponsavelObra] = useState<ResponsavelObraCreateData>({
+    nome: '',
+    usuario: '',
+    email: '',
+    telefone: ''
+  })
+  const responsaveisObraCarregadosRef = useRef(false)
   
   // Estados para devolução de componentes
   const [componentesDevolucao, setComponentesDevolucao] = useState<Array<ComponenteGrua & { grua_nome?: string }>>([])
@@ -534,6 +552,79 @@ function ObraDetailsPageContent() {
       sinaleirosCarregadosRef.current = true // Marcar como carregado mesmo em caso de erro
     } finally {
       setLoadingSinaleiros(false)
+    }
+  }
+
+  // Funções para responsáveis de obra
+  const carregarResponsaveisObra = async () => {
+    if (!obraId) return
+    setLoadingResponsaveisObra(true)
+    try {
+      const response = await responsaveisObraApi.listar(parseInt(obraId))
+      if (response.success) {
+        setResponsaveisObra(response.data || [])
+      }
+      responsaveisObraCarregadosRef.current = true
+    } catch (error: any) {
+      console.error('Erro ao carregar responsáveis de obra:', error)
+      responsaveisObraCarregadosRef.current = true
+    } finally {
+      setLoadingResponsaveisObra(false)
+    }
+  }
+
+  const abrirModalResponsavelObra = (responsavel?: ResponsavelObra) => {
+    if (responsavel) {
+      setEditandoResponsavelObra(responsavel)
+      setFormResponsavelObra({
+        nome: responsavel.nome,
+        usuario: responsavel.usuario || '',
+        email: responsavel.email || '',
+        telefone: responsavel.telefone || ''
+      })
+    } else {
+      setEditandoResponsavelObra(null)
+      setFormResponsavelObra({ nome: '', pedido: '', usuario: '', email: '', telefone: '' })
+    }
+    setIsModalResponsavelObraOpen(true)
+  }
+
+  const salvarResponsavelObra = async () => {
+    if (!obraId || !formResponsavelObra.nome.trim()) {
+      toast({ title: "Erro", description: "O nome é obrigatório", variant: "destructive" })
+      return
+    }
+    setSalvandoResponsavelObra(true)
+    try {
+      if (editandoResponsavelObra) {
+        await responsaveisObraApi.atualizar(parseInt(obraId), editandoResponsavelObra.id, formResponsavelObra)
+        toast({ title: "Sucesso", description: "Responsável atualizado com sucesso" })
+      } else {
+        const resultado = await responsaveisObraApi.criar(parseInt(obraId), formResponsavelObra)
+        const msg = resultado.message || "Responsável cadastrado com sucesso"
+        toast({ title: "Sucesso", description: msg })
+      }
+      setIsModalResponsavelObraOpen(false)
+      setEditandoResponsavelObra(null)
+      setFormResponsavelObra({ nome: '', usuario: '', email: '', telefone: '' })
+      await carregarResponsaveisObra()
+    } catch (error: any) {
+      console.error('Erro ao salvar responsável de obra:', error)
+      toast({ title: "Erro", description: error.message || "Erro ao salvar responsável", variant: "destructive" })
+    } finally {
+      setSalvandoResponsavelObra(false)
+    }
+  }
+
+  const removerResponsavelObra = async (id: number) => {
+    if (!obraId) return
+    try {
+      await responsaveisObraApi.remover(parseInt(obraId), id)
+      toast({ title: "Sucesso", description: "Responsável removido com sucesso" })
+      await carregarResponsaveisObra()
+    } catch (error: any) {
+      console.error('Erro ao remover responsável de obra:', error)
+      toast({ title: "Erro", description: error.message || "Erro ao remover responsável", variant: "destructive" })
     }
   }
 
@@ -2711,7 +2802,8 @@ function ObraDetailsPageContent() {
           carregarArquivos(),
           carregarDocumentosAdicionaisEquipamento(),
           carregarTodosResponsaveisTecnicos(),
-          carregarSinaleiros()
+          carregarSinaleiros(),
+          carregarResponsaveisObra()
         ])
       }
     }
@@ -3971,6 +4063,173 @@ useEffect(() => {
                 )}
               </CardContent>
             </Card>
+
+            {/* Responsáveis de Obra */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    Responsáveis de Obra ({responsaveisObra.length})
+                  </CardTitle>
+                  <Button
+                    size="sm"
+                    onClick={() => abrirModalResponsavelObra()}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Responsável
+                  </Button>
+                </div>
+                <CardDescription>
+                  Responsáveis com acesso para aprovar as horas dos funcionários desta obra
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {loadingResponsaveisObra ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                    <span className="ml-2 text-sm text-gray-500">Carregando responsáveis...</span>
+                  </div>
+                ) : responsaveisObra.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <UserCheck className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">Nenhum responsável cadastrado</p>
+                    <p className="text-xs text-gray-400 mt-1">Adicione responsáveis para aprovar horas dos funcionários</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Usuário</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {responsaveisObra.map((responsavel) => (
+                          <TableRow key={responsavel.id}>
+                            <TableCell className="font-medium">{responsavel.nome}</TableCell>
+                            <TableCell>{responsavel.usuario || '-'}</TableCell>
+                            <TableCell>
+                              {responsavel.email ? (
+                                <div className="flex items-center gap-1">
+                                  <Mail className="w-3 h-3 text-gray-400" />
+                                  <span className="text-sm">{responsavel.email}</span>
+                                </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {responsavel.telefone ? (
+                                <div className="flex items-center gap-1">
+                                  <Phone className="w-3 h-3 text-gray-400" />
+                                  <span className="text-sm">{responsavel.telefone}</span>
+                                </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => abrirModalResponsavelObra(responsavel)}
+                                  title="Editar"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    if (confirm('Deseja remover este responsável?')) {
+                                      removerResponsavelObra(responsavel.id)
+                                    }
+                                  }}
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Modal para adicionar/editar responsável de obra */}
+            <Dialog open={isModalResponsavelObraOpen} onOpenChange={setIsModalResponsavelObraOpen}>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editandoResponsavelObra ? 'Editar Responsável de Obra' : 'Novo Responsável de Obra'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editandoResponsavelObra 
+                      ? 'Atualize os dados do responsável' 
+                      : 'Cadastre um responsável para aprovar horas dos funcionários desta obra'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label htmlFor="resp-nome">Nome *</Label>
+                    <Input
+                      id="resp-nome"
+                      value={formResponsavelObra.nome}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, nome: e.target.value })}
+                      placeholder="Nome do responsável"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="resp-usuario">Usuário</Label>
+                    <Input
+                      id="resp-usuario"
+                      value={formResponsavelObra.usuario || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, usuario: e.target.value })}
+                      placeholder="Nome de usuário"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="resp-email">Email</Label>
+                    <Input
+                      id="resp-email"
+                      type="email"
+                      value={formResponsavelObra.email || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, email: e.target.value })}
+                      placeholder="email@exemplo.com"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="resp-telefone">Telefone</Label>
+                    <Input
+                      id="resp-telefone"
+                      value={formResponsavelObra.telefone || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, telefone: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsModalResponsavelObraOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button onClick={salvarResponsavelObra} disabled={salvandoResponsavelObra}>
+                    {salvandoResponsavelObra && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                    {editandoResponsavelObra ? 'Salvar Alterações' : 'Cadastrar'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
         </TabsContent>
 

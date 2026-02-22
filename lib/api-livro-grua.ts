@@ -416,7 +416,16 @@ export const livroGruaApi = {
   /**
    * Obter dados do funcionário logado
    */
-  async obterFuncionarioLogado(): Promise<{ id: number; nome: string; cargo: string; role?: string; email?: string; funcionario_id?: number }> {
+  async obterFuncionarioLogado(): Promise<{
+    id: number;
+    nome: string;
+    cargo: string;
+    role?: string;
+    email?: string;
+    funcionario_id?: number;
+    obras_responsavel?: Array<{ responsavel_id: number; obra_id: number; obra_nome: string; obra_status: string }>;
+    is_responsavel_obra?: boolean;
+  }> {
     const response = await httpRequest('/auth/me')
     
     // O endpoint retorna: { success: true, data: { user: {...}, profile: {...}, perfil: {...} } }
@@ -432,7 +441,9 @@ export const livroGruaApi = {
       cargo: userData.cargo || userData.role || 'Funcionário',
       role: userData.role || userData.perfil?.nome,
       email: userData.email,
-      funcionario_id: userData.funcionario_id // CORREÇÃO: incluir funcionario_id
+      funcionario_id: userData.funcionario_id,
+      obras_responsavel: response.data.obras_responsavel || userData.obras_responsavel || [],
+      is_responsavel_obra: userData.is_responsavel_obra || false
     }
   },
 

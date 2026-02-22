@@ -606,13 +606,40 @@ router.get('/me', authenticateToken, async (req, res) => {
       }
     }
 
+    // Verificar se o usuário é responsável de obra
+    let obrasResponsavel = []
+    if (profile?.email) {
+      const { data: responsaveisData, error: responsaveisError } = await supabaseAdmin
+        .from('responsaveis_obra')
+        .select('id, obra_id, nome, ativo, obras(id, nome, status)')
+        .eq('email', profile.email)
+        .eq('ativo', true)
+
+      if (responsaveisError) {
+        console.error('❌ Erro ao buscar responsaveis_obra:', responsaveisError)
+      }
+
+      console.log(`🔍 Responsaveis obra para ${profile.email}:`, responsaveisData?.length || 0, 'registros')
+
+      if (responsaveisData && responsaveisData.length > 0) {
+        obrasResponsavel = responsaveisData.map(r => ({
+          responsavel_id: r.id,
+          obra_id: r.obra_id,
+          obra_nome: r.obras?.nome || '',
+          obra_status: r.obras?.status || ''
+        }))
+      }
+    }
+
     // Preparar objeto user com informações adicionais
     const userData = {
       ...req.user,
       id: profile?.id || req.user.id,
       role: role || req.user.role,
       level: level,
-      permissions: permissoes.map(p => p.nome)
+      permissions: permissoes.map(p => p.nome),
+      obras_responsavel: obrasResponsavel,
+      is_responsavel_obra: obrasResponsavel.length > 0
     }
 
     res.json({
@@ -623,7 +650,8 @@ router.get('/me', authenticateToken, async (req, res) => {
         perfil: perfilData,
         role: role,
         level: level,
-        permissoes: permissoes
+        permissoes: permissoes,
+        obras_responsavel: obrasResponsavel
       }
     })
   } catch (error) {
