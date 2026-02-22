@@ -1753,30 +1753,28 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
         </div>
       </div>
 
-      {/* Conta Bancária para débito */}
-      {formData.status === 'pago' && (
-        <div>
-          <Label htmlFor="contaBancaria">Conta Bancária (débito)</Label>
-          <Select
-            value={formData.contaBancariaId}
-            onValueChange={(value) => setFormData({ ...formData, contaBancariaId: value })}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Selecione a conta para débito" />
-            </SelectTrigger>
-            <SelectContent>
-              {contasBancarias.map((conta: any) => (
-                <SelectItem key={conta.id} value={String(conta.id)}>
-                  {conta.banco} - Ag: {conta.agencia} / CC: {conta.conta} (Saldo: R$ {parseFloat(conta.saldo_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {contasBancarias.length === 0 && (
-            <p className="text-sm text-muted-foreground mt-1">Nenhuma conta bancária ativa encontrada</p>
-          )}
-        </div>
-      )}
+      {/* Conta Bancária para débito - sempre visível */}
+      <div>
+        <Label htmlFor="contaBancaria">Conta Bancária (débito)</Label>
+        <Select
+          value={formData.contaBancariaId}
+          onValueChange={(value) => setFormData({ ...formData, contaBancariaId: value })}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Selecione a conta para débito" />
+          </SelectTrigger>
+          <SelectContent>
+            {contasBancarias.map((conta: any) => (
+              <SelectItem key={conta.id} value={String(conta.id)}>
+                {conta.banco} - Ag: {conta.agencia} / CC: {conta.conta} (Saldo: R$ {parseFloat(conta.saldo_atual || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {contasBancarias.length === 0 && (
+          <p className="text-sm text-muted-foreground mt-1">Nenhuma conta bancária ativa encontrada</p>
+        )}
+      </div>
 
       {/* Upload de Arquivo */}
       <div>
