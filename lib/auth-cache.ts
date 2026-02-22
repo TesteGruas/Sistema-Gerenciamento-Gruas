@@ -194,6 +194,11 @@ class AuthCache {
             if (data.data?.profile) {
               parsedUserData.profile = data.data.profile
             }
+            // Atualizar obras_responsavel se disponível (responsável de obra)
+            if (data.data?.obras_responsavel) {
+              parsedUserData.obras_responsavel = data.data.obras_responsavel
+              parsedUserData.is_responsavel_obra = data.data.obras_responsavel.length > 0
+            }
             localStorage.setItem('user_data', JSON.stringify(parsedUserData))
             console.log(`🔐 user_data atualizado: id=${profileId}, role=${data.data?.role}, level=${data.data?.level}, funcionario_id=${funcionarioId}`)
           } catch (e) {
@@ -213,6 +218,8 @@ class AuthCache {
               ...(data.data?.user?.user_metadata || {})
             },
             profile: data.data?.profile || null,
+            obras_responsavel: data.data?.obras_responsavel || null,
+            is_responsavel_obra: (data.data?.obras_responsavel?.length || 0) > 0,
             ...userData
           }
           localStorage.setItem('user_data', JSON.stringify(newUserData))
