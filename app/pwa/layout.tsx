@@ -635,11 +635,16 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
   // Para o menu lateral (drawer), separar em "Principal" e "Mais"
+  // Filtrar itens irrelevantes para responsável de obra (não é funcionário)
+  const hiddenForResponsavel = ['/pwa/ponto', '/pwa/espelho-ponto', '/pwa/documentos', '/pwa/holerites']
+  const filterResponsavel = (items: typeof priorityItems) =>
+    isResponsavelObraUser ? items.filter(i => !hiddenForResponsavel.includes(i.href)) : items
+
   // Itens principais para o drawer (mesmos da prioridade)
-  const drawerMainItems = priorityItems
+  const drawerMainItems = filterResponsavel(priorityItems)
   
   // Demais itens para o drawer (outros + sempre visíveis)
-  const drawerSideItems = [...otherItems, ...alwaysVisibleItems]
+  const drawerSideItems = filterResponsavel([...otherItems, ...alwaysVisibleItems])
 
   // noLayoutPaths e shouldShowLayout já foram declarados acima
 
