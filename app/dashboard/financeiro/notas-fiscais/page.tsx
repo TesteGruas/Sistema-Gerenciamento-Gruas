@@ -1510,6 +1510,344 @@ export default function NotasFiscaisPage() {
     })
   }
 
+  // Função para parsear XML de NFe e preencher o formulário automaticamente
+  const parseNFeXML = async (file: File) => {
+    try {
+      const text = await file.text()
+      const parser = new DOMParser()
+      const xmlDoc = parser.parseFromString(text, 'text/xml')
+
+      const parserError = xmlDoc.querySelector('parsererror')
+      if (parserError) {
+        toast({
+          title: "Erro no XML",
+          description: "O arquivo XML não é válido ou está corrompido",
+          variant: "destructive"
+        })
+        return
+      }
+
+      // Helper: busca tag considerando namespace
+      const getTagValue = (parent: Element | Document, tagName: string): string => {
+        const el = parent.getElementsByTagNameNS('*', tagName)[0] ||
+                   parent.getElementsByTagName(tagName)[0]
+        return el?.textContent?.trim() || ''
+      }
+
+      const getTagElement = (parent: Element | Document, tagName: string): Element | null => {
+        return parent.getElementsByTagNameNS('*', tagName)[0] ||
+               parent.getElementsByTagName(tagName)[0] || null
+      }
+
+      // Verificar se é um XML de NFe válido
+      const infNFe = getTagElement(xmlDoc, 'infNFe')
+      if (!infNFe) {
+        toast({
+          title: "XML inválido",
+          description: "Este arquivo não parece ser um XML de NFe válido",
+          variant: "destructive"
+        })
+        return
+      }
+
+      const ide = getTagElement(infNFe, 'ide')
+      const dest = getTagElement(infNFe, 'dest')
+      const emit = getTagElement(infNFe, 'emit')
+      const totalEl = getTagElement(infNFe, 'total')
+      const pagEl = getTagElement(infNFe, 'pag')
+      const infAdic = getTagElement(infNFe, 'infAdic')
+
+      // === Dados do Cabeçalho ===
+      const nNF = ide ? getTagValue(ide, 'nNF') : ''
+      const serie = ide ? getTagValue(ide, 'serie') : ''
+      const tpNF = ide ? getTagValue(ide, 'tpNF') : ''
+      const dhEmi = ide ? getTagValue(ide, 'dhEmi') : ''
+      const natOp = ide ? getTagValue(ide, 'natOp') : ''
+
+      const dataEmissao = dhEmi ? dhEmi.split('T')[0] : new Date().toISOString().split('T')[0]
+
+      // Valor total
+      const icmsTot = totalEl ? getTagElement(totalEl, 'ICMSTot') : null
+      const vNF = icmsTot ? getTagValue(icmsTot, 'vNF') : '0'
+
+      // Chave de acesso
+      const chaveAcesso = infNFe.getAttribute('Id')?.replace('NFe', '') || ''
+
+      // Data de vencimento (duplicatas)
+      let dataVencimento = ''
+      const cobr = getTagElement(infNFe, 'cobr')
+      if (cobr) {
+        const dup = getTagElement(cobr, 'dup')
+        if (dup) {
+          dataVencimento = getTagValue(dup, 'dVenc')
+        }
+      }
+
+      // Forma de pagamento
+      let formaPagamentoXML = ''
+      if (pagEl) {
+        const detPag = getTagElement(pagEl, 'detPag')
+        if (detPag) {
+          const tPag = getTagValue(detPag, 'tPag')
+          switch (tPag) {
+            case '01': formaPagamentoXML = 'dinheiro'; break
+            case '02': formaPagamentoXML = 'cheque'; break
+            case '03': case '04': formaPagamentoXML = 'cartao_credito'; break
+            case '05': formaPagamentoXML = 'cartao_credito'; break
+            case '10': case '11': case '12': case '13': formaPagamentoXML = 'cartao_debito'; break
+            case '15': formaPagamentoXML = 'boleto'; break
+            case '17': formaPagamentoXML = 'pix'; break
+            case '16': formaPagamentoXML = 'transferencia'; break
+            case '90': formaPagamentoXML = ''; break // sem pagamento
+            default: formaPagamentoXML = ''; break
+          }
+        }
+      }
+
+      // Observações
+      const observacoes = infAdic ? getTagValue(infAdic, 'infCpl') : ''
+
+      // Determinar tipo (saída/entrada)
+      const tipoNota = tpNF === '1' ? 'saida' : 'entrada'
+
+      // Tipo de nota fiscal: NFe eletrônica por padrão quando vem de XML
+      const tipoNotaCategoria = 'nfe_eletronica'
+
+      // === Preencher FormData ===
+      const dadosXML: NotaFiscalCreate = {
+        numero_nf: nNF,
+        serie: serie,
+        data_emissao: dataEmissao,
+        data_vencimento: dataVencimento,
+        valor_total: parseFloat(vNF) || 0,
+        tipo: tipoNota as 'entrada' | 'saida',
+        status: 'pendente',
+        tipo_nota: tipoNotaCategoria,
+        eletronica: true,
+        chave_acesso: chaveAcesso,
+        observacoes: observacoes
+      }
+
+      // === Buscar cliente/fornecedor pelo CNPJ ===
+      if (tipoNota === 'saida' && dest) {
+        const cnpjDest = getTagValue(dest, 'CNPJ')
+        const cpfDest = getTagValue(dest, 'CPF')
+        const docDest = cnpjDest || cpfDest
+
+        if (docDest) {
+          const docLimpo = docDest.replace(/\D/g, '')
+          const clienteEncontrado = clientes.find(c => {
+            const cnpjCliente = (c.cnpj || '').replace(/\D/g, '')
+            return cnpjCliente === docLimpo
+          })
+          if (clienteEncontrado) {
+            dadosXML.cliente_id = clienteEncontrado.id
+          } else {
+            const nomeDest = getTagValue(dest, 'xNome')
+            toast({
+              title: "Cliente não encontrado",
+              description: `Nenhum cliente com CNPJ/CPF ${docDest} encontrado. Nome no XML: "${nomeDest}". Selecione manualmente.`,
+              variant: "default"
+            })
+          }
+        }
+      } else if (tipoNota === 'entrada' && emit) {
+        const cnpjEmit = getTagValue(emit, 'CNPJ')
+        const cpfEmit = getTagValue(emit, 'CPF')
+        const docEmit = cnpjEmit || cpfEmit
+
+        if (docEmit) {
+          const docLimpo = docEmit.replace(/\D/g, '')
+          const fornecedorEncontrado = fornecedores.find(f => {
+            const cnpjFornecedor = (f.cnpj || '').replace(/\D/g, '')
+            return cnpjFornecedor === docLimpo
+          })
+          if (fornecedorEncontrado) {
+            dadosXML.fornecedor_id = fornecedorEncontrado.id
+          } else {
+            const nomeEmit = getTagValue(emit, 'xNome')
+            toast({
+              title: "Fornecedor não encontrado",
+              description: `Nenhum fornecedor com CNPJ/CPF ${docEmit} encontrado. Nome no XML: "${nomeEmit}". Selecione manualmente.`,
+              variant: "default"
+            })
+          }
+        }
+      }
+
+      setFormData(dadosXML)
+      if (formaPagamentoXML) {
+        setFormaPagamento(formaPagamentoXML)
+        setCriarBoleto(formaPagamentoXML === 'boleto')
+      }
+
+      // === Itens da Nota ===
+      const detElements = infNFe.getElementsByTagNameNS('*', 'det')
+      const detFallback = detElements.length > 0 ? detElements : infNFe.getElementsByTagName('det')
+      const itensXML: NotaFiscalItem[] = []
+
+      for (let i = 0; i < detFallback.length; i++) {
+        const det = detFallback[i]
+        const prod = getTagElement(det, 'prod')
+        const impostoEl = getTagElement(det, 'imposto')
+        if (!prod) continue
+
+        const qCom = parseFloat(getTagValue(prod, 'qCom')) || 1
+        const vUnCom = parseFloat(getTagValue(prod, 'vUnCom')) || 0
+        const vProd = parseFloat(getTagValue(prod, 'vProd')) || qCom * vUnCom
+
+        // Extrair CSOSN ou CST do ICMS
+        let csosn = ''
+        if (impostoEl) {
+          const icmsEl = getTagElement(impostoEl, 'ICMS')
+          if (icmsEl) {
+            csosn = getTagValue(icmsEl, 'CSOSN') || getTagValue(icmsEl, 'CST') || ''
+          }
+        }
+
+        // Extrair valores de impostos do item
+        let baseCalcICMS = 0
+        let pICMS = 0
+        let vICMS = 0
+        let pIPI = 0
+        let vIPI = 0
+        let vPIS = 0
+        let pPIS = 0
+        let vCOFINS = 0
+        let pCOFINS = 0
+        let vTotTribItem = 0
+
+        if (impostoEl) {
+          // ICMS
+          const icmsEl = getTagElement(impostoEl, 'ICMS')
+          if (icmsEl) {
+            baseCalcICMS = parseFloat(getTagValue(icmsEl, 'vBC')) || 0
+            pICMS = parseFloat(getTagValue(icmsEl, 'pICMS')) || 0
+            vICMS = parseFloat(getTagValue(icmsEl, 'vICMS')) || 0
+          }
+          // IPI
+          const ipiEl = getTagElement(impostoEl, 'IPI')
+          if (ipiEl) {
+            pIPI = parseFloat(getTagValue(ipiEl, 'pIPI')) || 0
+            vIPI = parseFloat(getTagValue(ipiEl, 'vIPI')) || 0
+          }
+          // PIS
+          const pisEl = getTagElement(impostoEl, 'PIS')
+          if (pisEl) {
+            vPIS = parseFloat(getTagValue(pisEl, 'vPIS')) || 0
+            pPIS = parseFloat(getTagValue(pisEl, 'pPIS')) || 0
+          }
+          // COFINS
+          const cofinsEl = getTagElement(impostoEl, 'COFINS')
+          if (cofinsEl) {
+            vCOFINS = parseFloat(getTagValue(cofinsEl, 'vCOFINS')) || 0
+            pCOFINS = parseFloat(getTagValue(cofinsEl, 'pCOFINS')) || 0
+          }
+          // Tributos aproximados (IBPT)
+          vTotTribItem = parseFloat(getTagValue(impostoEl, 'vTotTrib')) || 0
+        }
+
+        // Montar impostos dinâmicos a partir dos dados do XML
+        const impostosDinamicos: ImpostoDinamico[] = []
+
+        if (vPIS > 0 || pPIS > 0) {
+          impostosDinamicos.push({
+            id: `pis_${i}`,
+            nome: 'PIS',
+            tipo: 'federal',
+            tipo_calculo: pPIS > 0 ? 'porcentagem' : 'valor_fixo',
+            base_calculo: pPIS > 0 ? vProd : 0,
+            aliquota: pPIS,
+            valor_fixo: pPIS > 0 ? undefined : vPIS,
+            valor_calculado: vPIS || (vProd * pPIS / 100)
+          })
+        }
+
+        if (vCOFINS > 0 || pCOFINS > 0) {
+          impostosDinamicos.push({
+            id: `cofins_${i}`,
+            nome: 'COFINS',
+            tipo: 'federal',
+            tipo_calculo: pCOFINS > 0 ? 'porcentagem' : 'valor_fixo',
+            base_calculo: pCOFINS > 0 ? vProd : 0,
+            aliquota: pCOFINS,
+            valor_fixo: pCOFINS > 0 ? undefined : vCOFINS,
+            valor_calculado: vCOFINS || (vProd * pCOFINS / 100)
+          })
+        }
+
+        if (vTotTribItem > 0) {
+          const totalJaContabilizado = vICMS + vIPI + vPIS + vCOFINS
+          const tribApprox = vTotTribItem - totalJaContabilizado
+          if (tribApprox > 0.01) {
+            impostosDinamicos.push({
+              id: `trib_aprox_${i}`,
+              nome: 'Tributos Aproximados (IBPT)',
+              tipo: 'informativo',
+              tipo_calculo: 'valor_fixo',
+              base_calculo: vProd,
+              aliquota: 0,
+              valor_fixo: tribApprox,
+              valor_calculado: tribApprox
+            })
+          }
+        }
+
+        const totalImpostosItem = vICMS + vIPI + vPIS + vCOFINS
+        const totalDinamicos = impostosDinamicos.reduce((s, imp) => s + (imp.valor_calculado || 0), 0)
+
+        const item: NotaFiscalItem = {
+          codigo_produto: getTagValue(prod, 'cProd'),
+          ncm_sh: getTagValue(prod, 'NCM'),
+          descricao: getTagValue(prod, 'xProd'),
+          unidade: getTagValue(prod, 'uCom') || 'UN',
+          quantidade: qCom,
+          preco_unitario: vUnCom,
+          preco_total: vProd,
+          cfop: getTagValue(prod, 'CFOP'),
+          csosn: csosn,
+          base_calculo_icms: baseCalcICMS || undefined,
+          percentual_icms: pICMS || undefined,
+          valor_icms: vICMS,
+          percentual_ipi: pIPI || undefined,
+          valor_ipi: vIPI,
+          valor_issqn: 0,
+          valor_inss: 0,
+          valor_cbs: 0,
+          valor_liquido: vProd - totalImpostosItem - totalDinamicos,
+          impostos_dinamicos: impostosDinamicos
+        }
+
+        itensXML.push(calcularImpostos(item))
+      }
+
+      if (itensXML.length > 0) {
+        setItens(itensXML)
+      }
+
+      // Ajustar tab se necessário
+      if (tipoNota === 'entrada' && activeTab !== 'entrada') {
+        setActiveTab('entrada')
+      } else if (tipoNota === 'saida' && activeTab !== 'saida') {
+        setActiveTab('saida')
+      }
+
+      const totalItens = itensXML.length
+      toast({
+        title: "XML importado com sucesso",
+        description: `Dados extraídos: NF ${nNF}, Série ${serie}, ${totalItens} item(ns). Valor: R$ ${parseFloat(vNF).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
+      })
+
+    } catch (error: any) {
+      console.error('Erro ao parsear XML:', error)
+      toast({
+        title: "Erro ao ler XML",
+        description: error.message || "Não foi possível extrair os dados do XML",
+        variant: "destructive"
+      })
+    }
+  }
+
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
@@ -2117,17 +2455,42 @@ export default function NotasFiscaisPage() {
                 </DialogDescription>
               </div>
               {!isEditDialogOpen && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={preencherDadosTeste}
-                  className="ml-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-                  title="Preencher com dados de teste"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Preencher Dados
-                </Button>
+                <div className="flex items-center gap-2 ml-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const input = document.createElement('input')
+                      input.type = 'file'
+                      input.accept = '.xml,.XML'
+                      input.onchange = (e) => {
+                        const file = (e.target as HTMLInputElement).files?.[0]
+                        if (file) {
+                          setFormFile(file)
+                          parseNFeXML(file)
+                        }
+                      }
+                      input.click()
+                    }}
+                    className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+                    title="Importar dados de um XML de NFe"
+                  >
+                    <Upload className="w-4 h-4 mr-2" />
+                    Importar XML
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={preencherDadosTeste}
+                    className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                    title="Preencher com dados de teste"
+                  >
+                    <Zap className="w-4 h-4 mr-2" />
+                    Preencher Dados
+                  </Button>
+                </div>
               )}
             </div>
           </DialogHeader>
@@ -2665,6 +3028,9 @@ export default function NotasFiscaisPage() {
 
             <div>
               <Label htmlFor="arquivo_nf">Arquivo da Nota Fiscal (PDF ou XML)</Label>
+              <p className="text-xs text-muted-foreground mb-1">
+                Se enviar um XML de NFe, os campos serão preenchidos automaticamente
+              </p>
               <Input
                 id="arquivo_nf"
                 type="file"
@@ -2672,7 +3038,6 @@ export default function NotasFiscaisPage() {
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) {
-                    // Validar tamanho (10MB)
                     if (file.size > 10 * 1024 * 1024) {
                       toast({
                         title: "Erro",
@@ -2682,7 +3047,6 @@ export default function NotasFiscaisPage() {
                       e.target.value = ''
                       return
                     }
-                    // Validar tipo
                     const validTypes = ['application/pdf', 'application/xml', 'text/xml']
                     const validExtensions = ['.pdf', '.xml']
                     const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
@@ -2696,6 +3060,10 @@ export default function NotasFiscaisPage() {
                       return
                     }
                     setFormFile(file)
+                    // Auto-preencher formulário se for XML de NFe
+                    if (fileExtension === '.xml' || file.type === 'application/xml' || file.type === 'text/xml') {
+                      parseNFeXML(file)
+                    }
                   } else {
                     setFormFile(null)
                   }

@@ -6,66 +6,85 @@ const WHATSAPP_WEBHOOK_URL = process.env.WHATSAPP_WEBHOOK_URL || 'https://gsouza
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 /**
- * Busca configuração da Evolution API e instância WhatsApp
- * @returns {Promise<Object|null>} - { instance_name, apikey } ou null
+ * Busca configuração completa da Evolution API (URL base, instância e apikey)
+ * Tenta whatsapp_instances primeiro, fallback para system_config
+ * @returns {Promise<Object|null>} - { base_url, instance_name, apikey } ou null
  */
 async function buscarConfiguracaoEvolutionAPI() {
   try {
-    console.log('[whatsapp-service] 🔍 Buscando instância WhatsApp...');
-    // Buscar instância WhatsApp (priorizar conectadas) com apikey
+    console.log('[whatsapp-service] 🔍 Buscando configuração Evolution API...');
+
+    let instanceName = null;
+    let instanceApikey = null;
+
+    // 1. Tentar buscar instância de whatsapp_instances
     const { data: instances, error: instanceError } = await supabaseAdmin
       .from('whatsapp_instances')
       .select('instance_name, apikey')
-      .order('status', { ascending: false }) // 'connected' vem antes de 'connecting'
+      .order('status', { ascending: false })
       .order('created_at', { ascending: false })
       .limit(1);
 
     if (instanceError) {
-      console.error('[whatsapp-service] ❌ Erro ao buscar instância:', instanceError);
-      return null;
+      console.warn('[whatsapp-service] ⚠️ Erro ao buscar whatsapp_instances:', instanceError.message);
+    } else if (instances && instances.length > 0) {
+      instanceName = instances[0].instance_name;
+      instanceApikey = instances[0].apikey;
+      console.log('[whatsapp-service] ✅ Instância encontrada em whatsapp_instances:', instanceName);
+    } else {
+      console.warn('[whatsapp-service] ⚠️ Nenhuma instância em whatsapp_instances, buscando em system_config...');
     }
 
-    if (!instances || instances.length === 0) {
-      console.warn('[whatsapp-service] ⚠️ Nenhuma instância WhatsApp encontrada no banco');
-      return null;
+    // 2. Buscar configurações de system_config (URL, API key, e instance_name como fallback)
+    const { data: configs, error: configError } = await supabaseAdmin
+      .from('system_config')
+      .select('key, value')
+      .in('key', ['evolution_api_url', 'evolution_api_key', 'evolution_instance_name']);
+
+    if (configError) {
+      console.error('[whatsapp-service] ❌ Erro ao buscar system_config:', configError.message);
     }
 
-    const instance = instances[0];
-    const instanceName = instance.instance_name;
-    console.log('[whatsapp-service] ✅ Instância encontrada:', instanceName);
+    const configMap = {};
+    if (configs) {
+      for (const c of configs) {
+        configMap[c.key] = c.value;
+      }
+    }
 
-    // Buscar API key - primeiro de whatsapp_instances, depois fallback para system_config
-    let apikey = instance.apikey;
-    
+    const baseUrl = configMap['evolution_api_url'] || null;
+
+    // Instance name: priorizar whatsapp_instances, fallback para system_config, depois default
+    if (!instanceName) {
+      instanceName = configMap['evolution_instance_name'] || 'sistema-whatsapp';
+      console.log('[whatsapp-service] ✅ Instance name (fallback):', instanceName);
+    }
+
+    // API key: priorizar whatsapp_instances, fallback para system_config
+    let apikey = instanceApikey;
     if (!apikey) {
-      console.log('[whatsapp-service] 🔍 API key não encontrada em whatsapp_instances, buscando em system_config...');
-      const { data: config, error: configError } = await supabaseAdmin
-        .from('system_config')
-        .select('key, value')
-        .eq('key', 'evolution_api_key')
-        .maybeSingle(); // Usar maybeSingle para não dar erro se não encontrar
-
-      if (configError) {
-        console.error('[whatsapp-service] ❌ Erro ao buscar API key de system_config:', configError);
-        console.error('[whatsapp-service] ❌ Detalhes do erro:', JSON.stringify(configError, null, 2));
-        return null;
+      apikey = configMap['evolution_api_key'] || null;
+      if (apikey) {
+        console.log('[whatsapp-service] ✅ API key encontrada em system_config');
       }
-
-      if (!config || !config.value) {
-        console.warn('[whatsapp-service] ⚠️ API key da Evolution API não encontrada em whatsapp_instances nem em system_config');
-        console.warn('[whatsapp-service] ⚠️ Verifique se existe um registro com key="evolution_api_key" na tabela system_config ou apikey em whatsapp_instances');
-        return null;
-      }
-
-      apikey = config.value;
-      console.log('[whatsapp-service] ✅ API key encontrada em system_config (fallback)');
     } else {
       console.log('[whatsapp-service] ✅ API key encontrada em whatsapp_instances');
     }
 
-    console.log('[whatsapp-service] ✅ API key encontrada (primeiros 8 caracteres):', apikey.substring(0, 8) + '...');
+    if (!apikey) {
+      console.warn('[whatsapp-service] ⚠️ API key não encontrada em nenhuma fonte');
+      return null;
+    }
+
+    console.log('[whatsapp-service] ✅ API key (primeiros 8 chars):', apikey.substring(0, 8) + '...');
+    if (baseUrl) {
+      console.log('[whatsapp-service] ✅ Evolution API URL:', baseUrl);
+    } else {
+      console.warn('[whatsapp-service] ⚠️ evolution_api_url não encontrada, usará webhook fallback');
+    }
 
     return {
+      base_url: baseUrl,
       instance_name: instanceName,
       apikey: apikey
     };
@@ -547,7 +566,7 @@ export { buscarTelefoneWhatsAppUsuario }
 
 export async function enviarMensagemWebhook(telefone, mensagem, link = null, opcoesLog = {}) {
   if (!telefone) {
-    console.warn(`[whatsapp-service] ⚠️ Telefone não fornecido para envio de webhook`);
+    console.warn(`[whatsapp-service] ⚠️ Telefone não fornecido para envio`);
     return {
       sucesso: false,
       erro: 'Telefone não fornecido',
@@ -555,47 +574,46 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
     };
   }
   
-  // Buscar configuração da Evolution API (instance_name e apikey)
   console.log(`[whatsapp-service] 🔍 Buscando configuração Evolution API...`);
   const evolutionConfig = await buscarConfiguracaoEvolutionAPI();
-  console.log(`[whatsapp-service] 🔍 Resultado da busca:`, evolutionConfig ? `Encontrado: instance=${evolutionConfig.instance_name}` : 'Não encontrado');
-  
-  const payload = {
-    number: telefone,
-    text: mensagem
-  };
-  
-  if (link) {
-    payload.link = link;
-  }
-
-  // Adicionar instance_name e apikey da Evolution API
-  if (evolutionConfig) {
-    payload.instance_name = evolutionConfig.instance_name;
-    payload.apikey = evolutionConfig.apikey;
-    console.log(`[whatsapp-service] ✅ Adicionando Evolution API config ao payload:`);
-    console.log(`[whatsapp-service]    - instance_name: ${evolutionConfig.instance_name}`);
-    console.log(`[whatsapp-service]    - apikey: ${evolutionConfig.apikey.substring(0, 8)}... (${evolutionConfig.apikey.length} caracteres)`);
-  } else {
-    console.warn(`[whatsapp-service] ⚠️ Configuração Evolution API não encontrada - enviando sem instance_name e apikey`);
-    console.warn(`[whatsapp-service] ⚠️ Verifique se existe instância WhatsApp e API key configurada`);
-  }
   
   const tipoNotificacao = opcoesLog.tipo || 'notificacao';
-  const dataHora = new Date().toISOString();
   
-  console.log(`[whatsapp-service] 📤 Preparando webhook para ${telefone}`);
+  // Determinar método de envio: direto pela Evolution API ou fallback pelo webhook n8n
+  const usarEvolutionDireto = evolutionConfig?.base_url && evolutionConfig?.instance_name && evolutionConfig?.apikey;
+  
+  let targetUrl;
+  let headers;
+  let payload;
+  
+  if (usarEvolutionDireto) {
+    const baseUrl = evolutionConfig.base_url.replace(/\/+$/, '');
+    targetUrl = `${baseUrl}/message/sendText/${evolutionConfig.instance_name}`;
+    headers = {
+      'Content-Type': 'application/json',
+      'apikey': evolutionConfig.apikey
+    };
+    payload = {
+      number: telefone,
+      text: mensagem
+    };
+    console.log(`[whatsapp-service] 📤 Modo: Evolution API direto`);
+    console.log(`[whatsapp-service] 📤 URL: ${targetUrl}`);
+  } else {
+    targetUrl = WHATSAPP_WEBHOOK_URL;
+    headers = { 'Content-Type': 'application/json' };
+    payload = { number: telefone, text: mensagem };
+    if (link) payload.link = link;
+    if (evolutionConfig) {
+      payload.instance_name = evolutionConfig.instance_name;
+      payload.apikey = evolutionConfig.apikey;
+    }
+    console.log(`[whatsapp-service] 📤 Modo: Webhook n8n (fallback)`);
+    console.log(`[whatsapp-service] 📤 URL: ${targetUrl}`);
+  }
+  
+  console.log(`[whatsapp-service] 📤 Destinatário: ${telefone}`);
   console.log(`[whatsapp-service] 📤 Tipo: ${tipoNotificacao}`);
-  console.log(`[whatsapp-service] 📤 Data/Hora: ${dataHora}`);
-  console.log(`[whatsapp-service] 📤 URL: ${WHATSAPP_WEBHOOK_URL}`);
-  console.log(`[whatsapp-service] 📤 Payload completo ANTES de enviar:`);
-  console.log(JSON.stringify(payload, null, 2));
-  console.log(`[whatsapp-service] 📤 Verificando campos no payload:`);
-  console.log(`[whatsapp-service]    - number: ${payload.number ? '✅' : '❌'}`);
-  console.log(`[whatsapp-service]    - text: ${payload.text ? '✅' : '❌'}`);
-  console.log(`[whatsapp-service]    - link: ${payload.link ? '✅' : '❌'}`);
-  console.log(`[whatsapp-service]    - instance_name: ${payload.instance_name ? '✅ ' + payload.instance_name : '❌'}`);
-  console.log(`[whatsapp-service]    - apikey: ${payload.apikey ? '✅ ' + payload.apikey.substring(0, 8) + '...' : '❌'}`);
   
   let tentativas = 0;
   const maxTentativas = 3;
@@ -605,27 +623,20 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
   while (tentativas < maxTentativas) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 segundos
+      const timeoutId = setTimeout(() => controller.abort(), 15000);
       
-      console.log(`[whatsapp-service] 📤 Tentativa ${tentativas + 1}/${maxTentativas} - Enviando POST para webhook...`);
+      console.log(`[whatsapp-service] 📤 Tentativa ${tentativas + 1}/${maxTentativas}...`);
       
-      // Garantir que o payload tem os campos corretos antes de enviar
-      const payloadFinal = { ...payload };
-      console.log(`[whatsapp-service] 📤 Enviando payload final para ${WHATSAPP_WEBHOOK_URL}:`);
-      console.log(JSON.stringify(payloadFinal, null, 2));
-      
-      const response = await fetch(WHATSAPP_WEBHOOK_URL, {
+      const response = await fetch(targetUrl, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(payloadFinal),
+        headers,
+        body: JSON.stringify(payload),
         signal: controller.signal
       });
       
       clearTimeout(timeoutId);
       
-      console.log(`[whatsapp-service] 📥 Resposta do webhook: Status ${response.status} ${response.statusText}`);
+      console.log(`[whatsapp-service] 📥 Resposta: ${response.status} ${response.statusText}`);
       
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
@@ -634,11 +645,9 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
       }
       
       const responseData = await response.json().catch(() => ({}));
-      console.log(`[whatsapp-service] 📥 Resposta do webhook:`, JSON.stringify(responseData, null, 2));
-      
+      console.log(`[whatsapp-service] 📥 Resposta body:`, JSON.stringify(responseData, null, 2));
       console.log(`[whatsapp-service] ✅ Mensagem enviada com sucesso para ${telefone}`);
       
-      // Registrar log de sucesso
       logId = await registrarLogWhatsApp({
         tipo: tipoNotificacao,
         telefone_destino: telefone,
@@ -658,9 +667,6 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
       tentativas++;
       ultimoErro = error;
       console.error(`[whatsapp-service] ❌ Tentativa ${tentativas}/${maxTentativas} falhou:`, error.message);
-      if (error.stack) {
-        console.error(`[whatsapp-service] Stack trace:`, error.stack);
-      }
       
       if (tentativas < maxTentativas) {
         const delay = 1000 * tentativas;
@@ -670,9 +676,8 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
     }
   }
   
-  console.error(`[whatsapp-service] ❌ Falha ao enviar mensagem após ${maxTentativas} tentativas para ${telefone}`);
+  console.error(`[whatsapp-service] ❌ Falha após ${maxTentativas} tentativas para ${telefone}`);
   
-  // Registrar log de erro
   logId = await registrarLogWhatsApp({
     tipo: tipoNotificacao,
     telefone_destino: telefone,
