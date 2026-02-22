@@ -173,6 +173,12 @@ export default function PWAMainPage() {
     const verificarObraAtiva = async () => {
       if (typeof window === 'undefined') return
       
+      if (isResponsavelObra) {
+        setTemObraAtiva(true)
+        setLoadingObra(false)
+        return
+      }
+
       try {
         // Verificar se é funcionário (não cliente)
         const userDataStr = localStorage.getItem('user_data')

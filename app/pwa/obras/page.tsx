@@ -107,12 +107,37 @@ export default function PWAObrasPage() {
         return
       }
 
+      // Responsável de obra: carregar obras via obras_responsavel do auth/me
+      const isResponsavel = userData?.user_metadata?.tipo === 'responsavel_obra'
+        || userData?.user?.user_metadata?.tipo === 'responsavel_obra'
+
+      if (isResponsavel) {
+        const obrasResp = userData?.obras_responsavel
+          || userData?.user?.obras_responsavel || []
+
+        if (obrasResp.length > 0) {
+          const obrasCompletas = await Promise.all(
+            obrasResp.map(async (o: any) => {
+              try {
+                const resp = await obrasApi.obterObra(o.obra_id)
+                return resp.success ? resp.data : null
+              } catch { return null }
+            })
+          )
+          const obrasValidas = obrasCompletas.filter(Boolean) as Obra[]
+          setObras(obrasValidas)
+          localStorage.setItem('cached_obras', JSON.stringify(obrasValidas))
+        } else {
+          setObras([])
+        }
+        setIsLoading(false)
+        return
+      }
+
       // Buscar cliente pelo usuario_id
       const clienteResponse = await clientesApi.buscarPorUsuarioId(userId)
       
       if (!clienteResponse.success || !clienteResponse.data) {
-        // Se não for cliente, pode ser funcionário - buscar obras do funcionário
-        // Por enquanto, retornar vazio se não for cliente
         setObras([])
         setIsLoading(false)
         return
