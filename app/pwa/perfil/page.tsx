@@ -192,6 +192,7 @@ function PWAPerfilPageContent() {
   const [funcionarioCompleto, setFuncionarioCompleto] = useState<any>(null)
   const [loadingFuncionario, setLoadingFuncionario] = useState(true)
   const [funcionarioId, setFuncionarioId] = useState<number | null>(null)
+  const [isResponsavelObra, setIsResponsavelObra] = useState(false)
   
   // Estados para as tabs - verificar se há parâmetro na URL
   const [activeTab, setActiveTab] = useState('informacoes')
@@ -263,6 +264,33 @@ function PWAPerfilPageContent() {
         setLoadingFuncionario(false)
         return
       }
+
+      // Verificar se é responsável de obra
+      try {
+        const udStr = localStorage.getItem('user_data')
+        if (udStr) {
+          const ud = JSON.parse(udStr)
+          const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
+          if (tipo === 'responsavel_obra') {
+            const telefone = ud?.profile?.telefone || ud?.telefone || ud?.user_metadata?.telefone || ''
+            const nome = ud?.profile?.nome || ud?.user_metadata?.nome || ud?.user?.user_metadata?.nome || user?.nome || 'Responsável'
+            const email = ud?.profile?.email || user?.email || ud?.email || ''
+            setIsResponsavelObra(true)
+            setFuncionarioCompleto({
+              nome,
+              email,
+              telefone,
+              cargo: 'Responsável de Obra'
+            })
+            setUserData({
+              telefone,
+              email
+            })
+            setLoadingFuncionario(false)
+            return
+          }
+        }
+      } catch { /* ignore */ }
 
       try {
         setLoadingFuncionario(true)
@@ -1265,7 +1293,8 @@ function PWAPerfilPageContent() {
       </Card>
       )}
 
-      {/* Menu de Seções - Mobile First */}
+      {/* Menu de Seções - Mobile First (esconder para responsável de obra) */}
+      {!isResponsavelObra && (
       <div className="space-y-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900 mb-1">Minhas Informações</h2>
@@ -1431,8 +1460,10 @@ function PWAPerfilPageContent() {
           )}
         </div>
       </div>
+      )}
 
       {/* Conteúdo da Seção Selecionada */}
+      {!isResponsavelObra && (
       <div className="w-full">
 
             {/* Seção Informações */}
@@ -1828,6 +1859,7 @@ function PWAPerfilPageContent() {
             </div>
             )}
           </div>
+      )}
 
       {/* Modal de Visualização de Documento */}
       <Dialog open={isModalDocumentoOpen} onOpenChange={setIsModalDocumentoOpen}>
