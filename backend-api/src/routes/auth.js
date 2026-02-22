@@ -665,6 +665,162 @@ router.get('/me', authenticateToken, async (req, res) => {
 
 /**
  * @swagger
+ * /api/auth/meu-perfil:
+ *   get:
+ *     summary: Obter perfil completo do usuário logado (funcionário ou responsável de obra)
+ *     tags: [Autenticação]
+ *     security:
+ *       - bearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Perfil do usuário com tipo identificado
+ *       401:
+ *         description: Token inválido
+ *       404:
+ *         description: Perfil não encontrado
+ */
+router.get('/meu-perfil', authenticateToken, async (req, res) => {
+  try {
+    const { data: usuario, error: userError } = await supabaseAdmin
+      .from('usuarios')
+      .select('*')
+      .eq('email', req.user.email)
+      .maybeSingle()
+
+    if (userError) {
+      return res.status(500).json({ success: false, error: 'Erro ao buscar usuário', message: userError.message })
+    }
+
+    if (!usuario) {
+      return res.status(404).json({ success: false, error: 'Usuário não encontrado' })
+    }
+
+    // 1) Verificar se é funcionário (tem funcionario_id vinculado)
+    if (usuario.funcionario_id) {
+      const { data: funcionario, error: funcError } = await supabaseAdmin
+        .from('funcionarios')
+        .select(`
+          *,
+          cargo_info:cargos(id, nome, departamento),
+          funcionarios_obras(
+            id, obra_id, data_inicio, data_fim, ativo,
+            obras(id, nome, status)
+          )
+        `)
+        .eq('id', usuario.funcionario_id)
+        .maybeSingle()
+
+      if (funcError) {
+        console.error('Erro ao buscar funcionário:', funcError)
+      }
+
+      if (funcionario) {
+        return res.json({
+          success: true,
+          data: {
+            tipo: 'funcionario',
+            id: funcionario.id,
+            nome: funcionario.nome,
+            email: funcionario.email || usuario.email,
+            telefone: funcionario.telefone,
+            cargo: funcionario.cargo_info?.nome || funcionario.cargo || usuario.cargo,
+            departamento: funcionario.cargo_info?.departamento,
+            cpf: funcionario.cpf,
+            data_admissao: funcionario.data_admissao,
+            data_nascimento: funcionario.data_nascimento,
+            endereco: funcionario.endereco,
+            status: funcionario.status,
+            salario: funcionario.salario,
+            foto_url: funcionario.foto_url,
+            usuario_id: usuario.id,
+            funcionario_id: funcionario.id,
+            obras: (funcionario.funcionarios_obras || [])
+              .filter(fo => fo.ativo)
+              .map(fo => ({
+                obra_id: fo.obra_id,
+                obra_nome: fo.obras?.nome || '',
+                obra_status: fo.obras?.status || '',
+                data_inicio: fo.data_inicio,
+                data_fim: fo.data_fim
+              })),
+            created_at: funcionario.created_at,
+            updated_at: funcionario.updated_at
+          }
+        })
+      }
+    }
+
+    // 2) Verificar se é responsável de obra
+    const { data: responsaveis, error: respError } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('*, obras(id, nome, status)')
+      .eq('email', usuario.email)
+      .eq('ativo', true)
+
+    if (respError) {
+      console.error('Erro ao buscar responsaveis_obra:', respError)
+    }
+
+    if (responsaveis && responsaveis.length > 0) {
+      const primeiro = responsaveis[0]
+      return res.json({
+        success: true,
+        data: {
+          tipo: 'responsavel_obra',
+          id: primeiro.id,
+          nome: primeiro.nome || usuario.nome,
+          email: usuario.email,
+          telefone: primeiro.telefone || usuario.telefone,
+          cargo: 'Responsável de Obra',
+          pedido: primeiro.pedido,
+          usuario_login: primeiro.usuario,
+          cpf: usuario.cpf,
+          status: primeiro.ativo ? 'Ativo' : 'Inativo',
+          foto_url: usuario.foto_url,
+          usuario_id: usuario.id,
+          obras: responsaveis.map(r => ({
+            responsavel_id: r.id,
+            obra_id: r.obra_id,
+            obra_nome: r.obras?.nome || '',
+            obra_status: r.obras?.status || ''
+          })),
+          created_at: primeiro.created_at,
+          updated_at: primeiro.updated_at
+        }
+      })
+    }
+
+    // 3) Usuário sem vínculo de funcionário nem de responsável - retornar dados básicos do usuario
+    return res.json({
+      success: true,
+      data: {
+        tipo: 'usuario',
+        id: usuario.id,
+        nome: usuario.nome,
+        email: usuario.email,
+        telefone: usuario.telefone,
+        cargo: usuario.cargo,
+        cpf: usuario.cpf,
+        status: usuario.status,
+        foto_url: usuario.foto_url,
+        usuario_id: usuario.id,
+        obras: [],
+        created_at: usuario.created_at,
+        updated_at: usuario.updated_at
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao buscar meu perfil:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
  * /api/auth/refresh:
  *   post:
  *     summary: Renovar token de acesso

@@ -49,8 +49,6 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
-import { funcionariosApi } from "@/lib/api-funcionarios"
-import { getFuncionarioId, getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
@@ -250,47 +248,18 @@ function PWAPerfilPageContent() {
   const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false)
   const [alterandoSenha, setAlterandoSenha] = useState(false)
 
-  // Carregar dados completos do funcionário da API
+  // Carregar dados completos do perfil via endpoint unificado (funcionário ou responsável)
   useEffect(() => {
-    const carregarFuncionarioCompleto = async () => {
+    const carregarPerfil = async () => {
       if (!user || typeof window === 'undefined') {
         setLoadingFuncionario(false)
         return
       }
 
-      // Aguardar até que user.id esteja disponível
       if (!user.id) {
-        console.log('[PERFIL] Aguardando user.id estar disponível...')
         setLoadingFuncionario(false)
         return
       }
-
-      // Verificar se é responsável de obra
-      try {
-        const udStr = localStorage.getItem('user_data')
-        if (udStr) {
-          const ud = JSON.parse(udStr)
-          const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
-          if (tipo === 'responsavel_obra') {
-            const telefone = ud?.profile?.telefone || ud?.telefone || ud?.user_metadata?.telefone || ''
-            const nome = ud?.profile?.nome || ud?.user_metadata?.nome || ud?.user?.user_metadata?.nome || user?.nome || 'Responsável'
-            const email = ud?.profile?.email || user?.email || ud?.email || ''
-            setIsResponsavelObra(true)
-            setFuncionarioCompleto({
-              nome,
-              email,
-              telefone,
-              cargo: 'Responsável de Obra'
-            })
-            setUserData({
-              telefone,
-              email
-            })
-            setLoadingFuncionario(false)
-            return
-          }
-        }
-      } catch { /* ignore */ }
 
       try {
         setLoadingFuncionario(true)
@@ -300,126 +269,54 @@ function PWAPerfilPageContent() {
           return
         }
 
-        // PRIORIDADE MÁXIMA: Usar funcionario_id da tabela usuarios (profile.funcionario_id ou user.funcionario_id)
-        // Este é o vínculo correto entre usuarios e funcionarios (129)
-        let funcionarioId: number | null = null
-        
-        // Tentar obter funcionario_id da tabela usuarios primeiro
-        const funcionarioIdFromTable = user?.profile?.funcionario_id || user?.funcionario_id
-        
-        if (funcionarioIdFromTable && !isNaN(Number(funcionarioIdFromTable)) && Number(funcionarioIdFromTable) > 0) {
-          // Verificar se o funcionário existe na API antes de usar
-          try {
-            const response = await funcionariosApi.obterFuncionario(Number(funcionarioIdFromTable))
-            if (response.success && response.data) {
-              funcionarioId = Number(funcionarioIdFromTable)
-              console.log(`[PERFIL] ✅ PRIORIDADE MÁXIMA: Funcionário ${funcionarioId} encontrado na API (da tabela usuarios), usando este ID`)
-            } else {
-              console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromTable} não encontrado na API, tentando funcionario_id do metadata`)
-              // Continuar para tentar funcionario_id do metadata
-            }
-          } catch (apiError: any) {
-            if (apiError?.response?.status === 404 || apiError?.status === 404) {
-              console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromTable} não encontrado na API (404), tentando funcionario_id do metadata`)
-              // Continuar para tentar funcionario_id do metadata
-            } else {
-              console.warn('[PERFIL] Erro ao verificar funcionário da tabela:', apiError)
-              // Continuar para tentar funcionario_id do metadata
-            }
-          }
-        }
-        
-        // PRIORIDADE 2: Se funcionario_id da tabela não foi encontrado, tentar funcionario_id do metadata
-        if (!funcionarioId) {
-          const funcionarioIdFromMetadata = user?.user_metadata?.funcionario_id
-          
-          if (funcionarioIdFromMetadata && !isNaN(Number(funcionarioIdFromMetadata)) && Number(funcionarioIdFromMetadata) > 0) {
-            try {
-              const response = await funcionariosApi.obterFuncionario(Number(funcionarioIdFromMetadata))
-              if (response.success && response.data) {
-                funcionarioId = Number(funcionarioIdFromMetadata)
-                console.log(`[PERFIL] ✅ PRIORIDADE 2: Funcionário ${funcionarioId} encontrado na API (do metadata), usando este ID`)
-              } else {
-                console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromMetadata} não encontrado na API, usando user.id como fallback`)
-                // Continuar para usar user.id como fallback
-              }
-            } catch (apiError: any) {
-              if (apiError?.response?.status === 404 || apiError?.status === 404) {
-                console.log(`[PERFIL] ⚠️ Funcionário ${funcionarioIdFromMetadata} não encontrado na API (404), usando user.id como fallback`)
-                // Continuar para usar user.id como fallback
-              } else {
-                console.warn('[PERFIL] Erro ao verificar funcionário do metadata:', apiError)
-                // Continuar para usar user.id como fallback
-              }
-            }
-          }
-        }
-        
-        // PRIORIDADE 3: Se funcionario_id não foi encontrado, usar user.id como fallback
-        if (!funcionarioId && user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
-          funcionarioId = Number(user.id)
-          console.log(`[PERFIL] ✅ PRIORIDADE 3: Usando user.id (${funcionarioId}) como fallback`)
-        }
-        
-        // Se ainda não encontrou, tentar buscar via getFuncionarioId
-        if (!funcionarioId) {
-          try {
-            console.log('[PERFIL] Tentando buscar via getFuncionarioId...')
-            funcionarioId = await getFuncionarioId(user, token)
-            
-            if (!funcionarioId) {
-              console.warn('[PERFIL] ID do funcionário não encontrado, usando dados do localStorage')
-              setLoadingFuncionario(false)
-              return
-            }
-          } catch (idError) {
-            console.warn('[PERFIL] Erro ao buscar funcionario_id:', idError)
-            setLoadingFuncionario(false)
-            return
-          }
-        }
+        const response = await fetch('/api/auth/meu-perfil', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+        const result = await response.json()
 
-        if (funcionarioId) {
-          console.log(`[PERFIL] Definindo funcionarioId: ${funcionarioId} (user.id: ${user?.id}, user_metadata.funcionario_id: ${user?.user_metadata?.funcionario_id})`)
-          setFuncionarioId(funcionarioId)
-          
-          // Verificar se o funcionarioId é diferente do user.id e logar aviso
-          if (funcionarioId !== Number(user.id)) {
-            console.warn(`[PERFIL] ⚠️ ATENÇÃO: funcionarioId (${funcionarioId}) é diferente de user.id (${user.id})`)
+        if (result.success && result.data) {
+          const perfil = result.data
+
+          if (perfil.tipo === 'responsavel_obra') {
+            setIsResponsavelObra(true)
+            setFuncionarioCompleto({
+              ...perfil,
+              cargo: perfil.cargo || 'Responsável de Obra'
+            })
+            setUserData({
+              telefone: perfil.telefone || '',
+              email: perfil.email || user?.email || ''
+            })
+          } else if (perfil.tipo === 'funcionario') {
+            setFuncionarioId(perfil.funcionario_id || perfil.id)
+            setFuncionarioCompleto(perfil)
+            setUserData({
+              telefone: perfil.telefone || '',
+              email: perfil.email || user?.email || ''
+            })
+          } else {
+            setFuncionarioCompleto({
+              nome: perfil.nome,
+              email: perfil.email,
+              telefone: perfil.telefone,
+              cargo: perfil.cargo || 'Usuário'
+            })
+            setUserData({
+              telefone: perfil.telefone || '',
+              email: perfil.email || user?.email || ''
+            })
           }
-          
-          try {
-            console.log(`[PERFIL] Chamando API: /api/funcionarios/${funcionarioId}`)
-            const response = await funcionariosApi.obterFuncionario(funcionarioId)
-            if (response.success && response.data) {
-              setFuncionarioCompleto(response.data)
-              // Atualizar userData com dados da API
-              setUserData({
-                telefone: response.data.telefone || '',
-                email: response.data.email || user?.email || ''
-              })
-            }
-          } catch (apiError: any) {
-            // Se for 404, o funcionário não existe - não é erro crítico
-            // Silenciar o erro 404 para não poluir o console
-            if (apiError?.response?.status === 404 || apiError?.status === 404 || apiError?.message?.includes('404') || apiError?.message?.includes('não existe')) {
-              // Funcionário não encontrado - usar apenas dados do localStorage
-              // Não logar erro para não poluir o console
-              console.log(`[PERFIL] Funcionário ${funcionarioId} não encontrado na API (404), usando dados do localStorage`)
-            } else {
-              console.warn('Erro ao buscar dados do funcionário da API, usando dados do localStorage:', apiError)
-            }
-            // Não é um erro crítico - continuar com dados do localStorage
-          }
+        } else {
+          console.warn('[PERFIL] Endpoint meu-perfil não retornou dados, usando fallback do localStorage')
         }
       } catch (error) {
-        console.warn('Erro ao carregar dados do funcionário, usando dados do localStorage:', error)
+        console.warn('[PERFIL] Erro ao carregar perfil, usando dados do localStorage:', error)
       } finally {
         setLoadingFuncionario(false)
       }
     }
 
-    carregarFuncionarioCompleto()
+    carregarPerfil()
     
     // Carregar estado de simulação do localStorage
     const simulatingManager = localStorage.getItem('simulating_manager') === 'true'
@@ -1075,14 +972,16 @@ function PWAPerfilPageContent() {
               <div>
                 <Label>
                   <Calendar className="w-4 h-4 inline mr-2" />
-                  Data de Admissão
+                  {isResponsavelObra ? 'Usuário / Login' : 'Data de Admissão'}
                 </Label>
                 <p className="mt-1 text-gray-900">
-                  {funcionarioCompleto?.data_admissao 
-                    ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
-                    : (user as any).dataAdmissao 
-                      ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
-                      : 'Não informado'}
+                  {isResponsavelObra
+                    ? (funcionarioCompleto?.usuario_login || 'Não informado')
+                    : (funcionarioCompleto?.data_admissao 
+                        ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
+                        : (user as any).dataAdmissao 
+                          ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
+                          : 'Não informado')}
                 </p>
               </div>
             </div>
@@ -1111,6 +1010,53 @@ function PWAPerfilPageContent() {
           </Button>
         </CardContent>
       </Card>
+
+      {/* Seção exclusiva para Responsável de Obra */}
+      {isResponsavelObra && funcionarioCompleto?.obras && funcionarioCompleto.obras.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Building2 className="w-5 h-5 text-[#871b0b]" />
+              Minhas Obras
+            </CardTitle>
+            <CardDescription>
+              Obras nas quais você é responsável
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {funcionarioCompleto.obras.map((obra: any, idx: number) => (
+                <div
+                  key={obra.responsavel_id || obra.obra_id || idx}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 bg-[#871b0b]/10 rounded-lg">
+                      <Building2 className="w-5 h-5 text-[#871b0b]" />
+                    </div>
+                    <div>
+                      <p className="font-medium text-gray-900">{obra.obra_nome || 'Obra sem nome'}</p>
+                      <p className="text-xs text-gray-500">ID: {obra.obra_id}</p>
+                    </div>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={
+                      obra.obra_status === 'Em Andamento' || obra.obra_status === 'Ativa'
+                        ? 'bg-green-50 border-green-200 text-green-700'
+                        : obra.obra_status === 'Concluída'
+                          ? 'bg-blue-50 border-blue-200 text-blue-700'
+                          : 'bg-gray-50 border-gray-200 text-gray-700'
+                    }
+                  >
+                    {obra.obra_status || 'N/A'}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Links de Teste - Apenas para Admin */}
       {isAdmin && (
