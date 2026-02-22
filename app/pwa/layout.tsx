@@ -496,13 +496,10 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     if (typeof window === 'undefined') return false
     
     try {
-      // Verificar se é cliente (level 1 ou role cliente)
-      // Clientes são quem aprovam horas extras como donos das obras
-      const userLevel = parseInt(localStorage.getItem('user_level') || '0', 10)
       const hookRole = userRole?.toLowerCase() || ''
+      const storedRole = localStorage.getItem('user_role')?.toLowerCase() || ''
       
-      // Se for cliente (level 1 ou role contém cliente), pode aprovar horas extras
-      const isCliente = userLevel === 1 || hookRole.includes('cliente')
+      const isCliente = hookRole.includes('cliente') || storedRole.includes('cliente')
       
       return isCliente
     } catch (error) {
@@ -530,6 +527,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   // Se for cliente (mas NÃO responsavel_obra), usar layout de cliente
   // Responsável de obra usa layout de supervisor (com Aprovações)
   const isClientUser = isClientRole() && !isResponsavelObraUser
+  
+  // Responsável de obra SEMPRE entra no branch de supervisor (independente do hook de role)
+  const isSupervisorOrResponsavel = isSupervisorUser || isResponsavelObraUser
   
   // Se for cliente, usar Documentos, Medições, Home e Perfil
   const essentialNavItems = isClientUser ? [
@@ -559,8 +559,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     },
     // Perfil - SEMPRE presente
     perfilItem
-  ] : isSupervisorUser ? [
-    // Aprovações - para supervisores
+  ] : isSupervisorOrResponsavel ? [
+    // Aprovações - para supervisores e responsáveis de obra
     allNavigationItems.find(item => item.href === '/pwa/aprovacoes') || {
       name: 'Aprovações',
       href: '/pwa/aprovacoes',

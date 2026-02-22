@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { 
   Clock, 
-  FileSignature, 
+  FilePenLine, 
   FileText,
   Settings,
   User, 
@@ -1133,7 +1133,7 @@ export default function PWAMainPage() {
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center flex-shrink-0">
-                <FileSignature className="w-5 h-5 text-orange-600" />
+                <FilePenLine className="w-5 h-5 text-orange-600" />
               </div>
               <div className="flex-1">
                 <h3 className="font-semibold text-orange-900 text-sm">
