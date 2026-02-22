@@ -196,11 +196,30 @@ export default function PWAAprovacoesPage() {
     const carregarFuncionarios = async () => {
       setLoadingFuncionarios(true);
       try {
-        const response = await apiFuncionarios.listarParaPonto(user?.id || 0, {
-          limit: 1000,
-          page: 1
-        });
-        setFuncionarios(response.funcionarios || []);
+        const isResponsavel = user?.is_responsavel_obra && user?.obras_responsavel && user.obras_responsavel.length > 0;
+
+        if (isResponsavel) {
+          const obraIds = user!.obras_responsavel!.map((o: any) => o.obra_id);
+          const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+          const results = await Promise.all(
+            obraIds.map(async (obraId: number) => {
+              const res = await fetch(`/api/funcionarios/obra/${obraId}`, {
+                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+              });
+              const json = await res.json();
+              return json.success ? (json.data || []) : [];
+            })
+          );
+          const todos = results.flat();
+          const unicos = Array.from(new Map(todos.map((f: any) => [f.id, f])).values()) as any[];
+          setFuncionarios(unicos.map((f: any) => ({ id: f.id, nome: f.nome, cargo: f.cargo, status: f.status, email: f.email, telefone: f.telefone })));
+        } else {
+          const response = await apiFuncionarios.listarParaPonto(user?.id || 0, {
+            limit: 1000,
+            page: 1
+          });
+          setFuncionarios(response.funcionarios || []);
+        }
       } catch (error: any) {
         console.error('Erro ao carregar funcionários:', error);
       } finally {

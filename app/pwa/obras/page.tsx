@@ -107,13 +107,28 @@ export default function PWAObrasPage() {
         return
       }
 
-      // Responsável de obra: carregar obras via obras_responsavel do auth/me
+      // Responsável de obra: carregar obras via /api/auth/meu-perfil
       const isResponsavel = userData?.user_metadata?.tipo === 'responsavel_obra'
         || userData?.user?.user_metadata?.tipo === 'responsavel_obra'
 
       if (isResponsavel) {
-        const obrasResp = userData?.obras_responsavel
-          || userData?.user?.obras_responsavel || []
+        // Buscar obras atualizadas do backend (não depender de localStorage)
+        const token = localStorage.getItem('access_token')
+        let obrasResp: any[] = []
+
+        try {
+          const perfilRes = await fetch('/api/auth/meu-perfil', {
+            headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+          })
+          const perfilJson = await perfilRes.json()
+          if (perfilJson.success && perfilJson.data?.obras) {
+            obrasResp = perfilJson.data.obras
+          }
+        } catch {
+          // Fallback: tentar do localStorage
+          obrasResp = userData?.obras_responsavel
+            || userData?.user?.obras_responsavel || []
+        }
 
         if (obrasResp.length > 0) {
           const obrasCompletas = await Promise.all(

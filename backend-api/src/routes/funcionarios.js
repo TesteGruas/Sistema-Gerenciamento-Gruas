@@ -2607,62 +2607,55 @@ router.get('/:id/historico-obras', async (req, res) => {
 
 router.get('/obra/:obra_id', async (req, res) => {
   try {
-    const { obra_id } = req.params;
-    const userId = req.user.id;
+    const { obra_id } = req.params
 
-    // Verificar se a obra existe
-    const obraExists = await db.query(
-      'SELECT id FROM obras WHERE id = $1',
-      [obra_id]
-    );
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('id', obra_id)
+      .maybeSingle()
 
-    if (obraExists.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Obra não encontrada'
-      });
+    if (obraError || !obra) {
+      return res.status(404).json({ success: false, message: 'Obra não encontrada' })
     }
 
-    // Buscar funcionários alocados na obra
-    const query = `
-      SELECT 
-        f.id,
-        f.nome,
-        f.cargo,
-        f.telefone,
-        f.email,
-        f.cpf,
-        f.turno,
-        f.status,
-        f.data_admissao,
-        f.salario,
-        f.observacoes,
-        fo.data_inicio,
-        fo.data_fim,
-        fo.horas_trabalhadas
-      FROM funcionarios f
-      INNER JOIN funcionarios_obras fo ON f.id = fo.funcionario_id
-      WHERE fo.obra_id = $1 
-        AND fo.status = 'ativo'
-        AND f.status = 'Ativo'
-      ORDER BY f.nome
-    `;
+    const { data: alocacoes, error: alocError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select(`
+        data_inicio,
+        data_fim,
+        horas_trabalhadas,
+        funcionarios!inner(
+          id, nome, cargo, telefone, email, cpf, turno, status, data_admissao, salario, observacoes,
+          cargo_info:cargos(id, nome, nivel, descricao)
+        )
+      `)
+      .eq('obra_id', obra_id)
+      .eq('status', 'ativo')
 
-    const result = await db.query(query, [obra_id]);
+    if (alocError) {
+      console.error('Erro ao buscar funcionários da obra:', alocError)
+      return res.status(500).json({ success: false, message: 'Erro ao buscar funcionários', error: alocError.message })
+    }
 
-    res.json({
-      success: true,
-      data: result.rows,
-      total: result.rows.length
-    });
+    const funcionarios = (alocacoes || [])
+      .filter(a => a.funcionarios)
+      .map(a => ({
+        ...a.funcionarios,
+        cargo: a.funcionarios.cargo_info?.nome || a.funcionarios.cargo,
+        data_inicio: a.data_inicio,
+        data_fim: a.data_fim,
+        horas_trabalhadas: a.horas_trabalhadas
+      }))
 
+    funcionarios.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''))
+
+    console.log(`[FUNC/OBRA] obra_id=${obra_id}: ${alocacoes?.length || 0} alocações, ${funcionarios.length} funcionários ativos`)
+
+    res.json({ success: true, data: funcionarios, total: funcionarios.length })
   } catch (error) {
-    console.error('Erro ao buscar funcionários da obra:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erro interno do servidor',
-      error: error.message
-    });
+    console.error('Erro ao buscar funcionários da obra:', error)
+    res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message })
   }
 });
 
