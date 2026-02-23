@@ -9,6 +9,7 @@ export interface GruaObraBackend {
   data_inicio_locacao: string
   data_fim_locacao?: string
   valor_locacao_mensal?: number
+  raio_trabalho?: number
   status: 'Ativa' | 'Concluída' | 'Suspensa'
   observacoes?: string
   created_at: string
@@ -167,6 +168,7 @@ export const converterGruaObraBackendParaFrontend = (gruaObraBackend: GruaObraBa
     dataInicioLocacao: gruaObraBackend.data_inicio_locacao,
     dataFimLocacao: gruaObraBackend.data_fim_locacao,
     valorLocacaoMensal: gruaObraBackend.valor_locacao_mensal || 0,
+    raio_trabalho: gruaObraBackend.raio_trabalho,
     status: converterStatusGruaObraBackendParaFrontend(gruaObraBackend.status),
     observacoes: gruaObraBackend.observacoes,
     createdAt: gruaObraBackend.created_at,

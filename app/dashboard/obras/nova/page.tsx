@@ -32,7 +32,11 @@ import {
   CreditCard,
   Loader2,
   Shield,
-  AlertCircle
+  AlertCircle,
+  UserCheck,
+  Phone,
+  Mail,
+  Edit
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -48,11 +52,13 @@ import { ResponsavelTecnicoForm, ResponsavelTecnicoData } from "@/components/res
 import { SinaleirosForm, type SinaleirosFormRef } from "@/components/sinaleiros-form"
 import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
 import { Checkbox } from "@/components/ui/checkbox"
 import { useDebugMode } from "@/hooks/use-debug-mode"
 import { DebugButton } from "@/components/debug-button"
+import { responsaveisObraApi, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -253,6 +259,14 @@ export default function NovaObraPage() {
   const [sinaleiros, setSinaleiros] = useState<any[]>([])
   const sinaleirosFormRef = useRef<SinaleirosFormRef>(null)
   
+  // Estados para responsáveis de obra (aprovadores de horas)
+  const [responsaveisObra, setResponsaveisObra] = useState<ResponsavelObraCreateData[]>([])
+  const [isModalResponsavelObraOpen, setIsModalResponsavelObraOpen] = useState(false)
+  const [editandoResponsavelObraIndex, setEditandoResponsavelObraIndex] = useState<number | null>(null)
+  const [formResponsavelObra, setFormResponsavelObra] = useState<ResponsavelObraCreateData>({
+    nome: '', usuario: '', email: '', telefone: ''
+  })
+  
   // Estados para orçamento aprovado
   const [orcamentoAprovado, setOrcamentoAprovado] = useState<Orcamento | null>(null)
   const [orcamentoId, setOrcamentoId] = useState<number | null>(null)
@@ -261,6 +275,7 @@ export default function NovaObraPage() {
   // Estados para Dados de Montagem do Equipamento
   const [dadosMontagemEquipamento, setDadosMontagemEquipamento] = useState({
     altura_final: '',
+    raio_trabalho: '',
     tipo_base: '',
     capacidade_1_cabo: '',
     capacidade_2_cabos: '',
@@ -537,7 +552,7 @@ export default function NovaObraPage() {
     const novoFuncionario = {
       id: `func_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       userId: funcionario.id,
-      role: funcionario.role,
+      role: funcionario.role || funcionario.cargo || 'não informado',
       name: funcionario.name,
       gruaId: '' // Removido - usando array de gruas
     }
@@ -566,6 +581,39 @@ export default function NovaObraPage() {
     }
   }
 
+
+  // Funções para responsáveis de obra
+  const abrirModalResponsavelObra = (index?: number) => {
+    if (index !== undefined) {
+      setEditandoResponsavelObraIndex(index)
+      setFormResponsavelObra({ ...responsaveisObra[index] })
+    } else {
+      setEditandoResponsavelObraIndex(null)
+      setFormResponsavelObra({ nome: '', usuario: '', email: '', telefone: '' })
+    }
+    setIsModalResponsavelObraOpen(true)
+  }
+
+  const salvarResponsavelObraLocal = () => {
+    if (!formResponsavelObra.nome.trim()) {
+      toast({ title: "Erro", description: "O nome é obrigatório", variant: "destructive" })
+      return
+    }
+    if (editandoResponsavelObraIndex !== null) {
+      const updated = [...responsaveisObra]
+      updated[editandoResponsavelObraIndex] = { ...formResponsavelObra }
+      setResponsaveisObra(updated)
+    } else {
+      setResponsaveisObra([...responsaveisObra, { ...formResponsavelObra }])
+    }
+    setIsModalResponsavelObraOpen(false)
+    setEditandoResponsavelObraIndex(null)
+    setFormResponsavelObra({ nome: '', usuario: '', email: '', telefone: '' })
+  }
+
+  const removerResponsavelObraLocal = (index: number) => {
+    setResponsaveisObra(responsaveisObra.filter((_, i) => i !== index))
+  }
 
   // Função para criar obra
   const handleCreateObra = async (e: React.FormEvent) => {
@@ -664,11 +712,11 @@ export default function NovaObraPage() {
       setError(null)
 
       // Debug: Log dos dados antes da conversão
-      console.log('🔍 DEBUG - Dados antes da conversão:')
-      console.log('  - custosMensais:', custosMensais)
-      console.log('  - funcionariosSelecionados:', funcionariosSelecionados)
-      console.log('  - gruasSelecionadas:', gruasSelecionadas)
-      console.log('  - obraFormData:', obraFormData)
+      console.debug('🔍 DEBUG - Dados antes da conversão:')
+      console.debug('  - custosMensais:', custosMensais)
+      console.debug('  - funcionariosSelecionados:', funcionariosSelecionados)
+      console.debug('  - gruasSelecionadas:', gruasSelecionadas)
+      console.debug('  - obraFormData:', obraFormData)
 
       // Preparar dados para o backend
       const obraData = {
@@ -708,6 +756,7 @@ export default function NovaObraPage() {
           tipo_base: grua.tipo_base || dadosMontagemEquipamento.tipo_base || undefined,
           altura_inicial: grua.altura_inicial || (dadosMontagemEquipamento.altura_inicial ? parseFloat(dadosMontagemEquipamento.altura_inicial) : undefined),
           altura_final: grua.altura_final || (dadosMontagemEquipamento.altura_final ? parseFloat(dadosMontagemEquipamento.altura_final) : undefined),
+          raio_trabalho: grua.raio_trabalho || (dadosMontagemEquipamento.raio_trabalho ? parseFloat(dadosMontagemEquipamento.raio_trabalho) : undefined),
           velocidade_giro: grua.velocidade_giro || (dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined),
           velocidade_elevacao: grua.velocidade_elevacao || (dadosMontagemEquipamento.velocidade_elevacao ? parseFloat(dadosMontagemEquipamento.velocidade_elevacao) : undefined),
           velocidade_translacao: grua.velocidade_translacao || (dadosMontagemEquipamento.velocidade_translacao ? parseFloat(dadosMontagemEquipamento.velocidade_translacao) : undefined),
@@ -745,13 +794,74 @@ export default function NovaObraPage() {
         }))
       }
 
+      const getArquivoDebug = (arquivo: File | null) => ({
+        selecionado: !!arquivo,
+        nome: arquivo?.name || null,
+        tamanhoBytes: arquivo?.size || 0,
+        tipoMime: arquivo?.type || null
+      })
+
+      const snapshotTabsPreenchimento = {
+        timestamp: new Date().toISOString(),
+        abaDadosObra: {
+          name: obraData.name,
+          description: obraData.description,
+          status: obraData.status,
+          startDate: obraData.startDate,
+          endDate: obraData.endDate,
+          location: obraData.location,
+          cidade: obraData.cidade,
+          estado: obraData.estado,
+          tipo: obraData.tipo,
+          clienteId: obraData.clienteId,
+          observations: obraData.observations,
+          cep: obraData.cep,
+          contato_obra: obraData.contato_obra,
+          telefone_obra: obraData.telefone_obra,
+          email_obra: obraData.email_obra
+        },
+        abaDocumentos: {
+          cno: obraData.cno,
+          art_numero: obraData.art_numero,
+          apolice_numero: obraData.apolice_numero,
+          cno_arquivo: getArquivoDebug(cnoArquivo),
+          art_arquivo: getArquivoDebug(artArquivo),
+          apolice_arquivo: getArquivoDebug(apoliceArquivo),
+          manual_tecnico_arquivo: getArquivoDebug(manualTecnicoArquivo),
+          termo_entrega_tecnica_arquivo: getArquivoDebug(termoEntregaArquivo),
+          plano_carga_arquivo: getArquivoDebug(planoCargaArquivo),
+          aterramento_arquivo: getArquivoDebug(aterramentoArquivo)
+        },
+        abaResponsavelTecnico: {
+          responsavel_cliente: responsavelTecnico,
+          irbana: {
+            equipamentos: responsavelEquipamentos,
+            manutencoes: responsavelManutencoes,
+            montagem_operacao: responsavelMontagemOperacao,
+            adicionais: responsaveisAdicionais
+          }
+        },
+        abaGrua: {
+          dados_montagem_equipamento: dadosMontagemEquipamento,
+          gruas_selecionadas: obraData.gruasSelecionadas
+        },
+        abaFuncionarios: {
+          responsaveis_obra: responsaveisObra,
+          funcionarios: funcionariosSelecionados,
+          sinaleiros
+        },
+        payloadCriacaoObra: obraData
+      }
+
+      console.debug('🧭 [Nova Obra] Snapshot de preenchimento por aba', snapshotTabsPreenchimento)
+
       // Debug: Log COMPLETO de todos os dados que serão enviados
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log('🚀 DEBUG COMPLETO - TODOS OS DADOS QUE SERÃO ENVIADOS')
-      console.log('═══════════════════════════════════════════════════════════')
+      console.debug('═══════════════════════════════════════════════════════════')
+      console.debug('🚀 DEBUG COMPLETO - TODOS OS DADOS QUE SERÃO ENVIADOS')
+      console.debug('═══════════════════════════════════════════════════════════')
       
-      console.log('\n📋 1. DADOS BÁSICOS DA OBRA:')
-      console.log(JSON.stringify({
+      console.debug('\n📋 1. DADOS BÁSICOS DA OBRA:')
+      console.debug(JSON.stringify({
         name: obraData.name,
         description: obraData.description,
         status: obraData.status,
@@ -770,8 +880,8 @@ export default function NovaObraPage() {
         observations: obraData.observations
       }, null, 2))
       
-      console.log('\n📄 2. DOCUMENTOS:')
-      console.log(JSON.stringify({
+      console.debug('\n📄 2. DOCUMENTOS:')
+      console.debug(JSON.stringify({
         cno: obraData.cno,
         art_numero: obraData.art_numero,
         art_arquivo: obraData.art_arquivo?.name || 'Arquivo não selecionado',
@@ -784,8 +894,8 @@ export default function NovaObraPage() {
         aterramentoArquivo: aterramentoArquivo?.name || 'Não selecionado'
       }, null, 2))
       
-      console.log('\n🏗️ 3. GRUAS SELECIONADAS:')
-      console.log(JSON.stringify({
+      console.debug('\n🏗️ 3. GRUAS SELECIONADAS:')
+      console.debug(JSON.stringify({
         quantidade: obraData.gruasSelecionadas.length,
         gruaId: obraData.gruaId,
         gruaValue: obraData.gruaValue,
@@ -804,6 +914,7 @@ export default function NovaObraPage() {
           tipo_base: g.tipo_base,
           altura_inicial: g.altura_inicial,
           altura_final: g.altura_final,
+          raio_trabalho: g.raio_trabalho,
           velocidade_giro: g.velocidade_giro,
           velocidade_elevacao: g.velocidade_elevacao,
           velocidade_translacao: g.velocidade_translacao,
@@ -826,11 +937,11 @@ export default function NovaObraPage() {
         }))
       }, null, 2))
       
-      console.log('\n⚙️ 4. DADOS DE MONTAGEM DO EQUIPAMENTO (geral):')
-      console.log(JSON.stringify(obraData.dados_montagem_equipamento, null, 2))
+      console.debug('\n⚙️ 4. DADOS DE MONTAGEM DO EQUIPAMENTO (geral):')
+      console.debug(JSON.stringify(obraData.dados_montagem_equipamento, null, 2))
       
-      console.log('\n👥 5. FUNCIONÁRIOS SELECIONADOS:')
-      console.log(JSON.stringify({
+      console.debug('\n👥 5. FUNCIONÁRIOS SELECIONADOS:')
+      console.debug(JSON.stringify({
         quantidade: obraData.funcionarios.length,
         funcionarios: obraData.funcionarios.map((f: any, idx: number) => ({
           indice: idx + 1,
@@ -842,8 +953,8 @@ export default function NovaObraPage() {
         }))
       }, null, 2))
       
-      console.log('\n👨‍💼 6. RESPONSÁVEL TÉCNICO:')
-      console.log(JSON.stringify({
+      console.debug('\n👨‍💼 6. RESPONSÁVEL TÉCNICO:')
+      console.debug(JSON.stringify({
         responsavel_tecnico: obraData.responsavel_tecnico ? {
           nome: obraData.responsavel_tecnico.nome,
           cpf_cnpj: obraData.responsavel_tecnico.cpf_cnpj,
@@ -854,8 +965,8 @@ export default function NovaObraPage() {
         } : null
       }, null, 2))
       
-      console.log('\n🚦 7. SINALEIROS:')
-      console.log(JSON.stringify({
+      console.debug('\n🚦 7. SINALEIROS:')
+      console.debug(JSON.stringify({
         quantidade: obraData.sinaleiros.length,
         sinaleiros: obraData.sinaleiros.map((s: any, idx: number) => ({
           indice: idx + 1,
@@ -867,8 +978,8 @@ export default function NovaObraPage() {
         }))
       }, null, 2))
       
-      console.log('\n💰 8. CUSTOS MENSAIS:')
-      console.log(JSON.stringify({
+      console.debug('\n💰 8. CUSTOS MENSAIS:')
+      console.debug(JSON.stringify({
         quantidade: obraData.custos_mensais.length,
         total: obraData.custos_mensais.reduce((acc: number, c: any) => acc + (c.totalOrcamento || 0), 0),
         custos: obraData.custos_mensais.map((c: any, idx: number) => ({
@@ -884,12 +995,12 @@ export default function NovaObraPage() {
         }))
       }, null, 2))
       
-      console.log('\n📦 9. DADOS COMPLETOS (OBJETO FINAL):')
-      console.log(JSON.stringify(obraData, null, 2))
+      console.debug('\n📦 9. DADOS COMPLETOS (OBJETO FINAL):')
+      console.debug(JSON.stringify(obraData, null, 2))
       
-      console.log('\n═══════════════════════════════════════════════════════════')
-      console.log('✅ FIM DO DEBUG - Dados prontos para envio')
-      console.log('═══════════════════════════════════════════════════════════\n')
+      console.debug('\n═══════════════════════════════════════════════════════════')
+      console.debug('✅ FIM DO DEBUG - Dados prontos para envio')
+      console.debug('═══════════════════════════════════════════════════════════\n')
 
       // 1. Fazer upload dos arquivos ART e Apólice (precisamos criar a obra primeiro)
       // Por enquanto, vamos criar a obra sem os arquivos e depois atualizar
@@ -900,9 +1011,9 @@ export default function NovaObraPage() {
       delete obraBackendData.art_arquivo
       delete obraBackendData.apolice_arquivo
       
-      console.log('\n🔄 10. DADOS CONVERTIDOS PARA BACKEND:')
-      console.log(JSON.stringify(obraBackendData, null, 2))
-      console.log('\n')
+      console.debug('\n🔄 10. DADOS CONVERTIDOS PARA BACKEND:')
+      console.debug(JSON.stringify(obraBackendData, null, 2))
+      console.debug('\n')
       
       // 2. Criar a obra
       const response = await obrasApi.criarObra(obraBackendData)
@@ -912,18 +1023,27 @@ export default function NovaObraPage() {
       }
       
       const obraId = response.data.id
-      console.log('\n✅ Obra criada com ID:', obraId)
-      console.log('📥 RESPOSTA DA API (criação da obra):')
-      console.log(JSON.stringify(response.data, null, 2))
+      console.debug('\n✅ Obra criada com ID:', obraId)
+      console.debug('📥 RESPOSTA DA API (criação da obra):')
+      console.debug(JSON.stringify(response.data, null, 2))
       
-      console.log('\n🔍 DEBUG - Estado antes de salvar responsável e sinaleiros:')
-      console.log('  - responsavelTecnico:', JSON.stringify(responsavelTecnico, null, 2))
-      console.log('  - sinaleiros:', JSON.stringify(sinaleiros, null, 2))
+      console.debug('\n🔍 DEBUG - Estado antes de salvar responsável e sinaleiros:')
+      console.debug('  - responsavelTecnico:', JSON.stringify(responsavelTecnico, null, 2))
+      console.debug('  - sinaleiros:', JSON.stringify(sinaleiros, null, 2))
       
       // 3. Fazer upload dos arquivos ART, Apólice e documentos adicionais
       let artArquivoUrl = ''
       let apoliceArquivoUrl = ''
       let cnoArquivoUrl = ''
+      const uploadResultados: Record<string, { enviado: boolean; nome: string | null; url: string | null }> = {
+        cno: { enviado: false, nome: cnoArquivo?.name || null, url: null },
+        art: { enviado: false, nome: artArquivo?.name || null, url: null },
+        apolice: { enviado: false, nome: apoliceArquivo?.name || null, url: null },
+        manual_tecnico: { enviado: false, nome: manualTecnicoArquivo?.name || null, url: null },
+        termo_entrega_tecnica: { enviado: false, nome: termoEntregaArquivo?.name || null, url: null },
+        plano_carga: { enviado: false, nome: planoCargaArquivo?.name || null, url: null },
+        aterramento: { enviado: false, nome: aterramentoArquivo?.name || null, url: null }
+      }
       
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
@@ -953,48 +1073,55 @@ export default function NovaObraPage() {
         // Upload CNO
         if (cnoArquivo) {
           cnoArquivoUrl = await fazerUploadArquivo(cnoArquivo, 'cno')
+          uploadResultados.cno = { enviado: !!cnoArquivoUrl, nome: cnoArquivo.name, url: cnoArquivoUrl || null }
         }
         
         // Upload ART
         if (artArquivo) {
           artArquivoUrl = await fazerUploadArquivo(artArquivo, 'art')
+          uploadResultados.art = { enviado: !!artArquivoUrl, nome: artArquivo.name, url: artArquivoUrl || null }
         }
         
         // Upload Apólice
         if (apoliceArquivo) {
           apoliceArquivoUrl = await fazerUploadArquivo(apoliceArquivo, 'apolice')
+          uploadResultados.apolice = { enviado: !!apoliceArquivoUrl, nome: apoliceArquivo.name, url: apoliceArquivoUrl || null }
         }
         
         // Upload Manual Técnico
         if (manualTecnicoArquivo) {
-          console.log('📤 Fazendo upload do Manual Técnico...')
+          console.debug('📤 Fazendo upload do Manual Técnico...')
           const manualTecnicoUrl = await fazerUploadArquivo(manualTecnicoArquivo, 'manual_tecnico')
-          console.log('✅ Manual Técnico enviado:', manualTecnicoUrl)
+          uploadResultados.manual_tecnico = { enviado: !!manualTecnicoUrl, nome: manualTecnicoArquivo.name, url: manualTecnicoUrl || null }
+          console.debug('✅ Manual Técnico enviado:', manualTecnicoUrl)
         }
         
         // Upload Termo de Entrega Técnica
         if (termoEntregaArquivo) {
-          console.log('📤 Fazendo upload do Termo de Entrega Técnica...')
+          console.debug('📤 Fazendo upload do Termo de Entrega Técnica...')
           const termoEntregaUrl = await fazerUploadArquivo(termoEntregaArquivo, 'termo_entrega_tecnica')
-          console.log('✅ Termo de Entrega Técnica enviado:', termoEntregaUrl)
+          uploadResultados.termo_entrega_tecnica = { enviado: !!termoEntregaUrl, nome: termoEntregaArquivo.name, url: termoEntregaUrl || null }
+          console.debug('✅ Termo de Entrega Técnica enviado:', termoEntregaUrl)
         }
         
         // Upload Plano de Carga
         if (planoCargaArquivo) {
-          console.log('📤 Fazendo upload do Plano de Carga...')
+          console.debug('📤 Fazendo upload do Plano de Carga...')
           const planoCargaUrl = await fazerUploadArquivo(planoCargaArquivo, 'plano_carga')
-          console.log('✅ Plano de Carga enviado:', planoCargaUrl)
+          uploadResultados.plano_carga = { enviado: !!planoCargaUrl, nome: planoCargaArquivo.name, url: planoCargaUrl || null }
+          console.debug('✅ Plano de Carga enviado:', planoCargaUrl)
         }
         
         // Upload Aterramento
         if (aterramentoArquivo) {
-          console.log('📤 Fazendo upload do Aterramento...')
+          console.debug('📤 Fazendo upload do Aterramento...')
           const aterramentoUrl = await fazerUploadArquivo(aterramentoArquivo, 'aterramento')
-          console.log('✅ Aterramento enviado:', aterramentoUrl)
+          uploadResultados.aterramento = { enviado: !!aterramentoUrl, nome: aterramentoArquivo.name, url: aterramentoUrl || null }
+          console.debug('✅ Aterramento enviado:', aterramentoUrl)
         }
         
         // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
-        console.log('\n📝 Atualizando documentos da obra...')
+        console.debug('\n📝 Atualizando documentos da obra...')
         const documentosUpdate = {
           cno,
           cno_arquivo: cnoArquivoUrl || undefined,
@@ -1003,9 +1130,15 @@ export default function NovaObraPage() {
           apolice_numero: apoliceNumero || undefined,
           apolice_arquivo: apoliceArquivoUrl || undefined
         }
-        console.log('📤 Dados de documentos para atualizar:', JSON.stringify(documentosUpdate, null, 2))
+        console.debug('🧭 [Nova Obra] Snapshot de documentos enviados', {
+          timestamp: new Date().toISOString(),
+          obraId,
+          uploadResultados,
+          payloadAtualizacaoDocumentos: documentosUpdate
+        })
+        console.debug('📤 Dados de documentos para atualizar:', JSON.stringify(documentosUpdate, null, 2))
         const documentosResponse = await obrasApi.atualizarDocumentos(obraId, documentosUpdate)
-        console.log('✅ Documentos atualizados:', JSON.stringify(documentosResponse, null, 2))
+        console.debug('✅ Documentos atualizados:', JSON.stringify(documentosResponse, null, 2))
       } catch (uploadError) {
         console.error('Erro ao fazer upload de arquivos:', uploadError)
         // Continuar mesmo com erro no upload - a obra já foi criada
@@ -1013,12 +1146,12 @@ export default function NovaObraPage() {
       
       // 5. Salvar responsável técnico (apenas se houver dados válidos)
       // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
-      console.log('🔍 DEBUG - Responsável técnico no estado:', responsavelTecnico)
+      console.debug('🔍 DEBUG - Responsável técnico no estado:', responsavelTecnico)
       if (responsavelTecnico) {
         const temFuncionarioId = !!responsavelTecnico.funcionario_id
         const temDadosCompletos = !!(responsavelTecnico.nome && responsavelTecnico.cpf_cnpj)
         
-        console.log('🔍 DEBUG - Validação responsável:', { temFuncionarioId, temDadosCompletos })
+        console.debug('🔍 DEBUG - Validação responsável:', { temFuncionarioId, temDadosCompletos })
         
         if (temFuncionarioId || temDadosCompletos) {
           try {
@@ -1032,9 +1165,9 @@ export default function NovaObraPage() {
                   email: responsavelTecnico.email,
                   telefone: responsavelTecnico.telefone
                 }
-            console.log('📤 Enviando responsável técnico:', payload)
+            console.debug('📤 Enviando responsável técnico:', payload)
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.log('✅ Responsável técnico salvo:', response)
+            console.debug('✅ Responsável técnico salvo:', response)
           } catch (error) {
             console.error('❌ Erro ao salvar responsável técnico:', error)
             toast({
@@ -1047,7 +1180,7 @@ export default function NovaObraPage() {
           console.warn('⚠️ Responsável técnico não tem dados válidos para salvar')
         }
       } else {
-        console.log('⚠️ Nenhum responsável técnico no estado')
+        console.debug('⚠️ Nenhum responsável técnico no estado')
       }
 
       // 5.1. Salvar responsáveis técnicos IRBANA (equipamentos, manutenções, montagem e operação)
@@ -1072,9 +1205,9 @@ export default function NovaObraPage() {
               payload.crea_empresa = 'SP 2494244' // CREA da empresa IRBANA
             }
 
-            console.log(`📤 Enviando responsável técnico ${tipo}:`, payload)
+            console.debug(`📤 Enviando responsável técnico ${tipo}:`, payload)
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.log(`✅ Responsável técnico ${tipo} salvo:`, response)
+            console.debug(`✅ Responsável técnico ${tipo} salvo:`, response)
           } catch (error) {
             console.error(`❌ Erro ao salvar responsável técnico ${tipo}:`, error)
             toast({
@@ -1105,9 +1238,9 @@ export default function NovaObraPage() {
               payload.nome = `${responsavel.nome} - ${responsavel.area}`
             }
 
-            console.log(`📤 Enviando responsável técnico adicional:`, payload)
+            console.debug(`📤 Enviando responsável técnico adicional:`, payload)
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.log(`✅ Responsável técnico adicional salvo:`, response)
+            console.debug(`✅ Responsável técnico adicional salvo:`, response)
           } catch (error) {
             console.error(`❌ Erro ao salvar responsável técnico adicional:`, error)
             toast({
@@ -1124,64 +1257,64 @@ export default function NovaObraPage() {
       // Buscar sinaleiros do estado atual (que foram preenchidos no formulário)
       // O componente SinaleirosForm mantém o estado local, precisamos obter os dados dele
       // Primeiro tentar obter do ref (estado mais atualizado), depois do estado
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log('🚦 INICIANDO PROCESSAMENTO DE SINALEIROS')
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log('🔍 DEBUG - Obra ID:', obraId)
+      console.debug('═══════════════════════════════════════════════════════════')
+      console.debug('🚦 INICIANDO PROCESSAMENTO DE SINALEIROS')
+      console.debug('═══════════════════════════════════════════════════════════')
+      console.debug('🔍 DEBUG - Obra ID:', obraId)
       
       // Tentar obter sinaleiros do componente via ref (estado mais atualizado)
       let sinaleirosParaProcessar = sinaleiros
-      console.log('🔍 Tentando obter sinaleiros via ref...')
-      console.log('   - Estado atual:', sinaleiros.length)
-      console.log('   - Ref existe?', !!sinaleirosFormRef.current)
+      console.debug('🔍 Tentando obter sinaleiros via ref...')
+      console.debug('   - Estado atual:', sinaleiros.length)
+      console.debug('   - Ref existe?', !!sinaleirosFormRef.current)
       
       if (sinaleirosFormRef.current) {
         try {
           const sinaleirosDoComponente = sinaleirosFormRef.current.getSinaleiros()
-          console.log('📥 Sinaleiros obtidos via ref:', sinaleirosDoComponente.length)
-          console.log('   - Dados:', JSON.stringify(sinaleirosDoComponente, null, 2))
+          console.debug('📥 Sinaleiros obtidos via ref:', sinaleirosDoComponente.length)
+          console.debug('   - Dados:', JSON.stringify(sinaleirosDoComponente, null, 2))
           
           if (sinaleirosDoComponente && Array.isArray(sinaleirosDoComponente) && sinaleirosDoComponente.length > 0) {
             sinaleirosParaProcessar = sinaleirosDoComponente
             // Sincronizar com o estado também
             setSinaleiros(sinaleirosDoComponente)
-            console.log('✅ Usando sinaleiros do ref:', sinaleirosDoComponente.length)
+            console.debug('✅ Usando sinaleiros do ref:', sinaleirosDoComponente.length)
           } else {
-            console.log('⚠️ Ref retornou array vazio ou inválido, usando estado')
+            console.debug('⚠️ Ref retornou array vazio ou inválido, usando estado')
           }
         } catch (error) {
           console.error('❌ Erro ao obter sinaleiros via ref:', error)
-          console.log('⚠️ Usando estado como fallback')
+          console.debug('⚠️ Usando estado como fallback')
         }
       } else {
-        console.log('⚠️ Ref não disponível, usando estado')
-        console.log('   - Estado tem', sinaleiros.length, 'sinaleiros')
+        console.debug('⚠️ Ref não disponível, usando estado')
+        console.debug('   - Estado tem', sinaleiros.length, 'sinaleiros')
       }
       
       // Se ainda não temos sinaleiros, tentar forçar uma última sincronização
       if (sinaleirosParaProcessar.length === 0 && sinaleirosFormRef.current) {
-        console.log('🔄 Tentando forçar sincronização final...')
+        console.debug('🔄 Tentando forçar sincronização final...')
         try {
           const sinaleirosFinais = sinaleirosFormRef.current.getSinaleiros()
           if (sinaleirosFinais && sinaleirosFinais.length > 0) {
             sinaleirosParaProcessar = sinaleirosFinais
             setSinaleiros(sinaleirosFinais)
-            console.log('✅ Sincronização forçada bem-sucedida:', sinaleirosFinais.length)
+            console.debug('✅ Sincronização forçada bem-sucedida:', sinaleirosFinais.length)
           }
         } catch (error) {
           console.error('❌ Erro na sincronização forçada:', error)
         }
       }
       
-      console.log('🔍 DEBUG - Sinaleiros no estado:', sinaleirosParaProcessar)
-      console.log('🔍 DEBUG - Tipo de sinaleiros:', typeof sinaleirosParaProcessar)
-      console.log('🔍 DEBUG - É array?', Array.isArray(sinaleirosParaProcessar))
-      console.log('🔍 DEBUG - Length:', sinaleirosParaProcessar?.length || 0)
-      console.log('🔍 DEBUG - Conteúdo completo:', JSON.stringify(sinaleirosParaProcessar, null, 2))
-      console.log('🔍 DEBUG - Verificação detalhada:')
+      console.debug('🔍 DEBUG - Sinaleiros no estado:', sinaleirosParaProcessar)
+      console.debug('🔍 DEBUG - Tipo de sinaleiros:', typeof sinaleirosParaProcessar)
+      console.debug('🔍 DEBUG - É array?', Array.isArray(sinaleirosParaProcessar))
+      console.debug('🔍 DEBUG - Length:', sinaleirosParaProcessar?.length || 0)
+      console.debug('🔍 DEBUG - Conteúdo completo:', JSON.stringify(sinaleirosParaProcessar, null, 2))
+      console.debug('🔍 DEBUG - Verificação detalhada:')
       if (Array.isArray(sinaleirosParaProcessar)) {
         sinaleirosParaProcessar.forEach((s, index) => {
-          console.log(`   - Sinaleiro ${index + 1}:`, {
+          console.debug(`   - Sinaleiro ${index + 1}:`, {
             id: s?.id,
             nome: s?.nome,
             rg_cpf: s?.rg_cpf,
@@ -1199,7 +1332,7 @@ export default function NovaObraPage() {
           variant: "destructive"
         })
       } else if (sinaleirosParaProcessar && Array.isArray(sinaleirosParaProcessar) && sinaleirosParaProcessar.length > 0) {
-        console.log('✅ Condição passou: sinaleiros encontrados, processando...')
+        console.debug('✅ Condição passou: sinaleiros encontrados, processando...')
         // Filtrar apenas sinaleiros com dados válidos (nome e rg_cpf preenchidos)
         const sinaleirosValidos = sinaleirosParaProcessar.filter((s: any) => {
           const temNome = !!s.nome && s.nome.trim() !== ''
@@ -1224,8 +1357,8 @@ export default function NovaObraPage() {
           return valido
         })
         
-        console.log('🔍 DEBUG - Sinaleiros válidos após filtro:', sinaleirosValidos.length)
-        console.log('🔍 DEBUG - Sinaleiros válidos:', JSON.stringify(sinaleirosValidos, null, 2))
+        console.debug('🔍 DEBUG - Sinaleiros válidos após filtro:', sinaleirosValidos.length)
+        console.debug('🔍 DEBUG - Sinaleiros válidos:', JSON.stringify(sinaleirosValidos, null, 2))
         
         if (sinaleirosValidos.length > 0) {
           try {
@@ -1260,22 +1393,22 @@ export default function NovaObraPage() {
                 tipo: tipo
               }
             })
-            console.log('═══════════════════════════════════════════════════════════')
-            console.log('📤 CHAMANDO API PARA SALVAR SINALEIROS')
-            console.log('═══════════════════════════════════════════════════════════')
-            console.log('📤 Obra ID:', obraId)
-            console.log('📤 Quantidade de sinaleiros:', sinaleirosParaEnviar.length)
-            console.log('📤 Dados dos sinaleiros formatados:', JSON.stringify(sinaleirosParaEnviar, null, 2))
-            console.log('📤 URL da API:', `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras/${obraId}/sinaleiros`)
+            console.debug('═══════════════════════════════════════════════════════════')
+            console.debug('📤 CHAMANDO API PARA SALVAR SINALEIROS')
+            console.debug('═══════════════════════════════════════════════════════════')
+            console.debug('📤 Obra ID:', obraId)
+            console.debug('📤 Quantidade de sinaleiros:', sinaleirosParaEnviar.length)
+            console.debug('📤 Dados dos sinaleiros formatados:', JSON.stringify(sinaleirosParaEnviar, null, 2))
+            console.debug('📤 URL da API:', `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras/${obraId}/sinaleiros`)
             
             let response: any = null
             try {
-              console.log('🔄 Iniciando chamada à API...')
+              console.debug('🔄 Iniciando chamada à API...')
               const startTime = Date.now()
               response = await sinaleirosApi.criarOuAtualizar(obraId, sinaleirosParaEnviar)
               const endTime = Date.now()
-              console.log(`✅ API chamada concluída em ${endTime - startTime}ms`)
-              console.log('✅ Resposta da API:', JSON.stringify(response, null, 2))
+              console.debug(`✅ API chamada concluída em ${endTime - startTime}ms`)
+              console.debug('✅ Resposta da API:', JSON.stringify(response, null, 2))
               
               if (!response.success) {
                 console.error('❌ Erro ao salvar sinaleiros:', response.error)
@@ -1293,7 +1426,7 @@ export default function NovaObraPage() {
                     variant: "default"
                   })
                 } else {
-                  console.log(`✅ ${response.data.length} sinaleiro(s) salvo(s) com sucesso`)
+                  console.debug(`✅ ${response.data.length} sinaleiro(s) salvo(s) com sucesso`)
                   toast({
                     title: "Sucesso",
                     description: `${response.data.length} sinaleiro(s) atrelado(s) à obra com sucesso.`,
@@ -1391,49 +1524,67 @@ export default function NovaObraPage() {
             })
           }
         } else {
-          console.log('⚠️ Nenhum sinaleiro válido encontrado após filtro')
+          console.debug('⚠️ Nenhum sinaleiro válido encontrado após filtro')
         }
       } else {
-        console.log('⚠️ Nenhum sinaleiro encontrado para salvar')
-        console.log('   - obraData.sinaleiros existe?', !!obraData.sinaleiros)
-        console.log('   - obraData.sinaleiros é array?', Array.isArray(obraData.sinaleiros))
-        console.log('   - obraData.sinaleiros.length:', obraData.sinaleiros?.length || 0)
-        console.log('   - sinaleiros (estado) existe?', !!sinaleiros)
-        console.log('   - sinaleiros (estado) é array?', Array.isArray(sinaleiros))
-        console.log('   - sinaleiros (estado).length:', sinaleiros?.length || 0)
+        console.debug('⚠️ Nenhum sinaleiro encontrado para salvar')
+        console.debug('   - obraData.sinaleiros existe?', !!obraData.sinaleiros)
+        console.debug('   - obraData.sinaleiros é array?', Array.isArray(obraData.sinaleiros))
+        console.debug('   - obraData.sinaleiros.length:', obraData.sinaleiros?.length || 0)
+        console.debug('   - sinaleiros (estado) existe?', !!sinaleiros)
+        console.debug('   - sinaleiros (estado) é array?', Array.isArray(sinaleiros))
+        console.debug('   - sinaleiros (estado).length:', sinaleiros?.length || 0)
       }
       
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log('🚦 FIM DO PROCESSAMENTO DE SINALEIROS')
-      console.log('═══════════════════════════════════════════════════════════')
+      console.debug('═══════════════════════════════════════════════════════════')
+      console.debug('🚦 FIM DO PROCESSAMENTO DE SINALEIROS')
+      console.debug('═══════════════════════════════════════════════════════════')
+      
+      // 7. Salvar responsáveis de obra (aprovadores de horas)
+      if (responsaveisObra.length > 0) {
+        console.debug(`📤 Salvando ${responsaveisObra.length} responsáveis de obra...`)
+        for (const responsavel of responsaveisObra) {
+          try {
+            await responsaveisObraApi.criar(obraId, responsavel)
+            console.debug(`✅ Responsável de obra salvo: ${responsavel.nome}`)
+          } catch (error: any) {
+            console.error(`❌ Erro ao salvar responsável de obra ${responsavel.nome}:`, error)
+            toast({
+              title: "Aviso",
+              description: `Obra criada, mas houve erro ao salvar o responsável ${responsavel.nome}. Você pode adicioná-lo depois.`,
+              variant: "destructive"
+            })
+          }
+        }
+      }
       
       toast({
         title: "Sucesso",
         description: "Obra criada com sucesso!"
       })
       // Resumo final de tudo que foi enviado e salvo
-      console.log('\n═══════════════════════════════════════════════════════════')
-      console.log('📊 RESUMO FINAL - TUDO QUE FOI ENVIADO E SALVO')
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log(`✅ Obra criada com ID: ${obraId}`)
-      console.log(`✅ Nome da Obra: ${obraData.name}`)
-      console.log(`✅ Cliente ID: ${obraData.clienteId}`)
-      console.log(`✅ Gruas vinculadas: ${obraData.gruasSelecionadas.length}`)
-      console.log(`✅ Funcionários vinculados: ${obraData.funcionarios.length}`)
-      console.log(`✅ Sinaleiros cadastrados: ${sinaleiros.length}`)
-      console.log(`✅ Responsável técnico: ${responsavelTecnico ? 'Sim' : 'Não'}`)
-      console.log(`✅ Custos mensais: ${obraData.custos_mensais.length}`)
-      console.log(`✅ Documentos enviados:`)
-      console.log(`   - CNO: ${cno ? 'Sim' : 'Não'}`)
-      console.log(`   - ART: ${artNumero ? 'Sim' : 'Não'}`)
-      console.log(`   - Apólice: ${apoliceNumero ? 'Sim' : 'Não'}`)
-      console.log(`   - Manual Técnico: ${manualTecnicoArquivo ? 'Sim' : 'Não'}`)
-      console.log(`   - Termo Entrega: ${termoEntregaArquivo ? 'Sim' : 'Não'}`)
-      console.log(`   - Plano Carga: ${planoCargaArquivo ? 'Sim' : 'Não'}`)
-      console.log(`✅ Dados de montagem: ${Object.keys(dadosMontagemEquipamento).filter(k => dadosMontagemEquipamento[k as keyof typeof dadosMontagemEquipamento]).length} campos preenchidos`)
-      console.log('\n═══════════════════════════════════════════════════════════')
-      console.log('🎉 PROCESSO CONCLUÍDO COM SUCESSO!')
-      console.log('═══════════════════════════════════════════════════════════\n')
+      console.debug('\n═══════════════════════════════════════════════════════════')
+      console.debug('📊 RESUMO FINAL - TUDO QUE FOI ENVIADO E SALVO')
+      console.debug('═══════════════════════════════════════════════════════════')
+      console.debug(`✅ Obra criada com ID: ${obraId}`)
+      console.debug(`✅ Nome da Obra: ${obraData.name}`)
+      console.debug(`✅ Cliente ID: ${obraData.clienteId}`)
+      console.debug(`✅ Gruas vinculadas: ${obraData.gruasSelecionadas.length}`)
+      console.debug(`✅ Funcionários vinculados: ${obraData.funcionarios.length}`)
+      console.debug(`✅ Sinaleiros cadastrados: ${sinaleiros.length}`)
+      console.debug(`✅ Responsável técnico: ${responsavelTecnico ? 'Sim' : 'Não'}`)
+      console.debug(`✅ Custos mensais: ${obraData.custos_mensais.length}`)
+      console.debug(`✅ Documentos enviados:`)
+      console.debug(`   - CNO: ${cno ? 'Sim' : 'Não'}`)
+      console.debug(`   - ART: ${artNumero ? 'Sim' : 'Não'}`)
+      console.debug(`   - Apólice: ${apoliceNumero ? 'Sim' : 'Não'}`)
+      console.debug(`   - Manual Técnico: ${manualTecnicoArquivo ? 'Sim' : 'Não'}`)
+      console.debug(`   - Termo Entrega: ${termoEntregaArquivo ? 'Sim' : 'Não'}`)
+      console.debug(`   - Plano Carga: ${planoCargaArquivo ? 'Sim' : 'Não'}`)
+      console.debug(`✅ Dados de montagem: ${Object.keys(dadosMontagemEquipamento).filter(k => dadosMontagemEquipamento[k as keyof typeof dadosMontagemEquipamento]).length} campos preenchidos`)
+      console.debug('\n═══════════════════════════════════════════════════════════')
+      console.debug('🎉 PROCESSO CONCLUÍDO COM SUCESSO!')
+      console.debug('═══════════════════════════════════════════════════════════\n')
       
       router.push('/dashboard/obras')
     } catch (err) {
@@ -1503,6 +1654,7 @@ export default function NovaObraPage() {
       telefone: ''
     })
     setSinaleiros([])
+    setResponsaveisObra([])
     setGruasSelecionadas([])
     setFuncionariosSelecionados([])
     setClienteSelecionado(null)
@@ -1511,6 +1663,7 @@ export default function NovaObraPage() {
     setOrcamentoId(null)
     setDadosMontagemEquipamento({
       altura_final: '',
+      raio_trabalho: '',
       tipo_base: '',
       capacidade_1_cabo: '',
       capacidade_2_cabos: '',
@@ -1677,6 +1830,7 @@ export default function NovaObraPage() {
     // Dados de Montagem do Equipamento
     setDadosMontagemEquipamento({
       altura_final: '60',
+      raio_trabalho: '50',
       tipo_base: 'Chumbador',
       capacidade_1_cabo: '5000',
       capacidade_2_cabos: '10000',
@@ -1724,6 +1878,7 @@ export default function NovaObraPage() {
       tipo_base: 'chumbador',
       altura_inicial: 20,
       altura_final: 60,
+      raio_trabalho: 50,
       velocidade_giro: 0.8,
       velocidade_elevacao: 60,
       velocidade_translacao: 0,
@@ -1788,6 +1943,7 @@ export default function NovaObraPage() {
       tipo_base: 'chumbador',
       altura_inicial: 20,
       altura_final: 60,
+      raio_trabalho: 50,
       velocidade_giro: 0.8,
       velocidade_elevacao: 60,
       velocidade_translacao: 0,
@@ -1841,6 +1997,7 @@ export default function NovaObraPage() {
       tipo_base: 'chumbador',
       altura_inicial: 20,
       altura_final: 60,
+      raio_trabalho: 50,
       velocidade_giro: 0.8,
       velocidade_elevacao: 60,
       velocidade_translacao: 0,
@@ -2647,6 +2804,19 @@ export default function NovaObraPage() {
                   </div>
 
                   <div>
+                    <Label htmlFor="raio_trabalho">Raio de Trabalho (m)</Label>
+                    <Input
+                      id="raio_trabalho"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.raio_trabalho}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, raio_trabalho: e.target.value })}
+                      placeholder="Ex: 50"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Determina o tamanho da lança</p>
+                  </div>
+
+                  <div>
                     <Label htmlFor="capacidade_1_cabo">Capacidade com 2 Cabos (kg)</Label>
                     <Input
                       id="capacidade_1_cabo"
@@ -3243,6 +3413,170 @@ export default function NovaObraPage() {
 
           {/* Aba: Funcionários */}
           <TabsContent value="funcionarios" className="space-y-4" forceMount>
+            {/* Seção: Responsáveis de Obra */}
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <UserCheck className="w-4 h-4" />
+                    Responsáveis de Obra ({responsaveisObra.length})
+                  </CardTitle>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => abrirModalResponsavelObra()}
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Adicionar Responsável
+                  </Button>
+                </div>
+                <CardDescription>
+                  Responsáveis com acesso para aprovar as horas dos funcionários desta obra
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {responsaveisObra.length === 0 ? (
+                  <div className="text-center py-6 text-gray-500">
+                    <UserCheck className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                    <p className="text-sm">Nenhum responsável cadastrado</p>
+                    <p className="text-xs text-gray-400 mt-1">Adicione responsáveis para aprovar horas dos funcionários</p>
+                  </div>
+                ) : (
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome</TableHead>
+                          <TableHead>Usuário</TableHead>
+                          <TableHead>Email</TableHead>
+                          <TableHead>Telefone</TableHead>
+                          <TableHead className="text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {responsaveisObra.map((responsavel, index) => (
+                          <TableRow key={index}>
+                            <TableCell className="font-medium">{responsavel.nome}</TableCell>
+                            <TableCell>{responsavel.usuario || '-'}</TableCell>
+                            <TableCell>
+                              {responsavel.email ? (
+                                <div className="flex items-center gap-1">
+                                  <Mail className="w-3 h-3 text-gray-400" />
+                                  <span className="text-sm">{responsavel.email}</span>
+                                </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell>
+                              {responsavel.telefone ? (
+                                <div className="flex items-center gap-1">
+                                  <Phone className="w-3 h-3 text-gray-400" />
+                                  <span className="text-sm">{responsavel.telefone}</span>
+                                </div>
+                              ) : '-'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              <div className="flex justify-end gap-1">
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => abrirModalResponsavelObra(index)}
+                                  title="Editar"
+                                >
+                                  <Edit className="w-3 h-3" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                                  onClick={() => {
+                                    if (confirm('Deseja remover este responsável?')) {
+                                      removerResponsavelObraLocal(index)
+                                    }
+                                  }}
+                                  title="Remover"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Modal para adicionar/editar responsável de obra */}
+            <Dialog open={isModalResponsavelObraOpen} onOpenChange={setIsModalResponsavelObraOpen}>
+              <DialogContent className="sm:max-w-[500px]">
+                <DialogHeader>
+                  <DialogTitle>
+                    {editandoResponsavelObraIndex !== null ? 'Editar Responsável de Obra' : 'Novo Responsável de Obra'}
+                  </DialogTitle>
+                  <DialogDescription>
+                    {editandoResponsavelObraIndex !== null
+                      ? 'Atualize os dados do responsável'
+                      : 'Cadastre um responsável para aprovar horas dos funcionários desta obra'}
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 py-4">
+                  <div>
+                    <Label htmlFor="novo-resp-nome">Nome *</Label>
+                    <Input
+                      id="novo-resp-nome"
+                      value={formResponsavelObra.nome}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, nome: e.target.value })}
+                      placeholder="Nome do responsável"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="novo-resp-usuario">Usuário</Label>
+                    <Input
+                      id="novo-resp-usuario"
+                      value={formResponsavelObra.usuario || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, usuario: e.target.value })}
+                      placeholder="Nome de usuário"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="novo-resp-email">Email</Label>
+                    <Input
+                      id="novo-resp-email"
+                      type="email"
+                      value={formResponsavelObra.email || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, email: e.target.value })}
+                      placeholder="email@exemplo.com"
+                      className="mt-1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="novo-resp-telefone">Telefone</Label>
+                    <Input
+                      id="novo-resp-telefone"
+                      value={formResponsavelObra.telefone || ''}
+                      onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, telefone: e.target.value })}
+                      placeholder="(11) 99999-9999"
+                      className="mt-1"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button type="button" variant="outline" onClick={() => setIsModalResponsavelObraOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="button" onClick={salvarResponsavelObraLocal}>
+                    {editandoResponsavelObraIndex !== null ? 'Salvar Alterações' : 'Cadastrar'}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             {/* Seção: Sinaleiros */}
             <Card>
               <CardHeader>

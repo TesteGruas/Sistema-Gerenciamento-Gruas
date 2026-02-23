@@ -62,6 +62,7 @@ export interface ObraBackend {
     tipo_base?: string
     altura_inicial?: number
     altura_final?: number
+    raio_trabalho?: number
     velocidade_giro?: number
     velocidade_elevacao?: number
     velocidade_translacao?: number
@@ -134,6 +135,27 @@ export interface ObraBackend {
     created_at: string
     updated_at: string
   }>
+  responsaveis_tecnicos?: Array<{
+    id: number
+    obra_id: number
+    nome: string
+    cpf_cnpj?: string
+    crea?: string
+    email?: string
+    telefone?: string
+    tipo?: string
+    crea_empresa?: string
+    created_at?: string
+    updated_at?: string
+  }>
+  responsavel_tecnico?: {
+    nome?: string
+    cpf_cnpj?: string
+    crea?: string
+    email?: string
+    telefone?: string
+    tipo?: string
+  }
 }
 
 export interface ObraCreateData {
@@ -192,6 +214,7 @@ export interface ObraCreateData {
     tipo_base?: string
     altura_inicial?: number
     altura_final?: number
+    raio_trabalho?: number
     velocidade_giro?: number
     velocidade_elevacao?: number
     velocidade_translacao?: number
@@ -695,6 +718,7 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
     custosIniciais: obraBackend.custos_iniciais || obraBackend.total_custos_mensais || obraBackend.custos_mensais?.reduce((total, custo) => total + (custo.total_orcamento || 0), 0) || 0,
+    custos_mensais: obraBackend.custos_mensais || [],
     custosAdicionais: obraBackend.custos_adicionais || obraBackend.total_custos_gerais || 0,
     totalCustos: obraBackend.total_custos || (obraBackend.custos_iniciais || 0) + (obraBackend.custos_adicionais || 0),
     // Campos adicionais do backend
@@ -719,6 +743,7 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     // Preservar sinaleiros_obra do backend
     sinaleiros_obra: obraBackend.sinaleiros_obra || [],
     // Preservar responsável técnico do backend
+    responsaveis_tecnicos: obraBackend.responsaveis_tecnicos || [],
     responsavel_tecnico: obraBackend.responsaveis_tecnicos?.find((rt: any) => rt.tipo === 'obra') || obraBackend.responsavel_tecnico || null,
     responsavelTecnico: obraBackend.responsaveis_tecnicos?.find((rt: any) => rt.tipo === 'obra') || obraBackend.responsavel_tecnico || null,
     // Preservar dados de montagem do equipamento (vem da primeira grua_obra)
@@ -726,6 +751,7 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
       tipo_base: obraBackend.grua_obra[0].tipo_base,
       altura_inicial: obraBackend.grua_obra[0].altura_inicial,
       altura_final: obraBackend.grua_obra[0].altura_final,
+      raio_trabalho: obraBackend.grua_obra[0].raio_trabalho,
       velocidade_giro: obraBackend.grua_obra[0].velocidade_giro,
       velocidade_elevacao: obraBackend.grua_obra[0].velocidade_elevacao,
       velocidade_translacao: obraBackend.grua_obra[0].velocidade_translacao,
@@ -782,6 +808,7 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
       tipo_base: grua.tipo_base,
       altura_inicial: grua.altura_inicial,
       altura_final: grua.altura_final,
+      raio_trabalho: grua.raio_trabalho,
       velocidade_giro: grua.velocidade_giro,
       velocidade_elevacao: grua.velocidade_elevacao,
       velocidade_translacao: grua.velocidade_translacao,
@@ -878,7 +905,7 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     funcionarios: obraFrontend.funcionarios && Array.isArray(obraFrontend.funcionarios) ? obraFrontend.funcionarios.map((func: any) => ({
       id: func.id,
       userId: func.userId,
-      role: func.role,
+      role: func.role || func.cargo || 'não informado',
       name: func.name,
       gruaId: func.gruaId || obraFrontend.gruaId // Usar gruaId do funcionário ou da obra
     })) : [],

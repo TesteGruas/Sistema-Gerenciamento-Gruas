@@ -199,6 +199,7 @@ function ObraDetailsPageContent() {
   // Estado para responsáveis de obra (aprovadores de horas)
   const [responsaveisObra, setResponsaveisObra] = useState<ResponsavelObra[]>([])
   const [loadingResponsaveisObra, setLoadingResponsaveisObra] = useState(false)
+  const exibirResponsaveisObra = false
   const [isModalResponsavelObraOpen, setIsModalResponsavelObraOpen] = useState(false)
   const [editandoResponsavelObra, setEditandoResponsavelObra] = useState<ResponsavelObra | null>(null)
   const [salvandoResponsavelObra, setSalvandoResponsavelObra] = useState(false)
@@ -527,11 +528,13 @@ function ObraDetailsPageContent() {
       
       if (response.success) {
         const sinaleirosData = response.data || []
-        setSinaleiros(sinaleirosData)
+        const sinaleirosFallback = (obra?.sinaleiros_obra || []) as SinaleiroBackend[]
+        const sinaleirosParaExibir = sinaleirosData.length > 0 ? sinaleirosData : sinaleirosFallback
+        setSinaleiros(sinaleirosParaExibir)
         
         // Carregar documentos de cada sinaleiro
         const documentosMap: Record<string, DocumentoSinaleiroBackend[]> = {}
-        for (const sinaleiro of sinaleirosData) {
+        for (const sinaleiro of sinaleirosParaExibir) {
           try {
             const docsResponse = await sinaleirosApi.listarDocumentos(sinaleiro.id)
             if (docsResponse.success && docsResponse.data) {
@@ -2520,6 +2523,7 @@ function ObraDetailsPageContent() {
               data_fim_locacao: relacao.dataFimLocacao || relacao.data_fim_locacao,
               valor_locacao_mensal: relacao.valorLocacaoMensal || relacao.valor_locacao_mensal || 0,
               valorLocacaoMensal: relacao.valorLocacaoMensal || relacao.valor_locacao_mensal || 0,
+              raio_trabalho: relacao.raio_trabalho || relacao.raioTrabalho || null,
               observacoes: relacao.observacoes || '',
               // Campos adicionais para compatibilidade
               status_legacy: statusLegacy,
@@ -2802,8 +2806,7 @@ function ObraDetailsPageContent() {
           carregarArquivos(),
           carregarDocumentosAdicionaisEquipamento(),
           carregarTodosResponsaveisTecnicos(),
-          carregarSinaleiros(),
-          carregarResponsaveisObra()
+          carregarSinaleiros()
         ])
       }
     }
@@ -2979,6 +2982,99 @@ useEffect(() => {
     return total
   }, [custosMensais])
 
+  const responsaveisTecnicosOrdenados = useMemo(() => {
+    const ordemTipo: Record<string, number> = {
+      obra: 0,
+      irbana_equipamentos: 1,
+      irbana_manutencoes: 2,
+      irbana_montagem_operacao: 3,
+      adicional: 4
+    }
+
+    const responsaveisDaApi = responsaveisTecnicosExistentes || []
+    const responsavelObra = (obra as any)?.responsavel_tecnico
+    const responsaveisDaObra = Array.isArray((obra as any)?.responsaveis_tecnicos)
+      ? (obra as any).responsaveis_tecnicos
+      : (responsavelObra ? [responsavelObra] : [])
+
+    const base = responsaveisDaApi.length > 0 ? responsaveisDaApi : responsaveisDaObra
+
+    return [...base].sort((a: any, b: any) => {
+      const ordemA = ordemTipo[a?.tipo || 'adicional'] ?? 99
+      const ordemB = ordemTipo[b?.tipo || 'adicional'] ?? 99
+      return ordemA - ordemB
+    })
+  }, [responsaveisTecnicosExistentes, obra])
+
+  const documentosCadastroObra = useMemo(() => {
+    const docs: Array<{ id: string; titulo: string; caminho?: string; descricao?: string }> = []
+
+    if (obra?.cno_arquivo) {
+      docs.push({
+        id: 'cno',
+        titulo: 'CNO',
+        caminho: obra.cno_arquivo,
+        descricao: obra.cno || 'Sem número informado'
+      })
+    }
+
+    if (obra?.art_arquivo) {
+      docs.push({
+        id: 'art',
+        titulo: 'ART',
+        caminho: obra.art_arquivo,
+        descricao: obra.art_numero || 'Sem número informado'
+      })
+    }
+
+    if (obra?.apolice_arquivo) {
+      docs.push({
+        id: 'apolice',
+        titulo: 'Apólice de Seguro',
+        caminho: obra.apolice_arquivo,
+        descricao: obra.apolice_numero || 'Sem número informado'
+      })
+    }
+
+    if (documentosAdicionaisEquipamento.manual_tecnico?.caminho) {
+      docs.push({
+        id: 'manual_tecnico',
+        titulo: 'Manual Técnico do Equipamento',
+        caminho: documentosAdicionaisEquipamento.manual_tecnico.caminho,
+        descricao: documentosAdicionaisEquipamento.manual_tecnico.nome_original
+      })
+    }
+
+    if (documentosAdicionaisEquipamento.termo_entrega_tecnica?.caminho) {
+      docs.push({
+        id: 'termo_entrega_tecnica',
+        titulo: 'Termo de Entrega Técnica',
+        caminho: documentosAdicionaisEquipamento.termo_entrega_tecnica.caminho,
+        descricao: documentosAdicionaisEquipamento.termo_entrega_tecnica.nome_original
+      })
+    }
+
+    if (documentosAdicionaisEquipamento.plano_carga?.caminho) {
+      docs.push({
+        id: 'plano_carga',
+        titulo: 'Plano de Carga',
+        caminho: documentosAdicionaisEquipamento.plano_carga.caminho,
+        descricao: documentosAdicionaisEquipamento.plano_carga.nome_original
+      })
+    }
+
+    if (documentosAdicionaisEquipamento.aterramento?.caminho) {
+      docs.push({
+        id: 'aterramento',
+        titulo: 'Documento de Aterramento',
+        caminho: documentosAdicionaisEquipamento.aterramento.caminho,
+        descricao: documentosAdicionaisEquipamento.aterramento.nome_original
+      })
+    }
+
+    return docs
+  }, [obra, documentosAdicionaisEquipamento])
+
   // Tratamento de loading e erro
   if (loading) {
     return (
@@ -3018,6 +3114,9 @@ useEffect(() => {
   const gruasVinculadas = gruasReais.length > 0 ? gruasReais : (obra?.gruasVinculadas || [])
   // Usar custos que já vêm da API (store ou obra)
   const custos = custosMensais || []
+  const custosMensaisParaExibir = custosMensais.length > 0
+    ? custosMensais
+    : (((obra as any)?.custos_mensais as any[]) || [])
   
   // Função auxiliar para nome da tab
   const getTabName = (tabValue: string): string => {
@@ -3034,6 +3133,37 @@ useEffect(() => {
       'livro-grua': 'Livro da Grua'
     }
     return tabNames[tabValue] || tabValue
+  }
+
+  const abrirArquivoPorCaminho = async (caminho: string, nomeDocumento: string) => {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(caminho)}`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      })
+
+      if (!urlResponse.ok) {
+        throw new Error('Erro ao gerar URL assinada')
+      }
+
+      const urlData = await urlResponse.json()
+      if (urlData.success && urlData.data?.url) {
+        window.open(urlData.data.url, '_blank')
+        return
+      }
+
+      throw new Error('URL não retornada')
+    } catch (error) {
+      console.error(`Erro ao abrir arquivo de ${nomeDocumento}:`, error)
+      toast({
+        title: 'Erro',
+        description: `Não foi possível abrir o arquivo de ${nomeDocumento}`,
+        variant: 'destructive'
+      })
+    }
   }
 
   return (
@@ -3874,12 +4004,6 @@ useEffect(() => {
                   </div>
                 ) : (
                   <>
-                    {/* Debug: Mostrar estado atual */}
-                    {process.env.NODE_ENV === 'development' && (
-                      <div className="text-xs text-gray-400 mb-2">
-                        Debug: {JSON.stringify(Object.keys(documentosAdicionaisEquipamento))}
-                      </div>
-                    )}
                     {/* Manual Técnico */}
                     <div className="space-y-3">
                       <Label className="text-sm font-medium text-gray-700">Manual Técnico do Equipamento</Label>
@@ -4065,7 +4189,7 @@ useEffect(() => {
             </Card>
 
             {/* Responsáveis de Obra */}
-            <Card>
+            {exibirResponsaveisObra && <Card>
               <CardHeader>
                 <div className="flex justify-between items-center">
                   <CardTitle className="text-sm flex items-center gap-2">
@@ -4161,10 +4285,10 @@ useEffect(() => {
                   </div>
                 )}
               </CardContent>
-            </Card>
+            </Card>}
 
             {/* Modal para adicionar/editar responsável de obra */}
-            <Dialog open={isModalResponsavelObraOpen} onOpenChange={setIsModalResponsavelObraOpen}>
+            {exibirResponsaveisObra && <Dialog open={isModalResponsavelObraOpen} onOpenChange={setIsModalResponsavelObraOpen}>
               <DialogContent className="sm:max-w-[500px]">
                 <DialogHeader>
                   <DialogTitle>
@@ -4229,7 +4353,7 @@ useEffect(() => {
                   </Button>
                 </DialogFooter>
               </DialogContent>
-            </Dialog>
+            </Dialog>}
           </div>
         </TabsContent>
 
@@ -4286,6 +4410,11 @@ useEffect(() => {
                               {(grua.valorLocacaoMensal || grua.valor_locacao_mensal) && (
                                 <p className="text-xs text-gray-500">
                                   <strong>Valor Mensal:</strong> <ValorMonetarioOculto valor={grua.valorLocacaoMensal || grua.valor_locacao_mensal || 0} />
+                                </p>
+                              )}
+                              {(grua.raio_trabalho || grua.raio_trabalho === 0) && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Raio de Trabalho:</strong> {grua.raio_trabalho} m
                                 </p>
                               )}
                               {grua.observacoes && (
@@ -4741,6 +4870,76 @@ useEffect(() => {
                       </Button>
                     </div>
                   )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Seção: Responsáveis Técnicos */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <UserCheck className="w-5 h-5 text-blue-600" />
+                Responsáveis Técnicos
+              </CardTitle>
+              <CardDescription>
+                Profissionais técnicos vinculados à obra
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loadingResponsaveisTecnicos ? (
+                <CardLoader text="Carregando responsáveis técnicos..." />
+              ) : responsaveisTecnicosOrdenados.length === 0 ? (
+                <div className="text-gray-500 text-sm text-center py-6">
+                  Nenhum responsável técnico cadastrado para esta obra
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {responsaveisTecnicosOrdenados.map((responsavel: any) => (
+                    <Card key={responsavel.id} className="border-l-4 border-l-blue-500">
+                      <CardHeader className="pb-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <CardTitle className="text-base">{responsavel.nome || 'Sem nome'}</CardTitle>
+                            <CardDescription>
+                              {responsavel.tipo?.replace(/_/g, ' ') || 'obra'}
+                            </CardDescription>
+                          </div>
+                          <Badge variant="outline">
+                            {responsavel.tipo?.replace(/_/g, ' ') || 'obra'}
+                          </Badge>
+                        </div>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                          {responsavel.crea && (
+                            <div>
+                              <Label className="text-xs text-gray-500">CREA</Label>
+                              <p className="font-medium">{responsavel.crea}</p>
+                            </div>
+                          )}
+                          {responsavel.cpf_cnpj && (
+                            <div>
+                              <Label className="text-xs text-gray-500">CPF/CNPJ</Label>
+                              <p className="font-medium">{responsavel.cpf_cnpj}</p>
+                            </div>
+                          )}
+                          {responsavel.telefone && (
+                            <div>
+                              <Label className="text-xs text-gray-500">Telefone</Label>
+                              <p className="font-medium">{responsavel.telefone}</p>
+                            </div>
+                          )}
+                          {responsavel.email && (
+                            <div>
+                              <Label className="text-xs text-gray-500">Email</Label>
+                              <p className="font-medium break-all">{responsavel.email}</p>
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
                 </div>
               )}
             </CardContent>
@@ -5294,6 +5493,49 @@ useEffect(() => {
             </CardContent>
           </Card>
 
+          {/* Seção: Documentos do Cadastro da Obra */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Paperclip className="w-5 h-5" />
+                Documentos do Cadastro da Obra
+              </CardTitle>
+              <CardDescription>
+                Documentos enviados no cadastro inicial (CNO, ART, Apólice e anexos técnicos)
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {documentosCadastroObra.length > 0 ? (
+                <div className="space-y-3">
+                  {documentosCadastroObra.map((documento) => (
+                    <div key={documento.id} className="flex items-center justify-between border rounded-lg p-3">
+                      <div className="min-w-0">
+                        <p className="font-medium text-sm">{documento.titulo}</p>
+                        {documento.descricao && (
+                          <p className="text-xs text-gray-500 truncate">{documento.descricao}</p>
+                        )}
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => documento.caminho && abrirArquivoPorCaminho(documento.caminho, documento.titulo)}
+                        disabled={!documento.caminho}
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Baixar
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-6 text-gray-500 text-sm">
+                  Nenhum documento do cadastro inicial foi encontrado para esta obra.
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Seção: Arquivos */}
           <Card>
             <CardHeader>
@@ -5551,6 +5793,47 @@ useEffect(() => {
                     <Plus className="w-4 h-4 mr-2" />
                     Criar Primeira Medição
                   </Button>
+
+                  {custosMensaisParaExibir.length > 0 && (
+                    <div className="mt-8 text-left">
+                      <div className="flex items-center gap-2 mb-3">
+                        <DollarSign className="w-4 h-4 text-blue-600" />
+                        <p className="font-medium text-gray-800">Custos mensais cadastrados (fallback)</p>
+                      </div>
+                      <p className="text-xs text-gray-500 mb-3">
+                        Estes itens vieram de `custos_mensais` da obra e ajudam na validação quando ainda não há medições geradas.
+                      </p>
+                      <div className="overflow-x-auto border rounded-lg">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Item</TableHead>
+                              <TableHead>Descrição</TableHead>
+                              <TableHead>Mês</TableHead>
+                              <TableHead className="text-right">Total Orçamento</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {custosMensaisParaExibir.map((custo: any, index: number) => (
+                              <TableRow key={custo.id || `${custo.item}-${custo.mes}`}>
+                                <TableCell className="font-medium">{custo.item || '-'}</TableCell>
+                                <TableCell>{custo.descricao || '-'}</TableCell>
+                                <TableCell>{custo.mes || '-'}</TableCell>
+                                <TableCell className="text-right">
+                                  {(
+                                    custo.total_orcamento ||
+                                    custo.totalOrcamento ||
+                                    custo.valor_total ||
+                                    0
+                                  ).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">

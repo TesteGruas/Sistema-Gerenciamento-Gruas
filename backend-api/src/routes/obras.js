@@ -58,6 +58,7 @@ const obraSchema = Joi.object({
       tipo_base: Joi.string().allow(null, '').optional(),
       altura_inicial: Joi.number().min(0).allow(null).optional(),
       altura_final: Joi.number().min(0).allow(null).optional(),
+      raio_trabalho: Joi.number().min(0).allow(null).optional(),
       velocidade_giro: Joi.number().min(0).allow(null).optional(),
       velocidade_elevacao: Joi.number().min(0).allow(null).optional(),
       velocidade_translacao: Joi.number().min(0).allow(null).optional(),
@@ -102,7 +103,7 @@ const obraSchema = Joi.object({
     Joi.object({
       id: Joi.string().required(),
       userId: Joi.string().required(),
-      role: Joi.string().required(),
+      role: Joi.string().allow('', null).optional(),
       name: Joi.string().required(),
       gruaId: Joi.string().allow(null, '').optional()
     })
@@ -377,6 +378,7 @@ router.get('/', authenticateToken, async (req, res) => {
           tipo_base,
           altura_inicial,
           altura_final,
+          raio_trabalho,
           velocidade_giro,
           velocidade_elevacao,
           velocidade_translacao,
@@ -747,6 +749,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
           valor_locacao_mensal,
           status,
           observacoes,
+          raio_trabalho,
           grua:gruas (
             id,
             modelo,
@@ -1494,6 +1497,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             tipo_base: grua.tipo_base || null,
             altura_inicial: parseNumber(grua.altura_inicial),
             altura_final: parseNumber(grua.altura_final),
+            raio_trabalho: parseNumber(grua.raio_trabalho),
             velocidade_giro: parseNumber(grua.velocidade_giro),
             velocidade_elevacao: parseNumber(grua.velocidade_elevacao),
             velocidade_translacao: parseNumber(grua.velocidade_translacao),
@@ -1714,6 +1718,9 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
         
         // Salvar funcionários na tabela funcionarios_obras
         for (const funcionario of value.funcionarios) {
+          const cargoFuncionario = funcionario.role && String(funcionario.role).trim()
+            ? String(funcionario.role).trim()
+            : 'não informado'
           const funcionarioObraData = {
             funcionario_id: parseInt(funcionario.userId),
             obra_id: data.id,
@@ -1721,7 +1728,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             status: 'ativo',
             horas_trabalhadas: 0,
             is_supervisor: false, // Removido: sistema não utiliza mais supervisor
-            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            observacoes: `Funcionário ${funcionario.name} (${cargoFuncionario}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
@@ -2125,6 +2132,9 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
         // Inserir novos funcionários se houver
         if (value.funcionarios && value.funcionarios.length > 0) {
           for (const funcionario of value.funcionarios) {
+          const cargoFuncionario = funcionario.role && String(funcionario.role).trim()
+            ? String(funcionario.role).trim()
+            : 'não informado'
           const funcionarioObraData = {
             funcionario_id: parseInt(funcionario.userId),
             obra_id: parseInt(id),
@@ -2132,7 +2142,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
             status: 'ativo',
             horas_trabalhadas: 0,
             is_supervisor: false, // Removido: sistema não utiliza mais supervisor
-            observacoes: `Funcionário ${funcionario.name} (${funcionario.role}) alocado na obra`
+            observacoes: `Funcionário ${funcionario.name} (${cargoFuncionario}) alocado na obra`
           }
           
           console.log('📝 Inserindo funcionário na tabela funcionarios_obras:', funcionarioObraData)
