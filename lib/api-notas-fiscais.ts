@@ -8,6 +8,18 @@ export interface NotaFiscal {
   data_vencimento?: string
   valor_total: number
   valor_liquido?: number
+  valor_icms?: number
+  valor_icms_st?: number
+  valor_fcp_st?: number
+  valor_ipi?: number
+  valor_pis?: number
+  valor_cofins?: number
+  valor_inss?: number
+  valor_ir?: number
+  valor_csll?: number
+  valor_issqn?: number
+  retencoes_federais?: number
+  outras_retencoes?: number
   tipo: 'entrada' | 'saida'
   status: 'pendente' | 'paga' | 'vencida' | 'cancelada'
   cliente_id?: number
@@ -55,6 +67,15 @@ export interface NotaFiscal {
     id: number
     numero: string
   }
+  boletos?: Array<{
+    id: number
+    numero_boleto: string
+    valor: number
+    data_vencimento: string
+    status: 'pendente' | 'pago' | 'vencido' | 'cancelado'
+    tipo: 'pagar' | 'receber'
+    arquivo_boleto?: string
+  }>
 }
 
 export interface NotaFiscalCreate {

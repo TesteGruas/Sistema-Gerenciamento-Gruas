@@ -306,7 +306,8 @@ router.get('/', async (req, res) => {
         clientes(nome, cnpj),
         fornecedores(nome, cnpj),
         vendas(numero_venda),
-        compras(numero_pedido)
+        compras(numero_pedido),
+        boletos(id, numero_boleto, valor, data_vencimento, status, tipo, arquivo_boleto)
       `, { count: 'exact' });
     
     // Aplicar filtros
@@ -844,7 +845,7 @@ router.get('/:id', async (req, res) => {
         fornecedores(nome, cnpj, telefone, email),
         vendas(numero_venda, data_venda),
         compras(numero_pedido, data_pedido),
-        boletos(id, numero_boleto, valor, data_vencimento, status, tipo)
+        boletos(id, numero_boleto, valor, data_vencimento, status, tipo, arquivo_boleto)
       `)
       .eq('id', id)
       .single();

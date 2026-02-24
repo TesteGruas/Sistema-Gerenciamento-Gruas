@@ -144,37 +144,30 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
     }
 
     // Transformar notas fiscais em formato de contas a pagar
+    // Regra de negócio: status e fluxo operacional sempre seguem a NOTA FISCAL.
     const notasFormatadas = notasFiltradas.map(nota => {
       // Buscar boleto vinculado a esta nota fiscal
       const boletoVinculado = boletosVinculados.find(b => b.nota_fiscal_id === nota.id);
       
       return {
-        id: boletoVinculado ? `boleto_${boletoVinculado.id}` : `nf_${nota.id}`, // Priorizar boleto se existir
-        tipo: boletoVinculado ? 'boleto' : 'nota_fiscal',
+        id: `nf_${nota.id}`,
+        tipo: 'nota_fiscal',
         descricao: boletoVinculado 
           ? `Boleto ${boletoVinculado.numero_boleto} - NF ${nota.numero_nf}${nota.serie ? ` Série ${nota.serie}` : ''}`
           : `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-        valor: boletoVinculado 
-          ? parseFloat(boletoVinculado.valor || 0)
-          : parseFloat(nota.valor_liquido || nota.valor_total || 0),
-        data_vencimento: boletoVinculado 
-          ? boletoVinculado.data_vencimento 
-          : (nota.data_vencimento || nota.data_emissao),
-        data_pagamento: boletoVinculado 
-          ? (boletoVinculado.status === 'pago' ? boletoVinculado.data_pagamento : null)
-          : (nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null),
-        status: boletoVinculado
-          ? (boletoVinculado.status === 'pago' ? 'pago' : boletoVinculado.status === 'vencido' ? 'vencido' : 'pendente')
-          : (nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente'),
+        valor: parseFloat(nota.valor_liquido || nota.valor_total || 0),
+        data_vencimento: nota.data_vencimento || nota.data_emissao,
+        data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
+        status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
         fornecedor: nota.fornecedor ? {
           id: nota.fornecedor.id,
           nome: nota.fornecedor.nome,
           cnpj: nota.fornecedor.cnpj
         } : null,
         categoria: null,
-        observacoes: boletoVinculado?.observacoes || nota.observacoes,
-        created_at: boletoVinculado?.created_at || nota.created_at,
-        updated_at: boletoVinculado?.updated_at || nota.updated_at,
+        observacoes: nota.observacoes,
+        created_at: nota.created_at,
+        updated_at: nota.updated_at,
         // Campos específicos da nota fiscal
         numero_nf: nota.numero_nf,
         serie: nota.serie,

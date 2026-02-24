@@ -83,7 +83,8 @@ interface Locacao {
 
 interface Compra {
   id: number
-  numero_pedido: string
+  numero_pedido?: string
+  numero_compra?: string
 }
 
 export default function NotasFiscaisPage() {
@@ -190,6 +191,7 @@ export default function NotasFiscaisPage() {
   const [formaPagamento, setFormaPagamento] = useState<string>('')
   const [tipoPagamentoPersonalizado, setTipoPagamentoPersonalizado] = useState<string>('')
   const [boletoFile, setBoletoFile] = useState<File | null>(null)
+  const [vincularCompraExistente, setVincularCompraExistente] = useState(false)
   const [itemFormData, setItemFormData] = useState<NotaFiscalItem>({
     descricao: '',
     unidade: 'UN',
@@ -450,9 +452,18 @@ export default function NotasFiscaisPage() {
       }
       
       // Carregar compras
-      const comprasResponse = await apiCompras.listar({ limit: 1000 })
-      if (comprasResponse.success) {
-        setCompras(comprasResponse.data || [])
+      try {
+        const comprasResponse = await apiCompras.listar({ limit: 1000 })
+        const comprasData = Array.isArray(comprasResponse?.data)
+          ? comprasResponse.data
+          : Array.isArray((comprasResponse as any)?.compras)
+            ? (comprasResponse as any).compras
+            : []
+
+        setCompras(comprasData)
+      } catch (comprasError) {
+        console.error('Erro ao carregar compras via API de compras:', comprasError)
+        setCompras([])
       }
       
       // Carregar contas bancárias
@@ -1140,6 +1151,7 @@ export default function NotasFiscaisPage() {
 
   const handleEdit = async (nota: NotaFiscal) => {
     setEditingNota(nota)
+    setVincularCompraExistente(Boolean(nota.compra_id))
     setFormData({
       numero_nf: nota.numero_nf,
       serie: nota.serie || '',
@@ -1336,6 +1348,53 @@ export default function NotasFiscaisPage() {
     }
   }
 
+  const getBoletoComArquivo = (nota: NotaFiscal) => {
+    return nota.boletos?.find((boleto) => Boolean(boleto.arquivo_boleto))
+  }
+
+  const handleDownloadBoletoVinculado = (nota: NotaFiscal) => {
+    const boleto = getBoletoComArquivo(nota)
+    if (!boleto?.arquivo_boleto) {
+      toast({
+        title: "Aviso",
+        description: "Nenhum arquivo de boleto vinculado disponível para download",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      window.open(boleto.arquivo_boleto, '_blank')
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer download do boleto",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const handleDownloadBoletoPorArquivo = (arquivoBoleto?: string | null) => {
+    if (!arquivoBoleto) {
+      toast({
+        title: "Aviso",
+        description: "Arquivo do boleto não disponível para download",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      window.open(arquivoBoleto, '_blank')
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao fazer download do boleto",
+        variant: "destructive"
+      })
+    }
+  }
+
   const handleImportXML = async () => {
     if (!importFile) return
 
@@ -1395,6 +1454,7 @@ export default function NotasFiscaisPage() {
     setTipoPagamentoPersonalizado('')
     setBoletoFile(null)
     setContaBancariaSelecionada(null)
+    setVincularCompraExistente(false)
   }
 
   // Função para preencher dados de teste do item
@@ -1607,8 +1667,10 @@ export default function NotasFiscaisPage() {
       // Observações
       const observacoes = infAdic ? getTagValue(infAdic, 'infCpl') : ''
 
-      // Determinar tipo (saída/entrada)
-      const tipoNota = tpNF === '1' ? 'saida' : 'entrada'
+      // Tipo indicado no XML (tpNF: 1=saida, 0=entrada)
+      const tipoNotaXml: 'saida' | 'entrada' = tpNF === '1' ? 'saida' : 'entrada'
+      // Regra da tela: manter o tipo escolhido manualmente no formulário/aba
+      const tipoNotaSelecionado: 'saida' | 'entrada' = (formData.tipo || activeTab) as 'saida' | 'entrada'
 
       // Tipo de nota fiscal: NFe eletrônica por padrão quando vem de XML
       const tipoNotaCategoria = 'nfe_eletronica'
@@ -1620,7 +1682,7 @@ export default function NotasFiscaisPage() {
         data_emissao: dataEmissao,
         data_vencimento: dataVencimento,
         valor_total: parseFloat(vNF) || 0,
-        tipo: tipoNota as 'entrada' | 'saida',
+        tipo: tipoNotaSelecionado,
         status: 'pendente',
         tipo_nota: tipoNotaCategoria,
         eletronica: true,
@@ -1629,7 +1691,7 @@ export default function NotasFiscaisPage() {
       }
 
       // === Buscar cliente/fornecedor pelo CNPJ ===
-      if (tipoNota === 'saida' && dest) {
+      if (tipoNotaSelecionado === 'saida' && dest) {
         const cnpjDest = getTagValue(dest, 'CNPJ')
         const cpfDest = getTagValue(dest, 'CPF')
         const docDest = cnpjDest || cpfDest
@@ -1651,7 +1713,7 @@ export default function NotasFiscaisPage() {
             })
           }
         }
-      } else if (tipoNota === 'entrada' && emit) {
+      } else if (tipoNotaSelecionado === 'entrada' && emit) {
         const cnpjEmit = getTagValue(emit, 'CNPJ')
         const cpfEmit = getTagValue(emit, 'CPF')
         const docEmit = cnpjEmit || cpfEmit
@@ -1825,11 +1887,12 @@ export default function NotasFiscaisPage() {
         setItens(itensXML)
       }
 
-      // Ajustar tab se necessário
-      if (tipoNota === 'entrada' && activeTab !== 'entrada') {
-        setActiveTab('entrada')
-      } else if (tipoNota === 'saida' && activeTab !== 'saida') {
-        setActiveTab('saida')
+      if (tipoNotaXml !== tipoNotaSelecionado) {
+        toast({
+          title: "Importação concluída",
+          description: `O XML indica nota de ${tipoNotaXml === 'saida' ? 'saída' : 'entrada'}, mas o tipo escolhido foi mantido como ${tipoNotaSelecionado === 'saida' ? 'saída' : 'entrada'}.`,
+          variant: "default"
+        })
       }
 
       const totalItens = itensXML.length
@@ -1894,6 +1957,32 @@ export default function NotasFiscaisPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
+  const getStatusBoletoBadge = (status: string) => {
+    const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
+      pendente: { label: "Pendente", variant: "outline" },
+      pago: { label: "Pago", variant: "default" },
+      vencido: { label: "Vencido", variant: "destructive" },
+      cancelado: { label: "Cancelado", variant: "secondary" }
+    }
+    const statusInfo = statusMap[status] || statusMap.pendente
+    return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
+  }
+
+  const renderCobrancaNota = (nota: NotaFiscal) => {
+    const boletosVinculados = nota.boletos || []
+    if (boletosVinculados.length === 0) {
+      return <span className="text-gray-400">Sem boleto</span>
+    }
+
+    const boletoPrincipal = boletosVinculados[0]
+    return (
+      <div className="space-y-1">
+        <div className="text-sm font-medium">Boleto {boletoPrincipal.numero_boleto}</div>
+        <div className="text-xs text-muted-foreground">Forma de cobrança vinculada</div>
+      </div>
+    )
+  }
+
   const getTipoNotaLabel = (tipo?: string) => {
     const tipos: Record<string, string> = {
       nf_servico: 'NFs (Serviço)',
@@ -1908,6 +1997,31 @@ export default function NotasFiscaisPage() {
       fornecedor: 'NFs (Serviço)'
     }
     return tipos[tipo || ''] || tipo || '-'
+  }
+
+  const calcularValorSaidaSemImpostos = (nota: NotaFiscal) => {
+    const totalImpostos = (
+      (nota.valor_icms || 0) +
+      (nota.valor_icms_st || 0) +
+      (nota.valor_fcp_st || 0) +
+      (nota.valor_ipi || 0) +
+      (nota.valor_pis || 0) +
+      (nota.valor_cofins || 0) +
+      (nota.valor_inss || 0) +
+      (nota.valor_ir || 0) +
+      (nota.valor_csll || 0) +
+      (nota.valor_issqn || 0) +
+      (nota.retencoes_federais || 0) +
+      (nota.outras_retencoes || 0)
+    )
+    return Math.max((nota.valor_total || 0) - totalImpostos, 0)
+  }
+
+  const getValorExibicaoNota = (nota: NotaFiscal) => {
+    if (nota.tipo === 'saida') {
+      return nota.valor_liquido ?? calcularValorSaidaSemImpostos(nota)
+    }
+    return nota.valor_liquido ?? nota.valor_total
   }
 
   // Filtrar notas fiscais
@@ -1930,7 +2044,7 @@ export default function NotasFiscaisPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Notas Fiscais</h1>
-          <p className="text-gray-600">Gerenciamento de notas fiscais de entrada e saída</p>
+          <p className="text-gray-600">Notas fiscais como registro principal, com boleto vinculado na própria nota</p>
         </div>
         <div className="flex gap-2">
           <Button 
@@ -2063,6 +2177,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor Líquido</TableHead>
+                        <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -2107,8 +2222,9 @@ export default function NotasFiscaisPage() {
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
                           <TableCell className="font-semibold">
-                            {formatCurrency(nota.valor_liquido ?? nota.valor_total)}
+                            {formatCurrency(getValorExibicaoNota(nota))}
                           </TableCell>
+                          <TableCell>{renderCobrancaNota(nota)}</TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -2117,7 +2233,8 @@ export default function NotasFiscaisPage() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleDownload(nota)}
-                                  title="Download do arquivo"
+                                  title="Baixar arquivo da nota fiscal"
+                                  aria-label="Baixar arquivo da nota fiscal"
                                   className="text-green-600 hover:text-green-700"
                                 >
                                   <Download className="w-4 h-4" />
@@ -2132,6 +2249,17 @@ export default function NotasFiscaisPage() {
                                   <Upload className="w-4 h-4" />
                                 </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadBoletoVinculado(nota)}
+                                title={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
+                                aria-label={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
+                                className="text-blue-600 hover:text-blue-700"
+                                disabled={!getBoletoComArquivo(nota)}
+                              >
+                                <Receipt className="w-4 h-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2284,6 +2412,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor Líquido</TableHead>
+                        <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
@@ -2318,8 +2447,9 @@ export default function NotasFiscaisPage() {
                           </TableCell>
                           <TableCell>{formatDate(nota.data_emissao)}</TableCell>
                           <TableCell className="font-semibold">
-                            {formatCurrency(nota.valor_liquido ?? nota.valor_total)}
+                            {formatCurrency(getValorExibicaoNota(nota))}
                           </TableCell>
+                          <TableCell>{renderCobrancaNota(nota)}</TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -2328,7 +2458,8 @@ export default function NotasFiscaisPage() {
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => handleDownload(nota)}
-                                  title="Download do arquivo"
+                                  title="Baixar arquivo da nota fiscal"
+                                  aria-label="Baixar arquivo da nota fiscal"
                                   className="text-green-600 hover:text-green-700"
                                 >
                                   <Download className="w-4 h-4" />
@@ -2343,6 +2474,17 @@ export default function NotasFiscaisPage() {
                                   <Upload className="w-4 h-4" />
                                 </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDownloadBoletoVinculado(nota)}
+                                title={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
+                                aria-label={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
+                                className="text-blue-600 hover:text-blue-700"
+                                disabled={!getBoletoComArquivo(nota)}
+                              >
+                                <Receipt className="w-4 h-4" />
+                              </Button>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -2612,54 +2754,100 @@ export default function NotasFiscaisPage() {
             )}
 
             {(formData.tipo || activeTab) === 'entrada' && (
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Label htmlFor="fornecedor_id">Fornecedor *</Label>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setIsCreateFornecedorDialogOpen(true)}
-                      className="h-7 text-xs"
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label htmlFor="tipo_nota_entrada">Tipo de Nota *</Label>
+                    <Select
+                      value={formData.tipo_nota || 'nf_servico'}
+                      onValueChange={(value) => setFormData({ ...formData, tipo_nota: value as any })}
                     >
-                      <Plus className="w-3 h-3 mr-1" />
-                      Novo
-                    </Button>
+                      <SelectTrigger id="tipo_nota_entrada">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="nf_servico">NF de Serviço (Entrada)</SelectItem>
+                        <SelectItem value="nfe_eletronica">NFe de Produto (Entrada)</SelectItem>
+                        <SelectItem value="fatura">Fatura / Outros</SelectItem>
+                        <SelectItem value="nf_locacao">NF de Locação (Entrada)</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <Select 
-                    value={formData.fornecedor_id?.toString() || ''} 
-                    onValueChange={(value) => setFormData({ ...formData, fornecedor_id: parseInt(value) })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o fornecedor" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {fornecedores.map(fornecedor => (
-                        <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                          {fornecedor.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="fornecedor_id">Fornecedor *</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsCreateFornecedorDialogOpen(true)}
+                        className="h-7 text-xs"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Novo
+                      </Button>
+                    </div>
+                    <Select 
+                      value={formData.fornecedor_id?.toString() || ''} 
+                      onValueChange={(value) => setFormData({ ...formData, fornecedor_id: parseInt(value) })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione o fornecedor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {fornecedores.map(fornecedor => (
+                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                            {fornecedor.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
-                <div>
-                  <Label htmlFor="compra_id">Compra</Label>
-                  <Select 
-                    value={formData.compra_id?.toString() || ''} 
-                    onValueChange={(value) => setFormData({ ...formData, compra_id: parseInt(value) })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione a compra" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {compras.map(compra => (
-                        <SelectItem key={compra.id} value={compra.id.toString()}>
-                          {compra.numero_pedido}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+
+                <div className="space-y-2">
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="vincular_compra_existente"
+                      checked={vincularCompraExistente}
+                      onCheckedChange={(checked) => {
+                        const habilitar = checked === true
+                        setVincularCompraExistente(habilitar)
+                        if (!habilitar) {
+                          setFormData({ ...formData, compra_id: undefined })
+                        }
+                      }}
+                    />
+                    <Label htmlFor="vincular_compra_existente" className="text-sm font-medium cursor-pointer">
+                      Vincular compra existente (opcional)
+                    </Label>
+                  </div>
+
+                  {vincularCompraExistente && (
+                    <>
+                      <Select
+                        value={formData.compra_id?.toString() || 'none'}
+                        onValueChange={(value) => setFormData({ ...formData, compra_id: value === 'none' ? undefined : parseInt(value) })}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Selecione a compra (opcional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Sem compra vinculada</SelectItem>
+                          {compras.map(compra => (
+                            <SelectItem key={compra.id} value={compra.id.toString()}>
+                              {compra.numero_pedido || compra.numero_compra || `Compra #${compra.id}`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {compras.length === 0 && (
+                        <p className="text-xs text-muted-foreground mt-1">
+                          Não há compras cadastradas no módulo de compras para vincular.
+                        </p>
+                      )}
+                    </>
+                  )}
                 </div>
               </div>
             )}
@@ -2735,8 +2923,13 @@ export default function NotasFiscaisPage() {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={formData.valor_total}
-                  onChange={(e) => setFormData({ ...formData, valor_total: parseFloat(e.target.value) || 0 })}
+                  placeholder="Ex: 1500.00"
+                  value={formData.valor_total > 0 ? formData.valor_total : ''}
+                  onChange={(e) => {
+                    const rawValue = e.target.value
+                    const valor = rawValue === '' ? 0 : Number(rawValue)
+                    setFormData({ ...formData, valor_total: Number.isFinite(valor) ? valor : 0 })
+                  }}
                 />
               </div>
             </div>
@@ -2809,8 +3002,8 @@ export default function NotasFiscaisPage() {
                   </div>
                   <p className="text-xs text-muted-foreground ml-6">
                     {(formData.tipo || activeTab) === 'saida' 
-                      ? 'O boleto será criado como "A Receber" (tipo receber) e aparecerá na lista de boletos de entrada.'
-                      : 'O boleto será criado como "A Pagar" (tipo pagar) e aparecerá na lista de boletos de saída.'}
+                      ? 'O boleto será criado como "A Receber" (tipo receber) e ficará vinculado a esta nota fiscal.'
+                      : 'O boleto será criado como "A Pagar" (tipo pagar) e ficará vinculado a esta nota fiscal.'}
                   </p>
                   
                   {criarBoleto && (
@@ -3027,9 +3220,9 @@ export default function NotasFiscaisPage() {
             </div>
 
             <div>
-              <Label htmlFor="arquivo_nf">Arquivo da Nota Fiscal (PDF ou XML)</Label>
+              <Label htmlFor="arquivo_nf">Arquivo da Nota Fiscal (apenas anexo PDF/XML)</Label>
               <p className="text-xs text-muted-foreground mb-1">
-                Se enviar um XML de NFe, os campos serão preenchidos automaticamente
+                Este campo somente anexa o arquivo. Para preencher dados automaticamente, use o botão "Importar XML".
               </p>
               <Input
                 id="arquivo_nf"
@@ -3060,10 +3253,6 @@ export default function NotasFiscaisPage() {
                       return
                     }
                     setFormFile(file)
-                    // Auto-preencher formulário se for XML de NFe
-                    if (fileExtension === '.xml' || file.type === 'application/xml' || file.type === 'text/xml') {
-                      parseNFeXML(file)
-                    }
                   } else {
                     setFormFile(null)
                   }
@@ -3221,6 +3410,43 @@ export default function NotasFiscaisPage() {
                   <p className="text-sm bg-gray-50 p-3 rounded-md">{viewingNota.observacoes}</p>
                 </div>
               )}
+
+              <div>
+                <Label className="text-sm font-medium text-gray-500">Cobrança Vinculada</Label>
+                {viewingNota.boletos && viewingNota.boletos.length > 0 ? (
+                  <div className="space-y-2 mt-2">
+                    {viewingNota.boletos.map((boleto) => (
+                      <div key={boleto.id} className="rounded-md border p-3">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm font-semibold">{boleto.numero_boleto}</p>
+                            <p className="text-xs text-gray-600">
+                              Vencimento: {formatDate(boleto.data_vencimento)} | Valor: {formatCurrency(boleto.valor)}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {getStatusBadge(viewingNota.status)}
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadBoletoPorArquivo(boleto.arquivo_boleto)}
+                              disabled={!boleto.arquivo_boleto}
+                              title={boleto.arquivo_boleto ? "Baixar arquivo do boleto" : "Boleto sem arquivo disponível"}
+                              aria-label={boleto.arquivo_boleto ? "Baixar arquivo do boleto" : "Boleto sem arquivo disponível"}
+                            >
+                              <Download className="w-4 h-4 mr-2" />
+                              Baixar boleto
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500 mt-2">Sem boleto vinculado</p>
+                )}
+              </div>
 
               {/* Seção de Itens da Nota Fiscal */}
               {viewingItens.length > 0 && (
@@ -3660,9 +3886,10 @@ export default function NotasFiscaisPage() {
                   type="number"
                   step="0.001"
                   min="0"
-                  value={itemFormData.quantidade}
+                  placeholder="Ex: 1.000"
+                  value={itemFormData.quantidade > 0 ? itemFormData.quantidade : ''}
                   onChange={(e) => {
-                    const qtd = parseFloat(e.target.value) || 0
+                    const qtd = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                     const itemAtualizado = calcularImpostos({ ...itemFormData, quantidade: qtd })
                     setItemFormData(itemAtualizado)
                   }}
@@ -3675,9 +3902,10 @@ export default function NotasFiscaisPage() {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={itemFormData.preco_unitario}
+                  placeholder="Ex: 250.00"
+                  value={itemFormData.preco_unitario > 0 ? itemFormData.preco_unitario : ''}
                   onChange={(e) => {
-                    const unit = parseFloat(e.target.value) || 0
+                    const unit = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
                     const itemAtualizado = calcularImpostos({ ...itemFormData, preco_unitario: unit })
                     setItemFormData(itemAtualizado)
                   }}
@@ -3690,7 +3918,8 @@ export default function NotasFiscaisPage() {
                   type="number"
                   step="0.01"
                   min="0"
-                  value={itemFormData.preco_total.toFixed(2)}
+                  value={itemFormData.preco_total > 0 ? itemFormData.preco_total.toFixed(2) : ''}
+                  placeholder="Calculado automaticamente"
                   readOnly
                   className="bg-muted"
                 />
@@ -3757,7 +3986,8 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_icms?.toFixed(2) || '0.00'}
+                    value={itemFormData.valor_icms && itemFormData.valor_icms > 0 ? itemFormData.valor_icms.toFixed(2) : ''}
+                    placeholder="Calculado automaticamente"
                     readOnly
                     className="bg-muted"
                   />
@@ -3784,7 +4014,8 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_ipi?.toFixed(2) || '0.00'}
+                    value={itemFormData.valor_ipi && itemFormData.valor_ipi > 0 ? itemFormData.valor_ipi.toFixed(2) : ''}
+                    placeholder="Calculado automaticamente"
                     readOnly
                     className="bg-muted"
                   />
@@ -3833,7 +4064,8 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_issqn?.toFixed(2) || '0.00'}
+                    value={itemFormData.valor_issqn && itemFormData.valor_issqn > 0 ? itemFormData.valor_issqn.toFixed(2) : ''}
+                    placeholder="Calculado automaticamente"
                     readOnly
                     className="bg-muted"
                   />
@@ -3873,7 +4105,8 @@ export default function NotasFiscaisPage() {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={itemFormData.valor_liquido?.toFixed(2) || '0.00'}
+                    value={itemFormData.valor_liquido && itemFormData.valor_liquido > 0 ? itemFormData.valor_liquido.toFixed(2) : ''}
+                    placeholder="Calculado automaticamente"
                     readOnly
                     className="bg-muted font-semibold"
                   />
@@ -4012,7 +4245,8 @@ export default function NotasFiscaisPage() {
                             type="number"
                             step="0.01"
                             min="0"
-                            value={imposto.valor_calculado?.toFixed(2) || '0.00'}
+                            value={imposto.valor_calculado && imposto.valor_calculado > 0 ? imposto.valor_calculado.toFixed(2) : ''}
+                            placeholder="Calculado automaticamente"
                             readOnly
                             className="h-8 text-sm bg-muted"
                           />

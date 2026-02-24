@@ -5,6 +5,31 @@ import Joi from 'joi';
 
 const router = express.Router();
 
+const calcularValorSemImpostos = (nota) => {
+  const valorLiquido = parseFloat(nota.valor_liquido);
+  if (!Number.isNaN(valorLiquido)) {
+    return Math.max(valorLiquido, 0);
+  }
+
+  const valorTotal = parseFloat(nota.valor_total || 0);
+  const totalImpostos = [
+    'valor_icms',
+    'valor_icms_st',
+    'valor_fcp_st',
+    'valor_ipi',
+    'valor_pis',
+    'valor_cofins',
+    'valor_inss',
+    'valor_ir',
+    'valor_csll',
+    'valor_issqn',
+    'retencoes_federais',
+    'outras_retencoes'
+  ].reduce((sum, campo) => sum + parseFloat(nota[campo] || 0), 0);
+
+  return Math.max(valorTotal - totalImpostos, 0);
+};
+
 // Schema de validação
 const contaReceberSchema = Joi.object({
   cliente_id: Joi.number().integer().allow(null),
@@ -179,44 +204,37 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
     }
 
     // Transformar notas fiscais em formato de contas a receber
+    // Regra de negócio: status e fluxo operacional sempre seguem a NOTA FISCAL.
     const notasFormatadas = notasFiltradas.map(nota => {
       // Buscar boleto vinculado a esta nota fiscal
       const boletoVinculado = boletosVinculados.find(b => b.nota_fiscal_id === nota.id);
       
       return {
-        id: boletoVinculado ? `boleto_${boletoVinculado.id}` : `nf_${nota.id}`, // Priorizar boleto se existir
-        tipo: boletoVinculado ? 'boleto' : 'nota_fiscal',
+        id: `nf_${nota.id}`,
+        tipo: 'nota_fiscal',
         descricao: boletoVinculado 
           ? `Boleto ${boletoVinculado.numero_boleto} - NF ${nota.numero_nf}${nota.serie ? ` Série ${nota.serie}` : ''}`
           : `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-        valor: boletoVinculado 
-          ? parseFloat(boletoVinculado.valor || 0)
-          : parseFloat(nota.valor_liquido || nota.valor_total || 0),
-        data_vencimento: boletoVinculado 
-          ? boletoVinculado.data_vencimento 
-          : (nota.data_vencimento || nota.data_emissao),
-        data_pagamento: boletoVinculado 
-          ? (boletoVinculado.status === 'pago' ? boletoVinculado.data_pagamento : null)
-          : (nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null),
-        status: boletoVinculado
-          ? (boletoVinculado.status === 'pago' ? 'pago' : boletoVinculado.status === 'vencido' ? 'vencido' : 'pendente')
-          : (nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente'),
+        valor: calcularValorSemImpostos(nota),
+        data_vencimento: nota.data_vencimento || nota.data_emissao,
+        data_pagamento: nota.status === 'paga' ? nota.updated_at?.split('T')[0] : null,
+        status: nota.status === 'paga' ? 'pago' : nota.status === 'vencida' ? 'vencido' : 'pendente',
         cliente: nota.cliente ? {
           id: nota.cliente.id,
           nome: nota.cliente.nome,
           cnpj: nota.cliente.cnpj
         } : null,
         obra: null, // Notas fiscais podem não ter obra vinculada diretamente
-        observacoes: boletoVinculado?.observacoes || nota.observacoes,
-        created_at: boletoVinculado?.created_at || nota.created_at,
-        updated_at: boletoVinculado?.updated_at || nota.updated_at,
+        observacoes: nota.observacoes,
+        created_at: nota.created_at,
+        updated_at: nota.updated_at,
         // Campos específicos da nota fiscal
         numero_nf: nota.numero_nf,
         serie: nota.serie,
         data_emissao: nota.data_emissao,
         valor_total: parseFloat(nota.valor_total || 0),
-        valor_liquido: parseFloat(nota.valor_liquido || nota.valor_total || 0),
-        tipo: nota.tipo,
+        valor_liquido: calcularValorSemImpostos(nota),
+        tipo_operacao: nota.tipo,
         tipo_nota: nota.tipo_nota,
         // Campos de impostos estaduais
         base_calculo_icms: parseFloat(nota.base_calculo_icms || 0),
@@ -417,7 +435,25 @@ router.get('/alertas', authenticateToken, requirePermission('financeiro:visualiz
     // Notas fiscais de saída vencidas
     const { data: notasVencidas, error: erroNotasVencidas } = await supabaseAdmin
       .from('notas_fiscais')
-      .select('id, numero_nf, serie, valor_total, valor_liquido, data_vencimento')
+      .select(`
+        id,
+        numero_nf,
+        serie,
+        valor_total,
+        data_vencimento,
+        valor_icms,
+        valor_icms_st,
+        valor_fcp_st,
+        valor_ipi,
+        valor_pis,
+        valor_cofins,
+        valor_inss,
+        valor_ir,
+        valor_csll,
+        valor_issqn,
+        retencoes_federais,
+        outras_retencoes
+      `)
       .eq('tipo', 'saida')
       .eq('status', 'pendente')
       .neq('status', 'cancelada')
@@ -426,7 +462,25 @@ router.get('/alertas', authenticateToken, requirePermission('financeiro:visualiz
     // Notas fiscais de saída vencendo
 const { data: notasVencendo, error: erroNotasVencendo } = await supabaseAdmin
       .from('notas_fiscais')
-      .select('id, numero_nf, serie, valor_total, valor_liquido, data_vencimento')
+      .select(`
+        id,
+        numero_nf,
+        serie,
+        valor_total,
+        data_vencimento,
+        valor_icms,
+        valor_icms_st,
+        valor_fcp_st,
+        valor_ipi,
+        valor_pis,
+        valor_cofins,
+        valor_inss,
+        valor_ir,
+        valor_csll,
+        valor_issqn,
+        retencoes_federais,
+        outras_retencoes
+      `)
       .eq('tipo', 'saida')
       .eq('status', 'pendente')
       .neq('status', 'cancelada')
@@ -437,14 +491,14 @@ const { data: notasVencendo, error: erroNotasVencendo } = await supabaseAdmin
     const notasVencidasFormatadas = (notasVencidas || []).map(nota => ({
       id: `nf_${nota.id}`,
       descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0),
+      valor: calcularValorSemImpostos(nota),
       data_vencimento: nota.data_vencimento
     }));
 
     const notasVencendoFormatadas = (notasVencendo || []).map(nota => ({
       id: `nf_${nota.id}`,
       descricao: `Nota Fiscal ${nota.numero_nf}${nota.serie ? ` - Série ${nota.serie}` : ''}`,
-      valor: parseFloat(nota.valor_liquido || nota.valor_total || 0),
+      valor: calcularValorSemImpostos(nota),
       data_vencimento: nota.data_vencimento
     }));
 

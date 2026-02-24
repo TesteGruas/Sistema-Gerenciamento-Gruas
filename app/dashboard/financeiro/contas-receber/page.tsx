@@ -80,6 +80,7 @@ interface ReceitaComRelacionamentos extends Receita {
 interface ContaReceber {
   id: number | string // Pode ser número ou string (ex: "nf_123" para notas fiscais)
   tipo?: 'conta_receber' | 'nota_fiscal' // Tipo do registro
+  tipo_operacao?: 'entrada' | 'saida'
   descricao: string
   valor: number
   data_vencimento: string
@@ -748,19 +749,68 @@ export default function ContasReceberPage() {
     }
   }
 
-  const getStatusBadge = (status: string) => {
+  const toNumber = (value: any) => {
+    const parsed = parseFloat(String(value ?? 0))
+    return Number.isFinite(parsed) ? parsed : 0
+  }
+
+  const enriquecerNotaComImpostosDosItens = (nota: any, itens: any[]) => {
+    if (!Array.isArray(itens) || itens.length === 0) {
+      return nota
+    }
+
+    const totais = itens.reduce((acc, item) => {
+      acc.base_calculo_icms += toNumber(item.base_calculo_icms)
+      acc.valor_icms += toNumber(item.valor_icms)
+      acc.base_calculo_issqn += toNumber(item.base_calculo_issqn)
+      acc.valor_issqn += toNumber(item.valor_issqn)
+      acc.valor_inss += toNumber(item.valor_inss)
+      acc.valor_ipi += toNumber(item.valor_ipi)
+      acc.valor_liquido += toNumber(item.valor_liquido)
+      return acc
+    }, {
+      base_calculo_icms: 0,
+      valor_icms: 0,
+      base_calculo_issqn: 0,
+      valor_issqn: 0,
+      valor_inss: 0,
+      valor_ipi: 0,
+      valor_liquido: 0
+    })
+
+    return {
+      ...nota,
+      base_calculo_icms: toNumber(nota.base_calculo_icms) > 0 ? toNumber(nota.base_calculo_icms) : totais.base_calculo_icms,
+      valor_icms: toNumber(nota.valor_icms) > 0 ? toNumber(nota.valor_icms) : totais.valor_icms,
+      base_calculo_issqn: toNumber(nota.base_calculo_issqn) > 0 ? toNumber(nota.base_calculo_issqn) : totais.base_calculo_issqn,
+      valor_issqn: toNumber(nota.valor_issqn) > 0 ? toNumber(nota.valor_issqn) : totais.valor_issqn,
+      valor_inss: toNumber(nota.valor_inss) > 0 ? toNumber(nota.valor_inss) : totais.valor_inss,
+      valor_ipi: toNumber(nota.valor_ipi) > 0 ? toNumber(nota.valor_ipi) : totais.valor_ipi,
+      valor_liquido: toNumber(nota.valor_liquido) > 0 ? toNumber(nota.valor_liquido) : totais.valor_liquido
+    }
+  }
+
+  const getStatusBadge = (status: string, options?: { notaFiscal?: boolean }) => {
+    const isNotaFiscal = options?.notaFiscal === true
     const variants: Record<string, string> = {
       pendente: 'bg-yellow-500',
       pago: 'bg-green-500',
       vencido: 'bg-red-500',
       cancelado: 'bg-gray-500'
     }
-    const labels: Record<string, string> = {
+    const labelsPadrao: Record<string, string> = {
       pendente: 'Pendente',
       pago: 'Pago',
       vencido: 'Vencido',
       cancelado: 'Cancelado'
     }
+    const labelsNotaFiscal: Record<string, string> = {
+      pendente: 'Pendente',
+      pago: 'Paga',
+      vencido: 'Vencida',
+      cancelado: 'Cancelada'
+    }
+    const labels = isNotaFiscal ? labelsNotaFiscal : labelsPadrao
     return (
       <Badge className={variants[status] || 'bg-gray-500'}>
         {labels[status] || status}
@@ -1264,7 +1314,7 @@ export default function ContasReceberPage() {
                               </div>
                             </TableCell>
                             <TableCell>
-                              {getStatusBadge(nota.status)}
+                              {getStatusBadge(nota.status, { notaFiscal: true })}
                             </TableCell>
                             <TableCell>
                               <div className="flex gap-2">
@@ -1324,9 +1374,20 @@ export default function ContasReceberPage() {
                                         
                                         if (detalhesResponse.success && detalhesResponse.data) {
                                           console.log('✅ [CONTAS-RECEBER] Dados recebidos com sucesso:', detalhesResponse.data)
+                                          let notaDetalhada = detalhesResponse.data
+
+                                          try {
+                                            const itensResponse = await notasFiscaisApi.listarItens(notaId)
+                                            if (itensResponse?.success && Array.isArray(itensResponse.data)) {
+                                              notaDetalhada = enriquecerNotaComImpostosDosItens(notaDetalhada, itensResponse.data)
+                                            }
+                                          } catch (itensError) {
+                                            console.warn('⚠️ [CONTAS-RECEBER] Não foi possível carregar itens para agregação de impostos:', itensError)
+                                          }
+
                                           setViewingItem({ 
                                             tipo: 'nota_fiscal', 
-                                            data: detalhesResponse.data 
+                                            data: notaDetalhada 
                                           })
                                         } else {
                                           // Se não conseguir buscar detalhes, usar os dados que já temos
@@ -1882,6 +1943,10 @@ export default function ContasReceberPage() {
 
               {viewingItem.tipo === 'nota_fiscal' && (
                 <>
+                  {(() => {
+                    const tipoOperacao = viewingItem.data.tipo_operacao || viewingItem.data.tipo
+                    return (
+                      <>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium text-gray-500">Número</Label>
@@ -1896,7 +1961,7 @@ export default function ContasReceberPage() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label className="text-sm font-medium text-gray-500">Tipo</Label>
-                      <p className="text-lg">{viewingItem.data.tipo === 'saida' ? 'Saída' : 'Entrada'}</p>
+                      <p className="text-lg">{tipoOperacao === 'saida' ? 'Saída' : 'Entrada'}</p>
                     </div>
                     <div>
                       <Label className="text-sm font-medium text-gray-500">Tipo de Nota</Label>
@@ -1904,7 +1969,7 @@ export default function ContasReceberPage() {
                     </div>
                   </div>
 
-                  {viewingItem.data.tipo === 'saida' && viewingItem.data.clientes && (
+                  {tipoOperacao === 'saida' && viewingItem.data.clientes && (
                     <div>
                       <Label className="text-sm font-medium text-gray-500">Cliente</Label>
                       <p className="text-lg font-semibold">{viewingItem.data.clientes.nome}</p>
@@ -1931,7 +1996,7 @@ export default function ContasReceberPage() {
 
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Status</Label>
-                    <div className="mt-2">{getStatusBadge(viewingItem.data.status)}</div>
+                    <div className="mt-2">{getStatusBadge(viewingItem.data.status, { notaFiscal: true })}</div>
                   </div>
 
                   {/* Seção de Impostos - Sempre mostrar para notas fiscais */}
@@ -2133,6 +2198,9 @@ export default function ContasReceberPage() {
                       <p className="text-sm bg-gray-50 p-3 rounded-md mt-2">{viewingItem.data.observacoes}</p>
                     </div>
                   )}
+                      </>
+                    )
+                  })()}
                 </>
               )}
 

@@ -10,20 +10,15 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   FileCheck,
-  CreditCard,
   Building2,
-  ArrowUpRight,
-  ArrowDownLeft,
   RefreshCw,
   Eye,
   TrendingUp,
   TrendingDown,
-  AlertTriangle,
   CheckCircle,
   Clock
 } from "lucide-react"
 import { notasFiscaisApi, type NotaFiscal } from "@/lib/api-notas-fiscais"
-import { boletosApi, type Boleto } from "@/lib/api-boletos"
 import { apiContasBancarias, type ContaBancaria } from "@/lib/api-contas-bancarias"
 import { useToast } from "@/hooks/use-toast"
 
@@ -44,23 +39,6 @@ interface NotasResumo {
   }
 }
 
-interface BoletosResumo {
-  entrada: {
-    total: number
-    pendentes: number
-    vencidos: number
-    pagos: number
-    lista: Boleto[]
-  }
-  saida: {
-    total: number
-    pendentes: number
-    vencidos: number
-    pagos: number
-    lista: Boleto[]
-  }
-}
-
 interface BancosResumo {
   totalContas: number
   saldoTotal: number
@@ -74,10 +52,6 @@ export default function FinanceiroPage() {
   const [notasResumo, setNotasResumo] = useState<NotasResumo>({
     aReceber: { total: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] },
     aPagar: { total: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] }
-  })
-  const [boletosResumo, setBoletosResumo] = useState<BoletosResumo>({
-    entrada: { total: 0, pendentes: 0, vencidos: 0, pagos: 0, lista: [] },
-    saida: { total: 0, pendentes: 0, vencidos: 0, pagos: 0, lista: [] }
   })
   const [bancosResumo, setBancosResumo] = useState<BancosResumo>({
     totalContas: 0,
@@ -101,6 +75,31 @@ export default function FinanceiroPage() {
       const hoje = new Date()
       hoje.setHours(0, 0, 0, 0)
 
+      const calcularValorSaidaSemImpostos = (nota: NotaFiscal) => {
+        const totalImpostos = (
+          (nota.valor_icms || 0) +
+          (nota.valor_icms_st || 0) +
+          (nota.valor_fcp_st || 0) +
+          (nota.valor_ipi || 0) +
+          (nota.valor_pis || 0) +
+          (nota.valor_cofins || 0) +
+          (nota.valor_inss || 0) +
+          (nota.valor_ir || 0) +
+          (nota.valor_csll || 0) +
+          (nota.valor_issqn || 0) +
+          (nota.retencoes_federais || 0) +
+          (nota.outras_retencoes || 0)
+        )
+        return Math.max((nota.valor_total || 0) - totalImpostos, 0)
+      }
+
+      const getValorFinanceiroNota = (nota: NotaFiscal) => {
+        if (nota.tipo === 'saida') {
+          return nota.valor_liquido ?? calcularValorSaidaSemImpostos(nota)
+        }
+        return nota.valor_total || 0
+      }
+
       const calcularResumoNotas = (notas: NotaFiscal[]) => {
         const pendentes = notas.filter(n => n.status === 'pendente')
         const vencidas = notas.filter(n => {
@@ -111,7 +110,7 @@ export default function FinanceiroPage() {
           return vencimento < hoje
         })
         const pagas = notas.filter(n => n.status === 'paga')
-        const total = notas.reduce((sum, n) => sum + (n.valor_total || 0), 0)
+        const total = notas.reduce((sum, n) => sum + getValorFinanceiroNota(n), 0)
 
         return {
           total,
@@ -125,40 +124,6 @@ export default function FinanceiroPage() {
       setNotasResumo({
         aReceber: calcularResumoNotas(notasReceber),
         aPagar: calcularResumoNotas(notasPagar)
-      })
-
-      // Carregar boletos
-      const [boletosReceberResponse, boletosPagarResponse] = await Promise.all([
-        boletosApi.list({ tipo: 'receber', limit: 100 }),
-        boletosApi.list({ tipo: 'pagar', limit: 100 })
-      ])
-
-      const boletosEntrada = (boletosPagarResponse.data || boletosPagarResponse || []) as Boleto[]
-      const boletosSaida = (boletosReceberResponse.data || boletosReceberResponse || []) as Boleto[]
-
-      const calcularResumoBoletos = (boletos: Boleto[]) => {
-        const pendentes = boletos.filter(b => b.status === 'pendente')
-        const vencidos = boletos.filter(b => {
-          if (b.status === 'pago' || b.status === 'cancelado') return false
-          const vencimento = new Date(b.data_vencimento)
-          vencimento.setHours(0, 0, 0, 0)
-          return vencimento < hoje
-        })
-        const pagos = boletos.filter(b => b.status === 'pago')
-        const total = boletos.reduce((sum, b) => sum + (b.valor || 0), 0)
-
-        return {
-          total,
-          pendentes: pendentes.length,
-          vencidos: vencidos.length,
-          pagos: pagos.length,
-          lista: boletos.slice(0, 10) // Mostrar apenas os 10 primeiros
-        }
-      }
-
-      setBoletosResumo({
-        entrada: calcularResumoBoletos(boletosEntrada),
-        saida: calcularResumoBoletos(boletosSaida)
       })
 
       // Carregar contas bancárias
@@ -215,6 +180,18 @@ export default function FinanceiroPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
+  const getCobrancaNota = (nota: NotaFiscal) => {
+    const boleto = nota.boletos?.[0]
+    if (!boleto) return <span className="text-gray-400">Sem boleto</span>
+
+    return (
+      <div className="space-y-1">
+        <p className="text-sm font-medium">{boleto.numero_boleto}</p>
+        {getStatusBadge(boleto.status)}
+      </div>
+    )
+  }
+
   if (isLoading) {
     return (
       <ProtectedRoute permission="financeiro:visualizar">
@@ -235,7 +212,7 @@ export default function FinanceiroPage() {
         <div className="flex justify-between items-center">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Dashboard Financeiro</h1>
-            <p className="text-gray-600 mt-1">Resumo de notas fiscais, boletos e contas bancárias</p>
+            <p className="text-gray-600 mt-1">Notas fiscais como base do contas a receber/pagar, com cobrança vinculada</p>
           </div>
           <Button
             variant="outline"
@@ -254,7 +231,7 @@ export default function FinanceiroPage() {
         </div>
 
         {/* Cards de Estatísticas Principais */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Notas a Receber</CardTitle>
@@ -277,21 +254,6 @@ export default function FinanceiroPage() {
               <div className="text-2xl font-bold">{formatarMoeda(notasResumo.aPagar.total)}</div>
               <p className="text-xs text-muted-foreground mt-1">
                 {notasResumo.aPagar.pendentes} pendentes
-              </p>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Boletos Pendentes</CardTitle>
-              <CreditCard className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">
-                {boletosResumo.entrada.pendentes + boletosResumo.saida.pendentes}
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {boletosResumo.saida.vencidos + boletosResumo.entrada.vencidos} vencidos
               </p>
             </CardContent>
           </Card>
@@ -327,7 +289,7 @@ export default function FinanceiroPage() {
                 Ver Todas
               </Button>
             </div>
-            <CardDescription>Resumo de notas fiscais a receber e a pagar</CardDescription>
+            <CardDescription>Resumo de notas fiscais e respectivas cobranças vinculadas</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -407,6 +369,7 @@ export default function FinanceiroPage() {
                         <TableHead>Cliente</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor</TableHead>
+                        <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -417,13 +380,14 @@ export default function FinanceiroPage() {
                             <TableCell className="font-medium">{nota.numero_nf}</TableCell>
                             <TableCell>{nota.clientes?.nome || '-'}</TableCell>
                             <TableCell>{nota.data_vencimento ? formatarData(nota.data_vencimento) : '-'}</TableCell>
-                            <TableCell>{formatarMoeda(nota.valor_total)}</TableCell>
+                            <TableCell>{formatarMoeda(nota.tipo === 'saida' ? (nota.valor_liquido ?? getValorFinanceiroNota(nota)) : nota.valor_total)}</TableCell>
+                            <TableCell>{getCobrancaNota(nota)}</TableCell>
                             <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-gray-500 py-4">
+                          <TableCell colSpan={6} className="text-center text-gray-500 py-4">
                             Nenhuma nota fiscal encontrada
                           </TableCell>
                         </TableRow>
@@ -441,6 +405,7 @@ export default function FinanceiroPage() {
                         <TableHead>Fornecedor</TableHead>
                         <TableHead>Vencimento</TableHead>
                         <TableHead>Valor</TableHead>
+                        <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -452,173 +417,14 @@ export default function FinanceiroPage() {
                             <TableCell>{nota.fornecedores?.nome || '-'}</TableCell>
                             <TableCell>{nota.data_vencimento ? formatarData(nota.data_vencimento) : '-'}</TableCell>
                             <TableCell>{formatarMoeda(nota.valor_total)}</TableCell>
+                            <TableCell>{getCobrancaNota(nota)}</TableCell>
                             <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           </TableRow>
                         ))
                       ) : (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-gray-500 py-4">
+                          <TableCell colSpan={6} className="text-center text-gray-500 py-4">
                             Nenhuma nota fiscal encontrada
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
-
-        {/* Resumo de Boletos */}
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-blue-600" />
-                <CardTitle>Boletos</CardTitle>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/dashboard/financeiro/boletos')}
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Ver Todos
-              </Button>
-            </div>
-            <CardDescription>Resumo de boletos de entrada e saída</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-              {/* Boletos de Entrada (A Pagar) */}
-              <Card className="border-red-200">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowDownLeft className="w-5 h-5 text-red-600" />
-                    <CardTitle className="text-base">A Pagar</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-xl font-bold text-red-700">{formatarMoeda(boletosResumo.entrada.total)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pendentes</p>
-                      <p className="text-xl font-bold">{boletosResumo.entrada.pendentes}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Vencidos</p>
-                      <p className="text-xl font-bold text-orange-600">{boletosResumo.entrada.vencidos}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pagos</p>
-                      <p className="text-xl font-bold text-blue-600">{boletosResumo.entrada.pagos}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Boletos de Saída (A Receber) */}
-              <Card className="border-green-200">
-                <CardHeader className="pb-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowUpRight className="w-5 h-5 text-green-600" />
-                    <CardTitle className="text-base">A Receber</CardTitle>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-xl font-bold text-green-700">{formatarMoeda(boletosResumo.saida.total)}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pendentes</p>
-                      <p className="text-xl font-bold">{boletosResumo.saida.pendentes}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Vencidos</p>
-                      <p className="text-xl font-bold text-red-600">{boletosResumo.saida.vencidos}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pagos</p>
-                      <p className="text-xl font-bold text-blue-600">{boletosResumo.saida.pagos}</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Tabela de Boletos Recentes */}
-            <Tabs defaultValue="entrada" className="w-full">
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="entrada">A Pagar</TabsTrigger>
-                <TabsTrigger value="saida">A Receber</TabsTrigger>
-              </TabsList>
-              <TabsContent value="entrada" className="mt-4">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Cliente/Fornecedor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {boletosResumo.entrada.lista.length > 0 ? (
-                        boletosResumo.entrada.lista.map((boleto) => (
-                          <TableRow key={boleto.id}>
-                            <TableCell className="font-medium">{boleto.numero_boleto}</TableCell>
-                            <TableCell>{boleto.clientes?.nome || '-'}</TableCell>
-                            <TableCell>{formatarData(boleto.data_vencimento)}</TableCell>
-                            <TableCell>{formatarMoeda(boleto.valor)}</TableCell>
-                            <TableCell>{getStatusBadge(boleto.status)}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center text-gray-500 py-4">
-                            Nenhum boleto encontrado
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </TabsContent>
-              <TabsContent value="saida" className="mt-4">
-                <div className="rounded-md border">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {boletosResumo.saida.lista.length > 0 ? (
-                        boletosResumo.saida.lista.map((boleto) => (
-                          <TableRow key={boleto.id}>
-                            <TableCell className="font-medium">{boleto.numero_boleto}</TableCell>
-                            <TableCell>{boleto.clientes?.nome || '-'}</TableCell>
-                            <TableCell>{formatarData(boleto.data_vencimento)}</TableCell>
-                            <TableCell>{formatarMoeda(boleto.valor)}</TableCell>
-                            <TableCell>{getStatusBadge(boleto.status)}</TableCell>
-                          </TableRow>
-                        ))
-                      ) : (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center text-gray-500 py-4">
-                            Nenhum boleto encontrado
                           </TableCell>
                         </TableRow>
                       )}

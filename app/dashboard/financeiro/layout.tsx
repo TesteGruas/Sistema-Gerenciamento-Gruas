@@ -15,7 +15,6 @@ import {
   Home,
   FileCheck,
   ReceiptText,
-  CreditCard,
   ShoppingCart,
   Building2,
   ChevronDown
@@ -82,12 +81,6 @@ const financeiroNavItems: NavItem[] = [
     href: "/dashboard/financeiro/impostos",
     icon: ReceiptText,
     category: "documentos"
-  },
-  {
-    title: "Boletos",
-    href: "/dashboard/financeiro/boletos",
-    icon: CreditCard,
-    category: "pagamentos"
   },
   {
     title: "Contas",
