@@ -199,7 +199,7 @@ function ObraDetailsPageContent() {
   // Estado para responsáveis de obra (aprovadores de horas)
   const [responsaveisObra, setResponsaveisObra] = useState<ResponsavelObra[]>([])
   const [loadingResponsaveisObra, setLoadingResponsaveisObra] = useState(false)
-  const exibirResponsaveisObra = false
+  const exibirResponsaveisObra = true
   const [isModalResponsavelObraOpen, setIsModalResponsavelObraOpen] = useState(false)
   const [editandoResponsavelObra, setEditandoResponsavelObra] = useState<ResponsavelObra | null>(null)
   const [salvandoResponsavelObra, setSalvandoResponsavelObra] = useState(false)
