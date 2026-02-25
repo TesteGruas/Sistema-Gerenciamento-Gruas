@@ -305,6 +305,9 @@ export default function PWAEspelhoPontoPage() {
         return <Badge className="bg-orange-100 text-orange-800"><AlertTriangle className="w-3 h-3 mr-1" />Pendente</Badge>
       case 'Rejeitado':
         return <Badge className="bg-red-100 text-red-800"><XCircle className="w-3 h-3 mr-1" />Rejeitado</Badge>
+      case 'Pendente Correção':
+      case 'Pendente Correcao':
+        return <Badge className="bg-red-100 text-red-800"><AlertTriangle className="w-3 h-3 mr-1" />Pendente Correção</Badge>
       default:
         return <Badge variant="secondary">{status}</Badge>
     }
@@ -500,6 +503,25 @@ export default function PWAEspelhoPontoPage() {
                     <Clock className="w-4 h-4 mr-2" />
                     Ver Detalhes Completos
                   </Button>
+
+                  {(registro.status === 'Pendente Assinatura Funcionário' ||
+                    registro.status === 'Pendente Assinatura Funcionario' ||
+                    registro.status === 'Pendente Correção' ||
+                    registro.status === 'Pendente Correcao') && (
+                    <Button
+                      className={`w-full mt-2 text-white ${
+                        registro.status === 'Pendente Assinatura Funcionário' || registro.status === 'Pendente Assinatura Funcionario'
+                          ? 'bg-blue-600 hover:bg-blue-700'
+                          : 'bg-red-600 hover:bg-red-700'
+                      }`}
+                      onClick={() => router.push(`/pwa/aprovacao-assinatura?id=${registro.id}`)}
+                    >
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      {registro.status === 'Pendente Assinatura Funcionário' || registro.status === 'Pendente Assinatura Funcionario'
+                        ? 'Assinar Registro'
+                        : 'Corrigir Horas e Reenviar'}
+                    </Button>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -629,6 +651,28 @@ export default function PWAEspelhoPontoPage() {
                   <h4 className="font-medium text-blue-900 mb-2">Observações</h4>
                   <p className="text-sm text-blue-800">{registroDetalhes.observacoes}</p>
                 </div>
+              )}
+
+              {(registroDetalhes.status === 'Pendente Assinatura Funcionário' ||
+                registroDetalhes.status === 'Pendente Assinatura Funcionario' ||
+                registroDetalhes.status === 'Pendente Correção' ||
+                registroDetalhes.status === 'Pendente Correcao') && (
+                <Button
+                  className={`w-full text-white ${
+                    registroDetalhes.status === 'Pendente Assinatura Funcionário' || registroDetalhes.status === 'Pendente Assinatura Funcionario'
+                      ? 'bg-blue-600 hover:bg-blue-700'
+                      : 'bg-red-600 hover:bg-red-700'
+                  }`}
+                  onClick={() => {
+                    setShowDetalhesModal(false)
+                    router.push(`/pwa/aprovacao-assinatura?id=${registroDetalhes.id}`)
+                  }}
+                >
+                  <FileSignature className="w-4 h-4 mr-2" />
+                  {registroDetalhes.status === 'Pendente Assinatura Funcionário' || registroDetalhes.status === 'Pendente Assinatura Funcionario'
+                    ? 'Assinar Registro'
+                    : 'Corrigir Horas e Reenviar'}
+                </Button>
               )}
             </div>
           )}

@@ -123,6 +123,67 @@ export default function PontoPage() {
   const [assinaturaUrl, setAssinaturaUrl] = useState<string | null>(null)
   const [loadingAssinatura, setLoadingAssinatura] = useState(false)
 
+  const abrirAssinaturaNoModal = useCallback(async (assinaturaPath: string) => {
+    try {
+      setLoadingAssinatura(true)
+      const token = localStorage.getItem('access_token')
+      if (!token) {
+        toast({
+          title: "Erro",
+          description: "Token não encontrado",
+          variant: "destructive"
+        })
+        return
+      }
+
+      try {
+        const urlResponse = await fetch(
+          `/api/arquivos/url-assinada?caminho=${encodeURIComponent(assinaturaPath)}&bucket=assinaturas-digitais`,
+          {
+            headers: {
+              'Authorization': `Bearer ${token}`,
+              'Content-Type': 'application/json'
+            }
+          }
+        )
+
+        if (urlResponse.ok) {
+          const urlData = await urlResponse.json()
+          const url = urlData.data?.url || urlData.url
+          if (url) {
+            setAssinaturaUrl(url)
+            setIsAssinaturaModalOpen(true)
+            return
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao obter URL assinada:', error)
+      }
+
+      const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+      if (supabaseUrl) {
+        const publicUrl = `${supabaseUrl}/storage/v1/object/public/assinaturas-digitais/${assinaturaPath}`
+        setAssinaturaUrl(publicUrl)
+        setIsAssinaturaModalOpen(true)
+      } else {
+        toast({
+          title: "Erro",
+          description: "Não foi possível obter a URL da assinatura",
+          variant: "destructive"
+        })
+      }
+    } catch (error: any) {
+      console.error('Erro ao abrir assinatura:', error)
+      toast({
+        title: "Erro",
+        description: "Erro ao abrir assinatura digital",
+        variant: "destructive"
+      })
+    } finally {
+      setLoadingAssinatura(false)
+    }
+  }, [toast])
+
   // Estados para paginação
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
@@ -1950,7 +2011,7 @@ export default function PontoPage() {
               </div>
 
               {/* Seção de Assinatura e Aprovação */}
-              {(registroEditando?.assinatura_digital_path || registroEditando?.aprovado_por || registroEditando?.data_aprovacao || registroEditando?.status === 'Aprovado') && (
+              {(registroEditando?.assinatura_digital_path || registroEditando?.assinatura_responsavel_path || registroEditando?.assinatura_funcionario_path || registroEditando?.aprovado_por || registroEditando?.data_aprovacao || registroEditando?.status === 'Aprovado') && (
                 <div className="bg-green-50 border border-green-200 rounded-lg p-3 space-y-3">
                   <h3 className="font-semibold text-green-800 mb-2 flex items-center gap-2 text-sm">
                     <CheckCircle className="w-4 h-4" />
@@ -1975,10 +2036,10 @@ export default function PontoPage() {
                     </div>
                   )}
 
-                  {/* Assinatura Digital */}
-                  {registroEditando?.assinatura_digital_path && (
+                  {/* Assinatura do Responsável */}
+                  {(registroEditando?.assinatura_responsavel_path || registroEditando?.assinatura_digital_path) && (
                     <div className="space-y-1.5">
-                      <Label className="text-xs font-medium text-green-800">Assinatura Digital</Label>
+                      <Label className="text-xs font-medium text-green-800">Assinatura do Responsável</Label>
                       <div className="bg-white border border-green-300 rounded-lg p-2">
                         <div className="flex items-center justify-between mb-2">
                           <span className="text-xs text-gray-600">Arquivo de assinatura:</span>
@@ -1986,70 +2047,7 @@ export default function PontoPage() {
                             type="button"
                             variant="outline"
                             size="sm"
-                            onClick={async () => {
-                              try {
-                                setLoadingAssinatura(true);
-                                const token = localStorage.getItem('access_token');
-                                if (!token) {
-                                  toast({
-                                    title: "Erro",
-                                    description: "Token não encontrado",
-                                    variant: "destructive"
-                                  });
-                                  return;
-                                }
-
-                                const assinaturaPath = registroEditando.assinatura_digital_path;
-                                
-                                // Tentar obter URL assinada via API
-                                try {
-                                  const urlResponse = await fetch(
-                                    `/api/arquivos/url-assinada?caminho=${encodeURIComponent(assinaturaPath)}&bucket=assinaturas-digitais`,
-                                    {
-                                      headers: {
-                                        'Authorization': `Bearer ${token}`,
-                                        'Content-Type': 'application/json'
-                                      }
-                                    }
-                                  );
-                                  
-                                  if (urlResponse.ok) {
-                                    const urlData = await urlResponse.json();
-                                    const url = urlData.data?.url || urlData.url;
-                                    if (url) {
-                                      setAssinaturaUrl(url);
-                                      setIsAssinaturaModalOpen(true);
-                                      return;
-                                    }
-                                  }
-                                } catch (error) {
-                                  console.error('Erro ao obter URL assinada:', error);
-                                }
-
-                                // Fallback: URL pública
-                                const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-                                if (supabaseUrl) {
-                                  const publicUrl = `${supabaseUrl}/storage/v1/object/public/assinaturas-digitais/${assinaturaPath}`;
-                                  setAssinaturaUrl(publicUrl);
-                                  setIsAssinaturaModalOpen(true);
-                                } else {
-                                  toast({
-                                    title: "Erro",
-                                    description: "Não foi possível obter a URL da assinatura",
-                                    variant: "destructive"
-                                  });
-                                }
-                              } catch (error: any) {
-                                console.error('Erro ao abrir assinatura:', error);
-                                toast({
-                                  title: "Erro",
-                                  description: "Erro ao abrir assinatura digital",
-                                  variant: "destructive"
-                                });
-                              } finally {
-                                setLoadingAssinatura(false);
-                              }
-                            }}
+                            onClick={() => abrirAssinaturaNoModal(registroEditando.assinatura_responsavel_path || registroEditando.assinatura_digital_path || '')}
                             className="text-xs"
                             disabled={loadingAssinatura}
                           >
@@ -2071,12 +2069,61 @@ export default function PontoPage() {
                     </div>
                   )}
 
+                  {/* Assinatura do Funcionário */}
+                  {registroEditando?.assinatura_funcionario_path && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-medium text-green-800">Assinatura do Funcionário</Label>
+                      <div className="bg-white border border-green-300 rounded-lg p-2">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs text-gray-600">Arquivo de assinatura:</span>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => abrirAssinaturaNoModal(registroEditando.assinatura_funcionario_path || '')}
+                            className="text-xs"
+                            disabled={loadingAssinatura}
+                          >
+                            <Eye className="w-3 h-3 mr-1" />
+                            {loadingAssinatura ? 'Carregando...' : 'Ver Assinatura'}
+                          </Button>
+                        </div>
+                        {registroEditando?.data_assinatura_funcionario && (
+                          <div className="space-y-1">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="text-gray-600 font-medium">Assinado em:</span>
+                              <span className="font-semibold text-xs text-green-800">
+                                {new Date(registroEditando.data_assinatura_funcionario).toLocaleString('pt-BR')}
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Status de Aprovação */}
                   {registroEditando?.status === 'Aprovado' && (
                     <div className="flex items-center gap-2 text-xs">
                       <CheckCircle className="w-3 h-3 text-green-600" />
                       <span className="text-green-700 font-medium">Registro aprovado e assinado</span>
                     </div>
+                  )}
+
+                  {(registroEditando?.status === 'Pendente Assinatura Funcionário' || registroEditando?.status === 'Pendente Assinatura Funcionario') && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full border-blue-300 text-blue-700 hover:bg-blue-50"
+                      onClick={() => {
+                        setIsEditarOpen(false);
+                        window.location.href = `/pwa/aprovacao-assinatura?id=${registroEditando.id}`;
+                      }}
+                    >
+                      <FileSignature className="w-4 h-4 mr-2" />
+                      Abrir Modal de Assinatura do Funcionário
+                    </Button>
                   )}
 
                   {/* Botão para baixar documento */}
@@ -2165,7 +2212,9 @@ export default function PontoPage() {
                             yPos += 10;
 
                             // Informações de Aprovação/Assinatura
-                            if (registroEditando.aprovado_por || registroEditando.assinatura_digital_path) {
+                            const assinaturaResponsavelPath = registroEditando.assinatura_responsavel_path || registroEditando.assinatura_digital_path;
+                            const assinaturaFuncionarioPath = registroEditando.assinatura_funcionario_path;
+                            if (registroEditando.aprovado_por || assinaturaResponsavelPath || assinaturaFuncionarioPath) {
                               doc.setFontSize(12);
                               doc.setFont('helvetica', 'bold');
                               doc.text('APROVAÇÃO/ASSINATURA', 14, yPos);
@@ -2181,121 +2230,109 @@ export default function PontoPage() {
                                 yPos += 6;
                               }
 
-                              if (registroEditando.assinatura_digital_path) {
-                                doc.text(`Assinatura Digital: Disponível`, 14, yPos);
+                              const assinaturasDisponiveis = [
+                                {
+                                  label: 'Assinatura do Responsável',
+                                  path: assinaturaResponsavelPath,
+                                  data: registroEditando.data_assinatura_responsavel || registroEditando.updated_at || null
+                                },
+                                {
+                                  label: 'Assinatura do Funcionário',
+                                  path: assinaturaFuncionarioPath,
+                                  data: registroEditando.data_assinatura_funcionario || null
+                                }
+                              ].filter((item) => !!item.path);
+
+                              assinaturasDisponiveis.forEach((item) => {
+                                doc.text(`${item.label}: Disponível`, 14, yPos);
                                 yPos += 6;
-                                if (registroEditando.updated_at) {
-                                  doc.text(`Assinado em: ${new Date(registroEditando.updated_at).toLocaleString('pt-BR')}`, 14, yPos);
+                                if (item.data) {
+                                  doc.text(`Assinado em: ${new Date(item.data).toLocaleString('pt-BR')}`, 14, yPos);
                                   yPos += 6;
                                 }
-                                
-                                // Tentar adicionar a imagem da assinatura
-                                try {
-                                  const token = localStorage.getItem('access_token');
-                                  
-                                  if (!token) {
-                                    throw new Error('Token não disponível');
-                                  }
-                                  
-                                  // Sempre usar URL assinada (bucket pode não ser público)
-                                  const urlResponse = await Promise.race([
-                                    fetch(
-                                      `/api/arquivos/url-assinada?caminho=${encodeURIComponent(registroEditando.assinatura_digital_path)}&bucket=assinaturas-digitais`,
-                                      {
-                                        headers: {
-                                          'Authorization': `Bearer ${token}`,
-                                          'Content-Type': 'application/json'
-                                        }
+                              });
+
+                              const carregarAssinaturaEmBase64 = async (assinaturaPath: string) => {
+                                const token = localStorage.getItem('access_token');
+                                if (!token) return null;
+
+                                const urlResponse = await Promise.race([
+                                  fetch(
+                                    `/api/arquivos/url-assinada?caminho=${encodeURIComponent(assinaturaPath)}&bucket=assinaturas-digitais`,
+                                    {
+                                      headers: {
+                                        'Authorization': `Bearer ${token}`,
+                                        'Content-Type': 'application/json'
                                       }
-                                    ),
-                                    new Promise<Response>((_, reject) => 
-                                      setTimeout(() => reject(new Error('Timeout')), 10000)
-                                    )
-                                  ]);
-                                  
-                                  if (!urlResponse.ok) {
-                                    throw new Error(`API retornou ${urlResponse.status}`);
-                                  }
-                                  
-                                  const urlData = await urlResponse.json();
-                                  const assinaturaUrl = urlData.data?.url || urlData.url;
-                                  
-                                  if (!assinaturaUrl || !assinaturaUrl.startsWith('http')) {
-                                    throw new Error('URL inválida');
-                                  }
-                                  
-                                  // Buscar a imagem com timeout
-                                  const imgResponse = await Promise.race([
-                                    fetch(assinaturaUrl),
-                                    new Promise<Response>((_, reject) => 
-                                      setTimeout(() => reject(new Error('Timeout ao buscar imagem')), 10000)
-                                    )
-                                  ]);
-                                  
-                                  if (!imgResponse.ok) {
-                                    throw new Error(`HTTP ${imgResponse.status}`);
-                                  }
-                                  
-                                  const blob = await imgResponse.blob();
-                                  
-                                  // Converter blob para base64
-                                  const base64Image = await new Promise<string>((resolve, reject) => {
-                                    const reader = new FileReader();
-                                    const timeout = setTimeout(() => reject(new Error('Timeout FileReader')), 5000);
-                                    reader.onloadend = () => {
-                                      clearTimeout(timeout);
-                                      if (typeof reader.result === 'string') {
-                                        resolve(reader.result);
-                                      } else {
-                                        reject(new Error('Resultado inválido'));
-                                      }
-                                    };
-                                    reader.onerror = () => {
-                                      clearTimeout(timeout);
-                                      reject(new Error('Erro FileReader'));
-                                    };
-                                    reader.readAsDataURL(blob);
-                                  });
-                                  
-                                  // Carregar imagem para obter dimensões
-                                  const img = new window.Image();
-                                  await new Promise<void>((resolve, reject) => {
-                                    const timeout = setTimeout(() => reject(new Error('Timeout carregar imagem')), 5000);
-                                    img.onload = () => {
-                                      clearTimeout(timeout);
-                                      resolve();
-                                    };
-                                    img.onerror = () => {
-                                      clearTimeout(timeout);
-                                      reject(new Error('Erro ao carregar imagem'));
-                                    };
-                                    img.src = base64Image;
-                                  });
-                                  
-                                  // Adicionar imagem ao PDF no canto inferior direito
-                                  const imgWidth = 120;
-                                  const imgHeight = (img.height * imgWidth) / img.width;
-                                  
-                                  // Obter dimensões da página
-                                  const pageWidth = doc.internal.pageSize.getWidth();
-                                  const pageHeight = doc.internal.pageSize.getHeight();
-                                  
-                                  // Calcular posição no canto inferior direito
-                                  const marginRight = 14;
-                                  const marginBottom = 20;
-                                  const xPos = pageWidth - imgWidth - marginRight;
-                                  const yPosAssinatura = pageHeight - imgHeight - marginBottom;
-                                  
+                                    }
+                                  ),
+                                  new Promise<Response>((_, reject) =>
+                                    setTimeout(() => reject(new Error('Timeout')), 10000)
+                                  )
+                                ]);
+
+                                if (!urlResponse.ok) return null;
+                                const urlData = await urlResponse.json();
+                                const assinaturaUrl = urlData.data?.url || urlData.url;
+                                if (!assinaturaUrl || !assinaturaUrl.startsWith('http')) return null;
+
+                                const imgResponse = await Promise.race([
+                                  fetch(assinaturaUrl),
+                                  new Promise<Response>((_, reject) =>
+                                    setTimeout(() => reject(new Error('Timeout ao buscar imagem')), 10000)
+                                  )
+                                ]);
+                                if (!imgResponse.ok) return null;
+
+                                const blob = await imgResponse.blob();
+                                const base64Image = await new Promise<string>((resolve, reject) => {
+                                  const reader = new FileReader();
+                                  reader.onloadend = () => {
+                                    if (typeof reader.result === 'string') resolve(reader.result);
+                                    else reject(new Error('Resultado inválido'));
+                                  };
+                                  reader.onerror = () => reject(new Error('Erro FileReader'));
+                                  reader.readAsDataURL(blob);
+                                });
+                                return base64Image;
+                              };
+
+                              const assinaturasBase64 = (
+                                await Promise.all(
+                                  assinaturasDisponiveis.map(async (item) => {
+                                    try {
+                                      const base64 = await carregarAssinaturaEmBase64(item.path as string);
+                                      return base64 ? { label: item.label, base64 } : null;
+                                    } catch {
+                                      return null;
+                                    }
+                                  })
+                                )
+                              ).filter(Boolean) as Array<{ label: string; base64: string }>;
+
+                              if (assinaturasBase64.length > 0) {
+                                yPos += 2;
+                                const boxWidth = 80;
+                                const startX = 14;
+                                const gap = 12;
+                                let posX = startX;
+                                const baseY = yPos;
+
+                                for (const assinatura of assinaturasBase64.slice(0, 2)) {
                                   try {
-                                    doc.addImage(base64Image, 'PNG', xPos, yPosAssinatura, imgWidth, imgHeight);
-                                  } catch (addImageError: any) {
-                                    // Tentar com base64 puro (sem prefixo data:image)
-                                    const base64Puro = base64Image.includes(',') ? base64Image.split(',')[1] : base64Image;
-                                    doc.addImage(base64Puro, 'PNG', xPos, yPosAssinatura, imgWidth, imgHeight);
+                                    doc.setFontSize(9);
+                                    doc.setFont('helvetica', 'bold');
+                                    doc.text(assinatura.label, posX, baseY);
+                                    const imgY = baseY + 3;
+                                    doc.addImage(assinatura.base64, 'PNG', posX, imgY, boxWidth, 24);
+                                    doc.setDrawColor(190, 190, 190);
+                                    doc.rect(posX, imgY, boxWidth, 24);
+                                  } catch {
+                                    // Ignora falhas de renderização individual da assinatura
                                   }
-                                } catch (error: any) {
-                                  // Silenciosamente ignorar erro
+                                  posX += boxWidth + gap;
                                 }
+                                yPos = baseY + 32;
                               }
                               yPos += 5;
                             }

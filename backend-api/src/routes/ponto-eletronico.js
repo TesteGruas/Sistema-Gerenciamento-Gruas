@@ -4798,7 +4798,7 @@ router.post('/registros/:id/assinar-responsavel', authenticateToken, async (req,
     // Buscar registro
     const { data: registro, error: errorBusca } = await supabaseAdmin
       .from('registros_ponto')
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone, user_id)`)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone)`)
       .eq('id', id)
       .single();
 
@@ -4864,7 +4864,7 @@ router.post('/registros/:id/assinar-responsavel', authenticateToken, async (req,
       .from('registros_ponto')
       .update(dadosUpdate)
       .eq('id', id)
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone, user_id)`)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone)`)
       .single();
 
     if (errorUpdate) {
@@ -4911,7 +4911,7 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
     // Buscar registro
     const { data: registro, error: errorBusca } = await supabaseAdmin
       .from('registros_ponto')
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, user_id)`)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno)`)
       .eq('id', id)
       .single();
 
@@ -4925,16 +4925,14 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
     }
 
     // Verificar que o usuário é o funcionário dono do registro
-    const funcUserId = registro.funcionario?.user_id;
     const { data: usuarioLogado } = await supabaseAdmin
       .from('usuarios')
       .select('id, funcionario_id')
       .eq('id', userId)
       .single();
 
-    const isFuncionarioDono = (
-      (usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id) ||
-      (funcUserId && funcUserId === userId)
+    const isFuncionarioDono = Boolean(
+      usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id
     );
 
     if (!isFuncionarioDono) {
@@ -4996,24 +4994,48 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
 // =========================================================
 router.post('/registros/:id/rejeitar-responsavel', authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
+    const id = String(req.params.id || '').trim();
     const { comentario } = req.body;
     const userId = req.user?.id || req.user?.userId;
 
     console.log(`[Rejeitar-Responsavel] Registro ${id}, usuário ${userId}`);
 
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID do registro é obrigatório' });
+    }
+
     if (!comentario || !comentario.trim()) {
       return res.status(400).json({ success: false, message: 'O comentário é obrigatório para explicar o motivo' });
     }
 
-    // Buscar registro
-    const { data: registro, error: errorBusca } = await supabaseAdmin
+    // Buscar registro por ID textual. Se vier UUID, tenta fallback em uuid.
+    const selectRegistro = `*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone)`;
+    let { data: registro, error: errorBusca } = await supabaseAdmin
       .from('registros_ponto')
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, email, telefone_whatsapp, telefone, user_id)`)
+      .select(selectRegistro)
       .eq('id', id)
       .single();
 
-    if (errorBusca || !registro) {
+    const isUuidParam = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+    if ((!registro || errorBusca?.code === 'PGRST116') && isUuidParam) {
+      const fallbackBusca = await supabaseAdmin
+        .from('registros_ponto')
+        .select(selectRegistro)
+        .eq('uuid', id)
+        .single();
+      registro = fallbackBusca.data;
+      errorBusca = fallbackBusca.error;
+    }
+
+    if (errorBusca) {
+      if (errorBusca.code === 'PGRST116') {
+        return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+      }
+      console.error('[Rejeitar-Responsavel] Erro ao buscar registro:', errorBusca);
+      return res.status(500).json({ success: false, message: 'Erro ao buscar registro', error: errorBusca.message });
+    }
+
+    if (!registro) {
       return res.status(404).json({ success: false, message: 'Registro não encontrado' });
     }
 
@@ -5056,7 +5078,7 @@ router.post('/registros/:id/rejeitar-responsavel', authenticateToken, async (req
       .from('registros_ponto')
       .update(dadosUpdate)
       .eq('id', id)
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone, user_id)`)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone)`)
       .single();
 
     if (errorUpdate) {
@@ -5104,7 +5126,7 @@ router.put('/registros/:id/corrigir-horas', authenticateToken, async (req, res) 
     // Buscar registro
     const { data: registro, error: errorBusca } = await supabaseAdmin
       .from('registros_ponto')
-      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id, user_id)`)
+      .select(`*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id)`)
       .eq('id', id)
       .single();
 
@@ -5124,10 +5146,8 @@ router.put('/registros/:id/corrigir-horas', authenticateToken, async (req, res) 
       .eq('id', userId)
       .single();
 
-    const funcUserId = registro.funcionario?.user_id;
-    const isFuncionarioDono = (
-      (usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id) ||
-      (funcUserId && funcUserId === userId)
+    const isFuncionarioDono = Boolean(
+      usuarioLogado?.funcionario_id && usuarioLogado.funcionario_id === registro.funcionario_id
     );
 
     if (!isFuncionarioDono) {

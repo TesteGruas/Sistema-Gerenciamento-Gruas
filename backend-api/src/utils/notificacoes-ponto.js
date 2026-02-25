@@ -403,13 +403,15 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
     // Buscar email e telefone do funcionário
     const { data: funcData } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, email, telefone_whatsapp, telefone, user_id')
+      .select('id, nome, email, telefone_whatsapp, telefone')
       .eq('id', funcionario.id || funcionario.funcionario_id || registro.funcionario_id)
       .single();
 
     const emailFunc = funcData?.email;
     const telefoneFunc = funcData?.telefone_whatsapp || funcData?.telefone;
-    const usuarioIdFunc = funcData?.user_id;
+    const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(
+      funcData?.id || funcionario.id || funcionario.funcionario_id || registro.funcionario_id
+    );
 
     // 1) Email
     if (emailFunc) {
@@ -480,13 +482,15 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
   try {
     const { data: funcData } = await supabaseAdmin
       .from('funcionarios')
-      .select('id, nome, email, telefone_whatsapp, telefone, user_id')
+      .select('id, nome, email, telefone_whatsapp, telefone')
       .eq('id', funcionario.id || funcionario.funcionario_id || registro.funcionario_id)
       .single();
 
     const emailFunc = funcData?.email;
     const telefoneFunc = funcData?.telefone_whatsapp || funcData?.telefone;
-    const usuarioIdFunc = funcData?.user_id;
+    const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(
+      funcData?.id || funcionario.id || funcionario.funcionario_id || registro.funcionario_id
+    );
 
     // 1) Email
     if (emailFunc) {
@@ -558,6 +562,22 @@ async function resolverUsuarioId(responsavel) {
       .from('usuarios')
       .select('id')
       .eq('email', responsavel.email)
+      .single();
+
+    return usuario?.id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolverUsuarioIdPorFuncionario(funcionarioId) {
+  if (!funcionarioId) return null;
+
+  try {
+    const { data: usuario } = await supabaseAdmin
+      .from('usuarios')
+      .select('id')
+      .eq('funcionario_id', funcionarioId)
       .single();
 
     return usuario?.id || null;
