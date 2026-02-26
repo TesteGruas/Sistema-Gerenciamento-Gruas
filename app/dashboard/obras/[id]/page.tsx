@@ -2806,7 +2806,8 @@ function ObraDetailsPageContent() {
           carregarArquivos(),
           carregarDocumentosAdicionaisEquipamento(),
           carregarTodosResponsaveisTecnicos(),
-          carregarSinaleiros()
+          carregarSinaleiros(),
+          carregarResponsaveisObra()
         ])
       }
     }
@@ -2852,6 +2853,7 @@ function ObraDetailsPageContent() {
   useEffect(() => {
     medicoesCarregadasRef.current = false
     sinaleirosCarregadosRef.current = false
+    responsaveisObraCarregadosRef.current = false
     gruasCarregadasRef.current = null
     funcionariosCarregadosRef.current = null
   }, [obraId])
