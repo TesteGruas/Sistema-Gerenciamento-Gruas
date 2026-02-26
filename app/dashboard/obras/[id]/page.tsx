@@ -5734,7 +5734,7 @@ useEffect(() => {
 
         {/* Aba: Livro da Grua */}
         <TabsContent value="livro-grua" className="space-y-4">
-          <LivroGruaObra obraId={obraId} />
+          <LivroGruaObra obraId={obraId} onRequestEdit={iniciarEdicao} />
         </TabsContent>
 
         <TabsContent value="medicoes-mensais" className="space-y-4">

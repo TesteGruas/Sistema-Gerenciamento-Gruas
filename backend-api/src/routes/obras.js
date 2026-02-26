@@ -35,6 +35,7 @@ const obraSchema = Joi.object({
   status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Planejamento'),
   // Novos campos adicionados - todos opcionais conforme tabela
   descricao: Joi.string().allow('', null).optional(),
+  canteiro: Joi.string().allow('', null).optional(),
   data_inicio: Joi.date().allow(null).optional(),
   data_fim: Joi.date().allow(null).optional(),
   orcamento: Joi.number().positive().allow(null).optional(),
@@ -157,6 +158,43 @@ const obraSchema = Joi.object({
     })
   ).allow(null).optional()
 })
+
+// Schema para atualização parcial de obra (PUT/PATCH)
+const obraUpdateSchema = Joi.object({
+  nome: Joi.string().min(2).optional(),
+  cliente_id: Joi.number().integer().positive().optional(),
+  endereco: Joi.string().optional(),
+  cidade: Joi.string().optional(),
+  estado: Joi.string().min(2).max(2).optional(),
+  tipo: Joi.string().valid('Residencial', 'Comercial', 'Industrial', 'Infraestrutura').optional(),
+  cep: Joi.string().pattern(/^\d{5}-?\d{3}$/).allow(null, '').optional(),
+  contato_obra: Joi.string().allow('', null).optional(),
+  telefone_obra: Joi.string().allow('', null).optional(),
+  email_obra: Joi.string().email().allow('', null).optional(),
+  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').optional(),
+  descricao: Joi.string().allow('', null).optional(),
+  canteiro: Joi.string().allow('', null).optional(),
+  data_inicio: Joi.date().allow(null).optional(),
+  data_fim: Joi.date().allow(null).optional(),
+  orcamento: Joi.number().positive().allow(null).optional(),
+  orcamento_id: Joi.number().integer().positive().allow(null).optional(),
+  observacoes: Joi.string().allow('', null).optional(),
+  responsavel_id: Joi.number().integer().positive().allow(null).optional(),
+  responsavel_nome: Joi.string().allow('', null).optional(),
+  latitude: Joi.number().min(-90).max(90).allow(null).optional(),
+  longitude: Joi.number().min(-180).max(180).allow(null).optional(),
+  raio_permitido: Joi.number().integer().positive().optional(),
+  cno: Joi.string().allow(null, '').optional(),
+  cno_arquivo: Joi.string().allow(null, '').optional(),
+  art_numero: Joi.string().allow(null, '').optional(),
+  art_arquivo: Joi.string().allow(null, '').optional(),
+  apolice_numero: Joi.string().allow(null, '').optional(),
+  apolice_arquivo: Joi.string().allow(null, '').optional(),
+  gruas: obraSchema.extract('gruas'),
+  funcionarios: obraSchema.extract('funcionarios'),
+  responsavel_tecnico: obraSchema.extract('responsavel_tecnico'),
+  sinaleiros: obraSchema.extract('sinaleiros')
+}).min(1)
 
 /**
  * @swagger
@@ -2024,7 +2062,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
     console.log('    - Responsável Nome:', req.body.responsavel_nome || 'N/A')
     console.log('═══════════════════════════════════════════════════════════\n')
 
-    const { error, value } = obraSchema.validate(req.body)
+    const { error, value } = obraUpdateSchema.validate(req.body)
     if (error) {
       console.error('❌ Erro de validação:', error.details)
       return res.status(400).json({
@@ -2048,6 +2086,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       status: value.status,
       // Novos campos adicionados
       descricao: value.descricao,
+      canteiro: value.canteiro,
       data_inicio: value.data_inicio,
       data_fim: value.data_fim,
       orcamento: value.orcamento,

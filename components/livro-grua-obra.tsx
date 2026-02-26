@@ -4,6 +4,10 @@ import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Building2, 
   User, 
@@ -20,12 +24,14 @@ import {
   CreditCard,
   BookOpen,
   FileCheck,
-  Package
+  Package,
+  Loader2
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 import { gruaObraApi } from "@/lib/api-grua-obra"
+import { gruasApi } from "@/lib/api-gruas"
 import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { Upload } from "lucide-react"
@@ -36,14 +42,18 @@ interface LivroGruaObraProps {
   obraId: string
   cachedData?: any
   onDataLoaded?: (data: any) => void
+  onRequestEdit?: () => void
 }
 
-export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObraProps) {
+export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit }: LivroGruaObraProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(!cachedData)
   const [obra, setObra] = useState<any>(cachedData?.obra || null)
   const [documentos, setDocumentos] = useState<any[]>(cachedData?.documentos || [])
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(cachedData?.gruaSelecionada || null)
+  const [isEditingLivro, setIsEditingLivro] = useState(false)
+  const [savingLivro, setSavingLivro] = useState(false)
+  const [livroForm, setLivroForm] = useState<any>({})
 
   useEffect(() => {
     // Só carregar se não houver dados em cache
@@ -369,6 +379,48 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     }).format(valor)
   }
 
+  const toNumberOrUndefined = (value: any) => {
+    if (value === null || value === undefined || value === '') return undefined
+    const parsed = Number(value)
+    return Number.isNaN(parsed) ? undefined : parsed
+  }
+
+  const toEditableValue = (value: any) => {
+    if (value === null || value === undefined) return ''
+    if (typeof value === 'string') {
+      const normalized = value.trim().toLowerCase()
+      if (
+        normalized === 'não informado' ||
+        normalized === 'nao informado' ||
+        normalized === 'n/a' ||
+        normalized === 'não informada' ||
+        normalized === 'nao informada'
+      ) {
+        return ''
+      }
+    }
+    return value
+  }
+
+  const normalizeText = (value: any): string => {
+    if (!value) return ''
+    return String(value)
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+  }
+
+  const isFichaTecnicaDocumento = (doc: any) => {
+    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)}`
+    return texto.includes('ficha tecnica') || texto.includes('dados tecnicos')
+  }
+
+  const isManualMontagemDocumento = (doc: any) => {
+    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)}`
+    return texto.includes('manual') && (texto.includes('montagem') || texto.includes('instalacao'))
+  }
+
   // Função auxiliar para fazer download de arquivo
   const downloadArquivo = async (arquivoUrl: string, nomeArquivo: string) => {
     if (!arquivoUrl) {
@@ -442,6 +494,42 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
       toast({
         title: "Erro",
         description: error.message || "Erro ao baixar documento",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const removerDocumento = async (documento: any) => {
+    try {
+      const idDocumento = documento?.id
+      if (!idDocumento) {
+        throw new Error('Documento inválido')
+      }
+
+      const idComoString = String(idDocumento)
+      if (idComoString.startsWith('arquivo_')) {
+        const arquivoId = parseInt(idComoString.replace('arquivo_', ''))
+        if (Number.isNaN(arquivoId)) {
+          throw new Error('ID de arquivo inválido')
+        }
+        await obrasArquivosApi.excluir(arquivoId)
+      } else {
+        const documentoId = parseInt(idComoString)
+        if (Number.isNaN(documentoId)) {
+          throw new Error('ID de documento inválido')
+        }
+        await obrasDocumentosApi.excluir(parseInt(obraId), documentoId)
+      }
+
+      toast({
+        title: "Sucesso",
+        description: "Arquivo removido com sucesso"
+      })
+      await carregarDados()
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Não foi possível remover o arquivo",
         variant: "destructive"
       })
     }
@@ -547,10 +635,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     input.type = 'file'
     input.accept = 'application/pdf'
     input.style.display = 'none'
-    input.onchange = () => handleUploadArquivo(categoria, titulo, input)
+    input.onchange = async () => {
+      await handleUploadArquivo(categoria, titulo, input)
+      if (document.body.contains(input)) {
+        document.body.removeChild(input)
+      }
+    }
     document.body.appendChild(input)
     input.click()
-    document.body.removeChild(input)
   }
 
   const handleExportar = async () => {
@@ -1862,6 +1954,164 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
     return fGruaId === sGruaId || fGruaId?.toString() === sGruaId?.toString()
   }) || []
 
+  const iniciarEdicaoLivro = () => {
+    setLivroForm({
+      altura_maxima: toEditableValue(gruaSelecionada?.altura_maxima),
+      alcance_maximo: toEditableValue(gruaSelecionada?.alcance_maximo),
+      numero_serie: toEditableValue(gruaSelecionada?.numero_serie),
+      tipo_base: toEditableValue(relacaoGrua?.tipo_base),
+      altura_inicial: toEditableValue(relacaoGrua?.altura_inicial),
+      altura_final: toEditableValue(relacaoGrua?.altura_final),
+      capacidade_1_cabo: toEditableValue(relacaoGrua?.capacidade_1_cabo),
+      capacidade_2_cabos: toEditableValue(relacaoGrua?.capacidade_2_cabos),
+      capacidade_ponta: toEditableValue(relacaoGrua?.capacidade_ponta),
+      capacidade_maxima_raio: toEditableValue(relacaoGrua?.capacidade_maxima_raio),
+      velocidade_rotacao: toEditableValue(relacaoGrua?.velocidade_rotacao),
+      velocidade_elevacao: toEditableValue(relacaoGrua?.velocidade_elevacao),
+      velocidade_translacao: toEditableValue(relacaoGrua?.velocidade_translacao),
+      potencia_instalada: toEditableValue(relacaoGrua?.potencia_instalada),
+      voltagem: toEditableValue(relacaoGrua?.voltagem),
+      tipo_ligacao: toEditableValue(relacaoGrua?.tipo_ligacao),
+      ano_fabricacao: toEditableValue(relacaoGrua?.ano_fabricacao),
+      vida_util: toEditableValue(relacaoGrua?.vida_util),
+      fundacao: toEditableValue(relacaoGrua?.fundacao || relacaoGrua?.fundacao_tipo),
+      canteiro: toEditableValue(obra?.canteiro),
+      local_instalacao: toEditableValue(relacaoGrua?.local_instalacao),
+      condicoes_ambiente: toEditableValue(relacaoGrua?.condicoes_ambiente),
+      raio_operacao: toEditableValue(relacaoGrua?.raio_operacao || relacaoGrua?.raio),
+      altura_operacao: toEditableValue(relacaoGrua?.altura),
+      manual_operacao: toEditableValue(relacaoGrua?.manual_operacao),
+      procedimento_montagem: Boolean(relacaoGrua?.procedimento_montagem),
+      procedimento_operacao: Boolean(relacaoGrua?.procedimento_operacao),
+      procedimento_desmontagem: Boolean(relacaoGrua?.procedimento_desmontagem),
+      data_desmontagem: relacaoGrua?.data_desmontagem ? String(relacaoGrua.data_desmontagem).split('T')[0] : '',
+      observacoes_montagem: toEditableValue(relacaoGrua?.observacoes_montagem || relacaoGrua?.observacoes),
+      observacoes_config: toEditableValue(relacaoGrua?.observacoes || obra?.observacoes),
+      proprietario_responsavel_tecnico: toEditableValue(gruaSelecionada?.proprietario_responsavel_tecnico || relacaoGrua?.responsavel_tecnico),
+      crea_responsavel: toEditableValue(gruaSelecionada?.proprietario_crea || relacaoGrua?.crea_responsavel)
+    })
+    setIsEditingLivro(true)
+  }
+
+  const salvarEdicaoLivro = async () => {
+    const relacaoId = relacaoGrua?.id || gruaSelecionada?.relacao?.id
+    if (!relacaoId) {
+      toast({
+        title: "Erro",
+        description: "Relação da grua com a obra não encontrada para salvar.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setSavingLivro(true)
+
+      await gruaObraApi.atualizarRelacionamento(Number(relacaoId), {
+        tipo_base: livroForm.tipo_base || undefined,
+        altura_inicial: toNumberOrUndefined(livroForm.altura_inicial),
+        altura_final: toNumberOrUndefined(livroForm.altura_final),
+        capacidade_1_cabo: toNumberOrUndefined(livroForm.capacidade_1_cabo),
+        capacidade_2_cabos: toNumberOrUndefined(livroForm.capacidade_2_cabos),
+        capacidade_ponta: toNumberOrUndefined(livroForm.capacidade_ponta),
+        capacidade_maxima_raio: toNumberOrUndefined(livroForm.capacidade_maxima_raio),
+        velocidade_rotacao: toNumberOrUndefined(livroForm.velocidade_rotacao),
+        velocidade_elevacao: toNumberOrUndefined(livroForm.velocidade_elevacao),
+        velocidade_translacao: toNumberOrUndefined(livroForm.velocidade_translacao),
+        potencia_instalada: toNumberOrUndefined(livroForm.potencia_instalada),
+        voltagem: livroForm.voltagem || undefined,
+        tipo_ligacao: livroForm.tipo_ligacao || undefined,
+        ano_fabricacao: toNumberOrUndefined(livroForm.ano_fabricacao),
+        vida_util: toNumberOrUndefined(livroForm.vida_util),
+        fundacao: livroForm.fundacao || undefined,
+        local_instalacao: livroForm.local_instalacao || undefined,
+        condicoes_ambiente: livroForm.condicoes_ambiente || undefined,
+        raio_operacao: toNumberOrUndefined(livroForm.raio_operacao),
+        raio: toNumberOrUndefined(livroForm.raio_operacao),
+        altura: toNumberOrUndefined(livroForm.altura_operacao),
+        manual_operacao: livroForm.manual_operacao || undefined,
+        procedimento_montagem: Boolean(livroForm.procedimento_montagem),
+        procedimento_operacao: Boolean(livroForm.procedimento_operacao),
+        procedimento_desmontagem: Boolean(livroForm.procedimento_desmontagem),
+        data_desmontagem: livroForm.data_desmontagem || undefined,
+        observacoes_montagem: livroForm.observacoes_montagem || undefined,
+        observacoes: livroForm.observacoes_config || livroForm.observacoes_montagem || undefined,
+        responsavel_tecnico: livroForm.proprietario_responsavel_tecnico || undefined,
+        crea_responsavel: livroForm.crea_responsavel || undefined
+      } as any)
+
+      if (gruaSelecionada?.id) {
+        await gruasApi.atualizarGrua(gruaSelecionada.id, {
+          altura_maxima: livroForm.altura_maxima || undefined,
+          alcance_maximo: livroForm.alcance_maximo || undefined,
+          numero_serie: livroForm.numero_serie || undefined
+        } as any)
+      }
+
+      // Atualiza campos da obra que também aparecem no Livro da Grua
+      if ((obra?.canteiro || '') !== (livroForm.canteiro || '')) {
+        await obrasApi.atualizarObra(parseInt(obraId), {
+          canteiro: livroForm.canteiro || undefined
+        } as any)
+      }
+
+      await carregarDados()
+      setIsEditingLivro(false)
+
+      toast({
+        title: "Sucesso",
+        description: "Dados do Livro da Grua atualizados."
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar",
+        description: error?.message || "Não foi possível salvar os dados do Livro da Grua.",
+        variant: "destructive"
+      })
+    } finally {
+      setSavingLivro(false)
+    }
+  }
+
+  const preencherDadosDebugLivro = () => {
+    setLivroForm((prev: any) => ({
+      ...prev,
+      altura_maxima: prev.altura_maxima || '75',
+      alcance_maximo: prev.alcance_maximo || '65',
+      numero_serie: prev.numero_serie || 'DBG-GRUA-2026-001',
+      tipo_base: prev.tipo_base || 'Chumbador',
+      altura_inicial: prev.altura_inicial || '35',
+      altura_final: prev.altura_final || '60',
+      capacidade_1_cabo: prev.capacidade_1_cabo || '2500',
+      capacidade_2_cabos: prev.capacidade_2_cabos || '4000',
+      capacidade_ponta: prev.capacidade_ponta || '2000',
+      capacidade_maxima_raio: prev.capacidade_maxima_raio || '5000',
+      velocidade_rotacao: prev.velocidade_rotacao || '0.8',
+      velocidade_elevacao: prev.velocidade_elevacao || '60',
+      velocidade_translacao: prev.velocidade_translacao || '35',
+      potencia_instalada: prev.potencia_instalada || '25',
+      voltagem: prev.voltagem || '380',
+      tipo_ligacao: prev.tipo_ligacao || 'trifasica',
+      ano_fabricacao: prev.ano_fabricacao || '2020',
+      vida_util: prev.vida_util || '20',
+      fundacao: prev.fundacao || 'Base em concreto armado',
+      canteiro: prev.canteiro || 'Canteiro principal - frente da obra',
+      local_instalacao: prev.local_instalacao || 'Lado norte do canteiro',
+      condicoes_ambiente: prev.condicoes_ambiente || 'Área isolada e sinalizada',
+      raio_operacao: prev.raio_operacao || '60',
+      altura_operacao: prev.altura_operacao || '70',
+      manual_operacao: prev.manual_operacao || 'Manual operacional interno v1',
+      procedimento_montagem: true,
+      procedimento_operacao: true,
+      procedimento_desmontagem: true,
+      data_desmontagem: prev.data_desmontagem || '2026-12-31',
+      proprietario_responsavel_tecnico: prev.proprietario_responsavel_tecnico || 'Eng. Teste Debug',
+      crea_responsavel: prev.crea_responsavel || 'SP-000000',
+      observacoes_montagem: prev.observacoes_montagem || 'Dados preenchidos automaticamente para validação.',
+      observacoes_config: prev.observacoes_config || 'Configuração técnica validada em modo debug.'
+    }))
+  }
+
   return (
     <div className="space-y-4 print:space-y-4">
       {/* Seletor de Grua */}
@@ -1969,6 +2219,109 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
 
       {gruaSelecionada ? (
         <>
+          <Card className="print:hidden">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>Edição Rápida do Livro da Grua</span>
+                {isEditingLivro ? (
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" onClick={preencherDadosDebugLivro} disabled={savingLivro}>
+                      Preencher tudo (debug)
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setIsEditingLivro(false)} disabled={savingLivro}>
+                      Cancelar
+                    </Button>
+                    <Button size="sm" onClick={salvarEdicaoLivro} disabled={savingLivro}>
+                      {savingLivro ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
+                      Salvar
+                    </Button>
+                  </div>
+                ) : (
+                  <Button size="sm" onClick={iniciarEdicaoLivro}>
+                    <Settings className="w-4 h-4 mr-2" />
+                    Editar campos pendentes
+                  </Button>
+                )}
+              </CardTitle>
+            </CardHeader>
+            {isEditingLivro && (
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div><Label>Altura Máxima</Label><Input value={livroForm.altura_maxima || ''} onChange={(e) => setLivroForm({ ...livroForm, altura_maxima: e.target.value })} /></div>
+                  <div><Label>Alcance Máximo (Raio)</Label><Input value={livroForm.alcance_maximo || ''} onChange={(e) => setLivroForm({ ...livroForm, alcance_maximo: e.target.value })} /></div>
+                  <div><Label>Número de Série</Label><Input value={livroForm.numero_serie || ''} onChange={(e) => setLivroForm({ ...livroForm, numero_serie: e.target.value })} /></div>
+                  <div><Label>Tipo de Base</Label><Input value={livroForm.tipo_base || ''} onChange={(e) => setLivroForm({ ...livroForm, tipo_base: e.target.value })} /></div>
+                  <div><Label>Altura Inicial (m)</Label><Input type="number" value={livroForm.altura_inicial ?? ''} onChange={(e) => setLivroForm({ ...livroForm, altura_inicial: e.target.value })} /></div>
+                  <div><Label>Altura Final (m)</Label><Input type="number" value={livroForm.altura_final ?? ''} onChange={(e) => setLivroForm({ ...livroForm, altura_final: e.target.value })} /></div>
+                  <div><Label>Capacidade com 2 Cabos (kg)</Label><Input type="number" value={livroForm.capacidade_1_cabo ?? ''} onChange={(e) => setLivroForm({ ...livroForm, capacidade_1_cabo: e.target.value })} /></div>
+                  <div><Label>Capacidade com 4 Cabos (kg)</Label><Input type="number" value={livroForm.capacidade_2_cabos ?? ''} onChange={(e) => setLivroForm({ ...livroForm, capacidade_2_cabos: e.target.value })} /></div>
+                  <div><Label>Capacidade Máx. por Raio (kg)</Label><Input type="number" value={livroForm.capacidade_maxima_raio ?? ''} onChange={(e) => setLivroForm({ ...livroForm, capacidade_maxima_raio: e.target.value })} /></div>
+                  <div><Label>Voltagem</Label><Input value={livroForm.voltagem || ''} onChange={(e) => setLivroForm({ ...livroForm, voltagem: e.target.value })} /></div>
+                  <div>
+                    <Label>Tipo de Ligação</Label>
+                    <Select value={livroForm.tipo_ligacao || undefined} onValueChange={(value) => setLivroForm({ ...livroForm, tipo_ligacao: value })}>
+                      <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="monofasica">Monofásica</SelectItem>
+                        <SelectItem value="trifasica">Trifásica</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Ano de Fabricação</Label><Input type="number" value={livroForm.ano_fabricacao ?? ''} onChange={(e) => setLivroForm({ ...livroForm, ano_fabricacao: e.target.value })} /></div>
+                  <div><Label>Vida Útil (anos)</Label><Input type="number" value={livroForm.vida_util ?? ''} onChange={(e) => setLivroForm({ ...livroForm, vida_util: e.target.value })} /></div>
+                  <div><Label>Fundação da Grua</Label><Input value={livroForm.fundacao || ''} onChange={(e) => setLivroForm({ ...livroForm, fundacao: e.target.value })} /></div>
+                  <div><Label>Canteiro de Obras</Label><Input value={livroForm.canteiro || ''} onChange={(e) => setLivroForm({ ...livroForm, canteiro: e.target.value })} /></div>
+                  <div><Label>Local de Instalação</Label><Input value={livroForm.local_instalacao || ''} onChange={(e) => setLivroForm({ ...livroForm, local_instalacao: e.target.value })} /></div>
+                  <div><Label>Condições do Ambiente</Label><Input value={livroForm.condicoes_ambiente || ''} onChange={(e) => setLivroForm({ ...livroForm, condicoes_ambiente: e.target.value })} /></div>
+                  <div><Label>Raio de Operação</Label><Input type="number" value={livroForm.raio_operacao ?? ''} onChange={(e) => setLivroForm({ ...livroForm, raio_operacao: e.target.value })} /></div>
+                  <div><Label>Altura de Operação</Label><Input type="number" value={livroForm.altura_operacao ?? ''} onChange={(e) => setLivroForm({ ...livroForm, altura_operacao: e.target.value })} /></div>
+                  <div><Label>Manual de Operação</Label><Input value={livroForm.manual_operacao || ''} onChange={(e) => setLivroForm({ ...livroForm, manual_operacao: e.target.value })} /></div>
+                  <div>
+                    <Label>Procedimento de Montagem</Label>
+                    <Select value={livroForm.procedimento_montagem ? 'sim' : 'nao'} onValueChange={(value) => setLivroForm({ ...livroForm, procedimento_montagem: value === 'sim' })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sim">Sim</SelectItem>
+                        <SelectItem value="nao">Não</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Procedimento de Operação</Label>
+                    <Select value={livroForm.procedimento_operacao ? 'sim' : 'nao'} onValueChange={(value) => setLivroForm({ ...livroForm, procedimento_operacao: value === 'sim' })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sim">Sim</SelectItem>
+                        <SelectItem value="nao">Não</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Procedimento de Desmontagem</Label>
+                    <Select value={livroForm.procedimento_desmontagem ? 'sim' : 'nao'} onValueChange={(value) => setLivroForm({ ...livroForm, procedimento_desmontagem: value === 'sim' })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="sim">Sim</SelectItem>
+                        <SelectItem value="nao">Não</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div><Label>Data de Desmontagem</Label><Input type="date" value={livroForm.data_desmontagem || ''} onChange={(e) => setLivroForm({ ...livroForm, data_desmontagem: e.target.value })} /></div>
+                  <div><Label>Responsável Técnico (Fornecedor)</Label><Input value={livroForm.proprietario_responsavel_tecnico || ''} onChange={(e) => setLivroForm({ ...livroForm, proprietario_responsavel_tecnico: e.target.value })} /></div>
+                  <div><Label>Nº CREA (Fornecedor)</Label><Input value={livroForm.crea_responsavel || ''} onChange={(e) => setLivroForm({ ...livroForm, crea_responsavel: e.target.value })} /></div>
+                  <div className="lg:col-span-3">
+                    <Label>Outras características / observações de montagem</Label>
+                    <Textarea value={livroForm.observacoes_montagem || ''} onChange={(e) => setLivroForm({ ...livroForm, observacoes_montagem: e.target.value })} />
+                  </div>
+                  <div className="lg:col-span-3">
+                    <Label>Condições Especiais e Observações (Seção 7)</Label>
+                    <Textarea value={livroForm.observacoes_config || ''} onChange={(e) => setLivroForm({ ...livroForm, observacoes_config: e.target.value })} />
+                  </div>
+                </div>
+              </CardContent>
+            )}
+          </Card>
+
           {/* 1. DADOS DA OBRA */}
           <Card>
             <CardHeader className="pb-3">
@@ -2691,9 +3044,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                       size="sm" 
                       className="ml-4 mt-8 print:hidden"
                       onClick={() => {
+                        if (onRequestEdit) {
+                          onRequestEdit()
+                          return
+                        }
                         toast({
-                          title: "Editar Responsável Técnico",
-                          description: "Funcionalidade de edição será implementada em breve.",
+                          title: "Edição indisponível",
+                          description: "Use o botão 'Editar Obra' no topo da página.",
                           variant: "default"
                         })
                       }}
@@ -2925,34 +3282,43 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Ficha Técnica do Equipamento (PDF)</p>
                   {(() => {
-                    const fichaTecnica = documentos.find((doc: any) => 
-                      doc.categoria === 'manual_tecnico' ||
-                      (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('técnica')) ||
-                      (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('tecnica')) ||
-                      (doc.titulo?.toLowerCase().includes('dados') && doc.titulo?.toLowerCase().includes('técnicos')) ||
-                      (doc.categoria?.toLowerCase().includes('ficha') && doc.categoria?.toLowerCase().includes('técnica')) ||
-                      (doc.categoria?.toLowerCase().includes('manual') && doc.categoria?.toLowerCase().includes('tecnico'))
-                    )
+                    const fichaTecnica = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
                     
                     if (fichaTecnica) {
                       return (
                         <div className="p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-3">
                             <div className="flex-1">
                               <p className="font-medium">{fichaTecnica.titulo || 'Ficha Técnica do Equipamento'}</p>
                               {fichaTecnica.descricao && <p className="text-sm text-gray-600 mt-1">{fichaTecnica.descricao}</p>}
                             </div>
-                            {(fichaTecnica.arquivo_assinado || fichaTecnica.caminho_arquivo || fichaTecnica.arquivo_original) && (
+                            <div className="flex items-center gap-2 print:hidden">
+                              {(fichaTecnica.arquivo_assinado || fichaTecnica.caminho_arquivo || fichaTecnica.arquivo_original) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => downloadDocumento(fichaTecnica)}
+                                >
+                                  <Download className="w-4 h-4 mr-1" />
+                                  Baixar PDF
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => downloadDocumento(fichaTecnica)}
-                                className="ml-4 print:hidden"
+                                onClick={() => criarInputUpload('manual_tecnico', 'Ficha Técnica do Equipamento')}
                               >
-                                <Download className="w-4 h-4 mr-1" />
-                                Baixar PDF
+                                <Upload className="w-4 h-4 mr-1" />
+                                Substituir PDF
                               </Button>
-                            )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removerDocumento(fichaTecnica)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       )
@@ -2991,41 +3357,58 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Manual de Montagem Disponível</p>
                   {(() => {
-                    const manualMontagem = documentos.find((doc: any) => 
-                      doc.categoria === 'manual_tecnico' ||
-                      (doc.titulo?.toLowerCase().includes('manual') && 
-                      (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação')))
-                    ) || relacaoGrua?.manual_montagem
+                    const manualMontagemDoc = documentos.find((doc: any) => isManualMontagemDocumento(doc))
+                    const manualMontagem = manualMontagemDoc || relacaoGrua?.manual_montagem
                     
                     if (manualMontagem) {
                       return (
                         <div className="p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-3">
                             <div>
                               <p className="font-medium">{manualMontagem.titulo || 'Manual de Montagem'}</p>
                               {manualMontagem.descricao && <p className="text-sm text-gray-600 mt-1">{manualMontagem.descricao}</p>}
                             </div>
-                            {manualMontagem.arquivo_assinado || manualMontagem.caminho_arquivo || manualMontagem.arquivo_original ? (
+                            <div className="flex items-center gap-2 print:hidden">
+                              {manualMontagem.arquivo_assinado || manualMontagem.caminho_arquivo || manualMontagem.arquivo_original ? (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => downloadDocumento(manualMontagem)}
+                                >
+                                  <Download className="w-4 h-4 mr-1" />
+                                  Baixar
+                                </Button>
+                              ) : null}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => downloadDocumento(manualMontagem)}
+                                onClick={() => criarInputUpload('manual_tecnico', 'Manual de Montagem')}
                               >
-                                <Download className="w-4 h-4 mr-1" />
-                                Baixar
+                                <Upload className="w-4 h-4 mr-1" />
+                                Substituir PDF
                               </Button>
-                            ) : null}
+                              {manualMontagemDoc ? (
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removerDocumento(manualMontagemDoc)}
+                                >
+                                  Remover
+                                </Button>
+                              ) : null}
+                            </div>
                           </div>
                         </div>
                       )
                     }
                     return (
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-gray-500 mb-3">Não informado</p>
+                      <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
+                        <p className="text-gray-500 text-sm mb-2">Nenhum manual de montagem cadastrado.</p>
+                        <p className="text-xs text-gray-400">Um arquivo em PDF estará disponível para consulta após o upload.</p>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="print:hidden"
+                          className="mt-3 print:hidden"
                           onClick={() => criarInputUpload('manual_tecnico', 'Manual de Montagem')}
                         >
                           <Upload className="w-4 h-4 mr-2" />
@@ -3066,7 +3449,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                       
                       return (
                         <div className="p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-3">
                             <div className="flex-1">
                               <div className="flex items-center gap-2 mb-2">
                                 <p className="font-medium">{termoEntrega.titulo || 'Termo de Entrega Técnica'}</p>
@@ -3084,27 +3467,45 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                                 </p>
                               )}
                             </div>
-                            {(termoEntrega.arquivo_assinado || termoEntrega.caminho_arquivo || termoEntrega.arquivo_original) && (
+                            <div className="flex items-center gap-2 print:hidden">
+                              {(termoEntrega.arquivo_assinado || termoEntrega.caminho_arquivo || termoEntrega.arquivo_original) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => downloadDocumento(termoEntrega)}
+                                >
+                                  <Download className="w-4 h-4 mr-1" />
+                                  Baixar
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => downloadDocumento(termoEntrega)}
+                                onClick={() => criarInputUpload('termo_entrega_tecnica', 'Termo de Entrega Técnica')}
                               >
-                                <Download className="w-4 h-4 mr-1" />
-                                Baixar
+                                <Upload className="w-4 h-4 mr-1" />
+                                Substituir PDF
                               </Button>
-                            )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removerDocumento(termoEntrega)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       )
                     }
                     return (
-                      <div className="p-3 bg-gray-50 rounded-md">
-                        <p className="text-gray-500 mb-3">Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.</p>
+                      <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
+                        <p className="text-gray-500 text-sm mb-2">Termo de entrega técnica não encontrado.</p>
+                        <p className="text-xs text-gray-400">Inclua o termo assinado por IRBANA em PDF para consulta e rastreabilidade.</p>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="print:hidden"
+                          className="mt-3 print:hidden"
                           onClick={() => criarInputUpload('termo_entrega_tecnica', 'Termo de Entrega Técnica')}
                         >
                           <Upload className="w-4 h-4 mr-2" />
@@ -3139,21 +3540,38 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                     return (
                       <div>
                         <div className="p-3 bg-gray-50 rounded-md mb-4">
-                          <div className="flex items-center justify-between">
+                          <div className="flex items-center justify-between gap-3">
                             <div className="flex-1">
                               <p className="font-medium">{planoCargas.titulo || 'Plano de Cargas'}</p>
                               {planoCargas.descricao && <p className="text-sm text-gray-600 mt-1">{planoCargas.descricao}</p>}
                             </div>
-                            {(planoCargas.arquivo_assinado || planoCargas.caminho_arquivo || planoCargas.arquivo_original) && (
+                            <div className="flex items-center gap-2 print:hidden">
+                              {(planoCargas.arquivo_assinado || planoCargas.caminho_arquivo || planoCargas.arquivo_original) && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => downloadDocumento(planoCargas)}
+                                >
+                                  <Download className="w-4 h-4 mr-1" />
+                                  Baixar
+                                </Button>
+                              )}
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => downloadDocumento(planoCargas)}
+                                onClick={() => criarInputUpload('plano_carga', 'Plano de Cargas')}
                               >
-                                <Download className="w-4 h-4 mr-1" />
-                                Baixar
+                                <Upload className="w-4 h-4 mr-1" />
+                                Substituir PDF
                               </Button>
-                            )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => removerDocumento(planoCargas)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
                           </div>
                         </div>
                         
@@ -3195,11 +3613,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded }: LivroGruaObr
                   
                   // Se não encontrar plano de cargas, mostrar informações do local de instalação
                   return (
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <p className="text-gray-500 mb-2">Plano de cargas não encontrado.</p>
-                      <p className="text-xs text-gray-500 mb-3">
+                    <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
+                      <p className="text-gray-500 text-sm mb-2">Plano de cargas não encontrado.</p>
+                      <p className="text-xs text-gray-500 mb-2">
                         Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.
                       </p>
+                      <p className="text-xs text-gray-400 mb-3">Faça upload do PDF para disponibilizar o documento na obra.</p>
                       {relacaoGrua?.local_instalacao && (
                         <div className="mb-3">
                           <p className="text-xs text-gray-500">Local de Instalação (referência):</p>

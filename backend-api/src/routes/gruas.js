@@ -387,6 +387,46 @@ const gruaInputSchema = Joi.object({
   cliente_telefone: Joi.string().allow(null, '').optional()
 })
 
+// Schema para atualização parcial de grua (PUT/PATCH)
+const gruaUpdateSchema = Joi.object({
+  name: Joi.string().min(2).optional(),
+  model: Joi.string().min(2).optional(),
+  capacity: Joi.string().optional(),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').optional(),
+  fabricante: Joi.string().min(2).optional(),
+  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').optional(),
+  lanca: Joi.string().allow(null, '').optional(),
+  altura_final: Joi.number().min(0).allow(null).optional(),
+  ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
+  tipo_base: Joi.string().allow(null, '').optional(),
+  capacidade_1_cabo: Joi.number().min(0).allow(null).optional(),
+  capacidade_2_cabos: Joi.number().min(0).allow(null).optional(),
+  potencia_instalada: Joi.number().min(0).allow(null).optional(),
+  voltagem: Joi.string().allow(null, '').optional(),
+  velocidade_rotacao: Joi.number().min(0).allow(null).optional(),
+  velocidade_elevacao: Joi.number().min(0).allow(null).optional(),
+  observacoes: Joi.string().allow(null, '').optional(),
+  capacidade_ponta: Joi.string().allow(null, '').optional(),
+  altura_trabalho: Joi.string().allow(null, '').optional(),
+  localizacao: Joi.string().allow(null, '').optional(),
+  horas_operacao: Joi.number().integer().min(0).allow(null).optional(),
+  valor_locacao: Joi.number().min(0).allow(null).optional(),
+  valor_real: Joi.number().min(0).allow(null).optional(),
+  valor_operacao: Joi.number().min(0).allow(null).optional(),
+  valor_sinaleiro: Joi.number().min(0).allow(null).optional(),
+  valor_manutencao: Joi.number().min(0).allow(null).optional(),
+  ultima_manutencao: Joi.date().allow(null).optional(),
+  proxima_manutencao: Joi.date().allow(null).optional(),
+  cliente_nome: Joi.string().allow(null, '').optional(),
+  cliente_documento: Joi.string().allow(null, '').optional(),
+  cliente_email: Joi.string().email().allow(null, '').optional(),
+  cliente_telefone: Joi.string().allow(null, '').optional(),
+  // Compatibilidade com frontend novo (edição rápida do Livro da Grua)
+  altura_maxima: Joi.alternatives().try(Joi.string(), Joi.number()).allow(null, '').optional(),
+  alcance_maximo: Joi.alternatives().try(Joi.string(), Joi.number()).allow(null, '').optional(),
+  numero_serie: Joi.string().allow(null, '').optional()
+}).min(1)
+
 // Schema para dados de cliente (usado internamente)
 const clienteDataSchema = Joi.object({
   nome: Joi.string().min(2).required(),
@@ -1161,7 +1201,7 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    // Validar dados
+    // Validar dados (criação completa)
     const { error, value } = gruaInputSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
@@ -1377,8 +1417,8 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Validar dados
-    const { error, value } = gruaInputSchema.validate(req.body)
+    // Validar dados (atualização parcial)
+    const { error, value } = gruaUpdateSchema.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -1397,38 +1437,44 @@ router.put('/:id', async (req, res) => {
       })
     }
 
-    // Preparar dados da grua (mapear campos do frontend para campos do banco)
-    const updateData = {
-      // Campos obrigatórios do frontend
-      name: value.name, // Nome da grua
-      modelo: value.model, // model -> modelo
-      fabricante: value.fabricante,
-      tipo: value.tipo,
-      capacidade: value.capacity, // capacity -> capacidade
-      capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
-      lanca: value.lanca,
-      altura_trabalho: value.altura_trabalho || 'Não informado',
-      altura_final: value.altura_final,
-      ano: value.ano,
-      tipo_base: value.tipo_base,
-      capacidade_1_cabo: value.capacidade_1_cabo,
-      capacidade_2_cabos: value.capacidade_2_cabos,
-      potencia_instalada: value.potencia_instalada,
-      voltagem: value.voltagem,
-      velocidade_rotacao: value.velocidade_rotacao,
-      velocidade_elevacao: value.velocidade_elevacao,
-      status: value.status,
-      localizacao: value.localizacao || 'Não informado',
-      horas_operacao: value.horas_operacao || 0,
-      valor_locacao: value.valor_locacao || null,
-      valor_real: value.valor_real || 0,
-      valor_operacao: value.valor_operacao || 0,
-      valor_sinaleiro: value.valor_sinaleiro || 0,
-      valor_manutencao: value.valor_manutencao || 0,
-      ultima_manutencao: value.ultima_manutencao || null,
-      proxima_manutencao: value.proxima_manutencao || null,
-      observacoes: value.observacoes || null,
-      updated_at: new Date().toISOString()
+    // Preparar dados da grua (somente campos enviados)
+    const updateData = { updated_at: new Date().toISOString() }
+    if (value.name !== undefined) updateData.name = value.name
+    if (value.model !== undefined) updateData.modelo = value.model
+    if (value.fabricante !== undefined) updateData.fabricante = value.fabricante
+    if (value.tipo !== undefined) updateData.tipo = value.tipo
+    if (value.capacity !== undefined) updateData.capacidade = value.capacity
+    if (value.capacidade_ponta !== undefined) updateData.capacidade_ponta = value.capacidade_ponta
+    if (value.lanca !== undefined) updateData.lanca = value.lanca
+    if (value.altura_trabalho !== undefined) updateData.altura_trabalho = value.altura_trabalho
+    if (value.altura_final !== undefined) updateData.altura_final = value.altura_final
+    if (value.ano !== undefined) updateData.ano = value.ano
+    if (value.tipo_base !== undefined) updateData.tipo_base = value.tipo_base
+    if (value.capacidade_1_cabo !== undefined) updateData.capacidade_1_cabo = value.capacidade_1_cabo
+    if (value.capacidade_2_cabos !== undefined) updateData.capacidade_2_cabos = value.capacidade_2_cabos
+    if (value.potencia_instalada !== undefined) updateData.potencia_instalada = value.potencia_instalada
+    if (value.voltagem !== undefined) updateData.voltagem = value.voltagem
+    if (value.velocidade_rotacao !== undefined) updateData.velocidade_rotacao = value.velocidade_rotacao
+    if (value.velocidade_elevacao !== undefined) updateData.velocidade_elevacao = value.velocidade_elevacao
+    if (value.status !== undefined) updateData.status = value.status
+    if (value.localizacao !== undefined) updateData.localizacao = value.localizacao
+    if (value.horas_operacao !== undefined) updateData.horas_operacao = value.horas_operacao
+    if (value.valor_locacao !== undefined) updateData.valor_locacao = value.valor_locacao
+    if (value.valor_real !== undefined) updateData.valor_real = value.valor_real
+    if (value.valor_operacao !== undefined) updateData.valor_operacao = value.valor_operacao
+    if (value.valor_sinaleiro !== undefined) updateData.valor_sinaleiro = value.valor_sinaleiro
+    if (value.valor_manutencao !== undefined) updateData.valor_manutencao = value.valor_manutencao
+    if (value.ultima_manutencao !== undefined) updateData.ultima_manutencao = value.ultima_manutencao
+    if (value.proxima_manutencao !== undefined) updateData.proxima_manutencao = value.proxima_manutencao
+    if (value.observacoes !== undefined) updateData.observacoes = value.observacoes
+    if (value.numero_serie !== undefined) updateData.numero_serie = value.numero_serie
+
+    // Compatibilidade com payload do Livro da Grua
+    if (value.altura_maxima !== undefined && value.altura_trabalho === undefined) {
+      updateData.altura_trabalho = value.altura_maxima !== null ? String(value.altura_maxima) : null
+    }
+    if (value.alcance_maximo !== undefined && value.lanca === undefined) {
+      updateData.lanca = value.alcance_maximo !== null ? String(value.alcance_maximo) : null
     }
 
     const { data, error: updateError } = await supabaseAdmin

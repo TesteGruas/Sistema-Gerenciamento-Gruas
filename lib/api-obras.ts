@@ -18,6 +18,7 @@ export interface ObraBackend {
   status: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   // Novos campos adicionados
   descricao?: string
+  canteiro?: string
   data_inicio?: string
   data_fim?: string
   orcamento?: number
@@ -172,6 +173,7 @@ export interface ObraCreateData {
   status?: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   // Novos campos adicionados
   descricao?: string
+  canteiro?: string
   data_inicio?: string
   data_fim?: string
   orcamento?: number
@@ -287,6 +289,7 @@ export interface ObraUpdateData {
   email_obra?: string
   status?: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   descricao?: string
+  canteiro?: string
   data_inicio?: string
   data_fim?: string
   orcamento?: number

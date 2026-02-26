@@ -44,6 +44,69 @@ const gruaEquipamentoSchema = Joi.object({
   observacoes: Joi.string().allow(null, '').optional()
 })
 
+const CAMPOS_ATUALIZAVEIS_GRUA_OBRA = new Set([
+  'data_inicio_locacao',
+  'data_fim_locacao',
+  'valor_locacao_mensal',
+  'status',
+  'observacoes',
+  'tipo_base',
+  'altura_inicial',
+  'altura_final',
+  'velocidade_giro',
+  'velocidade_rotacao',
+  'velocidade_elevacao',
+  'velocidade_translacao',
+  'potencia_instalada',
+  'voltagem',
+  'tipo_ligacao',
+  'capacidade_ponta',
+  'capacidade_maxima_raio',
+  'capacidade_1_cabo',
+  'capacidade_2_cabos',
+  'ano_fabricacao',
+  'vida_util',
+  'data_montagem',
+  'data_desmontagem',
+  'local_instalacao',
+  'observacoes_montagem',
+  'fundacao',
+  'condicoes_ambiente',
+  'raio_operacao',
+  'raio',
+  'raio_trabalho',
+  'altura',
+  'manual_operacao',
+  'procedimento_montagem',
+  'procedimento_operacao',
+  'procedimento_desmontagem',
+  'responsavel_tecnico',
+  'crea_responsavel'
+])
+
+const sanitizarUpdateGruaObra = (payload = {}) => {
+  const updateData = {}
+
+  for (const [chave, valor] of Object.entries(payload)) {
+    if (!CAMPOS_ATUALIZAVEIS_GRUA_OBRA.has(chave)) continue
+
+    // Normaliza string vazia para null para evitar poluir com ''
+    updateData[chave] = valor === '' ? null : valor
+  }
+
+  // Compatibilidade: se vier raio_operacao, também espelhar em raio_trabalho
+  if (updateData.raio_operacao !== undefined && updateData.raio_trabalho === undefined) {
+    updateData.raio_trabalho = updateData.raio_operacao
+  }
+
+  // Compatibilidade: se vier raio_trabalho, também espelhar em raio_operacao
+  if (updateData.raio_trabalho !== undefined && updateData.raio_operacao === undefined) {
+    updateData.raio_operacao = updateData.raio_trabalho
+  }
+
+  return updateData
+}
+
 // =====================================================
 // ENDPOINTS PARA GRUA-OBRA
 // =====================================================
@@ -742,7 +805,14 @@ router.post('/grua-equipamento', async (req, res) => {
 router.put('/grua-obra/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const updateData = req.body
+    const updateData = sanitizarUpdateGruaObra(req.body)
+
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'Nenhum campo válido foi enviado para atualização'
+      })
+    }
 
     // Buscar relacionamento atual para pegar grua_id
     const { data: relacionamentoAtual, error: erroBuscar } = await supabaseAdmin
