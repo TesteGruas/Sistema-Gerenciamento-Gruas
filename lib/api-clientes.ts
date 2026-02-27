@@ -6,13 +6,18 @@ export interface ClienteBackend {
   id: number
   nome: string
   cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
   email?: string
   telefone?: string
   endereco?: string
+  endereco_complemento?: string
+  endereco_obra?: string
   cidade?: string
   estado?: string
   cep?: string
   contato?: string
+  contato_cargo?: string
   contato_email?: string
   contato_cpf?: string
   contato_telefone?: string
@@ -35,13 +40,18 @@ export interface ClienteBackend {
 export interface ClienteCreateData {
   nome: string
   cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
   email?: string
   telefone?: string
   endereco?: string
+  endereco_complemento?: string
+  endereco_obra?: string
   cidade?: string
   estado?: string
   cep?: string
   contato?: string
+  contato_cargo?: string
   contato_email?: string
   contato_cpf?: string
   contato_telefone?: string
@@ -53,13 +63,18 @@ export interface ClienteCreateData {
 export interface ClienteUpdateData {
   nome?: string
   cnpj?: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
   email?: string
   telefone?: string
   endereco?: string
+  endereco_complemento?: string
+  endereco_obra?: string
   cidade?: string
   estado?: string
   cep?: string
   contato?: string
+  contato_cargo?: string
   contato_email?: string
   contato_cpf?: string
   contato_telefone?: string
@@ -72,13 +87,18 @@ export type Cliente = ClienteBackend
 export interface ClienteFormData {
   nome: string
   cnpj: string
+  inscricao_estadual?: string
+  inscricao_municipal?: string
   email?: string
   telefone?: string
   endereco?: string
+  endereco_complemento?: string
+  endereco_obra?: string
   cidade?: string
   estado?: string
   cep?: string
   contato?: string
+  contato_cargo?: string
   contato_email?: string
   contato_cpf?: string
   contato_telefone?: string

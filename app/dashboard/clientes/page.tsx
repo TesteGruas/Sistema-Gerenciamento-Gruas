@@ -56,14 +56,19 @@ export default function ClientesPage() {
   const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null)
   const [clienteFormData, setClienteFormData] = useState<ClienteFormData>({
     nome: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
     email: '',
     telefone: '',
     cnpj: '',
     endereco: '',
+    endereco_complemento: '',
+    endereco_obra: '',
     cidade: '',
     estado: '',
     cep: '',
     contato: '',
+    contato_cargo: '',
     contato_email: '',
     contato_cpf: '',
     contato_telefone: '',
@@ -322,14 +327,19 @@ export default function ClientesPage() {
     setSelectedCliente(cliente)
     setClienteFormData({
       nome: cliente.nome,
+      inscricao_estadual: cliente.inscricao_estadual || '',
+      inscricao_municipal: cliente.inscricao_municipal || '',
       email: cliente.email || '',
       telefone: cliente.telefone || '',
       cnpj: cliente.cnpj,
       endereco: cliente.endereco || '',
+      endereco_complemento: cliente.endereco_complemento || '',
+      endereco_obra: cliente.endereco_obra || '',
       cidade: cliente.cidade || '',
       estado: cliente.estado || '',
       cep: cliente.cep || '',
       contato: cliente.contato || '',
+      contato_cargo: cliente.contato_cargo || '',
       contato_email: cliente.contato_email || '',
       contato_cpf: cliente.contato_cpf || '',
       contato_telefone: cliente.contato_telefone || '',
@@ -510,6 +520,12 @@ export default function ClientesPage() {
     if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
       camposFaltando.push('Nome do Representante')
     }
+    if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
+      camposFaltando.push('Email do Contato')
+    }
+    if (!clienteFormData.contato_telefone || !clienteFormData.contato_telefone.trim()) {
+      camposFaltando.push('Telefone do Contato')
+    }
     
     if (camposFaltando.length > 0) {
       toast({
@@ -565,14 +581,19 @@ export default function ClientesPage() {
       // Resetar formulário e fechar dialog
       setClienteFormData({
         nome: '',
+        inscricao_estadual: '',
+        inscricao_municipal: '',
         email: '',
         telefone: '',
         cnpj: '',
         endereco: '',
+        endereco_complemento: '',
+        endereco_obra: '',
         cidade: '',
         estado: '',
         cep: '',
         contato: '',
+        contato_cargo: '',
         contato_email: '',
         contato_cpf: '',
         contato_telefone: '',
@@ -622,6 +643,12 @@ export default function ClientesPage() {
     
     if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
       camposFaltando.push('Nome do Representante')
+    }
+    if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
+      camposFaltando.push('Email do Contato')
+    }
+    if (!clienteFormData.contato_telefone || !clienteFormData.contato_telefone.trim()) {
+      camposFaltando.push('Telefone do Contato')
     }
     
     if (camposFaltando.length > 0) {
@@ -1325,16 +1352,20 @@ function ClienteForm({
   const preencherDadosDebug = () => {
     setFormData({
       nome: 'Construtora ABC Ltda',
+      cnpj: '12.345.678/0001-90',
+      inscricao_estadual: '110.042.490.114',
+      inscricao_municipal: '1234567',
       email: 'contato@construtoraabc.com.br',
       telefone: '(11) 98765-4321',
-      cnpj: '12.345.678/0001-90',
-      endereco: 'Rua das Construções, 123 - Centro',
+      endereco: 'Rua das Construções, 123',
+      endereco_complemento: 'Sala 402',
+      endereco_obra: 'Av. Paulista, 1500 - Bela Vista, São Paulo/SP',
       cidade: 'São Paulo',
       estado: 'SP',
       cep: '01310-100',
       contato: 'João Silva',
+      contato_cargo: 'Engenheiro Responsável',
       contato_email: 'joao.silva@construtoraabc.com.br',
-      contato_cpf: '123.456.789-00',
       contato_telefone: '(11) 91234-5678',
       status: 'ativo',
       criar_usuario: true,
@@ -1399,7 +1430,25 @@ function ClienteForm({
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <Label htmlFor="inscricao_estadual">Inscrição Estadual</Label>
+            <Input
+              id="inscricao_estadual"
+              value={formData.inscricao_estadual || ''}
+              onChange={(e) => setFormData({ ...formData, inscricao_estadual: e.target.value })}
+              placeholder="Opcional"
+            />
+          </div>
+          <div>
+            <Label htmlFor="inscricao_municipal">Inscrição Municipal</Label>
+            <Input
+              id="inscricao_municipal"
+              value={formData.inscricao_municipal || ''}
+              onChange={(e) => setFormData({ ...formData, inscricao_municipal: e.target.value })}
+              placeholder="Opcional"
+            />
+          </div>
           <div>
             <Label htmlFor="status">Status *</Label>
             <Select
@@ -1419,43 +1468,11 @@ function ClienteForm({
           </div>
         </div>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="email">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={formData.email || ''}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-              placeholder="contato@empresa.com"
-            />
-          </div>
-          <div>
-            <Label htmlFor="telefone">Telefone</Label>
-            <Input
-              id="telefone"
-              value={formData.telefone || ''}
-              onChange={(e) => {
-                let value = e.target.value.replace(/\D/g, '')
-                if (value.length >= 2) {
-                  value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
-                }
-                if (value.length >= 10) {
-                  value = value.substring(0, 10) + '-' + value.substring(10, 14)
-                }
-                setFormData({ ...formData, telefone: value })
-              }}
-              placeholder="(11) 99999-9999"
-              maxLength={15}
-            />
-          </div>
-        </div>
-        
       </div>
 
-      {/* Endereço */}
+      {/* Endereço da Empresa */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Endereço</h3>
+        <h3 className="text-lg font-medium">Endereço da Empresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="endereco">Endereço</Label>
@@ -1463,9 +1480,21 @@ function ClienteForm({
               id="endereco"
               value={formData.endereco || ''}
               onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-              placeholder="Rua, número, bairro"
+              placeholder="Rua, número e bairro"
             />
           </div>
+          <div>
+            <Label htmlFor="endereco_complemento">Complemento</Label>
+            <Input
+              id="endereco_complemento"
+              value={formData.endereco_complemento || ''}
+              onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })}
+              placeholder="Sala, bloco, andar (opcional)"
+            />
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <Label htmlFor="cep">CEP</Label>
             <Input
@@ -1539,12 +1568,12 @@ function ClienteForm({
 
      
 
-      {/* Contato */}
+      {/* Informações de Contato */}
       <div className="space-y-4">
-        <h3 className="text-lg font-medium">Pessoa de Contato (Representante)</h3>
+        <h3 className="text-lg font-medium">Informações de Contato</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="contato">Nome do Representante *</Label>
+            <Label htmlFor="contato">Nome do Contato *</Label>
             <Input
               id="contato"
               value={formData.contato || ''}
@@ -1554,42 +1583,30 @@ function ClienteForm({
             />
           </div>
           <div>
-            <Label htmlFor="contato_cpf">CPF do Representante</Label>
+            <Label htmlFor="contato_cargo">Cargo do Contato</Label>
             <Input
-              id="contato_cpf"
-              value={formData.contato_cpf || ''}
-              onChange={(e) => {
-                let value = e.target.value.replace(/\D/g, '')
-                if (value.length >= 3) {
-                  value = value.substring(0, 3) + '.' + value.substring(3)
-                }
-                if (value.length >= 7) {
-                  value = value.substring(0, 7) + '.' + value.substring(7)
-                }
-                if (value.length >= 11) {
-                  value = value.substring(0, 11) + '-' + value.substring(11, 13)
-                }
-                setFormData({ ...formData, contato_cpf: value })
-              }}
-              placeholder="000.000.000-00"
-              maxLength={14}
+              id="contato_cargo"
+              value={formData.contato_cargo || ''}
+              onChange={(e) => setFormData({ ...formData, contato_cargo: e.target.value })}
+              placeholder="Ex: Engenheiro, Comprador, Administrador"
             />
           </div>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <Label htmlFor="contato_email">Email do Representante</Label>
+            <Label htmlFor="contato_email">Email do Contato *</Label>
             <Input
               id="contato_email"
               type="email"
               value={formData.contato_email || ''}
               onChange={(e) => setFormData({ ...formData, contato_email: e.target.value })}
               placeholder="joao.silva@empresa.com"
+              required
             />
           </div>
           <div>
-            <Label htmlFor="contato_telefone">Telefone do Representante</Label>
+            <Label htmlFor="contato_telefone">Telefone do Contato *</Label>
             <Input
               id="contato_telefone"
               value={formData.contato_telefone || ''}
@@ -1605,8 +1622,24 @@ function ClienteForm({
               }}
               placeholder="(11) 99999-9999"
               maxLength={15}
+              required
             />
           </div>
+        </div>
+      </div>
+
+      {/* Endereço da Obra */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-medium">Endereço da Obra</h3>
+        <div>
+          <Label htmlFor="endereco_obra">Endereço da Obra</Label>
+          <Textarea
+            id="endereco_obra"
+            value={formData.endereco_obra || ''}
+            onChange={(e) => setFormData({ ...formData, endereco_obra: e.target.value })}
+            placeholder="Informe o endereço completo da obra"
+            rows={3}
+          />
         </div>
       </div>
 
@@ -1848,6 +1881,18 @@ function ClienteDetails({
               <span className="text-sm text-gray-600">CNPJ:</span>
               <span className="text-sm">{cliente.cnpj}</span>
             </div>
+            {cliente.inscricao_estadual && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Inscrição Estadual:</span>
+                <span className="text-sm">{cliente.inscricao_estadual}</span>
+              </div>
+            )}
+            {cliente.inscricao_municipal && (
+              <div className="flex justify-between">
+                <span className="text-sm text-gray-600">Inscrição Municipal:</span>
+                <span className="text-sm">{cliente.inscricao_municipal}</span>
+              </div>
+            )}
             <div className="flex justify-between">
               <span className="text-sm text-gray-600">Status:</span>
               <Badge 
@@ -1889,6 +1934,9 @@ function ClienteDetails({
             {cliente.endereco && (
               <p className="text-sm">{cliente.endereco}</p>
             )}
+            {cliente.endereco_complemento && (
+              <p className="text-sm">Complemento: {cliente.endereco_complemento}</p>
+            )}
             {(cliente.cidade || cliente.estado) && (
               <p className="text-sm">
                 {cliente.cidade && cliente.estado ? `${cliente.cidade}/${cliente.estado}` : cliente.cidade || cliente.estado}
@@ -1897,15 +1945,18 @@ function ClienteDetails({
             {cliente.cep && (
               <p className="text-sm">CEP: {cliente.cep}</p>
             )}
+            {cliente.endereco_obra && (
+              <p className="text-sm">Endereço da obra: {cliente.endereco_obra}</p>
+            )}
           </CardContent>
         </Card>
       </div>
 
       {/* Pessoa de Contato */}
-      {(cliente.contato || cliente.contato_email || cliente.contato_cpf || cliente.contato_telefone) && (
+      {(cliente.contato || cliente.contato_email || cliente.contato_cargo || cliente.contato_telefone) && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm">Pessoa de Contato (Representante)</CardTitle>
+            <CardTitle className="text-sm">Informações de Contato</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {cliente.contato && (
@@ -1914,10 +1965,10 @@ function ClienteDetails({
                 <span className="text-sm font-medium">{cliente.contato}</span>
               </div>
             )}
-            {cliente.contato_cpf && (
+            {cliente.contato_cargo && (
               <div className="flex justify-between">
-                <span className="text-sm text-gray-600">CPF:</span>
-                <span className="text-sm">{cliente.contato_cpf}</span>
+                <span className="text-sm text-gray-600">Cargo:</span>
+                <span className="text-sm">{cliente.contato_cargo}</span>
               </div>
             )}
             {cliente.contato_email && (

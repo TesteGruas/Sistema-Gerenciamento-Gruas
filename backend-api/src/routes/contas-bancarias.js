@@ -5,14 +5,36 @@ import Joi from 'joi';
 const router = express.Router();
 
 // Schema de validação para conta bancária
+// Suporta tanto o payload legado (tipo_conta/saldo_atual/status)
+// quanto o payload usado no frontend (tipo/saldo_inicial/ativa).
 const contaBancariaSchema = Joi.object({
+  nome: Joi.string().max(255).allow('', null).optional(),
   banco: Joi.string().min(1).max(100).required(),
-  agencia: Joi.string().min(1).max(10).required(),
+  agencia: Joi.string().min(1).max(20).required(),
   conta: Joi.string().min(1).max(20).required(),
-  tipo_conta: Joi.string().valid('corrente', 'poupanca', 'investimento').required(),
-  saldo_atual: Joi.number().min(0).default(0),
-  status: Joi.string().valid('ativa', 'inativa', 'bloqueada').default('ativa')
-});
+  tipo_conta: Joi.string().valid('corrente', 'poupanca', 'investimento').optional(),
+  tipo: Joi.string().valid('corrente', 'poupanca', 'investimento').optional(),
+  saldo_atual: Joi.number().min(0).optional(),
+  saldo_inicial: Joi.number().min(0).optional(),
+  status: Joi.string().valid('ativa', 'inativa', 'bloqueada').optional(),
+  ativa: Joi.boolean().optional(),
+  observacoes: Joi.string().allow('', null).optional()
+}).or('tipo_conta', 'tipo');
+
+const normalizarContaBancariaPayload = (value) => {
+  const tipoConta = value.tipo_conta || value.tipo;
+  const saldoAtual = value.saldo_atual ?? value.saldo_inicial ?? 0;
+  const status = value.status ?? (value.ativa === false ? 'inativa' : 'ativa');
+
+  return {
+    banco: value.banco,
+    agencia: value.agencia,
+    conta: value.conta,
+    tipo_conta: tipoConta,
+    saldo_atual: saldoAtual,
+    status
+  };
+};
 
 /**
  * @swagger
@@ -174,9 +196,11 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const payload = normalizarContaBancariaPayload(value);
+
     const { data, error } = await supabase
       .from('contas_bancarias')
-      .insert([value])
+      .insert([payload])
       .select()
       .single();
 
@@ -383,9 +407,11 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    const payload = normalizarContaBancariaPayload(value);
+
     const { data, error } = await supabase
       .from('contas_bancarias')
-      .update(value)
+      .update(payload)
       .eq('id', id)
       .select()
       .single();

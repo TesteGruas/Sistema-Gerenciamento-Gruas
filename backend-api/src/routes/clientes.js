@@ -24,13 +24,18 @@ const router = express.Router()
 const clienteSchema = Joi.object({
   nome: Joi.string().min(2).required(),
   cnpj: Joi.string().allow('').optional(), // CNPJ
+  inscricao_estadual: Joi.string().allow('').optional(),
+  inscricao_municipal: Joi.string().allow('').optional(),
   email: Joi.string().email().allow('').optional(),
   telefone: Joi.string().allow('').optional(),
   endereco: Joi.string().allow('').optional(),
+  endereco_complemento: Joi.string().allow('').optional(),
+  endereco_obra: Joi.string().allow('').optional(),
   cidade: Joi.string().allow('').optional(),
   estado: Joi.string().length(2).allow('').optional(),
   cep: Joi.string().pattern(/^[\d]{2}\.?[\d]{3}-?[\d]{3}$/).allow('').optional(),
   contato: Joi.string().allow('').optional(), // Nome do representante
+  contato_cargo: Joi.string().allow('').optional(),
   contato_email: Joi.string().email().allow('').optional(), // Email do representante
   contato_cpf: Joi.string().allow('').optional(), // CPF do representante
   contato_telefone: Joi.string().allow('').optional(), // Telefone do representante
@@ -44,13 +49,18 @@ const clienteSchema = Joi.object({
 const clienteUpdateSchema = Joi.object({
   nome: Joi.string().min(2).optional(),
   cnpj: Joi.string().allow('').optional(),
+  inscricao_estadual: Joi.string().allow('').optional(),
+  inscricao_municipal: Joi.string().allow('').optional(),
   email: Joi.string().email().allow('').optional(),
   telefone: Joi.string().allow('').optional(),
   endereco: Joi.string().allow('').optional(),
+  endereco_complemento: Joi.string().allow('').optional(),
+  endereco_obra: Joi.string().allow('').optional(),
   cidade: Joi.string().allow('').optional(),
   estado: Joi.string().length(2).allow('').optional(),
   cep: Joi.string().pattern(/^[\d]{2}\.?[\d]{3}-?[\d]{3}$/).allow('').optional(),
   contato: Joi.string().allow('').optional(),
+  contato_cargo: Joi.string().allow('').optional(),
   contato_email: Joi.string().email().allow('').optional(),
   contato_cpf: Joi.string().allow('').optional(),
   contato_telefone: Joi.string().allow('').optional(),
@@ -58,6 +68,24 @@ const clienteUpdateSchema = Joi.object({
   criar_usuario: Joi.boolean().optional(),
   usuario_senha: Joi.string().min(8).optional()
 })
+
+function buildClienteDbPayload(data) {
+  return {
+    nome: data.nome,
+    cnpj: data.cnpj || null,
+    email: data.email || null,
+    telefone: data.telefone || null,
+    endereco: data.endereco || null,
+    cidade: data.cidade || null,
+    estado: data.estado || null,
+    cep: data.cep || null,
+    contato: data.contato || null,
+    contato_email: data.contato_email || null,
+    contato_cpf: data.contato_cpf || null,
+    contato_telefone: data.contato_telefone || null,
+    status: data.status || 'ativo'
+  }
+}
 
 /**
  * @swagger
@@ -442,7 +470,7 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
 
     // Criar cliente
     const clienteInsertData = {
-      ...clienteData,
+      ...buildClienteDbPayload(clienteData),
       contato_usuario_id: usuarioId,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
@@ -801,7 +829,7 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
 
     // Preparar dados de atualização
     const updateData = {
-      ...clienteData,
+      ...buildClienteDbPayload(clienteData),
       updated_at: new Date().toISOString()
     }
 

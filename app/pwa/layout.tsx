@@ -592,8 +592,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Documentos',
       description: 'Documentos'
     },
-    // Perfil - SEMPRE presente
-    perfilItem
+    // Perfil aparece apenas para supervisor (não para responsável de obra)
+    ...(isResponsavelObraUser ? [] : [perfilItem])
   ] : [
     // Ponto - sempre exibir para funcionários (mesmo sem obra ativa)
     allNavigationItems.find(item => item.href === '/pwa/ponto') || {
@@ -631,7 +631,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     perfilItem
   ].filter(Boolean) // Remove itens undefined
 
-  // Usar apenas os 5 itens essenciais na navegação inferior
+  // Usar apenas os itens essenciais na navegação inferior
   const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
   // Para o menu lateral (drawer), separar em "Principal" e "Mais"
@@ -954,8 +954,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
             </main>
 
             {/* Bottom Navigation */}
-            <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible">
-              <div className={`flex h-16 relative items-center ${filteredNavigationItems.length <= 3 ? 'justify-center gap-16' : filteredNavigationItems.length === 4 ? 'justify-around gap-4' : 'justify-around gap-2'}`}>
+            <nav className="fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md border-t border-gray-200 shadow-2xl z-50 safe-area-pb overflow-visible pb-[10px]">
+              <div className="flex h-16 w-full relative items-center">
                 {filteredNavigationItems.length > 0 ? (
                   filteredNavigationItems
                     .filter(item => item && item.icon) // Filtrar itens sem ícone
@@ -969,7 +969,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                         <button
                           key={item.name || item.href || index}
                           onClick={() => handleNavigation(item.href)}
-                          className={`relative flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible px-6 py-2 ${
+                          className={`relative flex-1 min-w-0 h-full flex flex-col items-center justify-center gap-1 transition-all duration-200 overflow-visible py-2 ${
                             isActive 
                               ? "text-[#871b0b]" 
                               : "text-gray-500 active:bg-gray-100"

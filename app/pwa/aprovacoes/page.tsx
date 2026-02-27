@@ -14,14 +14,13 @@ import {
   CheckCircle, 
   XCircle, 
   Timer, 
-  RefreshCw,
   ArrowLeft,
   AlertTriangle,
   Calendar,
+  ChevronDown,
   User,
   Eye,
   ExternalLink,
-  CheckSquare,
   Loader2,
   Filter,
   X
@@ -190,6 +189,7 @@ export default function PWAAprovacoesPage() {
   const [funcionarioFiltro, setFuncionarioFiltro] = useState<string>('all');
   const [funcionarios, setFuncionarios] = useState<Funcionario[]>([]);
   const [loadingFuncionarios, setLoadingFuncionarios] = useState(false);
+  const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
   // Carregar lista de funcionários para o filtro
   useEffect(() => {
@@ -432,14 +432,15 @@ export default function PWAAprovacoesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 pb-6">
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="flex items-center gap-3 mb-2">
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200">
+        <div className="mx-auto w-full max-w-5xl p-4">
+          <div className="flex items-center gap-3 mb-1">
           <Button 
             variant="ghost" 
             size="sm" 
-            className="p-0"
+            className="h-9 w-9 p-0 rounded-full"
             onClick={(e) => {
               e.preventDefault()
               router.back()
@@ -448,22 +449,35 @@ export default function PWAAprovacoesPage() {
           >
             <ArrowLeft className="w-5 h-5" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-900">Assinar Registros de Ponto</h1>
+            <h1 className="text-lg sm:text-xl font-bold text-gray-900">Assinar Registros de Ponto</h1>
+          </div>
+          <p className="text-sm text-gray-600">Assine todos os registros de ponto do dia dos funcionários</p>
         </div>
-        <p className="text-sm text-gray-600">Assine todos os registros de ponto do dia dos funcionários</p>
       </div>
 
-      {/* Filtros */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Filter className="w-4 h-4" />
-              Filtros
-            </CardTitle>
+      <div className="mx-auto w-full max-w-5xl space-y-4">
+        {/* Filtros */}
+        <Card className="mt-4 shadow-sm border-gray-200 gap-3 py-4">
+          <CardHeader className="px-4 pb-1">
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Filter className="w-4 h-4" />
+                Filtros
+              </CardTitle>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-8 px-2 text-xs"
+                onClick={() => setMostrarFiltros(prev => !prev)}
+              >
+                {mostrarFiltros ? 'Ocultar' : 'Mostrar'}
+                <ChevronDown className={`w-4 h-4 ml-1 transition-transform ${mostrarFiltros ? 'rotate-180' : ''}`} />
+              </Button>
+            </div>
           </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {mostrarFiltros && (
+            <CardContent className="px-4 pt-0 pb-2 space-y-3">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {/* Filtro de Data Início */}
               <div className="space-y-2">
                 <Label htmlFor="data-inicio" className="text-sm">Data Início</Label>
@@ -472,7 +486,7 @@ export default function PWAAprovacoesPage() {
                   type="date"
                   value={dataInicio}
                   onChange={(e) => setDataInicio(e.target.value)}
-                  className="w-full"
+                  className="w-full h-10"
                 />
               </div>
 
@@ -484,19 +498,19 @@ export default function PWAAprovacoesPage() {
                   type="date"
                   value={dataFim}
                   onChange={(e) => setDataFim(e.target.value)}
-                  className="w-full"
+                  className="w-full h-10"
                 />
               </div>
 
               {/* Filtro de Funcionário */}
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2 lg:col-span-1">
                 <Label htmlFor="funcionario" className="text-sm">Funcionário</Label>
                 <Select
                   value={funcionarioFiltro}
                   onValueChange={setFuncionarioFiltro}
                   disabled={loadingFuncionarios}
                 >
-                  <SelectTrigger id="funcionario" className="w-full">
+                  <SelectTrigger id="funcionario" className="w-full h-10">
                     <SelectValue placeholder="Todos os funcionários" />
                   </SelectTrigger>
                   <SelectContent>
@@ -511,7 +525,7 @@ export default function PWAAprovacoesPage() {
               </div>
 
               {/* Botão Limpar Filtros */}
-              <div className="space-y-2">
+              <div className="space-y-2 col-span-2 lg:col-span-1">
                 <Label className="text-sm opacity-0">Limpar</Label>
                 <Button
                   variant="outline"
@@ -521,72 +535,65 @@ export default function PWAAprovacoesPage() {
                     setDataFim(hoje);
                     setFuncionarioFiltro('all');
                   }}
-                  className="w-full"
+                  className="w-full h-10"
                 >
                   <X className="w-4 h-4 mr-2" />
                   Limpar Filtros
                 </Button>
               </div>
             </div>
-          </CardContent>
-        </Card>
-      </div>
 
-      {/* Botão de Aprovação em Massa - Posição Fixa */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <Button
-          onClick={() => router.push('/pwa/aprovacao-massa')}
-          className="w-full bg-blue-600 text-white hover:bg-blue-700"
-          disabled={loading}
-        >
-          <CheckSquare className="w-4 h-4 mr-2" />
-          Aprovação em Massa
-        </Button>
-      </div>
-
-      <div className="p-4 space-y-4">
-        {/* Resumo */}
-        <Card>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-2 gap-4 text-center">
-              <div>
-                <p className="text-2xl font-bold text-blue-600">{pendentes.length}</p>
-                <p className="text-sm text-gray-600">Pendentes de Assinatura</p>
+              {/* Ações rápidas */}
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  onClick={() => router.push('/pwa/aprovacao-massa')}
+                  className="w-full h-10 bg-blue-600 text-white hover:bg-blue-700 text-sm"
+                  disabled={loading}
+                >
+                  Aprovação em Massa
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleRefresh}
+                  disabled={loading}
+                  className="w-full h-10 text-sm"
+                >
+                  Atualizar
+                </Button>
               </div>
-              <div>
+            </CardContent>
+          )}
+        </Card>
+
+        {/* Resumo */}
+        <Card className="shadow-sm border-gray-200">
+          <CardContent className="p-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-center">
+                <p className="text-2xl font-bold text-blue-600">{pendentes.length}</p>
+                <p className="text-xs sm:text-sm text-blue-800">Pendentes de Assinatura</p>
+              </div>
+              <div className="rounded-lg border border-green-100 bg-green-50 p-3 text-center">
                 <p className="text-2xl font-bold text-green-600">{aprovadas.length}</p>
-                <p className="text-sm text-gray-600">Já Assinados</p>
+                <p className="text-xs sm:text-sm text-green-800">Já Assinados</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Botão de Atualizar */}
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRefresh}
-            disabled={loading}
-          >
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Atualizar
-          </Button>
-        </div>
-
         {/* Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="todas" className="text-xs">
+          <TabsList className="grid w-full grid-cols-4 h-auto">
+            <TabsTrigger value="todas" className="text-[11px] sm:text-xs px-1 sm:px-3">
               Todas ({aprovacoes.length})
             </TabsTrigger>
-            <TabsTrigger value="pendentes" className="text-xs">
+            <TabsTrigger value="pendentes" className="text-[11px] sm:text-xs px-1 sm:px-3">
               Pendentes ({pendentes.length})
             </TabsTrigger>
-            <TabsTrigger value="aprovadas" className="text-xs">
+            <TabsTrigger value="aprovadas" className="text-[11px] sm:text-xs px-1 sm:px-3">
               Aprovadas ({aprovadas.length})
             </TabsTrigger>
-            <TabsTrigger value="rejeitadas" className="text-xs">
+            <TabsTrigger value="rejeitadas" className="text-[11px] sm:text-xs px-1 sm:px-3">
               Outras ({rejeitadas.length + canceladas.length})
             </TabsTrigger>
           </TabsList>
