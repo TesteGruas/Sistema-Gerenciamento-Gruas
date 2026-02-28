@@ -30,6 +30,7 @@ import {
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
+import api from "@/lib/api"
 import { gruaObraApi } from "@/lib/api-grua-obra"
 import { gruasApi } from "@/lib/api-gruas"
 import { CardLoader } from "@/components/ui/loader"
@@ -118,6 +119,55 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     }
   }, [obra, gruaSelecionada, loading, documentos, onDataLoaded])
 
+  const mapCategoriaLivroArquivo = (arquivo: any) => {
+    const categoria = String(arquivo?.categoria || '').toLowerCase()
+    const texto = `${String(arquivo?.nome_original || '')} ${String(arquivo?.descricao || '')}`.toLowerCase()
+
+    if (categoria === 'manual') {
+      if (texto.includes('montagem')) return 'manual_montagem'
+      return 'manual_tecnico'
+    }
+
+    if (categoria === 'certificado') {
+      if (texto.includes('aterramento')) return 'aterramento'
+      return 'termo_entrega_tecnica'
+    }
+
+    if (categoria === 'outro') {
+      if (texto.includes('aterramento')) return 'aterramento'
+      if (texto.includes('plano') && texto.includes('carga')) return 'plano_carga'
+      return 'outro'
+    }
+
+    return categoria || 'geral'
+  }
+
+  const obterTituloPadraoPorCategoria = (categoriaLivro: string, tituloOriginal: string) => {
+    const tituloLimpo = (tituloOriginal || '').trim()
+    if (tituloLimpo) {
+      if (categoriaLivro === 'manual_tecnico' && !tituloLimpo.toLowerCase().includes('plano decargas')) return tituloLimpo
+      if (categoriaLivro === 'manual_montagem' && !tituloLimpo.toLowerCase().includes('plano decargas')) return tituloLimpo
+      if (categoriaLivro === 'termo_entrega_tecnica' && !tituloLimpo.toLowerCase().includes('plano decargas')) return tituloLimpo
+      if (categoriaLivro === 'plano_carga') return tituloLimpo
+      if (categoriaLivro === 'aterramento' && !tituloLimpo.toLowerCase().includes('plano decargas')) return tituloLimpo
+    }
+
+    switch (categoriaLivro) {
+      case 'manual_tecnico':
+        return 'Ficha Técnica do Equipamento.pdf'
+      case 'manual_montagem':
+        return 'Manual de Montagem.pdf'
+      case 'termo_entrega_tecnica':
+        return 'Termo de Entrega Técnica.pdf'
+      case 'plano_carga':
+        return 'Plano de Cargas.pdf'
+      case 'aterramento':
+        return 'Documento de Aterramento.pdf'
+      default:
+        return tituloLimpo || 'Arquivo.pdf'
+    }
+  }
+
   const carregarDados = async () => {
     try {
       setLoading(true)
@@ -159,19 +209,52 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       try {
         const arquivosResponse = await obrasArquivosApi.listarPorObra(parseInt(obraId))
         if (arquivosResponse.success && arquivosResponse.data) {
-          const arquivosComoDocumentos = arquivosResponse.data.map((arquivo: any) => ({
+          const arquivosComoDocumentos = arquivosResponse.data.map((arquivo: any) => {
+            const categoriaLivro = mapCategoriaLivroArquivo(arquivo)
+            return ({
             id: `arquivo_${arquivo.id}`,
-            titulo: arquivo.nome_original || arquivo.descricao || 'Arquivo',
+            titulo: obterTituloPadraoPorCategoria(categoriaLivro, arquivo.nome_original || arquivo.descricao || ''),
             descricao: arquivo.descricao,
-            categoria: arquivo.categoria === 'manual' ? 'manual_tecnico' : arquivo.categoria === 'certificado' ? 'termo_entrega_tecnica' : arquivo.categoria === 'outro' ? 'plano_carga' : arquivo.categoria,
+            categoria: categoriaLivro,
             caminho_arquivo: arquivo.caminho,
             arquivo_original: arquivo.caminho,
             created_at: arquivo.created_at
-          }))
+          })})
           documentosData = [...documentosData, ...arquivosComoDocumentos]
         }
       } catch (error) {
         console.log('Erro ao carregar arquivos:', error)
+      }
+
+      // Compatibilidade: carregar uploads legados da rota /api/arquivos/obra/:id
+      // (usada por versões anteriores na criação de obra)
+      try {
+        const legacyResponse = await api.get(`/arquivos/obra/${obraId}`)
+        const legacyData = legacyResponse?.data?.data
+        if (legacyResponse?.data?.success && Array.isArray(legacyData)) {
+          const legacyComoDocumentos = legacyData.map((arquivo: any) => {
+            const categoriaLivro = mapCategoriaLivroArquivo(arquivo)
+            return ({
+            id: `legacy_${arquivo.id}`,
+            titulo: obterTituloPadraoPorCategoria(categoriaLivro, arquivo.nome_original || arquivo.descricao || ''),
+            descricao: arquivo.descricao,
+            categoria: categoriaLivro,
+            caminho_arquivo: arquivo.caminho,
+            arquivo_original: arquivo.caminho,
+            created_at: arquivo.created_at
+          })})
+
+          const caminhosAtuais = new Set(
+            documentosData.map((d: any) => d.caminho_arquivo || d.arquivo_original).filter(Boolean)
+          )
+          const legacySemDuplicar = legacyComoDocumentos.filter(
+            (d: any) => !caminhosAtuais.has(d.caminho_arquivo || d.arquivo_original)
+          )
+
+          documentosData = [...documentosData, ...legacySemDuplicar]
+        }
+      } catch (error) {
+        console.log('Erro ao carregar arquivos legados:', error)
       }
 
       setDocumentos(documentosData)
@@ -402,6 +485,23 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     return value
   }
 
+  const firstFilled = (...values: any[]) => {
+    for (const value of values) {
+      if (value === null || value === undefined) continue
+      if (typeof value === 'string' && value.trim() === '') continue
+      return value
+    }
+    return undefined
+  }
+
+  const normalizarTipoLigacaoForm = (value: any) => {
+    if (!value) return ''
+    const texto = String(value).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    if (texto.includes('tri')) return 'trifasica'
+    if (texto.includes('mono')) return 'monofasica'
+    return String(value)
+  }
+
   const normalizeText = (value: any): string => {
     if (!value) return ''
     return String(value)
@@ -412,13 +512,21 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   }
 
   const isFichaTecnicaDocumento = (doc: any) => {
-    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)}`
-    return texto.includes('ficha tecnica') || texto.includes('dados tecnicos')
+    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)} ${normalizeText(doc?.categoria)}`
+    return (
+      normalizeText(doc?.categoria) === 'manual_tecnico' ||
+      texto.includes('ficha tecnica') ||
+      texto.includes('dados tecnicos') ||
+      (texto.includes('manual tecnico') && !texto.includes('montagem'))
+    )
   }
 
   const isManualMontagemDocumento = (doc: any) => {
-    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)}`
-    return texto.includes('manual') && (texto.includes('montagem') || texto.includes('instalacao'))
+    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)} ${normalizeText(doc?.categoria)}`
+    return (
+      normalizeText(doc?.categoria) === 'manual_montagem' ||
+      (texto.includes('manual') && (texto.includes('montagem') || texto.includes('instalacao')))
+    )
   }
 
   // Função auxiliar para fazer download de arquivo
@@ -664,6 +772,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         unit: 'mm',
         format: 'a4'
       })
+      const COR_BASE: [number, number, number] = [135, 27, 11] // #871b0b
 
       // ============================================
       // CAPA PADRÃO NR12 NR18
@@ -681,7 +790,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       // Box de cabeçalho com fundo - Capa padrão NR12 NR18
       const headerBoxY = yPos - 3
       const headerBoxHeight = 30
-      doc.setFillColor(66, 139, 202) // Azul profissional
+      doc.setFillColor(...COR_BASE) // Cor base #871b0b
       doc.roundedRect(14, headerBoxY, 182, headerBoxHeight, 2, 2, 'F')
       
       // Título principal (branco sobre fundo azul)
@@ -722,6 +831,59 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       // Limite máximo considerando rodapé
       // Rodapé está em 285mm (297mm - 12mm), então o conteúdo deve parar em 270mm para dar espaço
       const MAX_Y = 270 // 285mm (rodapé) - 15mm de margem de segurança
+
+      const renderTabelaPares = (
+        dados: Array<[string, any]>,
+        ladoALado: boolean = true
+      ) => {
+        const linhas = ladoALado
+          ? Array.from({ length: Math.ceil(dados.length / 2) }, (_, idx) => {
+              const a = dados[idx * 2]
+              const b = dados[idx * 2 + 1]
+              return [
+                a?.[0] || '',
+                String(a?.[1] ?? 'N/A'),
+                b?.[0] || '',
+                b ? String(b?.[1] ?? 'N/A') : ''
+              ]
+            })
+          : dados.map(([k, v]) => [k, String(v ?? 'N/A')])
+
+        autoTable(doc, {
+          startY: yPos,
+          margin: { left: 14, right: 14 },
+          head: ladoALado
+            ? [['Campo', 'Valor', 'Campo', 'Valor']]
+            : [['Campo', 'Valor']],
+          body: linhas,
+          styles: {
+            fontSize: 8.5,
+            cellPadding: 2.4,
+            lineColor: [210, 210, 210],
+            lineWidth: 0.1,
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fillColor: COR_BASE,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          columnStyles: ladoALado
+            ? {
+                0: { cellWidth: 34, fontStyle: 'bold' },
+                1: { cellWidth: 57 },
+                2: { cellWidth: 34, fontStyle: 'bold' },
+                3: { cellWidth: 57 }
+              }
+            : {
+                0: { cellWidth: 45, fontStyle: 'bold' },
+                1: { cellWidth: 137 }
+              }
+        })
+
+        const lastAutoTable = (doc as any).lastAutoTable
+        yPos = (lastAutoTable?.finalY || yPos) + 8
+      }
       
       // ============================================
       // ÍNDICE DO LIVRO
@@ -731,7 +893,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const indiceY = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, indiceY, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -747,9 +909,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       const indiceItens = [
         '1. Dados da Obra',
         '2. Equipamento - Grua',
-        '3. Responsável Técnico',
-        '4. Sinaleiros',
-        '5. Parâmetros Técnicos',
+        '3. Responsáveis e Equipe',
+        '3.1. Responsável Técnico da Empresa Locadora',
+        '3.2. Sinaleiros',
+        '4. Localização e Ambiente',
+        '5. Período de Locação',
         '6. Documentos e Certificações',
         '6.1. Dados da Montagem do(s) Equipamento(s)',
         '6.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento',
@@ -820,7 +984,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       yPos += 6
 
       // Linha separadora decorativa
-      doc.setDrawColor(66, 139, 202)
+      doc.setDrawColor(...COR_BASE)
       doc.setLineWidth(1)
       doc.line(14, yPos, 196, yPos)
       yPos += 10
@@ -833,7 +997,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       // 1. DADOS DA OBRA
       const secaoY = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secaoY, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -846,7 +1010,6 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
       
-      // Criar tabela com duas colunas usando splitTextToSize para textos longos
       const dadosObra = [
         [`Nome:`, obra.name || 'N/A'],
         [`Endereço:`, obra.location || obra.endereco || 'N/A'],
@@ -858,128 +1021,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Data de Fim:`, obra.endDate ? formatarData(obra.endDate) : 'N/A'],
         [`Orçamento:`, obra.budget ? formatarMoeda(parseFloat(obra.budget.toString().replace(',', '.'))) : 'N/A']
       ]
-
-      // Dividir em duas colunas com quebra de texto adequada
-      const col1XObra = 18
-      const col2XObra = 110
-      const col1Width = 85 // Largura da primeira coluna
-      const col2Width = 75 // Largura da segunda coluna
-      const linhaAlturaObra = 6
-      let col1YPos = yPos
-      let col2YPos = yPos
-      let maxYUsed = yPos
-      
-      for (let index = 0; index < dadosObra.length; index++) {
-        const [label, value] = dadosObra[index]
-        const coluna = Math.floor(index / 5)
-        const linha = index % 5
-        
-        // Quando muda de coluna, verificar se há espaço suficiente
-        if (coluna === 1 && linha === 0) {
-          // Verificar se há espaço para a segunda coluna na mesma página
-          const espacoNecessario = 5 * linhaAlturaObra + 20 // espaço para 5 linhas + margem
-          if (col1YPos + espacoNecessario > MAX_Y) {
-            // Não há espaço, quebrar página
-            col2YPos = await adicionarNovaPaginaComLogos()
-            col1YPos = col2YPos // Resetar também a primeira coluna para manter alinhamento
-          } else {
-            col2YPos = col1YPos // Mesma altura da primeira coluna
-          }
-        }
-        
-        const xPos = coluna === 0 ? col1XObra : col2XObra
-        const width = coluna === 0 ? col1Width : col2Width
-        const currentColYPos = coluna === 0 ? col1YPos : col2YPos
-        const linhaY = currentColYPos + linha * linhaAlturaObra
-        
-        // Verificar ANTES de escrever se há espaço suficiente (com margem de segurança)
-        // Estimar altura necessária para o texto
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, width - 5)
-        const alturaNecessaria = linhaY + (textLines.length * 4)
-        
-        // Verificar se precisa quebrar página ANTES de escrever
-        if (linhaY > MAX_Y || alturaNecessaria > MAX_Y) {
-          const newYPos = await adicionarNovaPaginaComLogos()
-          if (coluna === 0) {
-            col1YPos = newYPos
-          } else {
-            col2YPos = newYPos
-            // Se quebrou página na segunda coluna, resetar também a primeira
-            col1YPos = newYPos
-          }
-          const newLinhaY = (coluna === 0 ? col1YPos : col2YPos) + linha * linhaAlturaObra
-          
-          doc.setFont('helvetica', 'bold')
-          doc.text(label, xPos, newLinhaY)
-          doc.setFont('helvetica', 'normal')
-          
-          // Quebrar texto longo se necessário
-          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-            const lineY = newLinhaY + (lineIdx * 4)
-            // Verificar se cada linha não ultrapassa o limite
-            if (lineY > MAX_Y) {
-              const extraYPos = await adicionarNovaPaginaComLogos()
-              if (coluna === 0) {
-                col1YPos = extraYPos
-              } else {
-                col2YPos = extraYPos
-                col1YPos = extraYPos
-              }
-              doc.text(textLines[lineIdx], xPos + 35, col1YPos)
-            } else {
-              doc.text(textLines[lineIdx], xPos + 35, lineY)
-            }
-          }
-          
-          // Atualizar maxYUsed
-          const finalY = Math.max(newLinhaY + (textLines.length * 4), (coluna === 0 ? col1YPos : col2YPos))
-          if (finalY > maxYUsed) {
-            maxYUsed = finalY
-          }
-        } else {
-          doc.setFont('helvetica', 'bold')
-          doc.text(label, xPos, linhaY)
-          doc.setFont('helvetica', 'normal')
-          
-          // Quebrar texto longo se necessário
-          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-            const lineY = linhaY + (lineIdx * 4)
-            // Verificar se cada linha não ultrapassa o limite
-            if (lineY > MAX_Y) {
-              const extraYPos = await adicionarNovaPaginaComLogos()
-              if (coluna === 0) {
-                col1YPos = extraYPos
-              } else {
-                col2YPos = extraYPos
-                col1YPos = extraYPos
-              }
-              doc.text(textLines[lineIdx], xPos + 35, extraYPos)
-            } else {
-              if (lineIdx === 0) {
-                doc.text(textLines[lineIdx], xPos + 35, linhaY)
-              } else {
-                doc.text(textLines[lineIdx], xPos + 35, lineY)
-              }
-            }
-          }
-          
-          // Atualizar maxYUsed
-          const finalY = linhaY + (textLines.length * 4)
-          if (finalY > maxYUsed) {
-            maxYUsed = finalY
-          }
-        }
-      }
-      
-      // Usar a altura máxima realmente usada + espaçamento
-      // Considerar a altura máxima entre as duas colunas
-      yPos = Math.max(col1YPos, col2YPos, maxYUsed) + 8
-      
-      // Garantir que não ultrapasse o limite
-      if (yPos > MAX_Y) {
-        yPos = await adicionarNovaPaginaComLogos()
-      }
+      renderTabelaPares(dadosObra, true)
 
       // 2. EQUIPAMENTO - GRUA
       if (yPos > MAX_Y - 20) {
@@ -987,7 +1029,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao2Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao2Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1005,48 +1047,37 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Modelo:`, modelo || 'N/A'],
         [`Fabricante:`, fabricante || 'N/A'],
         [`Tipo:`, gruaSelecionada.tipo || 'N/A'],
-        [`Capacidade:`, gruaSelecionada.capacidade || 'N/A']
+        [`Número de Série:`, gruaSelecionada.numero_serie || gruaSelecionada.serial || 'N/A'],
+        [`Ano de Fabricação:`, relacaoGrua.ano_fabricacao ? String(relacaoGrua.ano_fabricacao) : 'N/A'],
+        [`Capacidade Máxima:`, gruaSelecionada.capacidade || 'N/A'],
+        [`Capacidade na Ponta:`, relacaoGrua.capacidade_ponta ? `${relacaoGrua.capacidade_ponta} kg` : (gruaSelecionada.capacidade_ponta || 'N/A')],
+        [`Altura Máxima:`, gruaSelecionada.altura_maxima || (relacaoGrua.altura ? `${relacaoGrua.altura} m` : 'N/A')],
+        [`Alcance Máximo (Raio):`, gruaSelecionada.alcance_maximo || relacaoGrua.raio_operacao || relacaoGrua.raio || 'N/A'],
+        [`Tipo de Base/Fundação:`, relacaoGrua.tipo_base || relacaoGrua.fundacao || obra?.dados_montagem_equipamento?.tipo_base || 'N/A']
       ]
+      renderTabelaPares(dadosGrua, true)
 
-      for (const [label, value] of dadosGrua) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const linhaY = yPos
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, 18, linhaY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 150)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
-        }
-        
-        yPos += Math.max(6, textLines.length * 4)
-      }
-      
-      yPos += 8
-
-      // 3. RESPONSÁVEL TÉCNICO
+      // 3. RESPONSÁVEIS E EQUIPE
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao3Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao3Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('3. RESPONSÁVEL TÉCNICO', 18, secao3Y + 6)
+      doc.text('3. RESPONSÁVEIS E EQUIPE', 18, secao3Y + 6)
       yPos = secao3Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+      doc.setFont('helvetica', 'bold')
+      doc.text('3.1. Responsável Técnico da Empresa Locadora', 18, yPos)
+      yPos += 6
       doc.setFont('helvetica', 'normal')
 
       if (obra.responsavelTecnico || obra.responsavel_nome) {
@@ -1058,26 +1089,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
           [`Email:`, responsavel.email || 'N/A'],
           [`Telefone:`, responsavel.telefone || 'N/A']
         ]
-
-        for (const [label, value] of dadosResponsavel) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          
-          const linhaY = yPos
-          doc.setFont('helvetica', 'bold')
-          doc.text(label, 18, linhaY)
-          doc.setFont('helvetica', 'normal')
-          
-          // Quebrar texto longo se necessário
-          const valueStr = String(value || 'N/A')
-          const textLines = doc.splitTextToSize(valueStr, 150)
-          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-            doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
-          }
-          
-          yPos += Math.max(6, textLines.length * 4)
-        }
+        renderTabelaPares(dadosResponsavel, true)
       } else {
         doc.text('Não informado', 18, yPos)
         yPos += 6
@@ -1085,19 +1097,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       yPos += 8
 
-      // 4. SINALEIROS
+      // 3.2. SINALEIROS
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
       const secao4Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao4Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('4. SINALEIROS', 18, secao4Y + 6)
+      doc.text('3.2. SINALEIROS', 18, secao4Y + 6)
       yPos = secao4Y + 12
 
       doc.setTextColor(0, 0, 0)
@@ -1106,33 +1118,40 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         const sinaleirosData = sinaleiros.map((s: any, index: number) => [
           `${index + 1}`,
           s.nome || 'N/A',
-          s.tipo === 'principal' ? 'Principal' : 'Reserva',
-          s.tipo_vinculo === 'interno' ? 'Interno' : 'Cliente'
+          s.tipo === 'principal' ? 'Principal' : s.tipo === 'reserva' ? 'Reserva' : 'N/A',
+          (s.tipo_vinculo === 'interno' || s.tipo === 'principal') ? 'Interno' : 'Cliente',
+          s.rg_cpf || s.cpf || s.rg || 'N/A',
+          s.telefone || 'N/A',
+          s.email || 'N/A'
         ])
 
         autoTable(doc, {
-          head: [['#', 'Nome', 'Tipo', 'Vínculo']],
-          body: sinaleirosData.map((row: any[]) => [row[0], row[1], row[2], row[3]]),
+          head: [['#', 'Nome', 'Tipo', 'Vínculo', 'Documento', 'Telefone', 'Email']],
+          body: sinaleirosData.map((row: any[]) => [row[0], row[1], row[2], row[3], row[4], row[5], row[6]]),
           startY: yPos,
           margin: { left: 14, right: 14 },
           styles: { 
-            fontSize: 9,
-            cellPadding: 3,
+            fontSize: 8,
+            cellPadding: 2.2,
             lineColor: [200, 200, 200],
-            lineWidth: 0.1
+            lineWidth: 0.1,
+            overflow: 'linebreak'
           },
           headStyles: { 
-            fillColor: [66, 139, 202],
+            fillColor: COR_BASE,
             textColor: [255, 255, 255],
             fontStyle: 'bold',
             halign: 'center'
           },
           alternateRowStyles: { fillColor: [250, 250, 250] },
           columnStyles: {
-            0: { cellWidth: 15, halign: 'center' },
-            1: { cellWidth: 80 },
-            2: { cellWidth: 40, halign: 'center' },
-            3: { cellWidth: 40, halign: 'center' }
+            0: { cellWidth: 8, halign: 'center' },
+            1: { cellWidth: 48 },
+            2: { cellWidth: 20, halign: 'center' },
+            3: { cellWidth: 24, halign: 'center' },
+            4: { cellWidth: 32 },
+            5: { cellWidth: 24 },
+            6: { cellWidth: 26 }
           }
         })
 
@@ -1152,87 +1171,66 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       yPos += 4
 
-      // 5. PARÂMETROS TÉCNICOS
+      // 4. LOCALIZAÇÃO E AMBIENTE
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
 
-      const secao5Y = yPos
-      doc.setFillColor(66, 139, 202)
-      doc.roundedRect(14, secao5Y, 182, 8, 2, 2, 'F')
+      const secao4AmbienteY = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao4AmbienteY, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(12)
       doc.setFont('helvetica', 'bold')
-      doc.text('5. PARÂMETROS TÉCNICOS', 18, secao5Y + 6)
-      yPos = secao5Y + 12
+      doc.text('4. LOCALIZAÇÃO E AMBIENTE', 18, secao4AmbienteY + 6)
+      yPos = secao4AmbienteY + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
       
-      const parametrosTecnicos = [
-        [`Tipo de Base:`, relacaoGrua.tipo_base || 'N/A'],
-        [`Altura Inicial:`, relacaoGrua.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'N/A'],
-        [`Altura Final:`, relacaoGrua.altura_final ? `${relacaoGrua.altura_final}m` : 'N/A'],
-        [`Velocidade de Giro:`, relacaoGrua.velocidade_giro ? `${relacaoGrua.velocidade_giro} rpm` : 'N/A'],
-        [`Velocidade de Elevação:`, relacaoGrua.velocidade_elevacao ? `${relacaoGrua.velocidade_elevacao} m/min` : 'N/A'],
-        [`Potência Instalada:`, relacaoGrua.potencia_instalada ? `${relacaoGrua.potencia_instalada} kVA` : 'N/A'],
-        [`Voltagem:`, relacaoGrua.voltagem || 'N/A'],
-        [`Tipo de Ligação:`, relacaoGrua.tipo_ligacao || 'N/A'],
-        [`Capacidade na Ponta:`, relacaoGrua.capacidade_ponta ? `${relacaoGrua.capacidade_ponta} kg` : 'N/A'],
-        [`Ano de Fabricação:`, relacaoGrua.ano_fabricacao ? String(relacaoGrua.ano_fabricacao) : 'N/A'],
-        [`Vida Útil:`, relacaoGrua.vida_util ? `${relacaoGrua.vida_util} anos` : 'N/A']
+      const dadosLocalizacaoAmbiente = [
+        [`Endereço Completo:`, obra.endereco || obra.location || 'Não informado'],
+        [`Cidade / Estado / CEP:`, `${obra.cidade || 'N/A'} / ${obra.estado || 'N/A'} / ${obra.cep || 'N/A'}`],
+        [`Canteiro de Obras:`, obra.canteiro || 'Não informado'],
+        [`Fundação da Grua:`, relacaoGrua?.fundacao || relacaoGrua?.fundacao_tipo || relacaoGrua?.tipo_base || obra?.dados_montagem_equipamento?.tipo_base || 'Não informado'],
+        [`Dimensões da Fundação:`, relacaoGrua?.fundacao_dimensoes || 'Não informado'],
+        [`Especificações da Fundação:`, relacaoGrua?.fundacao_especificacoes || 'Não informado'],
+        [`Local de Instalação:`, relacaoGrua?.local_instalacao || relacaoGrua?.local || 'Não informado'],
+        [`Coordenadas:`, relacaoGrua?.coordenadas || 'Não informado'],
+        [`Condições do Ambiente:`, relacaoGrua?.condicoes_ambiente || relacaoGrua?.ambiente || relacaoGrua?.observacoes_montagem || obra?.observacoes || 'Não informado'],
+        [`Modelo, Raio e Altura:`, `${gruaSelecionada.modelo || gruaSelecionada.model || 'Não informado'}${gruaSelecionada.alcance_maximo ? ` - Raio: ${gruaSelecionada.alcance_maximo}` : ''}${gruaSelecionada.altura_maxima ? ` - Altura: ${gruaSelecionada.altura_maxima}` : ''}`]
       ]
+      renderTabelaPares(dadosLocalizacaoAmbiente, true)
 
-      // Dividir em duas colunas
-      const col1XTec = 18
-      const col2XTec = 110
-      const linhaAlturaTec = 6
-      let maxYPosTec = yPos
-      
-      for (let index = 0; index < parametrosTecnicos.length; index++) {
-        const [label, value] = parametrosTecnicos[index]
-        const coluna = Math.floor(index / 6)
-        const linha = index % 6
-        
-        // Calcular posição Y baseada na coluna
-        let currentY: number
-        if (coluna === 0) {
-          currentY = yPos + linha * linhaAlturaTec
-        } else {
-          // Segunda coluna - mesma altura da primeira coluna
-          currentY = yPos + linha * linhaAlturaTec
-        }
-        
-        // Verificar se precisa quebrar página
-        if (currentY > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-          currentY = yPos + linha * linhaAlturaTec
-        }
-        
-        const xPos = coluna === 0 ? col1XTec : col2XTec
-        
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, xPos, currentY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 80)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], xPos + 45, currentY + (lineIdx * 4))
-        }
-        
-        // Atualizar maxYPosTec para calcular altura total corretamente
-        const finalY = currentY + (textLines.length * 4)
-        if (finalY > maxYPosTec) {
-          maxYPosTec = finalY
-        }
+      // 5. PERÍODO DE LOCAÇÃO
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
       }
+
+      const secao5LocacaoY = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao5LocacaoY, 182, 8, 2, 2, 'F')
       
-      // Calcular yPos final baseado na altura máxima usada
-      yPos = maxYPosTec + 8
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('5. PERÍODO DE LOCAÇÃO', 18, secao5LocacaoY + 6)
+      yPos = secao5LocacaoY + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const inicioLocacao = obra.startDate || relacaoGrua?.data_inicio_locacao
+      const fimLocacao = obra.endDate || relacaoGrua?.data_fim_locacao
+      const dadosPeriodoLocacao = [
+        [`Data de Início:`, inicioLocacao ? formatarData(inicioLocacao) : 'Não informado'],
+        [`Data de Fim:`, fimLocacao ? formatarData(fimLocacao) : 'Não informado'],
+        [`Período Total:`, calcularPeriodoLocacao(inicioLocacao, fimLocacao)]
+      ]
+      renderTabelaPares(dadosPeriodoLocacao, true)
 
       // 6. DOCUMENTOS E CERTIFICAÇÕES
       if (yPos > MAX_Y - 20) {
@@ -1240,7 +1238,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao6Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao6Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1258,28 +1256,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`ART de Instalação:`, obra.art_numero || obra.artNumero || 'Não informado'],
         [`Apólice de Seguro:`, obra.apolice_numero || obra.apoliceNumero || 'Não informado']
       ]
-
-      for (const [label, value] of documentosInfo) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const linhaY = yPos
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, 18, linhaY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 140)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
-        }
-        
-        yPos += Math.max(6, textLines.length * 4)
-      }
-      
-      yPos += 8
+      renderTabelaPares(documentosInfo, false)
 
       // 6.1. DADOS DA MONTAGEM DO(s) EQUIPAMENTO(s)
       if (yPos > MAX_Y - 20) {
@@ -1287,7 +1264,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao61Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao61Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1319,26 +1296,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Velocidade de Translação:`, relacaoGrua?.velocidade_translacao || dadosMontagemObra.velocidade_translacao ? `${relacaoGrua?.velocidade_translacao || dadosMontagemObra.velocidade_translacao} m/min` : 'Não informado'],
         [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || obra.location || 'Não informado']
       ]
-
-      for (const [label, value] of dadosMontagem) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const linhaY = yPos
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, 18, linhaY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 130)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], 18 + 60, linhaY + (lineIdx * 4))
-        }
-        
-        yPos += Math.max(6, textLines.length * 4)
-      }
+      renderTabelaPares(dadosMontagem, true)
       
       yPos += 8
 
@@ -1348,7 +1306,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao62Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao62Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1361,34 +1319,18 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      // Dados fixos da Irbana como proprietário/fornecedor
       const proprietario = [
         [`Nome/Razão Social:`, 'IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'],
         [`CNPJ:`, '20.053.969/0001-38'],
         [`Endereço:`, 'Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141'],
         [`Telefone:`, '(11) 98818-5951'],
-        [`Email:`, 'info@gruascopa.com.br']
+        [`Email:`, 'info@gruascopa.com.br'],
+        [`Fax:`, 'Não informado'],
+        [`Responsável Técnico:`, relacaoGrua?.proprietario_nome || relacaoGrua?.empresa_locadora_responsavel_tecnico || 'NESTOR ALVAREZ GONZALEZ'],
+        [`Nº do CREA:`, gruaSelecionada.proprietario_crea || relacaoGrua?.crea_responsavel || 'Não informado'],
+        [`N° do CREA da Empresa:`, 'SP 2494244']
       ]
-
-      for (const [label, value] of proprietario) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const linhaY = yPos
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, 18, linhaY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 140)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
-        }
-        
-        yPos += Math.max(6, textLines.length * 4)
-      }
+      renderTabelaPares(proprietario, true)
       
       yPos += 8
 
@@ -1398,7 +1340,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao63Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao63Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1411,43 +1353,18 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      const responsavelManutencao = funcionariosGrua.find((f: any) => 
-        f.funcionario?.cargo?.toLowerCase().includes('manutenção') || 
-        f.funcionario?.cargo?.toLowerCase().includes('técnico') || 
-        f.funcionario?.cargo?.toLowerCase().includes('mecânico')
-      )
-
-      if (responsavelManutencao) {
-        const dadosManutencao = [
-          [`Nome:`, responsavelManutencao.funcionario?.nome || 'N/A'],
-          [`Cargo:`, responsavelManutencao.funcionario?.cargo || 'N/A'],
-          [`Telefone:`, responsavelManutencao.funcionario?.telefone || 'Não informado'],
-          [`Email:`, responsavelManutencao.funcionario?.email || 'Não informado']
-        ]
-
-        for (const [label, value] of dadosManutencao) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          
-          const linhaY = yPos
-          doc.setFont('helvetica', 'bold')
-          doc.text(label, 18, linhaY)
-          doc.setFont('helvetica', 'normal')
-          
-          // Quebrar texto longo se necessário
-          const valueStr = String(value || 'N/A')
-          const textLines = doc.splitTextToSize(valueStr, 150)
-          for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-            doc.text(textLines[lineIdx], 18 + 40, linhaY + (lineIdx * 4))
-          }
-          
-          yPos += Math.max(6, textLines.length * 4)
-        }
-      } else {
-        doc.text('Não informado', 18, yPos)
-        yPos += 6
-      }
+      const dadosManutencao = [
+        [`Razão Social:`, 'IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'],
+        [`Endereço Completo:`, 'Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141'],
+        [`CNPJ:`, '20.053.969/0001-38'],
+        [`E-mail:`, 'info@gruascopa.com.br'],
+        [`Fone:`, '(11) 98818-5951'],
+        [`Fax:`, 'Não informado'],
+        [`Responsável Técnico:`, relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'NESTOR ALVAREZ GONZALEZ'],
+        [`Fone do Responsável:`, relacaoGrua?.empresa_manutencao_fone_responsavel || '(11) 98818-5951'],
+        [`N° do CREA da Empresa:`, 'SP 2494244']
+      ]
+      renderTabelaPares(dadosManutencao, true)
 
       yPos += 8
 
@@ -1457,7 +1374,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao64Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao64Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1475,33 +1392,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         f.funcionario?.cargo?.toLowerCase().includes('montagem') || 
         f.funcionario?.cargo?.toLowerCase().includes('montador')
       )
-
-      if (operador) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('Operador da Grua:', 18, yPos)
-        yPos += 6
-        doc.setFont('helvetica', 'normal')
-        doc.text(`Nome: ${operador.funcionario?.nome || 'N/A'}`, 25, yPos)
-        yPos += 5
-        doc.text(`Cargo: ${operador.funcionario?.cargo || 'N/A'}`, 25, yPos)
-        yPos += 8
-      }
-
-      if (montador) {
-        doc.setFont('helvetica', 'bold')
-        doc.text('Responsável pela Montagem:', 18, yPos)
-        yPos += 6
-        doc.setFont('helvetica', 'normal')
-        doc.text(`Nome: ${montador.funcionario?.nome || 'N/A'}`, 25, yPos)
-        yPos += 5
-        doc.text(`Cargo: ${montador.funcionario?.cargo || 'N/A'}`, 25, yPos)
-        yPos += 8
-      }
-
-      if (!operador && !montador) {
-        doc.text('Não informado', 18, yPos)
-        yPos += 6
-      }
+      const dadosEmpresaMontagem = [
+        [`Razão Social:`, 'IRBANA COPAS SERVIÇOS DE MANUTENÇÃO E MONTAGEM LTDA'],
+        [`Endereço Completo:`, 'Rua Benevenuto Vieira, 48 - Jardim Aeroporto, ITU - SP, CEP: 13306-141'],
+        [`CNPJ:`, '20.053.969/0001-38'],
+        [`E-mail:`, 'info@gruascopa.com.br'],
+        [`Fone:`, '(11) 98818-5951'],
+        [`Fax:`, 'Não informado'],
+        [`Responsável Técnico:`, relacaoGrua?.empresa_montagem_responsavel_tecnico || 'ALEX MARCELO DA SILVA NASCIMENTO'],
+        [`Nº do CREA:`, relacaoGrua?.empresa_montagem_crea || '5071184591'],
+        [`Operador da Grua:`, operador ? `${operador.funcionario?.nome || 'N/A'} (${operador.funcionario?.cargo || 'N/A'})` : 'Não informado'],
+        [`Responsável pela Montagem:`, montador ? `${montador.funcionario?.nome || 'N/A'} (${montador.funcionario?.cargo || 'N/A'})` : 'Não informado']
+      ]
+      renderTabelaPares(dadosEmpresaMontagem, true)
 
       yPos += 8
 
@@ -1511,7 +1414,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao65Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao65Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1524,17 +1427,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      const fichaTecnica = documentos.find((doc: any) => 
-        (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('técnica')) ||
-        (doc.titulo?.toLowerCase().includes('ficha') && doc.titulo?.toLowerCase().includes('tecnica')) ||
-        (doc.titulo?.toLowerCase().includes('dados') && doc.titulo?.toLowerCase().includes('técnicos'))
-      )
+      const fichaTecnica = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
 
-      if (fichaTecnica) {
-        doc.text(`Ficha Técnica disponível: ${fichaTecnica.titulo || 'Ficha Técnica do Equipamento'}`, 18, yPos)
-      } else {
-        doc.text('Ficha técnica não cadastrada. Um arquivo em PDF estará disponível para consulta após o upload.', 18, yPos)
-      }
+      const dadosTecnicosEquipamento = [
+        [`Ficha Técnica:`, fichaTecnica ? (fichaTecnica.titulo || 'Ficha Técnica do Equipamento') : 'Não cadastrada'],
+        [`Descrição:`, fichaTecnica?.descricao || 'Não informado']
+      ]
+      renderTabelaPares(dadosTecnicosEquipamento, true)
       yPos += 8
 
       // 6.6. MANUAL DE MONTAGEM
@@ -1543,7 +1442,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao66Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao66Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1556,16 +1455,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      const manualMontagem = documentos.find((doc: any) => 
-        doc.titulo?.toLowerCase().includes('manual') && 
-        (doc.titulo?.toLowerCase().includes('montagem') || doc.titulo?.toLowerCase().includes('instalação'))
-      )
+      const manualMontagem = documentos.find((doc: any) => isManualMontagemDocumento(doc))
+        || documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
 
-      if (manualMontagem) {
-        doc.text(`Manual disponível: ${manualMontagem.titulo || 'Manual de Montagem'}`, 18, yPos)
-      } else {
-        doc.text('Não informado', 18, yPos)
-      }
+      const dadosManualMontagem = [
+        [`Manual de Montagem:`, manualMontagem ? (manualMontagem.titulo || 'Manual de Montagem') : 'Não informado'],
+        [`Descrição:`, manualMontagem?.descricao || 'Não informado']
+      ]
+      renderTabelaPares(dadosManualMontagem, true)
       yPos += 8
 
       // 6.7. ENTREGA TÉCNICA
@@ -1574,7 +1471,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao67Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao67Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1592,54 +1489,18 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         (doc.titulo?.toLowerCase().includes('termo') && doc.titulo?.toLowerCase().includes('entrega'))
       )
 
-      if (termoEntrega) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const isAssinado = termoEntrega.status === 'assinado' || termoEntrega.arquivo_assinado
-        const tituloText = `Termo de Entrega Técnica: ${termoEntrega.titulo || 'Termo de Entrega Técnica'}`
-        const tituloLines = doc.splitTextToSize(tituloText, 170)
-        for (const line of tituloLines) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          doc.text(line, 18, yPos)
-          yPos += 4
-        }
-        
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        doc.text(`Status: ${isAssinado ? 'Assinado' : 'Pendente'}`, 18, yPos)
-        yPos += 6
-        
-        if (termoEntrega.assinaturas && termoEntrega.assinaturas.length > 0) {
-          const assinantesText = `Assinado por: ${termoEntrega.assinaturas.filter((a: any) => a.status === 'assinado').map((a: any) => a.user_nome || a.user_email).join(', ')}`
-          const assinantesLines = doc.splitTextToSize(assinantesText, 170)
-          for (const line of assinantesLines) {
-            if (yPos > MAX_Y) {
-              yPos = await adicionarNovaPaginaComLogos()
-            }
-            doc.text(line, 18, yPos)
-            yPos += 4
-          }
-        }
-      } else {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const texto = 'Termo de entrega técnica não encontrado. Inclua o termo assinado por IRBANA em anexo.'
-        const textLines = doc.splitTextToSize(texto, 170)
-        for (const line of textLines) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          doc.text(line, 18, yPos)
-          yPos += 4
-        }
-      }
+      const termoAssinadoPor = termoEntrega?.assinaturas && termoEntrega.assinaturas.length > 0
+        ? termoEntrega.assinaturas
+            .filter((a: any) => a.status === 'assinado')
+            .map((a: any) => a.user_nome || a.user_email)
+            .join(', ')
+        : 'Não informado'
+      const dadosEntregaTecnica = [
+        [`Termo de Entrega Técnica:`, termoEntrega ? (termoEntrega.titulo || 'Termo de Entrega Técnica') : 'Não encontrado'],
+        [`Status:`, termoEntrega ? ((termoEntrega.status === 'assinado' || termoEntrega.arquivo_assinado) ? 'Assinado' : 'Pendente') : 'Pendente'],
+        [`Assinado por:`, termoAssinadoPor]
+      ]
+      renderTabelaPares(dadosEntregaTecnica, true)
       yPos += 10
 
       // 6.8. PLANO DE CARGAS
@@ -1648,7 +1509,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao68Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao68Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1667,104 +1528,17 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         doc.titulo?.toLowerCase().includes('carga'))
       )
 
-      if (planoCargas) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const tituloText = `Plano de Cargas: ${planoCargas.titulo || 'Plano de Cargas'}`
-        const tituloLines = doc.splitTextToSize(tituloText, 170)
-        for (const line of tituloLines) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          doc.text(line, 18, yPos)
-          yPos += 4
-        }
-        yPos += 2
-        
-        if (planoCargas.descricao) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          
-          const descText = `Descrição: ${planoCargas.descricao}`
-          const descLines = doc.splitTextToSize(descText, 170)
-          for (const line of descLines) {
-            if (yPos > MAX_Y) {
-              yPos = await adicionarNovaPaginaComLogos()
-            }
-            doc.text(line, 18, yPos)
-            yPos += 4
-          }
-        }
-        
-        // Anexos do plano de cargas
-        const anexosPlano = documentos.filter((doc: any) => 
-          doc.titulo?.toLowerCase().includes('anexo') && 
-          (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
-        )
-
-        if (anexosPlano.length > 0) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          
-          yPos += 2
-          doc.setFont('helvetica', 'bold')
-          doc.text('Anexos:', 18, yPos)
-          yPos += 6
-          doc.setFont('helvetica', 'normal')
-          for (let idx = 0; idx < anexosPlano.length; idx++) {
-            const anexo = anexosPlano[idx]
-            if (yPos > MAX_Y) {
-              yPos = await adicionarNovaPaginaComLogos()
-            }
-            
-            const anexoText = `${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`
-            const anexoLines = doc.splitTextToSize(anexoText, 170)
-            for (const line of anexoLines) {
-              if (yPos > MAX_Y) {
-                yPos = await adicionarNovaPaginaComLogos()
-              }
-              doc.text(line, 25, yPos)
-              yPos += 4
-            }
-          }
-        }
-      } else {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        doc.text('Plano de cargas não encontrado.', 18, yPos)
-        yPos += 6
-        
-        const notaText = 'Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.'
-        doc.setFontSize(8)
-        const notaLines = doc.splitTextToSize(notaText, 170)
-        for (const line of notaLines) {
-          if (yPos > MAX_Y) {
-            yPos = await adicionarNovaPaginaComLogos()
-          }
-          doc.text(line, 18, yPos)
-          yPos += 4
-        }
-        
-        if (relacaoGrua?.local_instalacao) {
-          yPos += 2
-          doc.setFontSize(9)
-          const localText = `Local de Instalação (referência): ${relacaoGrua.local_instalacao}`
-          const localLines = doc.splitTextToSize(localText, 170)
-          for (const line of localLines) {
-            if (yPos > MAX_Y) {
-              yPos = await adicionarNovaPaginaComLogos()
-            }
-            doc.text(line, 18, yPos)
-            yPos += 4
-          }
-        }
-      }
+      const anexosPlano = documentos.filter((doc: any) => 
+        doc.titulo?.toLowerCase().includes('anexo') && 
+        (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
+      )
+      const dadosPlanoCargas = [
+        [`Plano de Cargas:`, planoCargas ? (planoCargas.titulo || 'Plano de Cargas') : 'Não encontrado'],
+        [`Descrição:`, planoCargas?.descricao || 'Não informado'],
+        [`Anexos:`, anexosPlano.length > 0 ? anexosPlano.map((anexo: any, idx: number) => `${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`).join(' | ') : 'Não informado'],
+        [`Local de Instalação (referência):`, relacaoGrua?.local_instalacao || 'Não informado']
+      ]
+      renderTabelaPares(dadosPlanoCargas, true)
       yPos += 8
 
       // 7. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
@@ -1773,7 +1547,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       }
 
       const secao7Y = yPos
-      doc.setFillColor(66, 139, 202)
+      doc.setFillColor(...COR_BASE)
       doc.roundedRect(14, secao7Y, 182, 8, 2, 2, 'F')
       
       doc.setTextColor(255, 255, 255)
@@ -1790,28 +1564,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Raio de Operação:`, relacaoGrua?.raio_operacao || relacaoGrua?.raio || gruaSelecionada.alcance_maximo || 'N/A'],
         [`Altura de Operação:`, gruaSelecionada.altura_maxima || relacaoGrua?.altura || 'N/A'],
         [`Manual de Operação:`, relacaoGrua?.manual_operacao || 'Vinculado à obra'],
-        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 7.6)' : 'Não informado']
+        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 6.6)' : 'Não informado'],
+        [`Procedimento de Montagem:`, relacaoGrua?.procedimento_montagem ? 'Disponível' : 'Não informado'],
+        [`Procedimento de Operação:`, relacaoGrua?.procedimento_operacao ? 'Disponível' : 'Não informado'],
+        [`Procedimento de Desmontagem:`, relacaoGrua?.procedimento_desmontagem ? 'Disponível' : 'Não informado'],
+        [`Condições Especiais e Observações:`, relacaoGrua?.observacoes || obra?.observacoes || 'Não informado']
       ]
 
-      for (const [label, value] of configTecnica) {
-        if (yPos > MAX_Y) {
-          yPos = await adicionarNovaPaginaComLogos()
-        }
-        
-        const linhaY = yPos
-        doc.setFont('helvetica', 'bold')
-        doc.text(label, 18, linhaY)
-        doc.setFont('helvetica', 'normal')
-        
-        // Quebrar texto longo se necessário
-        const valueStr = String(value || 'N/A')
-        const textLines = doc.splitTextToSize(valueStr, 140)
-        for (let lineIdx = 0; lineIdx < textLines.length; lineIdx++) {
-          doc.text(textLines[lineIdx], 18 + 50, linhaY + (lineIdx * 4))
-        }
-        
-        yPos += Math.max(6, textLines.length * 4)
-      }
+      renderTabelaPares(configTecnica, true)
       
       yPos += 8
 
@@ -1822,7 +1582,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       if (obra.observacoes || relacaoGrua?.observacoes) {
         const secao8Y = yPos
-        doc.setFillColor(66, 139, 202)
+        doc.setFillColor(...COR_BASE)
         doc.roundedRect(14, secao8Y, 182, 8, 2, 2, 'F')
         
         doc.setTextColor(255, 255, 255)
@@ -1955,32 +1715,34 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   }) || []
 
   const iniciarEdicaoLivro = () => {
+    const dadosMontagemObra = obra?.dados_montagem_equipamento || {}
+
     setLivroForm({
-      altura_maxima: toEditableValue(gruaSelecionada?.altura_maxima),
-      alcance_maximo: toEditableValue(gruaSelecionada?.alcance_maximo),
+      altura_maxima: toEditableValue(firstFilled(gruaSelecionada?.altura_maxima, relacaoGrua?.altura, relacaoGrua?.altura_final, dadosMontagemObra?.altura_final)),
+      alcance_maximo: toEditableValue(firstFilled(gruaSelecionada?.alcance_maximo, relacaoGrua?.raio_operacao, relacaoGrua?.raio, relacaoGrua?.capacidade_maxima_raio, dadosMontagemObra?.raio_trabalho)),
       numero_serie: toEditableValue(gruaSelecionada?.numero_serie),
-      tipo_base: toEditableValue(relacaoGrua?.tipo_base),
-      altura_inicial: toEditableValue(relacaoGrua?.altura_inicial),
-      altura_final: toEditableValue(relacaoGrua?.altura_final),
-      capacidade_1_cabo: toEditableValue(relacaoGrua?.capacidade_1_cabo),
-      capacidade_2_cabos: toEditableValue(relacaoGrua?.capacidade_2_cabos),
-      capacidade_ponta: toEditableValue(relacaoGrua?.capacidade_ponta),
-      capacidade_maxima_raio: toEditableValue(relacaoGrua?.capacidade_maxima_raio),
-      velocidade_rotacao: toEditableValue(relacaoGrua?.velocidade_rotacao),
-      velocidade_elevacao: toEditableValue(relacaoGrua?.velocidade_elevacao),
-      velocidade_translacao: toEditableValue(relacaoGrua?.velocidade_translacao),
-      potencia_instalada: toEditableValue(relacaoGrua?.potencia_instalada),
-      voltagem: toEditableValue(relacaoGrua?.voltagem),
-      tipo_ligacao: toEditableValue(relacaoGrua?.tipo_ligacao),
+      tipo_base: toEditableValue(firstFilled(relacaoGrua?.tipo_base, dadosMontagemObra?.tipo_base, gruaSelecionada?.tipo_base)),
+      altura_inicial: toEditableValue(firstFilled(relacaoGrua?.altura_inicial, dadosMontagemObra?.altura_inicial, gruaSelecionada?.altura_inicial)),
+      altura_final: toEditableValue(firstFilled(relacaoGrua?.altura_final, dadosMontagemObra?.altura_final, gruaSelecionada?.altura_final)),
+      capacidade_1_cabo: toEditableValue(firstFilled(relacaoGrua?.capacidade_1_cabo, dadosMontagemObra?.capacidade_1_cabo)),
+      capacidade_2_cabos: toEditableValue(firstFilled(relacaoGrua?.capacidade_2_cabos, dadosMontagemObra?.capacidade_2_cabos)),
+      capacidade_ponta: toEditableValue(firstFilled(relacaoGrua?.capacidade_ponta, dadosMontagemObra?.capacidade_ponta, gruaSelecionada?.capacidade_ponta)),
+      capacidade_maxima_raio: toEditableValue(firstFilled(relacaoGrua?.capacidade_maxima_raio, dadosMontagemObra?.capacidade_maxima_raio, gruaSelecionada?.alcance_maximo)),
+      velocidade_rotacao: toEditableValue(firstFilled(relacaoGrua?.velocidade_rotacao, relacaoGrua?.velocidade_giro, dadosMontagemObra?.velocidade_rotacao, gruaSelecionada?.velocidade_giro)),
+      velocidade_elevacao: toEditableValue(firstFilled(relacaoGrua?.velocidade_elevacao, dadosMontagemObra?.velocidade_elevacao, gruaSelecionada?.velocidade_elevacao)),
+      velocidade_translacao: toEditableValue(firstFilled(relacaoGrua?.velocidade_translacao, dadosMontagemObra?.velocidade_translacao, gruaSelecionada?.velocidade_translacao)),
+      potencia_instalada: toEditableValue(firstFilled(relacaoGrua?.potencia_instalada, dadosMontagemObra?.potencia_instalada, gruaSelecionada?.potencia_instalada)),
+      voltagem: toEditableValue(firstFilled(relacaoGrua?.voltagem, dadosMontagemObra?.voltagem, gruaSelecionada?.voltagem)),
+      tipo_ligacao: toEditableValue(normalizarTipoLigacaoForm(firstFilled(relacaoGrua?.tipo_ligacao, dadosMontagemObra?.tipo_ligacao, gruaSelecionada?.tipo_ligacao))),
       ano_fabricacao: toEditableValue(relacaoGrua?.ano_fabricacao),
-      vida_util: toEditableValue(relacaoGrua?.vida_util),
+      vida_util: toEditableValue(firstFilled(relacaoGrua?.vida_util, gruaSelecionada?.vida_util)),
       fundacao: toEditableValue(relacaoGrua?.fundacao || relacaoGrua?.fundacao_tipo),
       canteiro: toEditableValue(obra?.canteiro),
-      local_instalacao: toEditableValue(relacaoGrua?.local_instalacao),
+      local_instalacao: toEditableValue(firstFilled(relacaoGrua?.local_instalacao, obra?.endereco, obra?.location)),
       condicoes_ambiente: toEditableValue(relacaoGrua?.condicoes_ambiente),
-      raio_operacao: toEditableValue(relacaoGrua?.raio_operacao || relacaoGrua?.raio),
-      altura_operacao: toEditableValue(relacaoGrua?.altura),
-      manual_operacao: toEditableValue(relacaoGrua?.manual_operacao),
+      raio_operacao: toEditableValue(firstFilled(relacaoGrua?.raio_operacao, relacaoGrua?.raio, dadosMontagemObra?.raio_trabalho, gruaSelecionada?.alcance_maximo)),
+      altura_operacao: toEditableValue(firstFilled(relacaoGrua?.altura, dadosMontagemObra?.altura_final, gruaSelecionada?.altura_maxima)),
+      manual_operacao: toEditableValue(firstFilled(relacaoGrua?.manual_operacao, 'Vinculado à obra')),
       procedimento_montagem: Boolean(relacaoGrua?.procedimento_montagem),
       procedimento_operacao: Boolean(relacaoGrua?.procedimento_operacao),
       procedimento_desmontagem: Boolean(relacaoGrua?.procedimento_desmontagem),
@@ -2461,11 +2223,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Tipo de Base</p>
-                  <p className="font-medium">{relacaoGrua?.tipo_base || 'Não informado'}</p>
+                  <p className="font-medium">{relacaoGrua?.tipo_base || obra.dados_montagem_equipamento?.tipo_base || 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Inicial (m)</p>
-                  <p className="font-medium">{relacaoGrua?.altura_inicial ? `${relacaoGrua.altura_inicial}m` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial) ? `${relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial}m` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Final (m)</p>
@@ -2481,7 +2243,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Velocidade de Translação (m/min)</p>
-                  <p className="font-medium">{relacaoGrua?.velocidade_translacao ? `${relacaoGrua.velocidade_translacao} m/min` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.velocidade_translacao || obra.dados_montagem_equipamento?.velocidade_translacao) ? `${relacaoGrua?.velocidade_translacao || obra.dados_montagem_equipamento?.velocidade_translacao} m/min` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Potência Instalada (kVA)</p>
@@ -2493,7 +2255,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Tipo de Ligação Elétrica</p>
-                  <p className="font-medium">{relacaoGrua?.tipo_ligacao === 'monofasica' ? 'Monofásica' : relacaoGrua?.tipo_ligacao === 'trifasica' ? 'Trifásica' : 'Não informado'}</p>
+                  <p className="font-medium">{normalizarTipoLigacaoForm(relacaoGrua?.tipo_ligacao || obra.dados_montagem_equipamento?.tipo_ligacao) === 'monofasica' ? 'Monofásica' : normalizarTipoLigacaoForm(relacaoGrua?.tipo_ligacao || obra.dados_montagem_equipamento?.tipo_ligacao) === 'trifasica' ? 'Trifásica' : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Capacidade na Ponta (kg)</p>
@@ -2509,7 +2271,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Vida Útil Estimada (anos)</p>
-                  <p className="font-medium">{relacaoGrua?.vida_util ? `${relacaoGrua.vida_util} anos` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.vida_util || gruaSelecionada?.vida_util) ? `${relacaoGrua?.vida_util || gruaSelecionada?.vida_util} anos` : 'Não informado'}</p>
                 </div>
               </div>
             </CardContent>
@@ -2601,11 +2363,23 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 mb-1">CPF</p>
-                              <p className="font-medium">{s.cpf || (s.rg_cpf && s.rg_cpf.length === 11 ? s.rg_cpf : 'Não informado')}</p>
+                              <p className="font-medium">
+                                {(() => {
+                                  const documento = (s.rg_cpf || '').toString()
+                                  const digitos = documento.replace(/\D/g, '')
+                                  return s.cpf || (digitos.length === 11 ? documento : 'Não informado')
+                                })()}
+                              </p>
                             </div>
                             <div>
                               <p className="text-xs text-gray-500 mb-1">RG</p>
-                              <p className="font-medium">{s.rg || (s.rg_cpf && s.rg_cpf.length > 11 ? s.rg_cpf : 'Não informado')}</p>
+                              <p className="font-medium">
+                                {(() => {
+                                  const documento = (s.rg_cpf || '').toString()
+                                  const digitos = documento.replace(/\D/g, '')
+                                  return s.rg || (digitos.length >= 7 && digitos.length <= 10 ? documento : 'Não informado')
+                                })()}
+                              </p>
                             </div>
                             {(s.documentos && s.documentos.length > 0) || (s.certificados && s.certificados.length > 0) ? (
                               <>
@@ -2696,7 +2470,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Fundação da Grua</p>
-                  <p className="font-medium">{relacaoGrua?.fundacao || relacaoGrua?.fundacao_tipo || 'Não informado'}</p>
+                  <p className="font-medium">
+                    {relacaoGrua?.fundacao || relacaoGrua?.fundacao_tipo || relacaoGrua?.tipo_base || obra?.dados_montagem_equipamento?.tipo_base || 'Não informado'}
+                  </p>
                   {relacaoGrua?.fundacao_dimensoes && (
                     <p className="text-xs text-gray-500 mt-1">Dimensões: {relacaoGrua.fundacao_dimensoes}</p>
                   )}
@@ -2713,7 +2489,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Condições do Ambiente</p>
-                  <p className="font-medium">{relacaoGrua?.condicoes_ambiente || relacaoGrua?.ambiente || 'Não informado'}</p>
+                  <p className="font-medium">
+                    {relacaoGrua?.condicoes_ambiente || relacaoGrua?.ambiente || relacaoGrua?.observacoes_montagem || obra?.observacoes || 'Não informado'}
+                  </p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Modelo, Raio e Altura</p>
@@ -3358,7 +3136,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                   <p className="text-xs text-gray-500 mb-2">Manual de Montagem Disponível</p>
                   {(() => {
                     const manualMontagemDoc = documentos.find((doc: any) => isManualMontagemDocumento(doc))
-                    const manualMontagem = manualMontagemDoc || relacaoGrua?.manual_montagem
+                    const fichaTecnicaDoc = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
+                    const manualMontagem = manualMontagemDoc || relacaoGrua?.manual_montagem || fichaTecnicaDoc
                     
                     if (manualMontagem) {
                       return (

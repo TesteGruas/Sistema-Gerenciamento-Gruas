@@ -36,13 +36,78 @@ export interface GruaObraCreateData {
   valor_locacao_mensal?: number
   status?: 'Ativa' | 'Concluída' | 'Suspensa'
   observacoes?: string
+  tipo_base?: string
+  altura_inicial?: number
+  altura_final?: number
+  velocidade_giro?: number
+  velocidade_rotacao?: number
+  velocidade_elevacao?: number
+  velocidade_translacao?: number
+  potencia_instalada?: number
+  voltagem?: string
+  tipo_ligacao?: string
+  capacidade_ponta?: number
+  capacidade_maxima_raio?: number
+  capacidade_1_cabo?: number
+  capacidade_2_cabos?: number
+  ano_fabricacao?: number
+  vida_util?: number
+  data_montagem?: string
+  data_desmontagem?: string
+  local_instalacao?: string
+  observacoes_montagem?: string
+  fundacao?: string
+  condicoes_ambiente?: string
+  raio_operacao?: number
+  raio?: number
+  raio_trabalho?: number
+  altura?: number
+  manual_operacao?: string
+  procedimento_montagem?: boolean
+  procedimento_operacao?: boolean
+  procedimento_desmontagem?: boolean
+  responsavel_tecnico?: string
+  crea_responsavel?: string
 }
 
 export interface GruaObraUpdateData {
+  data_inicio_locacao?: string
   data_fim_locacao?: string
   valor_locacao_mensal?: number
   status?: 'Ativa' | 'Concluída' | 'Suspensa'
   observacoes?: string
+  tipo_base?: string
+  altura_inicial?: number
+  altura_final?: number
+  velocidade_giro?: number
+  velocidade_rotacao?: number
+  velocidade_elevacao?: number
+  velocidade_translacao?: number
+  potencia_instalada?: number
+  voltagem?: string
+  tipo_ligacao?: string
+  capacidade_ponta?: number
+  capacidade_maxima_raio?: number
+  capacidade_1_cabo?: number
+  capacidade_2_cabos?: number
+  ano_fabricacao?: number
+  vida_util?: number
+  data_montagem?: string
+  data_desmontagem?: string
+  local_instalacao?: string
+  observacoes_montagem?: string
+  fundacao?: string
+  condicoes_ambiente?: string
+  raio_operacao?: number
+  raio?: number
+  raio_trabalho?: number
+  altura?: number
+  manual_operacao?: string
+  procedimento_montagem?: boolean
+  procedimento_operacao?: boolean
+  procedimento_desmontagem?: boolean
+  responsavel_tecnico?: string
+  crea_responsavel?: string
 }
 
 export interface GruaObraResponse {

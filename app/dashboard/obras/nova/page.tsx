@@ -59,6 +59,8 @@ import { useDebugMode } from "@/hooks/use-debug-mode"
 import { DebugButton } from "@/components/debug-button"
 import { responsaveisObraApi, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { gruasApi } from "@/lib/api-gruas"
+import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -119,6 +121,38 @@ const formatCEP = (value: string) => {
     .substring(0, 9)
 }
 
+const toNumberOrUndefined = (value: any): number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined
+  const parsed = Number(String(value).replace(',', '.'))
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const normalizarTipoBase = (value: any): string | undefined => {
+  if (!value) return undefined
+  const normalizado = String(value).trim().toLowerCase()
+  if (normalizado.includes('chumb')) return 'chumbador'
+  if (normalizado.includes('trilho')) return 'trilho'
+  if (normalizado.includes('cruz')) return 'cruzeta'
+  return 'outro'
+}
+
+const normalizarVoltagem = (value: any): string | undefined => {
+  if (!value) return undefined
+  const texto = String(value)
+  if (texto.includes('220')) return '220'
+  if (texto.includes('380')) return '380'
+  if (texto.includes('440')) return '440'
+  return undefined
+}
+
+const normalizarTipoLigacao = (value: any): string | undefined => {
+  if (!value) return undefined
+  const texto = String(value).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+  if (texto.includes('mono')) return 'monofasica'
+  if (texto.includes('tri')) return 'trifasica'
+  return undefined
+}
+
 // Função para remover máscaras
 const removeMasks = (value: string) => {
   return value.replace(/\D/g, '')
@@ -165,6 +199,7 @@ export default function NovaObraPage() {
   // Estados para integração com backend
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
+  const creatingObraInFlightRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
 
   // Prevenir saída da página durante criação
@@ -519,16 +554,55 @@ export default function NovaObraPage() {
   }
 
   // Função para lidar com seleção de grua
-  const handleGruaSelect = (grua: any) => {
+  const handleGruaSelect = async (grua: any) => {
+    if (!grua) {
+      return
+    }
+
     console.log('🔧 DEBUG - Grua selecionada:', grua)
     if (gruasSelecionadas.find(g => g.id === grua.id)) {
       return // Já está selecionada
     }
-    
+
+    let detalhesGrua: any = {}
+    try {
+      const responseDetalhes = await gruasApi.obterGrua(grua.id)
+      if (responseDetalhes?.success && responseDetalhes.data) {
+        detalhesGrua = responseDetalhes.data
+      }
+    } catch (error) {
+      console.warn('⚠️ Não foi possível carregar detalhes completos da grua selecionada:', error)
+    }
+
+    const fonteDados = { ...grua, ...detalhesGrua }
     const novaGrua = {
-      ...grua,
-      valor_locacao: grua.valor_locacao || 0,
-      taxa_mensal: grua.valor_locacao || 0
+      ...fonteDados,
+      valor_locacao: toNumberOrUndefined(fonteDados.valor_locacao ?? fonteDados.valorLocacao) ?? 0,
+      taxa_mensal: toNumberOrUndefined(fonteDados.taxa_mensal ?? fonteDados.valor_locacao ?? fonteDados.valorLocacao) ?? 0,
+      tipo_base: normalizarTipoBase(fonteDados.tipo_base ?? fonteDados.tipoBase),
+      altura_inicial: toNumberOrUndefined(fonteDados.altura_inicial ?? fonteDados.alturaInicial),
+      altura_final: toNumberOrUndefined(fonteDados.altura_final ?? fonteDados.alturaFinal),
+      velocidade_giro: toNumberOrUndefined(fonteDados.velocidade_giro ?? fonteDados.velocidadeGiro ?? fonteDados.velocidade_rotacao),
+      velocidade_elevacao: toNumberOrUndefined(fonteDados.velocidade_elevacao ?? fonteDados.velocidadeElevacao),
+      velocidade_translacao: toNumberOrUndefined(fonteDados.velocidade_translacao ?? fonteDados.velocidadeTranslacao),
+      potencia_instalada: toNumberOrUndefined(fonteDados.potencia_instalada ?? fonteDados.potenciaInstalada),
+      voltagem: normalizarVoltagem(fonteDados.voltagem),
+      tipo_ligacao: normalizarTipoLigacao(fonteDados.tipo_ligacao ?? fonteDados.tipoLigacao),
+      capacidade_ponta: toNumberOrUndefined(fonteDados.capacidade_ponta ?? fonteDados.capacidadePonta ?? fonteDados.capacity ?? fonteDados.capacidade),
+      capacidade_maxima_raio: toNumberOrUndefined(fonteDados.capacidade_maxima_raio ?? fonteDados.capacidadeMaximaRaio ?? fonteDados.alcance_maximo ?? fonteDados.lanca),
+      capacidade_1_cabo: toNumberOrUndefined(fonteDados.capacidade_1_cabo ?? fonteDados.capacidade1Cabo),
+      capacidade_2_cabos: toNumberOrUndefined(fonteDados.capacidade_2_cabos ?? fonteDados.capacidade2Cabos),
+      velocidade_rotacao: toNumberOrUndefined(fonteDados.velocidade_rotacao ?? fonteDados.velocidadeRotacao),
+      ano_fabricacao: toNumberOrUndefined(fonteDados.ano_fabricacao ?? fonteDados.anoFabricacao ?? fonteDados.ano),
+      vida_util: toNumberOrUndefined(fonteDados.vida_util ?? fonteDados.vidaUtil),
+      manual_operacao: fonteDados.manual_operacao ?? fonteDados.manualOperacao ?? undefined,
+      procedimento_montagem: typeof fonteDados.procedimento_montagem === 'boolean' ? fonteDados.procedimento_montagem : undefined,
+      procedimento_operacao: typeof fonteDados.procedimento_operacao === 'boolean' ? fonteDados.procedimento_operacao : undefined,
+      procedimento_desmontagem: typeof fonteDados.procedimento_desmontagem === 'boolean' ? fonteDados.procedimento_desmontagem : undefined,
+      guindaste_montagem: fonteDados.guindaste_montagem ?? fonteDados.guindasteMontagem ?? undefined,
+      quantidade_viagens: toNumberOrUndefined(fonteDados.quantidade_viagens ?? fonteDados.quantidadeViagens),
+      alojamento_alimentacao: fonteDados.alojamento_alimentacao ?? fonteDados.alojamentoAlimentacao ?? undefined,
+      responsabilidade_acessorios: fonteDados.responsabilidade_acessorios ?? fonteDados.responsabilidadeAcessorios ?? undefined
     }
     
     console.log('🔧 DEBUG - Nova grua criada:', novaGrua)
@@ -594,6 +668,19 @@ export default function NovaObraPage() {
     setIsModalResponsavelObraOpen(true)
   }
 
+  const preencherResponsavelObraTeste = () => {
+    const sufixoData = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    const nomeBase = `Responsável Obra ${sufixoData}`
+    const usuarioBase = `resp_obra_${Date.now().toString().slice(-6)}`
+
+    setFormResponsavelObra({
+      nome: nomeBase,
+      usuario: usuarioBase,
+      email: `${usuarioBase}@empresa.com.br`,
+      telefone: '(11) 99999-9999'
+    })
+  }
+
   const salvarResponsavelObraLocal = () => {
     if (!formResponsavelObra.nome.trim()) {
       toast({ title: "Erro", description: "O nome é obrigatório", variant: "destructive" })
@@ -618,6 +705,15 @@ export default function NovaObraPage() {
   // Função para criar obra
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
+    const TRAVAR_FLUXO_EM_ERRO = false
+    const VALIDAR_DOCUMENTOS_SINALEIRO_NA_CRIACAO = false
+
+    // Evita submit duplicado (duplo clique/enter/bubbling)
+    if (creatingObraInFlightRef.current || creating) {
+      console.warn('⏭️ [Nova Obra] Submissão ignorada: criação já em andamento.')
+      return
+    }
+    creatingObraInFlightRef.current = true
     
     // Determinar clienteId - usar clienteSelecionado como fallback
     const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
@@ -711,6 +807,28 @@ export default function NovaObraPage() {
       setCreating(true)
       setError(null)
 
+      const interromperFluxo = (etapa: string, erro: unknown, contexto?: Record<string, unknown>): never => {
+        const mensagem = erro instanceof Error ? erro.message : String(erro || 'Erro desconhecido')
+
+        console.group(`⛔ [TRAVA DEBUG] Fluxo interrompido em: ${etapa}`)
+        console.error('Erro:', erro)
+        if (contexto) {
+          console.debug('Contexto:', contexto)
+        }
+        console.trace('Stack trace da interrupção')
+        console.groupEnd()
+
+        const mensagemFinal = `[TRAVA-DEBUG] ${etapa}: ${mensagem}`
+        setError(mensagemFinal)
+        toast({
+          title: "Fluxo interrompido para análise",
+          description: `${etapa}: ${mensagem}`,
+          variant: "destructive"
+        })
+
+        throw new Error(mensagemFinal)
+      }
+
       // Debug: Log dos dados antes da conversão
       console.debug('🔍 DEBUG - Dados antes da conversão:')
       console.debug('  - custosMensais:', custosMensais)
@@ -750,33 +868,57 @@ export default function NovaObraPage() {
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
         monthlyFee: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].taxa_mensal?.toString() || '' : '',
         // Múltiplas gruas - usar dados específicos de cada grua quando disponíveis, senão usar dados gerais
-        gruasSelecionadas: gruasSelecionadas.map(grua => ({
+        gruasSelecionadas: gruasSelecionadas.map(grua => {
+          const tipoBaseNormalizado = normalizarTipoBase(grua.tipo_base || dadosMontagemEquipamento.tipo_base)
+          const tipoLigacaoNormalizado = normalizarTipoLigacao(grua.tipo_ligacao || dadosMontagemEquipamento.tipo_ligacao)
+          const alturaFinalCalculada = toNumberOrUndefined(grua.altura_final) ?? toNumberOrUndefined(dadosMontagemEquipamento.altura_final)
+          const raioTrabalhoCalculado = toNumberOrUndefined(grua.raio_trabalho) ?? toNumberOrUndefined(dadosMontagemEquipamento.raio_trabalho)
+
+          return {
           ...grua,
           // Parâmetros Técnicos - usar dados específicos da grua, senão usar dados gerais
-          tipo_base: grua.tipo_base || dadosMontagemEquipamento.tipo_base || undefined,
-          altura_inicial: grua.altura_inicial || (dadosMontagemEquipamento.altura_inicial ? parseFloat(dadosMontagemEquipamento.altura_inicial) : undefined),
-          altura_final: grua.altura_final || (dadosMontagemEquipamento.altura_final ? parseFloat(dadosMontagemEquipamento.altura_final) : undefined),
-          raio_trabalho: grua.raio_trabalho || (dadosMontagemEquipamento.raio_trabalho ? parseFloat(dadosMontagemEquipamento.raio_trabalho) : undefined),
-          velocidade_giro: grua.velocidade_giro || (dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined),
-          velocidade_elevacao: grua.velocidade_elevacao || (dadosMontagemEquipamento.velocidade_elevacao ? parseFloat(dadosMontagemEquipamento.velocidade_elevacao) : undefined),
-          velocidade_translacao: grua.velocidade_translacao || (dadosMontagemEquipamento.velocidade_translacao ? parseFloat(dadosMontagemEquipamento.velocidade_translacao) : undefined),
-          potencia_instalada: grua.potencia_instalada || (dadosMontagemEquipamento.potencia_instalada ? parseFloat(dadosMontagemEquipamento.potencia_instalada) : undefined),
+          tipo_base: tipoBaseNormalizado || undefined,
+          altura_inicial: toNumberOrUndefined(grua.altura_inicial) ?? toNumberOrUndefined(dadosMontagemEquipamento.altura_inicial),
+          altura_final: alturaFinalCalculada,
+          raio_trabalho: raioTrabalhoCalculado,
+          velocidade_giro: toNumberOrUndefined(grua.velocidade_giro) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_rotacao),
+          velocidade_elevacao: toNumberOrUndefined(grua.velocidade_elevacao) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_elevacao),
+          velocidade_translacao: toNumberOrUndefined(grua.velocidade_translacao) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_translacao),
+          potencia_instalada: toNumberOrUndefined(grua.potencia_instalada) ?? toNumberOrUndefined(dadosMontagemEquipamento.potencia_instalada),
           voltagem: grua.voltagem || dadosMontagemEquipamento.voltagem || undefined,
-          tipo_ligacao: grua.tipo_ligacao || dadosMontagemEquipamento.tipo_ligacao || undefined,
-          capacidade_ponta: grua.capacidade_ponta || (dadosMontagemEquipamento.capacidade_ponta ? parseFloat(dadosMontagemEquipamento.capacidade_ponta) : undefined),
-          capacidade_maxima_raio: grua.capacidade_maxima_raio || undefined,
+          tipo_ligacao: tipoLigacaoNormalizado || undefined,
+          capacidade_ponta: toNumberOrUndefined(grua.capacidade_ponta) ?? toNumberOrUndefined(dadosMontagemEquipamento.capacidade_ponta),
+          capacidade_maxima_raio: toNumberOrUndefined(grua.capacidade_maxima_raio) ?? raioTrabalhoCalculado,
           ano_fabricacao: grua.ano_fabricacao || grua.ano || undefined,
           vida_util: grua.vida_util || undefined,
-          // Dados de montagem específicos (seção geral)
-          capacidade_1_cabo: dadosMontagemEquipamento.capacidade_1_cabo ? parseFloat(dadosMontagemEquipamento.capacidade_1_cabo) : undefined,
-          capacidade_2_cabos: dadosMontagemEquipamento.capacidade_2_cabos ? parseFloat(dadosMontagemEquipamento.capacidade_2_cabos) : undefined,
-          velocidade_rotacao: dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined,
+          // Dados de montagem específicos (prioriza valor da grua; fallback para seção geral)
+          capacidade_1_cabo:
+            grua.capacidade_1_cabo ||
+            (dadosMontagemEquipamento.capacidade_1_cabo ? parseFloat(dadosMontagemEquipamento.capacidade_1_cabo) : undefined),
+          capacidade_2_cabos:
+            grua.capacidade_2_cabos ||
+            (dadosMontagemEquipamento.capacidade_2_cabos ? parseFloat(dadosMontagemEquipamento.capacidade_2_cabos) : undefined),
+          velocidade_rotacao:
+            grua.velocidade_rotacao ||
+            (dadosMontagemEquipamento.velocidade_rotacao ? parseFloat(dadosMontagemEquipamento.velocidade_rotacao) : undefined),
+          manual_operacao: grua.manual_operacao || 'Vinculado à obra',
+          procedimento_montagem: grua.procedimento_montagem ?? false,
+          procedimento_operacao: grua.procedimento_operacao ?? false,
+          procedimento_desmontagem: grua.procedimento_desmontagem ?? false,
+          fundacao: grua.fundacao || tipoBaseNormalizado || undefined,
+          condicoes_ambiente: grua.condicoes_ambiente || undefined,
+          raio_operacao: toNumberOrUndefined(grua.raio_operacao) ?? raioTrabalhoCalculado,
+          altura: toNumberOrUndefined(grua.altura) ?? alturaFinalCalculada,
+          local_instalacao: grua.local_instalacao || obraFormData.location || undefined,
+          observacoes_montagem: grua.observacoes_montagem || grua.observacoes || obraFormData.observations || undefined,
+          responsavel_tecnico: grua.responsavel_tecnico || responsavelTecnico?.nome || undefined,
+          crea_responsavel: grua.crea_responsavel || responsavelTecnico?.crea || undefined,
           // Serviços e Logística (específicos de cada grua)
           guindaste_montagem: grua.guindaste_montagem || undefined,
           quantidade_viagens: grua.quantidade_viagens || undefined,
           alojamento_alimentacao: grua.alojamento_alimentacao || undefined,
           responsabilidade_acessorios: grua.responsabilidade_acessorios || undefined,
-        })),
+        }}),
         // Dados de montagem do equipamento (geral)
         dados_montagem_equipamento: dadosMontagemEquipamento,
         // Lista de funcionários
@@ -1045,27 +1187,62 @@ export default function NovaObraPage() {
         aterramento: { enviado: false, nome: aterramentoArquivo?.name || null, url: null }
       }
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-      
       // Função auxiliar para fazer upload de arquivo
       const fazerUploadArquivo = async (arquivo: File, categoria: string): Promise<string> => {
-        const formData = new FormData()
-        formData.append('arquivo', arquivo)
-        formData.append('categoria', categoria)
-        
-        const response = await fetch(`${apiUrl}/api/arquivos/upload/${obraId}`, {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
-          body: formData
-        })
-        
-        if (response.ok) {
-          const result = await response.json()
-          return result.data?.caminho || result.data?.arquivo || ''
+        const mapCategoriaObrasArquivos = (categoriaOriginal: string) => {
+          switch (categoriaOriginal) {
+            case 'manual_tecnico':
+              return 'manual'
+            case 'termo_entrega_tecnica':
+            case 'aterramento':
+              return 'certificado'
+            case 'plano_carga':
+              return 'outro'
+            case 'art':
+              return 'certificado'
+            case 'apolice':
+            case 'cno':
+              return 'contrato'
+            default:
+              return 'geral'
+          }
         }
+
+        const mapDescricaoArquivo = (categoriaOriginal: string) => {
+          switch (categoriaOriginal) {
+            case 'manual_tecnico':
+              return 'Ficha Técnica do Equipamento'
+            case 'termo_entrega_tecnica':
+              return 'Termo de Entrega Técnica'
+            case 'plano_carga':
+              return 'Plano de Cargas'
+            case 'aterramento':
+              return 'Documento de Aterramento'
+            case 'art':
+              return 'Documento ART'
+            case 'apolice':
+              return 'Apólice de Seguro'
+            case 'cno':
+              return 'Documento CNO'
+            default:
+              return arquivo.name
+          }
+        }
+
+        const response = await obrasArquivosApi.upload({
+          obra_id: obraId,
+          arquivo,
+          nome_original: arquivo.name,
+          descricao: mapDescricaoArquivo(categoria),
+          categoria: mapCategoriaObrasArquivos(categoria),
+          is_public: false
+        })
+
+        if (response?.success && response?.data && !Array.isArray(response.data)) {
+          const arquivoRetorno: any = response.data
+          return arquivoRetorno.caminho || arquivoRetorno.url || ''
+        }
+
         return ''
       }
       
@@ -1140,8 +1317,13 @@ export default function NovaObraPage() {
         const documentosResponse = await obrasApi.atualizarDocumentos(obraId, documentosUpdate)
         console.debug('✅ Documentos atualizados:', JSON.stringify(documentosResponse, null, 2))
       } catch (uploadError) {
+        if (TRAVAR_FLUXO_EM_ERRO) {
+          interromperFluxo('Upload de arquivos/documentos', uploadError, {
+            obraId,
+            uploadResultados
+          })
+        }
         console.error('Erro ao fazer upload de arquivos:', uploadError)
-        // Continuar mesmo com erro no upload - a obra já foi criada
       }
       
       // 5. Salvar responsável técnico (apenas se houver dados válidos)
@@ -1169,12 +1351,10 @@ export default function NovaObraPage() {
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
             console.debug('✅ Responsável técnico salvo:', response)
           } catch (error) {
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Salvar responsável técnico', error, { obraId, payload: responsavelTecnico })
+            }
             console.error('❌ Erro ao salvar responsável técnico:', error)
-            toast({
-              title: "Aviso",
-              description: "Obra criada, mas houve erro ao salvar o responsável técnico. Você pode editá-lo depois.",
-              variant: "destructive"
-            })
           }
         } else {
           console.warn('⚠️ Responsável técnico não tem dados válidos para salvar')
@@ -1209,12 +1389,10 @@ export default function NovaObraPage() {
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
             console.debug(`✅ Responsável técnico ${tipo} salvo:`, response)
           } catch (error) {
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo(`Salvar responsável técnico ${tipo}`, error, { obraId, tipo, data })
+            }
             console.error(`❌ Erro ao salvar responsável técnico ${tipo}:`, error)
-            toast({
-              title: "Aviso",
-              description: `Obra criada, mas houve erro ao salvar o responsável técnico ${tipo}. Você pode editá-lo depois.`,
-              variant: "destructive"
-            })
           }
         }
       }
@@ -1242,12 +1420,10 @@ export default function NovaObraPage() {
             const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
             console.debug(`✅ Responsável técnico adicional salvo:`, response)
           } catch (error) {
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Salvar responsável técnico adicional', error, { obraId, responsavel })
+            }
             console.error(`❌ Erro ao salvar responsável técnico adicional:`, error)
-            toast({
-              title: "Aviso",
-              description: `Obra criada, mas houve erro ao salvar um responsável técnico adicional. Você pode editá-lo depois.`,
-              variant: "destructive"
-            })
           }
         }
       }
@@ -1325,42 +1501,70 @@ export default function NovaObraPage() {
       }
       
       if (!obraId) {
+        if (TRAVAR_FLUXO_EM_ERRO) {
+          interromperFluxo('Salvar sinaleiros', new Error('ID da obra não está disponível após criação'))
+        }
         console.error('❌ ERRO: obraId não está disponível! Não é possível salvar sinaleiros.')
-        toast({
-          title: "Erro",
-          description: "ID da obra não disponível. Os sinaleiros não puderam ser salvos.",
-          variant: "destructive"
-        })
       } else if (sinaleirosParaProcessar && Array.isArray(sinaleirosParaProcessar) && sinaleirosParaProcessar.length > 0) {
         console.debug('✅ Condição passou: sinaleiros encontrados, processando...')
-        // Filtrar apenas sinaleiros com dados válidos (nome e rg_cpf preenchidos)
+        const sinaleirosIgnorados: Array<{ nome: string; motivo: string }> = []
+
+        // Filtrar apenas sinaleiros com dados válidos (nome e documento com tamanho aceito no backend)
         const sinaleirosValidos = sinaleirosParaProcessar.filter((s: any) => {
           const temNome = !!s.nome && s.nome.trim() !== ''
           
-          // Verificar se tem documento válido (RG ou CPF)
-          const documento = (s.rg_cpf || s.cpf || s.rg || '').trim()
-          // Remover formatação e contar apenas dígitos
-          const apenasDigitos = documento.replace(/\D/g, '')
-          // RG deve ter pelo menos 7 dígitos, CPF deve ter 11
-          const temDocumentoValido = apenasDigitos.length >= 7 && apenasDigitos.length <= 11
+          // Verificar se há documento informado (RG ou CPF)
+          // Escolher o mais completo para evitar priorizar um campo parcial
+          const candidatosDocumento = [s.rg_cpf, s.cpf, s.rg]
+            .map((doc: any) => (doc || '').trim())
+            .filter(Boolean)
+            .sort((a: string, b: string) => b.replace(/\D/g, '').length - a.replace(/\D/g, '').length)
+          const documento = candidatosDocumento[0] || ''
+          const tamanhoDocumento = documento.replace(/\D/g, '').length
+          const documentoValido = tamanhoDocumento >= 7 && tamanhoDocumento <= 11
           
-          const valido = temNome && temDocumentoValido
+          const valido = temNome && documentoValido
           if (!valido) {
+            const motivo = !temNome
+              ? 'Nome ausente'
+              : !documento
+                ? 'Documento ausente'
+                : `Documento inválido (${tamanhoDocumento} dígitos). Informe RG com 7-10 dígitos ou CPF com 11 dígitos`
+
             console.warn('⚠️ Sinaleiro inválido ignorado:', { 
               nome: s.nome, 
               rg_cpf: s.rg_cpf, 
               cpf: s.cpf, 
               rg: s.rg,
-              motivo: !temNome ? 'Nome ausente' : `Documento inválido (${apenasDigitos.length} dígitos, mínimo 7)`
+              motivo
             })
+            sinaleirosIgnorados.push({ nome: s.nome || 'Sem nome', motivo })
           }
           return valido
         })
         
         console.debug('🔍 DEBUG - Sinaleiros válidos após filtro:', sinaleirosValidos.length)
         console.debug('🔍 DEBUG - Sinaleiros válidos:', JSON.stringify(sinaleirosValidos, null, 2))
+
+        const possuiSinaleirosInvalidos = sinaleirosIgnorados.length > 0
+
+        if (possuiSinaleirosInvalidos) {
+          const mensagemIgnorados = sinaleirosIgnorados
+            .map((s) => `${s.nome}: ${s.motivo}`)
+            .join(' | ')
+
+          toast({
+            title: "Sinaleiros inválidos - vínculo bloqueado",
+            description: `Corrija os dados antes de salvar: ${mensagemIgnorados}`,
+            variant: "destructive"
+          })
+
+          // Evitar envio parcial (ex.: salvar só 1 de 2 sinaleiros)
+          console.warn('⛔ Envio de sinaleiros bloqueado para evitar vínculo parcial.')
+          setError(`Sinaleiros com dados inválidos: ${mensagemIgnorados}`)
+        }
         
-        if (sinaleirosValidos.length > 0) {
+        if (sinaleirosValidos.length > 0 && !possuiSinaleirosInvalidos) {
           try {
             // Converter para o formato esperado pelo backend (remover IDs temporários)
             const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -1375,14 +1579,13 @@ export default function NovaObraPage() {
                 tipo = 'reserva'
               }
               
-              // Garantir que rg_cpf está válido antes de enviar
-              const rgCpf = (s.rg_cpf || s.cpf || s.rg || '').trim()
+              // Garantir que rg_cpf está válido antes de enviar (usar documento mais completo)
+              const candidatosRgCpf = [s.rg_cpf, s.cpf, s.rg]
+                .map((doc: any) => (doc || '').trim())
+                .filter(Boolean)
+                .sort((a: string, b: string) => b.replace(/\D/g, '').length - a.replace(/\D/g, '').length)
+              const rgCpf = candidatosRgCpf[0] || ''
               const apenasDigitos = rgCpf.replace(/\D/g, '')
-              
-              if (apenasDigitos.length < 7) {
-                console.error(`❌ Sinaleiro "${s.nome}" tem documento inválido: ${rgCpf} (${apenasDigitos.length} dígitos)`)
-                throw new Error(`O documento do sinaleiro "${s.nome}" está incompleto. RG deve ter pelo menos 7 dígitos e CPF deve ter 11 dígitos.`)
-              }
               
               return {
                 id: s.id && uuidRegex.test(s.id) ? s.id : undefined,
@@ -1411,12 +1614,14 @@ export default function NovaObraPage() {
               console.debug('✅ Resposta da API:', JSON.stringify(response, null, 2))
               
               if (!response.success) {
+                if (TRAVAR_FLUXO_EM_ERRO) {
+                  interromperFluxo('Salvar sinaleiros (API)', new Error(response.error || 'Resposta não-sucesso'), {
+                    obraId,
+                    sinaleirosParaEnviar,
+                    response
+                  })
+                }
                 console.error('❌ Erro ao salvar sinaleiros:', response.error)
-                toast({
-                  title: "Aviso",
-                  description: `Erro ao salvar sinaleiros: ${response.error || 'Erro desconhecido'}`,
-                  variant: "destructive"
-                })
               } else {
                 if (!response.data || response.data.length === 0) {
                   console.warn('⚠️ Nenhum sinaleiro foi retornado na resposta')
@@ -1445,9 +1650,9 @@ export default function NovaObraPage() {
               return
             }
             
-            // Validar documentos completos para sinaleiros externos (clientes)
-            // Conforme especificação: "CASO ESSE NÃO ESTEJA COM OS DOCUMENTOS COMPLETOS, O SISTEMA NÃO PERMITE ATRELAR A OBRA"
-            if (response && response.success && response.data) {
+            // Na criação de obra, não bloquear por documentos de sinaleiro externo.
+            // Essa validação permanece para fluxos de edição/vinculação no RH.
+            if (VALIDAR_DOCUMENTOS_SINALEIRO_NA_CRIACAO && response && response.success && response.data) {
               const sinaleirosSalvos = response.data
               const sinaleirosComDocumentosIncompletos: string[] = []
               
@@ -1459,8 +1664,9 @@ export default function NovaObraPage() {
                   (s.nome === sinaleiro.nome && (s.rg_cpf || s.cpf || s.rg) === sinaleiro.rg_cpf)
                 )
                 
-                // Se for sinaleiro externo (cliente), validar documentos
-                if (sinaleiroOriginal && sinaleiroOriginal.tipo_vinculo !== 'interno' && sinaleiro.id) {
+                // Validar documentos apenas para sinaleiro externo (reserva) já salvo
+                // Usar o tipo retornado pelo backend evita falso positivo quando tipo_vinculo não está definido.
+                if (sinaleiro?.tipo === 'reserva' && sinaleiro.id) {
                   try {
                     const validacao = await sinaleirosApi.validarDocumentosCompletos(sinaleiro.id)
                     
@@ -1475,13 +1681,13 @@ export default function NovaObraPage() {
                       sinaleirosComDocumentosIncompletos.push(`${sinaleiro.nome} (faltando: ${nomesFaltando})`)
                     }
                   } catch (validacaoError: any) {
-                    // Se a validação falhar, permitir continuar mas avisar
+                    if (TRAVAR_FLUXO_EM_ERRO) {
+                      interromperFluxo('Validar documentos do sinaleiro', validacaoError, {
+                        obraId,
+                        sinaleiro
+                      })
+                    }
                     console.warn('Erro ao validar documentos do sinaleiro:', validacaoError)
-                    toast({
-                      title: "Aviso",
-                      description: `Não foi possível validar os documentos do sinaleiro "${sinaleiro.nome}". Verifique se todos os documentos obrigatórios estão completos.`,
-                      variant: "default"
-                    })
                   }
                 }
               }
@@ -1489,15 +1695,19 @@ export default function NovaObraPage() {
               // Se houver sinaleiros com documentos incompletos, bloquear criação da obra
               if (sinaleirosComDocumentosIncompletos.length > 0) {
                 const mensagemErro = `A obra foi criada, mas não é possível vincular os seguintes sinaleiros porque não possuem documentos completos:\n${sinaleirosComDocumentosIncompletos.join('\n')}\n\nATENÇÃO: Complete o cadastro dos sinaleiros pelo RH antes de vincular à obra. A obra foi criada mas os sinaleiros não foram vinculados.`
-                
+
+                if (TRAVAR_FLUXO_EM_ERRO) {
+                  interromperFluxo('Documentos incompletos de sinaleiro', new Error(mensagemErro), {
+                    obraId,
+                    sinaleirosComDocumentosIncompletos
+                  })
+                }
+
                 toast({
                   title: "Erro - Documentos Incompletos",
                   description: mensagemErro,
                   variant: "destructive"
                 })
-                
-                // Não lançar erro aqui para não reverter tudo, mas mostrar aviso claro
-                // A obra foi criada mas os sinaleiros não foram vinculados corretamente
                 setError(mensagemErro)
               }
             }
@@ -1511,19 +1721,17 @@ export default function NovaObraPage() {
               obraId: obraId,
               sinaleirosEnviados: sinaleirosParaEnviar
             })
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Processamento de sinaleiros', error, { obraId })
+            }
+
             toast({
               title: "Erro ao salvar sinaleiros",
               description: error.message || 'Erro desconhecido ao salvar sinaleiros',
               variant: "destructive"
             })
-            
-            toast({
-              title: "Erro ao processar sinaleiros",
-              description: error.message || 'Erro desconhecido ao processar sinaleiros',
-              variant: "destructive"
-            })
           }
-        } else {
+        } else if (!possuiSinaleirosInvalidos) {
           console.debug('⚠️ Nenhum sinaleiro válido encontrado após filtro')
         }
       } else {
@@ -1548,12 +1756,10 @@ export default function NovaObraPage() {
             await responsaveisObraApi.criar(obraId, responsavel)
             console.debug(`✅ Responsável de obra salvo: ${responsavel.nome}`)
           } catch (error: any) {
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Salvar responsável de obra', error, { obraId, responsavel })
+            }
             console.error(`❌ Erro ao salvar responsável de obra ${responsavel.nome}:`, error)
-            toast({
-              title: "Aviso",
-              description: `Obra criada, mas houve erro ao salvar o responsável ${responsavel.nome}. Você pode adicioná-lo depois.`,
-              variant: "destructive"
-            })
           }
         }
       }
@@ -1590,13 +1796,14 @@ export default function NovaObraPage() {
     } catch (err) {
       console.error('Erro ao criar obra:', err)
       setError(err instanceof Error ? err.message : 'Erro ao criar obra')
-      toast({
-        title: "Erro",
-        description: "Erro ao criar obra",
-        variant: "destructive"
-      })
+      const mensagemErro = err instanceof Error ? err.message : String(err)
+      if (!mensagemErro.includes('[TRAVA-DEBUG]')) {
+        // Evita duplicidade de toast genérico. O detalhe já fica no setError + console.
+        console.error('⛔ [Nova Obra] Erro final sem trava-debug:', mensagemErro)
+      }
     } finally {
       setCreating(false)
+      creatingObraInFlightRef.current = false
     }
   }
 
@@ -1678,6 +1885,54 @@ export default function NovaObraPage() {
     })
   }
 
+  const criarPdfTeste = (nomeArquivo: string, titulo: string): File => {
+    const conteudoPdf = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792]
+/Contents 4 0 R
+/Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 78 >>
+stream
+BT
+/F1 16 Tf
+72 720 Td
+(${titulo}) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f
+0000000010 00000 n
+0000000060 00000 n
+0000000117 00000 n
+0000000244 00000 n
+0000000372 00000 n
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+443
+%%EOF`
+
+    return new File([conteudoPdf], nomeArquivo, { type: 'application/pdf' })
+  }
+
+  const montarNomePdfTeste = (prefixoCampo: string) => {
+    const data = new Date().toISOString().slice(0, 10)
+    return `${prefixoCampo}_${data}.pdf`
+  }
+
   // Função para preencher todos os campos com dados de teste
   const preencherDadosTeste = () => {
     // Dados básicos da obra
@@ -1705,6 +1960,48 @@ export default function NovaObraPage() {
     setCno('12345678000190')
     setArtNumero('12345678901234567890')
     setApoliceNumero('AP-2025-001234')
+    setCnoArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('documento_cno_obra'),
+        `Documento CNO - Obra Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setArtArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('documento_art'),
+        `Documento ART - Obra Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setApoliceArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('apolice_seguro'),
+        `Apolice de Seguro - Obra Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setManualTecnicoArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('manual_tecnico_equipamento'),
+        `Manual Tecnico do Equipamento - Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setTermoEntregaArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('termo_entrega_tecnica'),
+        `Termo de Entrega Tecnica - Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setPlanoCargaArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('plano_carga'),
+        `Plano de Carga - Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
+    setAterramentoArquivo(
+      criarPdfTeste(
+        montarNomePdfTeste('documento_aterramento'),
+        `Documento de Aterramento - Teste (${new Date().toLocaleDateString('pt-BR')})`
+      )
+    )
 
     // Responsável técnico
     setResponsavelTecnico({
@@ -2616,137 +2913,6 @@ export default function NovaObraPage() {
                   </div>
                 </div>
 
-                {/* Responsáveis Técnicos Adicionais Dinâmicos */}
-                <div className="space-y-4 mt-6">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-semibold text-gray-900">Responsáveis Técnicos Adicionais</h3>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setResponsaveisAdicionais([
-                          ...responsaveisAdicionais,
-                          {
-                            nome: '',
-                            cpf_cnpj: '',
-                            crea: '',
-                            email: '',
-                            telefone: '',
-                            area: '',
-                            tipo: 'adicional'
-                          }
-                        ])
-                      }}
-                      className="flex items-center gap-2"
-                    >
-                      <Plus className="w-4 h-4" />
-                      Adicionar Responsável
-                    </Button>
-                  </div>
-
-                  {responsaveisAdicionais.map((responsavel, index) => (
-                    <div key={index} className="space-y-4 p-4 border rounded-lg bg-gray-50/50">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium text-gray-900">
-                          Responsável Técnico #{index + 1}
-                        </h4>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setResponsaveisAdicionais(responsaveisAdicionais.filter((_, i) => i !== index))
-                          }}
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                        >
-                          <X className="w-4 h-4" />
-                        </Button>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <Label>Área de Responsabilidade</Label>
-                          <Input
-                            value={responsavel.area || ''}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].area = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="Ex: Segurança, Qualidade, etc."
-                          />
-                        </div>
-                        <div>
-                          <Label>Nome do Responsável Técnico <span className="text-red-500">*</span></Label>
-                          <Input
-                            value={responsavel.nome}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].nome = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="Nome completo"
-                          />
-                        </div>
-                        <div>
-                          <Label>CPF/CNPJ <span className="text-red-500">*</span></Label>
-                          <Input
-                            value={responsavel.cpf_cnpj}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].cpf_cnpj = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="000.000.000-00 ou 00.000.000/0000-00"
-                          />
-                        </div>
-                        <div>
-                          <Label>N° do CREA</Label>
-                          <Input
-                            value={responsavel.crea || ''}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].crea = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="Ex: 5071184591"
-                          />
-                        </div>
-                        <div>
-                          <Label>Email</Label>
-                          <Input
-                            type="email"
-                            value={responsavel.email}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].email = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="email@example.com"
-                          />
-                        </div>
-                        <div>
-                          <Label>Telefone</Label>
-                          <Input
-                            value={responsavel.telefone}
-                            onChange={(e) => {
-                              const novos = [...responsaveisAdicionais]
-                              novos[index].telefone = e.target.value
-                              setResponsaveisAdicionais(novos)
-                            }}
-                            placeholder="(11) 98765-4321"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {responsaveisAdicionais.length === 0 && (
-                    <div className="text-center py-8 text-gray-500 text-sm">
-                      Nenhum responsável técnico adicional adicionado. Clique em "Adicionar Responsável" para adicionar.
-                    </div>
-                  )}
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -3522,6 +3688,18 @@ export default function NovaObraPage() {
                       ? 'Atualize os dados do responsável'
                       : 'Cadastre um responsável para aprovar horas dos funcionários desta obra'}
                   </DialogDescription>
+                  <div className="flex justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={preencherResponsavelObraTeste}
+                      className="mt-2"
+                    >
+                      <Zap className="w-3 h-3 mr-1" />
+                      Preencher dados de teste
+                    </Button>
+                  </div>
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>

@@ -106,6 +106,8 @@ const enriquecerDadosGrua = async (grua) => {
       .eq('status', 'Ativa')
       .single()
 
+    const obraAtivaValida = obraAtual?.obra?.id ? obraAtual : null
+
     // Enriquecer dados
     const gruaEnriquecida = {
       ...grua,
@@ -115,8 +117,8 @@ const enriquecerDadosGrua = async (grua) => {
       fabricante: grua.fabricante, // fabricante -> fabricante para frontend
       tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
-      currentObraId: obraAtual?.obra_id?.toString() || null,
-      currentObraName: obraAtual?.obra?.nome || null,
+      currentObraId: obraAtivaValida?.obra?.id?.toString() || null,
+      currentObraName: obraAtivaValida?.obra?.nome || null,
       
       // Campos de compatibilidade com frontend
       alturaTrabalho: grua.altura_trabalho,
@@ -1229,9 +1231,11 @@ router.post('/', async (req, res) => {
       fabricante: value.fabricante,
       tipo: value.tipo,
       capacidade: value.capacity, // capacity -> capacidade
-      capacidade_ponta: value.capacidade_ponta || value.capacity || 'Não informado', // garantir que não seja null
+      capacidade_ponta: value.capacidade_ponta ?? value.capacity ?? null,
       lanca: value.lanca,
-      altura_trabalho: value.altura_trabalho || 'Não informado',
+      // Algumas bases antigas mantêm essas colunas como NOT NULL.
+      // Usamos string vazia para representar "não informado" sem gravar placeholder textual.
+      altura_trabalho: value.altura_trabalho ?? '',
       altura_final: value.altura_final,
       ano: value.ano,
       tipo_base: value.tipo_base,
@@ -1242,16 +1246,16 @@ router.post('/', async (req, res) => {
       velocidade_rotacao: value.velocidade_rotacao,
       velocidade_elevacao: value.velocidade_elevacao,
       status: value.status,
-      localizacao: value.localizacao || 'Não informado',
-      horas_operacao: value.horas_operacao || 0,
-      valor_locacao: value.valor_locacao || null,
-      valor_real: value.valor_real || 0,
-      valor_operacao: value.valor_operacao || 0,
-      valor_sinaleiro: value.valor_sinaleiro || 0,
-      valor_manutencao: value.valor_manutencao || 0,
-      ultima_manutencao: value.ultima_manutencao || null,
-      proxima_manutencao: value.proxima_manutencao || null,
-      observacoes: value.observacoes || null,
+      localizacao: value.localizacao ?? '',
+      horas_operacao: value.horas_operacao ?? 0,
+      valor_locacao: value.valor_locacao ?? null,
+      valor_real: value.valor_real ?? 0,
+      valor_operacao: value.valor_operacao ?? 0,
+      valor_sinaleiro: value.valor_sinaleiro ?? 0,
+      valor_manutencao: value.valor_manutencao ?? 0,
+      ultima_manutencao: value.ultima_manutencao ?? null,
+      proxima_manutencao: value.proxima_manutencao ?? null,
+      observacoes: value.observacoes ?? null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -1550,19 +1554,23 @@ router.delete('/:id', async (req, res) => {
       })
     }
 
-    // Determinar se é um ID numérico/UUID ou um código/nome alfanumérico
-    const isNumericOrUUID = !isNaN(Number(id)) || id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)
-    
-    // Primeiro, buscar a grua para obter o ID real se necessário
-    let gruaId = id
-    if (!isNumericOrUUID) {
-      // Limpar o ID de espaços em branco
-      const idLimpo = id.trim()
-      
-      // Buscar por código/nome alfanumérico no campo 'name'
-      // Tentar múltiplas estratégias de busca
+    // Primeiro, sempre tentar localizar por ID exato (ID pode ser alfanumérico, ex: G0014)
+    const idLimpo = id.trim()
+    let gruaId = idLimpo
+
+    let { data: gruaPorId, error: errorPorId } = await supabaseAdmin
+      .from('gruas')
+      .select('id')
+      .eq('id', idLimpo)
+      .limit(1)
+      .maybeSingle()
+
+    if (gruaPorId && !errorPorId) {
+      gruaId = gruaPorId.id
+    } else {
+      // Fallback: buscar por código/nome no campo 'name'
       let gruaExistente = null
-      
+
       // Estratégia 1: Busca exata case-insensitive
       let { data: gruaExata, error: errorExata } = await supabaseAdmin
         .from('gruas')
@@ -1570,7 +1578,7 @@ router.delete('/:id', async (req, res) => {
         .ilike('name', idLimpo)
         .limit(1)
         .maybeSingle()
-      
+
       if (gruaExata && !errorExata) {
         gruaExistente = gruaExata
       } else {
@@ -1581,7 +1589,7 @@ router.delete('/:id', async (req, res) => {
           .ilike('name', `%${idLimpo}%`)
           .limit(1)
           .maybeSingle()
-        
+
         if (gruaParcial && !errorParcial) {
           gruaExistente = gruaParcial
         } else {
@@ -1592,13 +1600,13 @@ router.delete('/:id', async (req, res) => {
             .eq('name', idLimpo)
             .limit(1)
             .maybeSingle()
-          
+
           if (gruaCaseSensitive && !errorCaseSensitive) {
             gruaExistente = gruaCaseSensitive
           }
         }
       }
-      
+
       if (!gruaExistente) {
         return res.status(404).json({
           error: 'Grua não encontrada',
@@ -1607,6 +1615,23 @@ router.delete('/:id', async (req, res) => {
       }
       gruaId = gruaExistente.id
     }
+
+    // Limpar vínculos antes de excluir para evitar bloqueios por FK
+    const limparRelacionamentos = async (tabela) => {
+      const { error: cleanupError } = await supabaseAdmin
+        .from(tabela)
+        .delete()
+        .eq('grua_id', gruaId)
+
+      if (cleanupError) {
+        throw new Error(`Erro ao limpar relacionamentos da tabela "${tabela}": ${cleanupError.message}`)
+      }
+    }
+
+    await limparRelacionamentos('grua_obra')
+    await limparRelacionamentos('obra_gruas_configuracao')
+    await limparRelacionamentos('grua_funcionario')
+    await limparRelacionamentos('grua_equipamento')
 
     const { error } = await supabaseAdmin
       .from('gruas')

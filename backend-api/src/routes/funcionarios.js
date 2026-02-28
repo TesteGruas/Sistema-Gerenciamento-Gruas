@@ -144,6 +144,13 @@ const funcionarioUpdateSchema = Joi.object({
  */
 router.get('/', authenticateToken, async (req, res) => {
   try {
+    const normalizarTexto = (valor) => (valor || '')
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
+
     console.log('='.repeat(80))
     console.log('[FUNCIONARIOS] Rota GET / chamada')
     console.log('[FUNCIONARIOS] Query params:', JSON.stringify(req.query, null, 2))
@@ -196,9 +203,8 @@ router.get('/', authenticateToken, async (req, res) => {
     if (req.query.status) {
       query = query.eq('status', req.query.status)
     }
-    if (req.query.cargo) {
-      query = query.eq('cargo', req.query.cargo)
-    }
+    // Não filtrar cargo diretamente no banco aqui.
+    // O cargo real pode vir de cargo_id -> cargos.nome (cargo_info).
     if (req.query.turno) {
       query = query.eq('turno', req.query.turno)
     }
@@ -487,13 +493,24 @@ router.get('/', authenticateToken, async (req, res) => {
     // Ordenar por ID descendente
     funcionariosComUsuario.sort((a, b) => (b.id || 0) - (a.id || 0))
 
+    // Aplicar filtro de cargo após consolidar e normalizar os dados.
+    let funcionariosFiltrados = funcionariosComUsuario
+    if (req.query.cargo) {
+      const cargoFiltro = normalizarTexto(req.query.cargo)
+      funcionariosFiltrados = funcionariosComUsuario.filter((funcionario) => {
+        const cargoFuncionario = normalizarTexto(funcionario.cargo || funcionario.cargo_info?.nome)
+        return cargoFuncionario === cargoFiltro
+      })
+      console.log(`[FUNCIONARIOS] Filtro cargo="${req.query.cargo}" -> ${funcionariosFiltrados.length} item(ns)`)
+    }
+
     // Calcular total correto
     // O total é sempre o tamanho da lista combinada (já filtrada se houver busca)
     // Isso garante que o total corresponde exatamente aos itens disponíveis
-    const totalItems = funcionariosComUsuario.length
+    const totalItems = funcionariosFiltrados.length
     
     const totalPages = Math.ceil(totalItems / limit)
-    const paginatedData = funcionariosComUsuario.slice(offset, offset + limit)
+    const paginatedData = funcionariosFiltrados.slice(offset, offset + limit)
 
     console.log(`[FUNCIONARIOS] 📤 Enviando resposta: ${paginatedData.length} itens`)
     console.log(`[FUNCIONARIOS] Paginação: página ${page} de ${totalPages}, total: ${totalItems}`)

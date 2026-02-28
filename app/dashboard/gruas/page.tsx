@@ -192,6 +192,14 @@ export default function GruasPage() {
     return converted
   }
 
+  const normalizarTextoOpcional = (valor: any): string => {
+    if (valor === null || valor === undefined) return ''
+    const texto = String(valor).trim()
+    if (!texto) return ''
+    if (texto.toLowerCase() === 'não informado' || texto.toLowerCase() === 'nao informado') return ''
+    return texto
+  }
+
   // Função para carregar gruas da API
   const carregarGruas = async () => {
     try {
@@ -789,11 +797,11 @@ export default function GruasPage() {
           voltagem: (grua as any).voltagem || '',
           velocidade_rotacao: (grua as any).velocidade_rotacao?.toString() || '',
           velocidade_elevacao: (grua as any).velocidade_elevacao?.toString() || '',
-          observacoes: grua.observacoes || (grua as any).observacoes || '',
+          observacoes: normalizarTextoOpcional(grua.observacoes || (grua as any).observacoes),
           createdAt: grua.createdAt || grua.created_at || '',
-          capacidade_ponta: (grua as any).capacidade_ponta || (grua as any).capacidadePonta || '',
-          altura_trabalho: (grua as any).altura_trabalho || (grua as any).alturaTrabalho || '',
-          localizacao: (grua as any).localizacao || '',
+          capacidade_ponta: normalizarTextoOpcional((grua as any).capacidade_ponta || (grua as any).capacidadePonta),
+          altura_trabalho: normalizarTextoOpcional((grua as any).altura_trabalho || (grua as any).alturaTrabalho),
+          localizacao: normalizarTextoOpcional((grua as any).localizacao),
           horas_operacao: (grua as any).horas_operacao?.toString() || (grua as any).horasOperacao?.toString() || '',
           valor_locacao: (grua as any).valor_locacao?.toString() || (grua as any).valorLocacao?.toString() || '',
           valor_real: (grua as any).valor_real?.toString() || '',
@@ -838,11 +846,11 @@ export default function GruasPage() {
         voltagem: (grua as any).voltagem || '',
         velocidade_rotacao: (grua as any).velocidade_rotacao?.toString() || '',
         velocidade_elevacao: (grua as any).velocidade_elevacao?.toString() || '',
-        observacoes: grua.observacoes || (grua as any).observacoes || '',
+        observacoes: normalizarTextoOpcional(grua.observacoes || (grua as any).observacoes),
         createdAt: grua.createdAt || grua.created_at || '',
-        capacidade_ponta: (grua as any).capacidade_ponta || (grua as any).capacidadePonta || '',
-        altura_trabalho: (grua as any).altura_trabalho || (grua as any).alturaTrabalho || '',
-        localizacao: (grua as any).localizacao || '',
+        capacidade_ponta: normalizarTextoOpcional((grua as any).capacidade_ponta || (grua as any).capacidadePonta),
+        altura_trabalho: normalizarTextoOpcional((grua as any).altura_trabalho || (grua as any).alturaTrabalho),
+        localizacao: normalizarTextoOpcional((grua as any).localizacao),
         horas_operacao: (grua as any).horas_operacao?.toString() || (grua as any).horasOperacao?.toString() || '',
         valor_locacao: (grua as any).valor_locacao?.toString() || (grua as any).valorLocacao?.toString() || '',
         valor_real: (grua as any).valor_real?.toString() || '',
@@ -864,20 +872,6 @@ export default function GruasPage() {
 
   const confirmDeleteGrua = async () => {
     if (!gruaToDelete) return
-
-    // Normalizar o status para comparação
-    const statusNormalizado = gruaToDelete.status?.toLowerCase().replace(/\s/g, '_')
-    
-    // Verificar se a grua está em obra
-    if (statusNormalizado === 'em_obra' || gruaToDelete.status === 'Operacional') {
-      toast({
-        title: "Informação",
-        description: `Não é possível excluir a grua "${gruaToDelete.name}" pois ela está atualmente em obra. Remova-a da obra primeiro.`,
-        variant: "default"
-      })
-      setIsDeleteDialogOpen(false)
-      return
-    }
 
     try {
       setDeleting(true)
@@ -1011,6 +1005,17 @@ export default function GruasPage() {
         velocidade_rotacao: 0.8,
         velocidade_elevacao: 60,
         observacoes: 'Grua criada automaticamente para validação.',
+        capacidade_ponta: '2000',
+        altura_trabalho: '95',
+        localizacao: 'Depósito Central',
+        horas_operacao: 0,
+        valor_locacao: 15000,
+        valor_real: 15000,
+        valor_operacao: 8000,
+        valor_sinaleiro: 6000,
+        valor_manutencao: 2000,
+        ultima_manutencao: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        proxima_manutencao: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
       }
       
       const response = await gruasApi.criarGrua(gruaData)
@@ -1097,7 +1102,18 @@ export default function GruasPage() {
         voltagem: gruaFormData.voltagem,
         velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
         velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
-        observacoes: gruaFormData.observacoes || undefined,
+        observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
+        capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
+        altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
+        localizacao: normalizarTextoOpcional(gruaFormData.localizacao) || undefined,
+        horas_operacao: parseFloat(gruaFormData.horas_operacao) || 0,
+        valor_locacao: gruaFormData.valor_locacao ? parseFloat(gruaFormData.valor_locacao) : undefined,
+        valor_real: parseFloat(gruaFormData.valor_real) || 0,
+        valor_operacao: parseFloat(gruaFormData.valor_operacao) || 0,
+        valor_sinaleiro: parseFloat(gruaFormData.valor_sinaleiro) || 0,
+        valor_manutencao: parseFloat(gruaFormData.valor_manutencao) || 0,
+        ultima_manutencao: gruaFormData.ultima_manutencao || undefined,
+        proxima_manutencao: gruaFormData.proxima_manutencao || undefined,
       }
       
       const response = await gruasApi.criarGrua(gruaData)
@@ -1190,10 +1206,10 @@ export default function GruasPage() {
         voltagem: gruaFormData.voltagem,
         velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
         velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
-        observacoes: gruaFormData.observacoes || undefined,
-        capacidade_ponta: gruaFormData.capacidade_ponta || undefined,
-        altura_trabalho: gruaFormData.altura_trabalho || undefined,
-        localizacao: gruaFormData.localizacao || undefined,
+        observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
+        capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
+        altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
+        localizacao: normalizarTextoOpcional(gruaFormData.localizacao) || undefined,
         horas_operacao: parseFloat(gruaFormData.horas_operacao) || 0,
         valor_locacao: gruaFormData.valor_locacao ? parseFloat(gruaFormData.valor_locacao) : undefined,
         valor_real: parseFloat(gruaFormData.valor_real) || 0,
@@ -1688,7 +1704,7 @@ export default function GruasPage() {
 
       {/* Dialog de Criação de Grua */}
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Crane className="w-5 h-5" />
@@ -1949,6 +1965,147 @@ export default function GruasPage() {
                 placeholder="Observações sobre a grua..."
                 rows={3}
               />
+            </div>
+
+            {/* Campos Adicionais */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Informações Adicionais</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-capacidade_ponta">Capacidade na Ponta</Label>
+                  <Input
+                    id="create-capacidade_ponta"
+                    value={gruaFormData.capacidade_ponta}
+                    onChange={handleCapacidadePontaChange}
+                    placeholder="Ex: 1000 KGS"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-altura_trabalho">Altura de Trabalho</Label>
+                  <Input
+                    id="create-altura_trabalho"
+                    value={gruaFormData.altura_trabalho}
+                    onChange={handleAlturaTrabalhoChange}
+                    placeholder="Ex: 80 metros"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-localizacao">Localização</Label>
+                  <Input
+                    id="create-localizacao"
+                    value={gruaFormData.localizacao}
+                    onChange={handleLocalizacaoChange}
+                    placeholder="Ex: São Paulo, SP"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-horas_operacao">Horas de Operação</Label>
+                  <Input
+                    id="create-horas_operacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.horas_operacao}
+                    onChange={handleHorasOperacaoChange}
+                    placeholder="Ex: 1500"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Informações Financeiras */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Informações Financeiras</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-valor_locacao">Valor de Locação (R$)</Label>
+                  <Input
+                    id="create-valor_locacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_locacao}
+                    onChange={handleValorLocacaoChange}
+                    placeholder="Ex: 5000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-valor_real">Valor Real (R$)</Label>
+                  <Input
+                    id="create-valor_real"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_real}
+                    onChange={handleValorRealChange}
+                    placeholder="Ex: 100000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-valor_operacao">Valor de Operação (R$)</Label>
+                  <Input
+                    id="create-valor_operacao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_operacao}
+                    onChange={handleValorOperacaoChange}
+                    placeholder="Ex: 2000.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-valor_sinaleiro">Valor de Sinaleiro (R$)</Label>
+                  <Input
+                    id="create-valor_sinaleiro"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_sinaleiro}
+                    onChange={handleValorSinaleiroChange}
+                    placeholder="Ex: 1500.00"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-valor_manutencao">Valor de Manutenção (R$)</Label>
+                  <Input
+                    id="create-valor_manutencao"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={gruaFormData.valor_manutencao}
+                    onChange={handleValorManutencaoChange}
+                    placeholder="Ex: 3000.00"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Manutenção */}
+            <div className="border-t pt-4">
+              <h3 className="text-lg font-semibold mb-4">Manutenção</h3>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="create-ultima_manutencao">Última Manutenção</Label>
+                  <Input
+                    id="create-ultima_manutencao"
+                    type="date"
+                    value={gruaFormData.ultima_manutencao}
+                    onChange={handleUltimaManutencaoChange}
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="create-proxima_manutencao">Próxima Manutenção</Label>
+                  <Input
+                    id="create-proxima_manutencao"
+                    type="date"
+                    value={gruaFormData.proxima_manutencao}
+                    onChange={handleProximaManutencaoChange}
+                  />
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-2">
@@ -2424,7 +2581,7 @@ export default function GruasPage() {
             </p>
             {gruaToDelete?.status === 'em_obra' && (
               <p className="text-xs text-orange-600">
-                ⚠️ Esta grua está atualmente em obra. A exclusão será bloqueada.
+                ⚠️ Esta grua aparece como "Em Obra". Se houver vínculo ativo válido, o backend poderá impedir a exclusão.
               </p>
             )}
           </div>
@@ -2438,7 +2595,7 @@ export default function GruasPage() {
             <Button 
               variant="destructive" 
               onClick={confirmDeleteGrua}
-              disabled={gruaToDelete?.status === 'em_obra' || deleting}
+              disabled={deleting}
             >
               {deleting ? (
                 <>
@@ -2694,7 +2851,7 @@ export default function GruasPage() {
                     Editar Grua
                   </Button>
                   
-                  {gruaToView.currentObraId && (
+                  {gruaToView.currentObraId && gruaToView.currentObraName && (
                     <Button
                       variant="outline"
                       onClick={() => window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`}

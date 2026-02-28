@@ -75,6 +75,7 @@ import { AlertCircle, Package as PackageIcon } from "lucide-react"
 import GruaSearch from "@/components/grua-search"
 import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
+import { gruaObraApi } from "@/lib/api-grua-obra"
 import { useObraStore } from "@/lib/obra-store"
 import { DocumentoUpload } from "@/components/documento-upload"
 import api, { fetchWithAuth, buildApiUrl } from "@/lib/api"
@@ -182,7 +183,7 @@ function ObraDetailsPageContent() {
   const [isModalTerceirizadoOpen, setIsModalTerceirizadoOpen] = useState(false)
   const [funcionarioSelecionado, setFuncionarioSelecionado] = useState<any>(null)
   const [tipoSinaleiroFuncionario, setTipoSinaleiroFuncionario] = useState<'principal' | 'reserva'>('principal')
-  const [tipoSinaleiroTerceirizado, setTipoSinaleiroTerceirizado] = useState<'principal' | 'reserva'>('principal')
+  const [tipoSinaleiroTerceirizado, setTipoSinaleiroTerceirizado] = useState<'principal' | 'reserva'>('reserva')
   const [dadosTerceirizado, setDadosTerceirizado] = useState({
     nome: '',
     rg_cpf: '',
@@ -723,7 +724,8 @@ function ObraDetailsPageContent() {
         rg_cpf: dadosTerceirizado.rg_cpf,
         telefone: dadosTerceirizado.telefone || '',
         email: dadosTerceirizado.email || '',
-        tipo: tipoSinaleiroTerceirizado
+        // Terceirizado deve sempre ser cadastrado como externo (reserva)
+        tipo: 'reserva' as const
       }
 
       const response = await sinaleirosApi.criarOuAtualizar(parseInt(obraId), [sinaleiroData])
@@ -734,6 +736,7 @@ function ObraDetailsPageContent() {
           description: "Terceirizado atrelado como sinaleiro com sucesso!"
         })
         setIsModalTerceirizadoOpen(false)
+        setTipoSinaleiroTerceirizado('reserva')
         setDadosTerceirizado({
           nome: '',
           rg_cpf: '',
@@ -1999,6 +2002,85 @@ function ObraDetailsPageContent() {
   }
 
   // Funções para adicionar grua
+  const normalizarNumero = (valor: any): number | undefined => {
+    if (valor === null || valor === undefined || valor === "") return undefined
+    if (typeof valor === "number") return Number.isFinite(valor) ? valor : undefined
+    const limpo = String(valor).replace(",", ".").replace(/[^\d.-]/g, "")
+    if (!limpo) return undefined
+    const numero = Number(limpo)
+    return Number.isFinite(numero) ? numero : undefined
+  }
+
+  const normalizarTipoLigacao = (valor: any): string | undefined => {
+    if (!valor) return undefined
+    const texto = String(valor).toLowerCase()
+    if (texto.includes("tri")) return "trifasica"
+    if (texto.includes("mono")) return "monofasica"
+    return String(valor)
+  }
+
+  const montarPayloadGruaObra = (
+    gruaSelecionadaModal: any,
+    gruaDetalhada: any
+  ) => {
+    const dataInicio = novaGruaData.dataInicioLocacao || new Date().toISOString().split("T")[0]
+    const dataFim = novaGruaData.dataFimLocacao || undefined
+    const observacoesBase =
+      novaGruaData.observacoes ||
+      `Valor locação: R$ ${gruaSelecionadaModal.valorLocacao || 0}, Taxa mensal: R$ ${gruaSelecionadaModal.taxaMensal || 0}`
+
+    const raio =
+      normalizarNumero(gruaDetalhada?.alcance_maximo) ??
+      normalizarNumero(gruaDetalhada?.lanca) ??
+      normalizarNumero(gruaDetalhada?.capacidade_maxima_raio)
+
+    return {
+      obra_id: parseInt(obraId),
+      grua_id: String(gruaSelecionadaModal.id),
+      data_inicio_locacao: dataInicio,
+      data_fim_locacao: dataFim,
+      data_montagem: dataInicio,
+      data_desmontagem: dataFim,
+      valor_locacao_mensal: normalizarNumero(gruaSelecionadaModal.valorLocacao) || 0,
+      status: "Ativa" as const,
+      observacoes: observacoesBase,
+      observacoes_montagem: observacoesBase,
+      tipo_base: gruaDetalhada?.tipo_base || undefined,
+      altura_inicial: normalizarNumero(gruaDetalhada?.altura_inicial),
+      altura_final:
+        normalizarNumero(gruaDetalhada?.altura_final) ?? normalizarNumero(gruaDetalhada?.altura_trabalho),
+      velocidade_giro: normalizarNumero(gruaDetalhada?.velocidade_giro),
+      velocidade_rotacao: normalizarNumero(gruaDetalhada?.velocidade_rotacao),
+      velocidade_elevacao: normalizarNumero(gruaDetalhada?.velocidade_elevacao),
+      velocidade_translacao: normalizarNumero(gruaDetalhada?.velocidade_translacao),
+      potencia_instalada: normalizarNumero(gruaDetalhada?.potencia_instalada),
+      voltagem: gruaDetalhada?.voltagem || undefined,
+      tipo_ligacao: normalizarTipoLigacao(gruaDetalhada?.tipo_ligacao),
+      capacidade_ponta:
+        normalizarNumero(gruaDetalhada?.capacidade_ponta) ?? normalizarNumero(gruaDetalhada?.capacity),
+      capacidade_maxima_raio:
+        normalizarNumero(gruaDetalhada?.capacidade_maxima_raio) ?? normalizarNumero(gruaDetalhada?.alcance_maximo),
+      capacidade_1_cabo: normalizarNumero(gruaDetalhada?.capacidade_1_cabo),
+      capacidade_2_cabos: normalizarNumero(gruaDetalhada?.capacidade_2_cabos),
+      ano_fabricacao: normalizarNumero(gruaDetalhada?.ano_fabricacao) ?? normalizarNumero(gruaDetalhada?.ano),
+      vida_util: normalizarNumero(gruaDetalhada?.vida_util),
+      fundacao: gruaDetalhada?.fundacao || undefined,
+      condicoes_ambiente: gruaDetalhada?.condicoes_ambiente || undefined,
+      raio_operacao: raio,
+      raio: raio,
+      raio_trabalho: raio,
+      altura:
+        normalizarNumero(gruaDetalhada?.altura_maxima) ?? normalizarNumero(gruaDetalhada?.altura_trabalho),
+      local_instalacao: obra?.endereco || undefined,
+      manual_operacao: gruaDetalhada?.manual_operacao || undefined,
+      procedimento_montagem: undefined,
+      procedimento_operacao: undefined,
+      procedimento_desmontagem: undefined,
+      responsavel_tecnico: gruaDetalhada?.proprietario_responsavel_tecnico || undefined,
+      crea_responsavel: gruaDetalhada?.proprietario_crea || undefined
+    }
+  }
+
   const handleAdicionarGrua = async (e: React.FormEvent) => {
     e.preventDefault()
     
@@ -2013,17 +2095,91 @@ function ObraDetailsPageContent() {
 
     try {
       setLoadingGruas(true)
+
+      const extrairMensagemErro = (erro: unknown): string => {
+        if (erro instanceof Error && erro.message) return erro.message
+        if (typeof erro === "string") return erro
+        return "Erro desconhecido"
+      }
       
-      // Vincular cada grua selecionada à obra
+      // Vincular cada grua selecionada à obra nas duas tabelas:
+      // - grua_obra (dados técnicos para Livro da Grua)
+      // - obra_gruas_configuracao (compatibilidade da tela de obra)
       const promises = gruasSelecionadas.map(async (grua) => {
-        const payload = {
+        const payloadConfiguracao = {
           obra_id: parseInt(obraId),
-          grua_id: grua.id,
+          grua_id: String(grua.id),
           data_instalacao: novaGruaData.dataInicioLocacao || new Date().toISOString().split('T')[0],
           observacoes: novaGruaData.observacoes || `Valor locação: R$ ${grua.valorLocacao || 0}, Taxa mensal: R$ ${grua.taxaMensal || 0}`
         }
-        
-        return obraGruasApi.adicionarGruaObra(payload)
+
+        const gruaDetalhadaResponse = await gruasApi.obterGrua(grua.id)
+        const gruaDetalhada = gruaDetalhadaResponse?.data || grua
+        const payloadRelacionamento = montarPayloadGruaObra(grua, gruaDetalhada)
+        const payloadAtualizacaoRelacionamento = {
+          ...payloadRelacionamento,
+          obra_id: undefined,
+          grua_id: undefined
+        }
+
+        let relacionamentoOk = false
+        let mensagemRelacionamento = ""
+        let configuracaoOk = false
+        let mensagemConfiguracao = ""
+
+        try {
+          await gruaObraApi.criarRelacionamento(payloadRelacionamento)
+          relacionamentoOk = true
+        } catch (erroCriacao) {
+          const mensagemCriacao = extrairMensagemErro(erroCriacao)
+          const jaExisteRelacionamento = /relacionamento já existe|já existe um relacionamento ativo/i.test(mensagemCriacao)
+
+          if (jaExisteRelacionamento) {
+            try {
+              const relacionamentosAtivos = await gruaObraApi.listarRelacionamentos({
+                obra_id: parseInt(obraId),
+                grua_id: String(grua.id),
+                status: "Ativa"
+              })
+              const relacionamentoExistente = relacionamentosAtivos?.data?.[0]
+
+              if (relacionamentoExistente?.id) {
+                await gruaObraApi.atualizarRelacionamento(relacionamentoExistente.id, payloadAtualizacaoRelacionamento)
+                relacionamentoOk = true
+                mensagemRelacionamento = "Relacionamento técnico já existia e foi atualizado"
+              } else {
+                mensagemRelacionamento = "Relacionamento técnico já existia, mas não foi possível localizá-lo para atualizar"
+              }
+            } catch (erroAtualizacao) {
+              mensagemRelacionamento = extrairMensagemErro(erroAtualizacao)
+            }
+          } else {
+            mensagemRelacionamento = mensagemCriacao
+          }
+        }
+
+        try {
+          await obraGruasApi.adicionarGruaObra(payloadConfiguracao)
+          configuracaoOk = true
+        } catch (erroConfiguracao) {
+          const mensagemCriacaoConfiguracao = extrairMensagemErro(erroConfiguracao)
+          const jaExisteConfiguracao = /já existe|já vinculad|duplicate/i.test(mensagemCriacaoConfiguracao)
+
+          if (jaExisteConfiguracao) {
+            configuracaoOk = true
+            mensagemConfiguracao = "Configuração da obra já existia"
+          } else {
+            mensagemConfiguracao = mensagemCriacaoConfiguracao
+          }
+        }
+
+        return {
+          success: relacionamentoOk,
+          relacionamentoOk,
+          configuracaoOk,
+          mensagemRelacionamento,
+          mensagemConfiguracao
+        }
       })
       
       const results = await Promise.all(promises)
@@ -2031,6 +2187,7 @@ function ObraDetailsPageContent() {
       // Verificar se todas as operações foram bem-sucedidas
       const sucessos = results.filter(result => result.success).length
       const falhas = results.length - sucessos
+      const falhasConfiguracao = results.filter(result => !result.configuracaoOk).length
       
       if (sucessos > 0) {
         toast({
@@ -2040,10 +2197,24 @@ function ObraDetailsPageContent() {
       }
       
       if (falhas > 0) {
+        const mensagensFalha = results
+          .filter(result => !result.success)
+          .map(result => result.mensagemRelacionamento)
+          .filter(Boolean)
+          .join(" | ")
+
         toast({
           title: "Atenção",
-          description: `${falhas} grua(s) não puderam ser adicionadas. Verifique se já estão vinculadas à obra.`,
+          description: `${falhas} grua(s) não puderam ser adicionadas com dados técnicos completos.${mensagensFalha ? ` ${mensagensFalha}` : ""}`,
           variant: "destructive"
+        })
+      }
+
+      if (falhasConfiguracao > 0) {
+        toast({
+          title: "Aviso",
+          description: `${falhasConfiguracao} configuração(ões) auxiliares da obra não puderam ser persistidas, mas o Livro da Grua foi priorizado.`,
+          variant: "default"
         })
       }
       
@@ -5095,7 +5266,6 @@ useEffect(() => {
                               <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="principal">Principal</SelectItem>
                               <SelectItem value="reserva">Reserva</SelectItem>
                             </SelectContent>
                           </Select>
@@ -5106,6 +5276,7 @@ useEffect(() => {
                           variant="outline"
                           onClick={() => {
                             setIsModalTerceirizadoOpen(false)
+                            setTipoSinaleiroTerceirizado('reserva')
                             setDadosTerceirizado({
                               nome: '',
                               rg_cpf: '',

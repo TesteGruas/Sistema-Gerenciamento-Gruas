@@ -29,6 +29,30 @@ export interface Sinaleiro {
   certificados?: any[]
 }
 
+const inferirCpfRg = (documento?: string) => {
+  const valor = (documento || '').trim()
+  const digitos = valor.replace(/\D/g, '')
+
+  if (!valor) return { cpf: '', rg: '' }
+  // CPF padrão: 11 dígitos. Qualquer outro tamanho tratamos como RG.
+  if (digitos.length === 11) return { cpf: valor, rg: '' }
+  return { cpf: '', rg: valor }
+}
+
+const validarCpf = (cpf?: string) => {
+  const digitos = (cpf || '').replace(/\D/g, '')
+  if (!digitos) return ''
+  return digitos.length === 11 ? '' : 'CPF deve conter 11 dígitos'
+}
+
+const validarRg = (rg?: string) => {
+  const digitos = (rg || '').replace(/\D/g, '')
+  if (!digitos) return ''
+  return digitos.length >= 7 && digitos.length <= 11
+    ? ''
+    : 'RG deve conter entre 7 e 11 dígitos'
+}
+
 interface SinaleirosFormProps {
   obraId?: number
   sinaleiros?: Sinaleiro[]
@@ -98,12 +122,17 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
       console.log('📥 Atualizando estado a partir de initialSinaleiros (obra existente)')
       // Converter para o formato esperado pelo componente
       const sinaleirosConvertidos = initialSinaleiros.map(s => ({
+        ...(() => {
+          const inferido = inferirCpfRg(s.rg_cpf)
+          return {
+            cpf: s.cpf || inferido.cpf,
+            rg: s.rg || inferido.rg
+          }
+        })(),
         id: s.id,
         obra_id: s.obra_id || 0,
         nome: s.nome || '',
         rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
-        cpf: s.cpf || s.rg_cpf || '',
-        rg: s.rg || s.rg_cpf || '',
         telefone: s.telefone || '',
         email: s.email || '',
         tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
@@ -144,6 +173,7 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
       if (response.success && response.data) {
         // Converter SinaleiroBackend para Sinaleiro
         const sinaleirosConvertidos: Sinaleiro[] = response.data.map((s: SinaleiroBackend) => ({
+          ...inferirCpfRg(s.rg_cpf),
           id: s.id,
           obra_id: s.obra_id,
           nome: s.nome,
@@ -170,82 +200,86 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
   // Não forçar criação de sinaleiros - permitir que o usuário adicione quando necessário
   // Os sinaleiros são opcionais: pode ter apenas interno, apenas cliente, ambos ou nenhum
 
-  const handleAddSinaleiro = (tipo: 'interno' | 'cliente') => {
-    console.log(`➕ Adicionando sinaleiro do tipo: ${tipo}`)
-    console.log(`   - Sinaleiros atuais: ${sinaleiros.length}`)
-    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
-    
-    // Verificar se já existe um sinaleiro deste tipo
-    const jaExiste = sinaleiros.some(s => s.tipo_vinculo === tipo)
-    if (jaExiste) {
-      console.log(`⚠️ Sinaleiro ${tipo} já existe`)
-      toast({
-        title: "Sinaleiro já existe",
-        description: `Já existe um sinaleiro ${tipo === 'interno' ? 'interno' : 'indicado pelo cliente'}`,
-        variant: "destructive"
-      })
-      return
-    }
-
-    // Verificar limite máximo de 2 sinaleiros
-    if (sinaleiros.length >= 2) {
-      console.log(`⚠️ Limite de sinaleiros atingido`)
-      toast({
-        title: "Limite atingido",
-        description: "Apenas 2 sinaleiros permitidos (máximo: 1 Interno + 1 Indicado pelo Cliente)",
-        variant: "destructive"
-      })
-      return
-    }
-
-    const novoSinaleiro: Sinaleiro = {
-      id: `${tipo}_${Date.now()}`,
-      obra_id: obraId || 0,
-      nome: '',
-      rg_cpf: '',
-      cpf: '',
-      rg: '',
-      telefone: '',
-      email: '',
-      tipo: tipo === 'interno' ? 'principal' : 'reserva',
-      tipo_vinculo: tipo,
-      cliente_informou: tipo === 'cliente',
-      documentos: [],
-      certificados: []
-    }
-
-    console.log('═══════════════════════════════════════════════════════════')
-    console.log(`➕ ADICIONANDO NOVO SINALEIRO`)
-    console.log('═══════════════════════════════════════════════════════════')
-    console.log(`✅ Novo sinaleiro criado:`, novoSinaleiro)
-    console.log(`   - Tipo: ${tipo}`)
-    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
-    
-    const novosSinaleiros = [...sinaleiros, novoSinaleiro]
-    console.log(`📋 Total de sinaleiros após adicionar: ${novosSinaleiros.length}`)
-    
-    setSinaleiros(novosSinaleiros)
-    console.log(`💾 Estado atualizado com novo sinaleiro`)
-    
-    // Se não há obraId, sincronizar com estado pai (sem salvar na API)
-    // Isso garante que os sinaleiros estejam disponíveis ao criar a obra
-    if (!obraId) {
-      // Sincronizar imediatamente para que o estado pai tenha o novo sinaleiro
-      // Mesmo sem nome preenchido, o sinaleiro precisa estar no estado para ser salvo depois
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log('💾 SINCRONIZANDO NOVO SINALEIRO COM ESTADO PAI')
-      console.log('═══════════════════════════════════════════════════════════')
-      console.log(`   - Quantidade: ${novosSinaleiros.length}`)
-      console.log('   - Dados:', JSON.stringify(novosSinaleiros, null, 2))
-      console.log('   - Chamando onSave callback...')
-      
+  const sincronizarComPaiAsync = (dados: Sinaleiro[]) => {
+    if (obraId) return
+    setTimeout(() => {
       try {
         const callback = onSaveRef.current || onSave
-        callback(novosSinaleiros)
-        console.log('✅ onSave chamado com sucesso')
+        callback([...dados])
       } catch (error) {
-        console.error('❌ Erro ao chamar onSave:', error)
+        console.error('❌ Erro ao sincronizar sinaleiros com estado pai:', error)
       }
+    }, 0)
+  }
+
+  const handleAddSinaleiro = (tipo: 'interno' | 'cliente') => {
+    console.log(`➕ Adicionando sinaleiro do tipo: ${tipo}`)
+    console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
+    let novosSinaleirosParaSincronizar: Sinaleiro[] | null = null
+
+    setSinaleiros(prevSinaleiros => {
+      console.log(`   - Sinaleiros atuais: ${prevSinaleiros.length}`)
+
+      // Verificar se já existe um sinaleiro deste tipo (usando estado mais atual)
+      const jaExiste = prevSinaleiros.some(s => s.tipo_vinculo === tipo)
+      if (jaExiste) {
+        console.log(`⚠️ Sinaleiro ${tipo} já existe`)
+        toast({
+          title: "Sinaleiro já existe",
+          description: `Já existe um sinaleiro ${tipo === 'interno' ? 'interno' : 'indicado pelo cliente'}`,
+          variant: "destructive"
+        })
+        return prevSinaleiros
+      }
+
+      // Verificar limite máximo de 2 sinaleiros
+      if (prevSinaleiros.length >= 2) {
+        console.log(`⚠️ Limite de sinaleiros atingido`)
+        toast({
+          title: "Limite atingido",
+          description: "Apenas 2 sinaleiros permitidos (máximo: 1 Interno + 1 Indicado pelo Cliente)",
+          variant: "destructive"
+        })
+        return prevSinaleiros
+      }
+
+      const novoSinaleiro: Sinaleiro = {
+        id: `${tipo}_${Date.now()}`,
+        obra_id: obraId || 0,
+        nome: '',
+        rg_cpf: '',
+        cpf: '',
+        rg: '',
+        telefone: '',
+        email: '',
+        tipo: tipo === 'interno' ? 'principal' : 'reserva',
+        tipo_vinculo: tipo,
+        cliente_informou: tipo === 'cliente',
+        documentos: [],
+        certificados: []
+      }
+
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log(`➕ ADICIONANDO NOVO SINALEIRO`)
+      console.log('═══════════════════════════════════════════════════════════')
+      console.log(`✅ Novo sinaleiro criado:`, novoSinaleiro)
+      console.log(`   - Tipo: ${tipo}`)
+      console.log(`   - Obra ID: ${obraId || 'N/A (nova obra)'}`)
+
+      const novosSinaleiros = [...prevSinaleiros, novoSinaleiro]
+      console.log(`📋 Total de sinaleiros após adicionar: ${novosSinaleiros.length}`)
+      console.log(`💾 Estado atualizado com novo sinaleiro`)
+
+      if (!obraId) {
+        novosSinaleirosParaSincronizar = novosSinaleiros
+      }
+
+      return novosSinaleiros
+    })
+
+    if (novosSinaleirosParaSincronizar) {
+      console.log('💾 Agendando sincronização do novo sinaleiro com estado pai')
+      sincronizarComPaiAsync(novosSinaleirosParaSincronizar)
     } else {
       console.log('ℹ️ Obra ID existe, não sincronizando (será salvo via API)')
     }
@@ -253,19 +287,23 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
 
   const handleRemoveSinaleiro = (id: string) => {
     // Permitir remover sinaleiros (não são mais obrigatórios)
+    let sinaleirosParaSincronizar: Sinaleiro[] | null = null
     setSinaleiros(prevSinaleiros => {
       const updated = prevSinaleiros.filter(s => s.id !== id)
       
       // Se não há obraId, sincronizar com estado pai (sem salvar na API)
       if (!obraId) {
         const sinaleirosComNome = updated.filter(s => s.nome && s.nome.trim() !== '')
-        console.log('💾 Sincronizando sinaleiros após remoção:', sinaleirosComNome.length)
-        const callback = onSaveRef.current || onSave
-        callback(sinaleirosComNome)
+        sinaleirosParaSincronizar = sinaleirosComNome
       }
       
       return updated
     })
+
+    if (sinaleirosParaSincronizar) {
+      console.log('💾 Agendando sincronização dos sinaleiros após remoção:', sinaleirosParaSincronizar.length)
+      sincronizarComPaiAsync(sinaleirosParaSincronizar)
+    }
   }
 
   const handleUpdateSinaleiro = (id: string, field: keyof Sinaleiro, value: any) => {
@@ -321,6 +359,36 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
       
       return updated
     })
+  }
+
+  const preencherSinaleiroClienteTeste = (id: string) => {
+    const sufixo = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-')
+    const cpfTeste = '123.456.789-01'
+    const rgTeste = '12.345.678-9'
+    let sinaleirosAtualizadosParaSincronizar: Sinaleiro[] | null = null
+
+    setSinaleiros(prevSinaleiros => {
+      const atualizado = prevSinaleiros.map(s => {
+        if (s.id !== id) return s
+        return {
+          ...s,
+          nome: `Sinaleiro Indicado pelo Cliente - ${sufixo}`,
+          cpf: cpfTeste,
+          rg: rgTeste,
+          rg_cpf: cpfTeste,
+          telefone: '(11) 98765-4321',
+          email: `sinaleiro.cliente.${Date.now().toString().slice(-6)}@email.com`
+        }
+      })
+
+      if (!obraId) sinaleirosAtualizadosParaSincronizar = [...atualizado]
+
+      return atualizado
+    })
+
+    if (sinaleirosAtualizadosParaSincronizar) {
+      sincronizarComPaiAsync(sinaleirosAtualizadosParaSincronizar)
+    }
   }
 
   const handleSave = async (e?: React.MouseEvent<HTMLButtonElement>) => {
@@ -425,12 +493,11 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
       if (!obraId) {
         // Converter para formato do componente antes de atualizar estado local
         const sinaleirosAtualizados: Sinaleiro[] = sinaleirosParaEnviar.map(s => ({
+          ...inferirCpfRg(s.rg_cpf),
           id: s.id || `temp_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           obra_id: 0,
           nome: s.nome,
           rg_cpf: s.rg_cpf,
-          cpf: s.rg_cpf, // Assumir que rg_cpf pode ser CPF
-          rg: s.rg_cpf, // Assumir que rg_cpf pode ser RG
           telefone: s.telefone || '',
           email: s.email || '',
           tipo: s.tipo,
@@ -457,6 +524,7 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
       if (response.success && response.data) {
         // Converter resposta para formato do componente
         const sinaleirosSalvos: Sinaleiro[] = response.data.map((s: SinaleiroBackend) => ({
+          ...inferirCpfRg(s.rg_cpf),
           id: s.id,
           obra_id: s.obra_id,
           nome: s.nome,
@@ -616,6 +684,7 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
                     }
                   }}
                   onlyActive={true}
+                  allowedRoles={['Sinaleiro']}
                   placeholder="Buscar funcionário..."
                   className="w-full"
                 />
@@ -624,8 +693,19 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
 
             {/* Mensagem para sinaleiro cliente */}
             {sinaleiro.tipo_vinculo === 'cliente' && (
-              <div className="p-2 bg-blue-50 rounded-md">
+              <div className="p-2 bg-blue-50 rounded-md flex items-center justify-between gap-2">
                 <p className="text-xs text-blue-700">Este sinaleiro pode ser editado pelo cliente</p>
+                {canEdit && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={() => preencherSinaleiroClienteTeste(sinaleiro.id)}
+                  >
+                    Preencher teste
+                  </Button>
+                )}
               </div>
             )}
 
@@ -651,46 +731,66 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
                   <Label>
                     CPF <span className="text-xs text-gray-500">(ou RG)</span>
                   </Label>
+                  {(() => {
+                    const erroCpf = validarCpf(sinaleiro.cpf)
+                    return (
+                      <>
                   <Input
-                    value={sinaleiro.cpf || sinaleiro.rg_cpf || ''}
+                    value={sinaleiro.cpf || ''}
                     onChange={(e) => {
                       console.log('📝 Input CPF alterado:', e.target.value)
-                      const value = e.target.value.replace(/\D/g, '')
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 11)
                       let formatted = value
                       if (value.length <= 11) {
                         formatted = value.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
                       }
                       handleUpdateSinaleiro(sinaleiro.id, 'cpf', formatted)
-                      if (!sinaleiro.cpf) {
-                        handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', formatted)
-                      }
+                      // Documento canônico prioriza CPF quando informado; senão usa RG.
+                      handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', formatted || (sinaleiro.rg || ''))
                     }}
                     placeholder="000.000.000-00"
                     disabled={!canEdit}
+                    className={erroCpf ? 'border-red-500 focus-visible:ring-red-300' : undefined}
                   />
+                      {erroCpf && (
+                        <p className="text-xs text-red-600 mt-1">{erroCpf}</p>
+                      )}
+                    </>
+                    )
+                  })()}
                 </div>
 
                 <div>
                   <Label>
                     RG <span className="text-xs text-gray-500">(ou CPF)</span>
                   </Label>
+                  {(() => {
+                    const erroRg = validarRg(sinaleiro.rg)
+                    return (
+                      <>
                   <Input
-                    value={sinaleiro.rg || sinaleiro.rg_cpf || ''}
+                    value={sinaleiro.rg || ''}
                     onChange={(e) => {
                       console.log('📝 Input RG alterado:', e.target.value)
-                      const value = e.target.value.replace(/\D/g, '')
+                      const value = e.target.value.replace(/\D/g, '').slice(0, 11)
                       let formatted = value
                       if (value.length <= 9) {
                         formatted = value.replace(/(\d{2})(\d{3})(\d{3})(\d{1})/, '$1.$2.$3-$4')
                       }
                       handleUpdateSinaleiro(sinaleiro.id, 'rg', formatted)
-                      if (!sinaleiro.rg) {
-                        handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', formatted)
-                      }
+                      // Se não houver CPF, usa RG como documento canônico.
+                      handleUpdateSinaleiro(sinaleiro.id, 'rg_cpf', (sinaleiro.cpf || '').trim() || formatted)
                     }}
                     placeholder="00.000.000-0"
                     disabled={!canEdit}
+                    className={erroRg ? 'border-red-500 focus-visible:ring-red-300' : undefined}
                   />
+                      {erroRg && (
+                        <p className="text-xs text-red-600 mt-1">{erroRg}</p>
+                      )}
+                    </>
+                    )
+                  })()}
                 </div>
 
                 <div>

@@ -34,6 +34,14 @@ export function FuncionarioSearch({
   // Se for um array vazio [], também não filtrar
   // Se for fornecido com valores, usar esses valores para filtrar
   const rolesFilter = allowedRoles !== undefined ? allowedRoles : null
+
+  const normalizarTexto = (valor: string) =>
+    valor
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim()
+
   const [searchTerm, setSearchTerm] = useState("")
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
@@ -56,8 +64,12 @@ export function FuncionarioSearch({
         setError(null)
         
         // Buscar funcionários
+        const cargoApi =
+          rolesFilter !== null && rolesFilter.length === 1 ? rolesFilter[0] : undefined
+
         const response = await funcionariosApi.buscarFuncionarios(searchTerm, {
-          status: onlyActive ? 'Ativo' : undefined
+          status: onlyActive ? 'Ativo' : undefined,
+          cargo: cargoApi
         })
         
         if (response.success) {
@@ -71,15 +83,14 @@ export function FuncionarioSearch({
             console.log('🎯 Cargos permitidos:', rolesFilter)
             console.log('🔍 Funcionários antes do filtro:', funcionariosConvertidos.map(f => ({ name: f.name, role: f.role })))
             funcionariosConvertidos = funcionariosConvertidos.filter(funcionario => {
-              const funcionarioRole = (funcionario.role?.toLowerCase() || '').trim()
+              const funcionarioRole = normalizarTexto(funcionario.role || '')
+              if (!funcionarioRole) return false
               const roleMatch = rolesFilter.some(allowedRole => {
-                const allowedRoleLower = allowedRole.toLowerCase().trim()
+                const allowedRoleLower = normalizarTexto(allowedRole)
                 // Correspondência exata ou parcial: verifica se o cargo do funcionário contém o cargo permitido
-                // ou se o cargo permitido contém o cargo do funcionário
                 // Também verifica correspondência exata após normalização
                 return funcionarioRole === allowedRoleLower || 
-                       funcionarioRole.includes(allowedRoleLower) || 
-                       allowedRoleLower.includes(funcionarioRole)
+                       funcionarioRole.includes(allowedRoleLower)
               })
               console.log(`🔍 Funcionário ${funcionario.name} (${funcionario.role}) - Match: ${roleMatch}`)
               return roleMatch

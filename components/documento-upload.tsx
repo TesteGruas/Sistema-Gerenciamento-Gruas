@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, useEffect, useId } from "react"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -36,7 +36,19 @@ export function DocumentoUpload({
   const [previewUrl, setPreviewUrl] = useState<string | null>(fileUrl || null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const inputId = useId()
   const { toast } = useToast()
+
+  // Sincroniza estado interno quando o arquivo é definido externamente
+  // (ex.: auto-preencher da tela de Nova Obra).
+  useEffect(() => {
+    setFile(currentFile || null)
+  }, [currentFile])
+
+  // Sincroniza URL de preview externa quando aplicável.
+  useEffect(() => {
+    setPreviewUrl(fileUrl || null)
+  }, [fileUrl])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0]
@@ -121,11 +133,11 @@ export function DocumentoUpload({
             accept={accept}
             onChange={handleFileSelect}
             className="hidden"
-            id="documento-upload"
+            id={inputId}
             disabled={disabled}
           />
           <Label
-            htmlFor="documento-upload"
+            htmlFor={inputId}
             className="cursor-pointer flex flex-col items-center gap-2"
           >
             <Upload className="w-8 h-8 text-gray-400" />

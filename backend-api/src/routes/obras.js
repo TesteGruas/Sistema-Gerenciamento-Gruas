@@ -68,8 +68,24 @@ const obraSchema = Joi.object({
       tipo_ligacao: Joi.string().allow(null, '').optional(),
       capacidade_ponta: Joi.number().min(0).allow(null).optional(),
       capacidade_maxima_raio: Joi.number().min(0).allow(null).optional(),
+      capacidade_1_cabo: Joi.number().min(0).allow(null).optional(),
+      capacidade_2_cabos: Joi.number().min(0).allow(null).optional(),
+      velocidade_rotacao: Joi.number().min(0).allow(null).optional(),
       ano_fabricacao: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
       vida_util: Joi.number().min(0).allow(null).optional(),
+      manual_operacao: Joi.string().allow(null, '').optional(),
+      procedimento_montagem: Joi.boolean().allow(null).optional(),
+      procedimento_operacao: Joi.boolean().allow(null).optional(),
+      procedimento_desmontagem: Joi.boolean().allow(null).optional(),
+      fundacao: Joi.string().allow(null, '').optional(),
+      condicoes_ambiente: Joi.string().allow(null, '').optional(),
+      raio_operacao: Joi.number().min(0).allow(null).optional(),
+      raio: Joi.number().min(0).allow(null).optional(),
+      altura: Joi.number().min(0).allow(null).optional(),
+      local_instalacao: Joi.string().allow(null, '').optional(),
+      observacoes_montagem: Joi.string().allow(null, '').optional(),
+      responsavel_tecnico: Joi.string().allow(null, '').optional(),
+      crea_responsavel: Joi.string().allow(null, '').optional(),
       valor_operador: Joi.number().min(0).allow(null).optional(),
       valor_manutencao: Joi.number().min(0).allow(null).optional(),
       valor_estaiamento: Joi.number().min(0).allow(null).optional(),
@@ -1525,6 +1541,15 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             return new Date().toISOString().split('T')[0]
           }
           
+          const tipoLigacaoNormalizada = (() => {
+            const valor = grua.tipo_ligacao
+            if (!valor) return null
+            const texto = String(valor).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+            if (texto.includes('tri')) return 'trifasica'
+            if (texto.includes('mono')) return 'monofasica'
+            return String(valor)
+          })()
+
           const gruaObraData = {
             obra_id: data.id,
             grua_id: grua.grua_id,
@@ -1541,11 +1566,27 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             velocidade_translacao: parseNumber(grua.velocidade_translacao),
             potencia_instalada: parseNumber(grua.potencia_instalada),
             voltagem: grua.voltagem || null,
-            tipo_ligacao: grua.tipo_ligacao || null,
+            tipo_ligacao: tipoLigacaoNormalizada,
             capacidade_ponta: parseNumber(grua.capacidade_ponta),
             capacidade_maxima_raio: parseNumber(grua.capacidade_maxima_raio),
+            capacidade_1_cabo: parseNumber(grua.capacidade_1_cabo),
+            capacidade_2_cabos: parseNumber(grua.capacidade_2_cabos),
+            velocidade_rotacao: parseNumber(grua.velocidade_rotacao),
             ano_fabricacao: parseInteger(grua.ano_fabricacao),
             vida_util: parseInteger(grua.vida_util),
+            manual_operacao: grua.manual_operacao || 'Vinculado à obra',
+            procedimento_montagem: typeof grua.procedimento_montagem === 'boolean' ? grua.procedimento_montagem : false,
+            procedimento_operacao: typeof grua.procedimento_operacao === 'boolean' ? grua.procedimento_operacao : false,
+            procedimento_desmontagem: typeof grua.procedimento_desmontagem === 'boolean' ? grua.procedimento_desmontagem : false,
+            fundacao: grua.fundacao || null,
+            condicoes_ambiente: grua.condicoes_ambiente || null,
+            raio_operacao: parseNumber(grua.raio_operacao ?? grua.raio ?? grua.raio_trabalho),
+            raio: parseNumber(grua.raio ?? grua.raio_operacao ?? grua.raio_trabalho),
+            altura: parseNumber(grua.altura ?? grua.altura_final),
+            local_instalacao: grua.local_instalacao || value.endereco || null,
+            observacoes_montagem: grua.observacoes_montagem || grua.observacoes || value.observacoes || null,
+            responsavel_tecnico: grua.responsavel_tecnico || null,
+            crea_responsavel: grua.crea_responsavel || null,
             // Serviços e Logística
             guindaste_montagem: grua.guindaste_montagem || null,
             quantidade_viagens: parseInteger(grua.quantidade_viagens),
@@ -2641,6 +2682,64 @@ router.delete('/:id', authenticateToken, requirePermission('obras:excluir'), asy
 
     if (orcamentosError) {
       console.error('Erro ao verificar orçamentos:', orcamentosError)
+    }
+
+    // Buscar gruas relacionadas para limpar vínculo e status antes de excluir a obra
+    const { data: relacoesGruaObra, error: relacoesError } = await supabaseAdmin
+      .from('grua_obra')
+      .select('id, grua_id, status')
+      .eq('obra_id', id)
+
+    if (relacoesError) {
+      console.error('Erro ao buscar relacionamentos grua_obra da obra:', relacoesError)
+    }
+
+    const idsGruasRelacionadas = Array.from(new Set((relacoesGruaObra || []).map((r) => r.grua_id).filter(Boolean)))
+
+    // Encerrar relacionamentos ativos para evitar "vínculo fantasma"
+    if ((relacoesGruaObra || []).length > 0) {
+      const hoje = new Date().toISOString().split('T')[0]
+      const { error: encerrarRelacoesError } = await supabaseAdmin
+        .from('grua_obra')
+        .update({
+          status: 'Concluída',
+          data_fim_locacao: hoje,
+          updated_at: new Date().toISOString()
+        })
+        .eq('obra_id', id)
+        .in('status', ['Ativa', 'Pausada'])
+
+      if (encerrarRelacoesError) {
+        console.error('Erro ao encerrar relacionamentos grua_obra:', encerrarRelacoesError)
+      }
+    }
+
+    // Limpar configuração auxiliar da obra para não deixar pendências
+    const { error: removeConfigError } = await supabaseAdmin
+      .from('obra_gruas_configuracao')
+      .delete()
+      .eq('obra_id', id)
+
+    if (removeConfigError) {
+      console.error('Erro ao remover obra_gruas_configuracao da obra:', removeConfigError)
+    }
+
+    // Liberar gruas que ainda apontam para esta obra como obra atual
+    if (idsGruasRelacionadas.length > 0) {
+      const { error: liberarGruasError } = await supabaseAdmin
+        .from('gruas')
+        .update({
+          status: 'disponivel',
+          current_obra_id: null,
+          current_obra_name: null,
+          updated_at: new Date().toISOString()
+        })
+        .in('id', idsGruasRelacionadas)
+        .eq('current_obra_id', id)
+
+      if (liberarGruasError) {
+        console.error('Erro ao liberar gruas vinculadas à obra excluída:', liberarGruasError)
+      }
     }
 
     // Se houver orçamentos vinculados, desvincular antes de excluir

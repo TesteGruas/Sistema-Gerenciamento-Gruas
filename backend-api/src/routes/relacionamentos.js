@@ -21,7 +21,39 @@ const gruaObraSchema = Joi.object({
   data_fim_locacao: Joi.date().allow(null).optional(),
   valor_locacao_mensal: Joi.number().min(0).allow(null).optional(),
   status: Joi.string().valid('Ativa', 'Concluída', 'Suspensa').default('Ativa'),
-  observacoes: Joi.string().allow(null, '').optional()
+  observacoes: Joi.string().allow(null, '').optional(),
+  tipo_base: Joi.string().allow(null, '').optional(),
+  altura_inicial: Joi.number().allow(null).optional(),
+  altura_final: Joi.number().allow(null).optional(),
+  velocidade_giro: Joi.number().allow(null).optional(),
+  velocidade_rotacao: Joi.number().allow(null).optional(),
+  velocidade_elevacao: Joi.number().allow(null).optional(),
+  velocidade_translacao: Joi.number().allow(null).optional(),
+  potencia_instalada: Joi.number().allow(null).optional(),
+  voltagem: Joi.string().allow(null, '').optional(),
+  tipo_ligacao: Joi.string().allow(null, '').optional(),
+  capacidade_ponta: Joi.number().allow(null).optional(),
+  capacidade_maxima_raio: Joi.number().allow(null).optional(),
+  capacidade_1_cabo: Joi.number().allow(null).optional(),
+  capacidade_2_cabos: Joi.number().allow(null).optional(),
+  ano_fabricacao: Joi.number().integer().allow(null).optional(),
+  vida_util: Joi.number().integer().allow(null).optional(),
+  data_montagem: Joi.date().allow(null).optional(),
+  data_desmontagem: Joi.date().allow(null).optional(),
+  local_instalacao: Joi.string().allow(null, '').optional(),
+  observacoes_montagem: Joi.string().allow(null, '').optional(),
+  fundacao: Joi.string().allow(null, '').optional(),
+  condicoes_ambiente: Joi.string().allow(null, '').optional(),
+  raio_operacao: Joi.number().allow(null).optional(),
+  raio: Joi.number().allow(null).optional(),
+  raio_trabalho: Joi.number().allow(null).optional(),
+  altura: Joi.number().allow(null).optional(),
+  manual_operacao: Joi.string().allow(null, '').optional(),
+  procedimento_montagem: Joi.boolean().allow(null).optional(),
+  procedimento_operacao: Joi.boolean().allow(null).optional(),
+  procedimento_desmontagem: Joi.boolean().allow(null).optional(),
+  responsavel_tecnico: Joi.string().allow(null, '').optional(),
+  crea_responsavel: Joi.string().allow(null, '').optional()
 })
 
 const gruaFuncionarioSchema = Joi.object({
@@ -289,9 +321,21 @@ router.post('/grua-obra', async (req, res) => {
     }
 
     // Criar relacionamento
+    const dadosTecnicos = sanitizarUpdateGruaObra(value)
+    const insertData = {
+      grua_id: value.grua_id,
+      obra_id: value.obra_id,
+      data_inicio_locacao: value.data_inicio_locacao,
+      data_fim_locacao: value.data_fim_locacao || null,
+      valor_locacao_mensal: value.valor_locacao_mensal ?? null,
+      status: value.status || 'Ativa',
+      observacoes: value.observacoes || null,
+      ...dadosTecnicos
+    }
+
     const { data, error: createError } = await supabaseAdmin
       .from('grua_obra')
-      .insert([value])
+      .insert([insertData])
       .select(`
         *,
         grua:gruas(id, modelo, fabricante, tipo),

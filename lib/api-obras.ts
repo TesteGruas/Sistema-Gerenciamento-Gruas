@@ -225,8 +225,15 @@ export interface ObraCreateData {
     tipo_ligacao?: string
     capacidade_ponta?: number
     capacidade_maxima_raio?: number
+    capacidade_1_cabo?: number
+    capacidade_2_cabos?: number
+    velocidade_rotacao?: number
     ano_fabricacao?: number
     vida_util?: number
+    manual_operacao?: string
+    procedimento_montagem?: boolean
+    procedimento_operacao?: boolean
+    procedimento_desmontagem?: boolean
     // Valores detalhados
     valor_operador?: number
     valor_manutencao?: number
@@ -650,18 +657,37 @@ export const obrasApi = {
 export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relacionamentos?: { gruasVinculadas?: any[], funcionariosVinculados?: any[] }) => {
   // Converter relacionamentos que vêm diretamente do backend
   const gruasVinculadas = obraBackend.grua_obra?.map(relacao => ({
+    ...relacao,
     id: relacao.id.toString(),
+    relacaoId: relacao.id.toString(),
     gruaId: relacao.grua_id,
     obraId: obraBackend.id.toString(),
     dataInicioLocacao: relacao.data_inicio_locacao,
     dataFimLocacao: relacao.data_fim_locacao,
     valorLocacaoMensal: relacao.valor_locacao_mensal,
+    valor_locacao: relacao.valor_locacao ?? relacao.valor_locacao_mensal,
+    taxa_mensal: relacao.taxa_mensal ?? relacao.valor_locacao_mensal,
     status: relacao.status,
     observacoes: relacao.observacoes,
+    tipo_base: relacao.tipo_base,
+    fundacao: relacao.fundacao,
+    condicoes_ambiente: relacao.condicoes_ambiente,
+    raio_operacao: relacao.raio_operacao ?? relacao.raio ?? relacao.raio_trabalho,
+    altura: relacao.altura ?? relacao.altura_final,
+    local_instalacao: relacao.local_instalacao,
+    observacoes_montagem: relacao.observacoes_montagem,
+    responsavel_tecnico: relacao.responsavel_tecnico,
+    crea_responsavel: relacao.crea_responsavel,
+    manual_operacao: relacao.manual_operacao,
+    manual_montagem: relacao.manual_montagem,
+    procedimento_montagem: relacao.procedimento_montagem,
+    procedimento_operacao: relacao.procedimento_operacao,
+    procedimento_desmontagem: relacao.procedimento_desmontagem,
     createdAt: obraBackend.created_at,
     updatedAt: obraBackend.updated_at,
     // Dados da grua
     grua: relacao.grua ? {
+      ...relacao.grua,
       id: relacao.grua.id,
       modelo: relacao.grua.modelo,
       fabricante: relacao.grua.fabricante,
@@ -820,8 +846,24 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
       tipo_ligacao: grua.tipo_ligacao,
       capacidade_ponta: grua.capacidade_ponta,
       capacidade_maxima_raio: grua.capacidade_maxima_raio,
+      capacidade_1_cabo: grua.capacidade_1_cabo,
+      capacidade_2_cabos: grua.capacidade_2_cabos,
+      velocidade_rotacao: grua.velocidade_rotacao,
       ano_fabricacao: grua.ano_fabricacao,
       vida_util: grua.vida_util,
+      fundacao: grua.fundacao,
+      condicoes_ambiente: grua.condicoes_ambiente,
+      raio_operacao: grua.raio_operacao,
+      altura: grua.altura,
+      local_instalacao: grua.local_instalacao,
+      observacoes_montagem: grua.observacoes_montagem,
+      responsavel_tecnico: grua.responsavel_tecnico,
+      crea_responsavel: grua.crea_responsavel,
+      manual_operacao: grua.manual_operacao,
+      manual_montagem: grua.manual_montagem,
+      procedimento_montagem: grua.procedimento_montagem,
+      procedimento_operacao: grua.procedimento_operacao,
+      procedimento_desmontagem: grua.procedimento_desmontagem,
       // Valores detalhados
       valor_operador: grua.valor_operador,
       valor_manutencao: grua.valor_manutencao,
