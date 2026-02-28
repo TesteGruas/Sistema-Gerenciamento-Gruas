@@ -2964,6 +2964,7 @@ startxref
                         <SelectItem value="Roda">Roda</SelectItem>
                         <SelectItem value="Carrinho">Carrinho</SelectItem>
                         <SelectItem value="Fixação Direta">Fixação Direta</SelectItem>
+                        <SelectItem value="BASE MOVEL">BASE MOVEL</SelectItem>
                         <SelectItem value="Outro">Outro</SelectItem>
                       </SelectContent>
                     </Select>
