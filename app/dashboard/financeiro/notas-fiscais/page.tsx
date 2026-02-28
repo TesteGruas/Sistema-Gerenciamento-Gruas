@@ -1573,7 +1573,43 @@ export default function NotasFiscaisPage() {
   // Função para parsear XML de NFe e preencher o formulário automaticamente
   const parseNFeXML = async (file: File) => {
     try {
-      const text = await file.text()
+      const xmlBuffer = await file.arrayBuffer()
+      const xmlBytes = new Uint8Array(xmlBuffer)
+
+      // Alguns emissores geram XML em ANSI/Latin-1 mesmo declarando UTF-8.
+      // Fazemos fallback de decodificação para preservar acentuação.
+      const utf8Text = new TextDecoder('utf-8').decode(xmlBytes)
+      const encodingMatch = utf8Text.match(/<\?xml[^>]*encoding=["']([^"']+)["']/i)
+      const declaredEncoding = encodingMatch?.[1]?.trim().toLowerCase()
+
+      const decodeCandidates = Array.from(new Set([
+        declaredEncoding,
+        'utf-8',
+        'windows-1252',
+        'iso-8859-1'
+      ].filter(Boolean) as string[]))
+
+      const decodingScore = (value: string) => {
+        const replacementChars = (value.match(/\uFFFD/g) || []).length
+        return replacementChars
+      }
+
+      let text = utf8Text
+      let bestScore = decodingScore(utf8Text)
+
+      for (const encoding of decodeCandidates) {
+        try {
+          const candidateText = new TextDecoder(encoding).decode(xmlBytes)
+          const candidateScore = decodingScore(candidateText)
+          if (candidateScore < bestScore) {
+            text = candidateText
+            bestScore = candidateScore
+          }
+        } catch {
+          // Ignora encoding não suportado no navegador
+        }
+      }
+
       const parser = new DOMParser()
       const xmlDoc = parser.parseFromString(text, 'text/xml')
 
@@ -1599,14 +1635,139 @@ export default function NotasFiscaisPage() {
                parent.getElementsByTagName(tagName)[0] || null
       }
 
-      // Verificar se é um XML de NFe válido
+      const normalizeImportedText = (value: string): string => {
+        if (!value) return value
+
+        const replacements: Array<[RegExp, string]> = [
+          [/Servi\?os/g, 'Serviços'],
+          [/servi\?os/g, 'serviços'],
+          [/Servi\?o/g, 'Serviço'],
+          [/servi\?o/g, 'serviço'],
+          [/per\?odo/g, 'período'],
+          [/Per\?odo/g, 'Período'],
+          [/MEDI\?\?O/g, 'MEDIÇÃO'],
+          [/Medi\?\?o/g, 'Medição'],
+          [/medi\?\?o/g, 'medição'],
+          [/opera\?\?o/g, 'operação'],
+          [/Opera\?\?o/g, 'Operação'],
+          [/eleva\?\?o/g, 'elevação'],
+          [/Eleva\?\?o/g, 'Elevação'],
+          [/manuten\?\?o/g, 'manutenção'],
+          [/Manuten\?\?o/g, 'Manutenção']
+        ]
+
+        return replacements.reduce((acc, [pattern, replacement]) => acc.replace(pattern, replacement), value)
+      }
+
+      // Verificar se é um XML de NFe/NFS-e válido
       const infNFe = getTagElement(xmlDoc, 'infNFe')
-      if (!infNFe) {
+      const infNfse = getTagElement(xmlDoc, 'InfNfse')
+      if (!infNFe && !infNfse) {
         toast({
           title: "XML inválido",
-          description: "Este arquivo não parece ser um XML de NFe válido",
+          description: "Este arquivo não parece ser um XML de NFe/NFS-e válido",
           variant: "destructive"
         })
+        return
+      }
+
+      // Branch NFS-e (serviços)
+      if (!infNFe && infNfse) {
+        const declaracao = getTagElement(infNfse, 'InfDeclaracaoPrestacaoServico')
+        const servico = declaracao ? getTagElement(declaracao, 'Servico') : null
+        const valoresServico = servico ? getTagElement(servico, 'Valores') : null
+        const tomador = declaracao ? getTagElement(declaracao, 'TomadorServico') : null
+        const prestador = declaracao ? getTagElement(declaracao, 'Prestador') : null
+
+        const numeroNfse = getTagValue(infNfse, 'Numero')
+        const dataEmissaoNfseRaw = getTagValue(infNfse, 'DataEmissao')
+        const dataEmissaoNfse = dataEmissaoNfseRaw
+          ? dataEmissaoNfseRaw.split('T')[0]
+          : new Date().toISOString().split('T')[0]
+        const valorServicos = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorServicos') : '0') || 0
+        const valorIss = parseFloat(
+          (valoresServico ? getTagValue(valoresServico, 'ValorIss') : '') || getTagValue(infNfse, 'ValorIss')
+        ) || 0
+        const valorInss = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorInss') : '0') || 0
+        const codigoVerificacao = getTagValue(infNfse, 'CodigoVerificacao')
+        const discriminacao = normalizeImportedText(servico ? getTagValue(servico, 'Discriminacao') : '')
+        const itemListaServico = servico ? getTagValue(servico, 'ItemListaServico') : ''
+
+        const tipoNotaSelecionado: 'saida' | 'entrada' = (formData.tipo || activeTab) as 'saida' | 'entrada'
+        const dadosNfse: NotaFiscalCreate = {
+          numero_nf: numeroNfse || `NFSE-${Date.now().toString().slice(-6)}`,
+          serie: 'NFS-e',
+          data_emissao: dataEmissaoNfse,
+          data_vencimento: '',
+          valor_total: valorServicos,
+          tipo: tipoNotaSelecionado,
+          status: 'pendente',
+          tipo_nota: 'nf_servico',
+          eletronica: true,
+          chave_acesso: codigoVerificacao || undefined,
+          observacoes: normalizeImportedText(discriminacao)
+        }
+
+        if (tipoNotaSelecionado === 'saida' && tomador) {
+          const docTomador = (
+            getTagValue(tomador, 'CNPJ') ||
+            getTagValue(tomador, 'CPF') ||
+            getTagValue(tomador, 'Cnpj') ||
+            getTagValue(tomador, 'Cpf')
+          ).replace(/\D/g, '')
+
+          if (docTomador) {
+            const clienteEncontrado = clientes.find((c) => (c.cnpj || '').replace(/\D/g, '') === docTomador)
+            if (clienteEncontrado) {
+              dadosNfse.cliente_id = clienteEncontrado.id
+            }
+          }
+        } else if (tipoNotaSelecionado === 'entrada' && prestador) {
+          const docPrestador = (
+            getTagValue(prestador, 'CNPJ') ||
+            getTagValue(prestador, 'CPF') ||
+            getTagValue(prestador, 'Cnpj') ||
+            getTagValue(prestador, 'Cpf')
+          ).replace(/\D/g, '')
+
+          if (docPrestador) {
+            const fornecedorEncontrado = fornecedores.find((f) => (f.cnpj || '').replace(/\D/g, '') === docPrestador)
+            if (fornecedorEncontrado) {
+              dadosNfse.fornecedor_id = fornecedorEncontrado.id
+            }
+          }
+        }
+
+        const itemNfse: NotaFiscalItem = calcularImpostos({
+          codigo_produto: itemListaServico || 'SERVICO',
+          ncm_sh: '',
+          descricao: normalizeImportedText(discriminacao) || 'Serviço',
+          unidade: 'SV',
+          quantidade: 1,
+          preco_unitario: valorServicos,
+          preco_total: valorServicos,
+          cfop: '',
+          csosn: '',
+          base_calculo_icms: undefined,
+          percentual_icms: undefined,
+          valor_icms: 0,
+          percentual_ipi: undefined,
+          valor_ipi: 0,
+          valor_issqn: valorIss,
+          valor_inss: valorInss,
+          valor_cbs: 0,
+          valor_liquido: valorServicos - valorIss - valorInss,
+          impostos_dinamicos: []
+        })
+
+        setFormData(dadosNfse)
+        setItens([itemNfse])
+
+        toast({
+          title: "XML NFS-e importado com sucesso",
+          description: `Dados extraídos: NFS-e ${dadosNfse.numero_nf}. Valor: R$ ${valorServicos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
+        })
+
         return
       }
 
@@ -1665,7 +1826,7 @@ export default function NotasFiscaisPage() {
       }
 
       // Observações
-      const observacoes = infAdic ? getTagValue(infAdic, 'infCpl') : ''
+      const observacoes = normalizeImportedText(infAdic ? getTagValue(infAdic, 'infCpl') : '')
 
       // Tipo indicado no XML (tpNF: 1=saida, 0=entrada)
       const tipoNotaXml: 'saida' | 'entrada' = tpNF === '1' ? 'saida' : 'entrada'
@@ -1861,7 +2022,7 @@ export default function NotasFiscaisPage() {
         const item: NotaFiscalItem = {
           codigo_produto: getTagValue(prod, 'cProd'),
           ncm_sh: getTagValue(prod, 'NCM'),
-          descricao: getTagValue(prod, 'xProd'),
+          descricao: normalizeImportedText(getTagValue(prod, 'xProd')),
           unidade: getTagValue(prod, 'uCom') || 'UN',
           quantidade: qCom,
           preco_unitario: vUnCom,
@@ -2616,7 +2777,7 @@ export default function NotasFiscaisPage() {
                       input.click()
                     }}
                     className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-                    title="Importar dados de um XML de NFe"
+                    title="Importar dados de um XML de NFe/NFS-e"
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Importar XML
@@ -3718,13 +3879,13 @@ export default function NotasFiscaisPage() {
           <DialogHeader>
             <DialogTitle>Importar Nota Fiscal (XML)</DialogTitle>
             <DialogDescription>
-              Envie o arquivo XML da NFe para importar automaticamente
+              Envie o arquivo XML da NFe/NFS-e para importar automaticamente
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
             <div>
-              <Label htmlFor="xml-file">Arquivo XML da NFe *</Label>
+              <Label htmlFor="xml-file">Arquivo XML da NFe/NFS-e *</Label>
               <Input
                 id="xml-file"
                 type="file"

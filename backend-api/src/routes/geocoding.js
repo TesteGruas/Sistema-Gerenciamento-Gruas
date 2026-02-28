@@ -12,6 +12,76 @@ const router = express.Router()
 router.use(authenticateToken)
 
 /**
+ * GET /api/geocoding/via-cep/:cep
+ * Busca dados de endereço no ViaCEP (sem geocoding)
+ */
+router.get('/via-cep/:cep', async (req, res) => {
+  try {
+    const { cep } = req.params
+
+    if (!cep) {
+      return res.status(400).json({
+        success: false,
+        error: 'CEP é obrigatório'
+      })
+    }
+
+    const cepLimpo = cep.replace(/\D/g, '')
+
+    if (cepLimpo.length !== 8) {
+      return res.status(400).json({
+        success: false,
+        error: 'CEP inválido. Deve conter 8 dígitos'
+      })
+    }
+
+    const viaCepResponse = await fetch(`https://viacep.com.br/ws/${cepLimpo}/json/`)
+    const viaCepData = viaCepResponse.ok ? await viaCepResponse.json() : null
+
+    if (viaCepData && !viaCepData?.erro) {
+      return res.json({
+        success: true,
+        data: viaCepData
+      })
+    }
+
+    // Fallback: BrasilAPI (mantém o contrato semelhante ao ViaCEP)
+    const brasilApiResponse = await fetch(`https://brasilapi.com.br/api/cep/v1/${cepLimpo}`)
+    const brasilApiData = brasilApiResponse.ok ? await brasilApiResponse.json() : null
+
+    if (brasilApiData && !brasilApiData?.errors) {
+      return res.json({
+        success: true,
+        data: {
+          cep: brasilApiData.cep || `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5)}`,
+          logradouro: brasilApiData.street || '',
+          complemento: '',
+          bairro: brasilApiData.neighborhood || '',
+          localidade: brasilApiData.city || '',
+          uf: brasilApiData.state || '',
+          ibge: brasilApiData.city_ibge || '',
+          gia: '',
+          ddd: brasilApiData.ddd || '',
+          siafi: ''
+        }
+      })
+    }
+
+    return res.status(404).json({
+      success: false,
+      error: 'CEP inválido ou não encontrado'
+    })
+  } catch (error) {
+    console.error('Erro ao buscar dados do CEP no ViaCEP:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
  * GET /api/geocoding/cep/:cep
  * Converte CEP em coordenadas (latitude e longitude)
  */

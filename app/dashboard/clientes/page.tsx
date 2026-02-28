@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -41,6 +40,13 @@ import {
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { apiArquivos } from "@/lib/api-arquivos"
+import { buscarEnderecoPorCep as buscarViaCep } from "@/lib/api-cep"
+
+const UFS = [
+  "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
+  "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN",
+  "RS", "RO", "RR", "SC", "SP", "SE", "TO"
+]
 
 export default function ClientesPage() {
   const router = useRouter()
@@ -64,9 +70,13 @@ export default function ClientesPage() {
     endereco: '',
     endereco_complemento: '',
     endereco_obra: '',
+    endereco_obra_complemento: '',
     cidade: '',
     estado: '',
     cep: '',
+    cidade_obra: '',
+    estado_obra: '',
+    cep_obra: '',
     contato: '',
     contato_cargo: '',
     contato_email: '',
@@ -317,6 +327,22 @@ export default function ClientesPage() {
   // Os clientes já vêm filtrados do backend, não precisamos filtrar novamente
   const filteredClientes = clientes
 
+  const formatarLinhaCidadeEstado = (cidade?: string, estado?: string) => {
+    if (cidade && estado) return `${cidade}/${estado}`
+    return cidade || estado || ''
+  }
+
+  const formatarEnderecoObra = (cliente: Cliente) => {
+    const partes = [
+      cliente.endereco_obra,
+      cliente.endereco_obra_complemento,
+      formatarLinhaCidadeEstado(cliente.cidade_obra, cliente.estado_obra),
+      cliente.cep_obra ? `CEP ${cliente.cep_obra}` : ''
+    ].filter(Boolean)
+
+    return partes.join(' - ')
+  }
+
 
   const handleViewDetails = (cliente: Cliente) => {
     setSelectedCliente(cliente)
@@ -335,9 +361,13 @@ export default function ClientesPage() {
       endereco: cliente.endereco || '',
       endereco_complemento: cliente.endereco_complemento || '',
       endereco_obra: cliente.endereco_obra || '',
+      endereco_obra_complemento: cliente.endereco_obra_complemento || '',
       cidade: cliente.cidade || '',
       estado: cliente.estado || '',
       cep: cliente.cep || '',
+      cidade_obra: cliente.cidade_obra || '',
+      estado_obra: cliente.estado_obra || '',
+      cep_obra: cliente.cep_obra || '',
       contato: cliente.contato || '',
       contato_cargo: cliente.contato_cargo || '',
       contato_email: cliente.contato_email || '',
@@ -523,10 +553,6 @@ export default function ClientesPage() {
     if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
       camposFaltando.push('Email do Contato')
     }
-    if (!clienteFormData.contato_telefone || !clienteFormData.contato_telefone.trim()) {
-      camposFaltando.push('Telefone do Contato')
-    }
-    
     if (camposFaltando.length > 0) {
       toast({
         title: "Campos obrigatórios",
@@ -545,6 +571,7 @@ export default function ClientesPage() {
         cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
         telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
         cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
         contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
         contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
         // Incluir campos de usuário se estiver criando
@@ -589,9 +616,13 @@ export default function ClientesPage() {
         endereco: '',
         endereco_complemento: '',
         endereco_obra: '',
+        endereco_obra_complemento: '',
         cidade: '',
         estado: '',
         cep: '',
+        cidade_obra: '',
+        estado_obra: '',
+        cep_obra: '',
         contato: '',
         contato_cargo: '',
         contato_email: '',
@@ -647,10 +678,6 @@ export default function ClientesPage() {
     if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
       camposFaltando.push('Email do Contato')
     }
-    if (!clienteFormData.contato_telefone || !clienteFormData.contato_telefone.trim()) {
-      camposFaltando.push('Telefone do Contato')
-    }
-    
     if (camposFaltando.length > 0) {
       toast({
         title: "Campos obrigatórios",
@@ -669,6 +696,7 @@ export default function ClientesPage() {
         cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
         telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
         cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
         contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
         contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
         // Remover campos de usuário na edição (não devem ser enviados)
@@ -982,7 +1010,16 @@ export default function ClientesPage() {
                     {(cliente.cidade || cliente.estado) && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <MapPin className="w-4 h-4" />
-                        <span>{cliente.cidade}, {cliente.estado}</span>
+                        <span>{formatarLinhaCidadeEstado(cliente.cidade, cliente.estado)}</span>
+                      </div>
+                    )}
+
+                    {(cliente.endereco_obra || cliente.cidade_obra || cliente.estado_obra || cliente.cep_obra) && (
+                      <div className="flex items-center gap-2 text-sm text-gray-600">
+                        <MapPin className="w-4 h-4 text-orange-500" />
+                        <span className="truncate" title={formatarEnderecoObra(cliente)}>
+                          Obra: {formatarEnderecoObra(cliente)}
+                        </span>
                       </div>
                     )}
                     
@@ -1333,7 +1370,7 @@ function ClienteForm({
   onRemoverArquivo
 }: { 
   formData: ClienteFormData; 
-  setFormData: (data: ClienteFormData) => void; 
+  setFormData: React.Dispatch<React.SetStateAction<ClienteFormData>>; 
   onSubmit: (e: React.FormEvent) => void; 
   onClose: () => void;
   isEdit: boolean;
@@ -1349,6 +1386,81 @@ function ClienteForm({
   loadingArquivos?: boolean;
   onRemoverArquivo?: (arquivoId: number) => void;
 }) {
+  const [buscandoCepCliente, setBuscandoCepCliente] = useState(false)
+  const [buscandoCepObra, setBuscandoCepObra] = useState(false)
+  const [erroCepCliente, setErroCepCliente] = useState('')
+  const [erroCepObra, setErroCepObra] = useState('')
+
+  const formatarCep = (rawValue: string) => {
+    const numeric = rawValue.replace(/\D/g, '').slice(0, 8)
+    if (numeric.length <= 5) return numeric
+    return `${numeric.slice(0, 5)}-${numeric.slice(5)}`
+  }
+
+  const aplicarEnderecoPorCep = async (cep: string, tipo: 'cliente' | 'obra') => {
+    const cepNumerico = cep.replace(/\D/g, '')
+    if (cepNumerico.length !== 8) return
+
+    if (tipo === 'cliente') {
+      setBuscandoCepCliente(true)
+      setErroCepCliente('')
+    } else {
+      setBuscandoCepObra(true)
+      setErroCepObra('')
+    }
+
+    try {
+      const data = await buscarViaCep(cepNumerico)
+
+      if (tipo === 'cliente') {
+        setFormData((prev) => ({
+          ...prev,
+          endereco: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco,
+          cidade: data.localidade || prev.cidade,
+          estado: data.uf || prev.estado,
+          cep: formatarCep(cepNumerico)
+        }))
+        setErroCepCliente('')
+        return
+      }
+
+      setFormData((prev) => ({
+        ...prev,
+        endereco_obra: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco_obra,
+        cidade_obra: data.localidade || prev.cidade_obra,
+        estado_obra: data.uf || prev.estado_obra,
+        cep_obra: formatarCep(cepNumerico)
+      }))
+      setErroCepObra('')
+    } catch (error) {
+      console.error('Erro ao buscar CEP:', error)
+      if (tipo === 'cliente') {
+        setErroCepCliente('CEP não encontrado. Verifique o número informado.')
+      } else {
+        const cepClienteNumerico = (formData.cep || '').replace(/\D/g, '')
+        // Fallback: se CEP da obra for igual ao da empresa, reaproveita os dados já preenchidos da empresa
+        if (cepClienteNumerico === cepNumerico && (formData.endereco || formData.cidade || formData.estado)) {
+          setFormData((prev) => ({
+            ...prev,
+            endereco_obra: prev.endereco || prev.endereco_obra,
+            cidade_obra: prev.cidade || prev.cidade_obra,
+            estado_obra: prev.estado || prev.estado_obra,
+            cep_obra: formatarCep(cepNumerico)
+          }))
+          setErroCepObra('')
+          return
+        }
+        setErroCepObra('CEP não encontrado. Verifique o número informado.')
+      }
+    } finally {
+      if (tipo === 'cliente') {
+        setBuscandoCepCliente(false)
+      } else {
+        setBuscandoCepObra(false)
+      }
+    }
+  }
+
   const preencherDadosDebug = () => {
     setFormData({
       nome: 'Construtora ABC Ltda',
@@ -1359,10 +1471,14 @@ function ClienteForm({
       telefone: '(11) 98765-4321',
       endereco: 'Rua das Construções, 123',
       endereco_complemento: 'Sala 402',
-      endereco_obra: 'Av. Paulista, 1500 - Bela Vista, São Paulo/SP',
+      endereco_obra: 'Av. Paulista, 1500 - Bela Vista',
+      endereco_obra_complemento: 'Torre B',
       cidade: 'São Paulo',
       estado: 'SP',
       cep: '01310-100',
+      cidade_obra: 'São Paulo',
+      estado_obra: 'SP',
+      cep_obra: '01311-000',
       contato: 'João Silva',
       contato_cargo: 'Engenheiro Responsável',
       contato_email: 'joao.silva@construtoraabc.com.br',
@@ -1475,6 +1591,33 @@ function ClienteForm({
         <h3 className="text-lg font-medium">Endereço da Empresa</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
+            <Label htmlFor="cep">CEP</Label>
+            <Input
+              id="cep"
+              value={formData.cep || ''}
+              onChange={(e) => {
+                const value = formatarCep(e.target.value)
+                setFormData({ ...formData, cep: value })
+                setErroCepCliente('')
+                if (value.length === 9) {
+                  aplicarEnderecoPorCep(value, 'cliente')
+                }
+              }}
+              onBlur={() => {
+                if ((formData.cep || '').length === 9) {
+                  aplicarEnderecoPorCep(formData.cep || '', 'cliente')
+                }
+              }}
+              placeholder="01234-567"
+              maxLength={9}
+            />
+            {buscandoCepCliente && <p className="text-xs text-blue-600 mt-1">Buscando CEP...</p>}
+            {erroCepCliente && <p className="text-xs text-red-600 mt-1">{erroCepCliente}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
             <Label htmlFor="endereco">Endereço</Label>
             <Input
               id="endereco"
@@ -1490,25 +1633,6 @@ function ClienteForm({
               value={formData.endereco_complemento || ''}
               onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })}
               placeholder="Sala, bloco, andar (opcional)"
-            />
-          </div>
-        </div>
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div>
-            <Label htmlFor="cep">CEP</Label>
-            <Input
-              id="cep"
-              value={formData.cep || ''}
-              onChange={(e) => {
-                let value = e.target.value.replace(/\D/g, '')
-                if (value.length >= 5) {
-                  value = value.substring(0, 5) + '-' + value.substring(5, 8)
-                }
-                setFormData({ ...formData, cep: value })
-              }}
-              placeholder="01234-567"
-              maxLength={9}
             />
           </div>
         </div>
@@ -1533,33 +1657,9 @@ function ClienteForm({
                 <SelectValue placeholder="Selecione o estado" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="AC">Acre (AC)</SelectItem>
-                <SelectItem value="AL">Alagoas (AL)</SelectItem>
-                <SelectItem value="AP">Amapá (AP)</SelectItem>
-                <SelectItem value="AM">Amazonas (AM)</SelectItem>
-                <SelectItem value="BA">Bahia (BA)</SelectItem>
-                <SelectItem value="CE">Ceará (CE)</SelectItem>
-                <SelectItem value="DF">Distrito Federal (DF)</SelectItem>
-                <SelectItem value="ES">Espírito Santo (ES)</SelectItem>
-                <SelectItem value="GO">Goiás (GO)</SelectItem>
-                <SelectItem value="MA">Maranhão (MA)</SelectItem>
-                <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
-                <SelectItem value="MS">Mato Grosso do Sul (MS)</SelectItem>
-                <SelectItem value="MG">Minas Gerais (MG)</SelectItem>
-                <SelectItem value="PA">Pará (PA)</SelectItem>
-                <SelectItem value="PB">Paraíba (PB)</SelectItem>
-                <SelectItem value="PR">Paraná (PR)</SelectItem>
-                <SelectItem value="PE">Pernambuco (PE)</SelectItem>
-                <SelectItem value="PI">Piauí (PI)</SelectItem>
-                <SelectItem value="RJ">Rio de Janeiro (RJ)</SelectItem>
-                <SelectItem value="RN">Rio Grande do Norte (RN)</SelectItem>
-                <SelectItem value="RS">Rio Grande do Sul (RS)</SelectItem>
-                <SelectItem value="RO">Rondônia (RO)</SelectItem>
-                <SelectItem value="RR">Roraima (RR)</SelectItem>
-                <SelectItem value="SC">Santa Catarina (SC)</SelectItem>
-                <SelectItem value="SP">São Paulo (SP)</SelectItem>
-                <SelectItem value="SE">Sergipe (SE)</SelectItem>
-                <SelectItem value="TO">Tocantins (TO)</SelectItem>
+                {UFS.map((uf) => (
+                  <SelectItem key={uf} value={uf}>{uf}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -1606,7 +1706,7 @@ function ClienteForm({
             />
           </div>
           <div>
-            <Label htmlFor="contato_telefone">Telefone do Contato *</Label>
+            <Label htmlFor="contato_telefone">Telefone do Contato</Label>
             <Input
               id="contato_telefone"
               value={formData.contato_telefone || ''}
@@ -1622,7 +1722,6 @@ function ClienteForm({
               }}
               placeholder="(11) 99999-9999"
               maxLength={15}
-              required
             />
           </div>
         </div>
@@ -1631,15 +1730,80 @@ function ClienteForm({
       {/* Endereço da Obra */}
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Endereço da Obra</h3>
-        <div>
-          <Label htmlFor="endereco_obra">Endereço da Obra</Label>
-          <Textarea
-            id="endereco_obra"
-            value={formData.endereco_obra || ''}
-            onChange={(e) => setFormData({ ...formData, endereco_obra: e.target.value })}
-            placeholder="Informe o endereço completo da obra"
-            rows={3}
-          />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="cep_obra">CEP</Label>
+            <Input
+              id="cep_obra"
+              value={formData.cep_obra || ''}
+              onChange={(e) => {
+                const value = formatarCep(e.target.value)
+                setFormData({ ...formData, cep_obra: value })
+                setErroCepObra('')
+                if (value.length === 9) {
+                  aplicarEnderecoPorCep(value, 'obra')
+                }
+              }}
+              onBlur={() => {
+                if ((formData.cep_obra || '').length === 9) {
+                  aplicarEnderecoPorCep(formData.cep_obra || '', 'obra')
+                }
+              }}
+              placeholder="01234-567"
+              maxLength={9}
+            />
+            {buscandoCepObra && <p className="text-xs text-blue-600 mt-1">Buscando CEP...</p>}
+            {erroCepObra && <p className="text-xs text-red-600 mt-1">{erroCepObra}</p>}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="endereco_obra">Endereço</Label>
+            <Input
+              id="endereco_obra"
+              value={formData.endereco_obra || ''}
+              onChange={(e) => setFormData({ ...formData, endereco_obra: e.target.value })}
+              placeholder="Rua, número e bairro"
+            />
+          </div>
+          <div>
+            <Label htmlFor="endereco_obra_complemento">Complemento</Label>
+            <Input
+              id="endereco_obra_complemento"
+              value={formData.endereco_obra_complemento || ''}
+              onChange={(e) => setFormData({ ...formData, endereco_obra_complemento: e.target.value })}
+              placeholder="Sala, bloco, andar (opcional)"
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="cidade_obra">Cidade</Label>
+            <Input
+              id="cidade_obra"
+              value={formData.cidade_obra || ''}
+              onChange={(e) => setFormData({ ...formData, cidade_obra: e.target.value })}
+              placeholder="São Paulo"
+            />
+          </div>
+          <div>
+            <Label htmlFor="estado_obra">Estado</Label>
+            <Select
+              value={formData.estado_obra || undefined}
+              onValueChange={(value) => setFormData({ ...formData, estado_obra: value })}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Selecione o estado" />
+              </SelectTrigger>
+              <SelectContent>
+                {UFS.map((uf) => (
+                  <SelectItem key={`obra-${uf}`} value={uf}>{uf}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -1839,6 +2003,11 @@ function ClienteDetails({
   const [arquivos, setArquivos] = useState<any[]>([])
   const [loadingArquivos, setLoadingArquivos] = useState(false)
 
+  const formatarLinhaCidadeEstado = (cidade?: string, estado?: string) => {
+    if (cidade && estado) return `${cidade}/${estado}`
+    return cidade || estado || ''
+  }
+
   // Carregar arquivos quando o componente é montado
   useEffect(() => {
     const carregarArquivos = async () => {
@@ -1931,22 +2100,38 @@ function ClienteDetails({
             <CardTitle className="text-sm">Endereço</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2">
-            {cliente.endereco && (
-              <p className="text-sm">{cliente.endereco}</p>
-            )}
-            {cliente.endereco_complemento && (
-              <p className="text-sm">Complemento: {cliente.endereco_complemento}</p>
-            )}
-            {(cliente.cidade || cliente.estado) && (
-              <p className="text-sm">
-                {cliente.cidade && cliente.estado ? `${cliente.cidade}/${cliente.estado}` : cliente.cidade || cliente.estado}
-              </p>
-            )}
-            {cliente.cep && (
-              <p className="text-sm">CEP: {cliente.cep}</p>
-            )}
-            {cliente.endereco_obra && (
-              <p className="text-sm">Endereço da obra: {cliente.endereco_obra}</p>
+            <div className="space-y-1">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Empresa</p>
+              {cliente.endereco && (
+                <p className="text-sm">{cliente.endereco}</p>
+              )}
+              {cliente.endereco_complemento && (
+                <p className="text-sm">Complemento: {cliente.endereco_complemento}</p>
+              )}
+              {(cliente.cidade || cliente.estado) && (
+                <p className="text-sm">{formatarLinhaCidadeEstado(cliente.cidade, cliente.estado)}</p>
+              )}
+              {cliente.cep && (
+                <p className="text-sm">CEP: {cliente.cep}</p>
+              )}
+            </div>
+
+            {(cliente.endereco_obra || cliente.endereco_obra_complemento || cliente.cidade_obra || cliente.estado_obra || cliente.cep_obra) && (
+              <div className="space-y-1 pt-3 border-t">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Obra</p>
+                {cliente.endereco_obra && (
+                  <p className="text-sm">{cliente.endereco_obra}</p>
+                )}
+                {cliente.endereco_obra_complemento && (
+                  <p className="text-sm">Complemento: {cliente.endereco_obra_complemento}</p>
+                )}
+                {(cliente.cidade_obra || cliente.estado_obra) && (
+                  <p className="text-sm">{formatarLinhaCidadeEstado(cliente.cidade_obra, cliente.estado_obra)}</p>
+                )}
+                {cliente.cep_obra && (
+                  <p className="text-sm">CEP: {cliente.cep_obra}</p>
+                )}
+              </div>
             )}
           </CardContent>
         </Card>

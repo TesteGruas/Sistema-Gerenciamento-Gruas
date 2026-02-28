@@ -13,6 +13,10 @@ export interface ClienteBackend {
   endereco?: string
   endereco_complemento?: string
   endereco_obra?: string
+  endereco_obra_complemento?: string
+  cidade_obra?: string
+  estado_obra?: string
+  cep_obra?: string
   cidade?: string
   estado?: string
   cep?: string
@@ -47,6 +51,10 @@ export interface ClienteCreateData {
   endereco?: string
   endereco_complemento?: string
   endereco_obra?: string
+  endereco_obra_complemento?: string
+  cidade_obra?: string
+  estado_obra?: string
+  cep_obra?: string
   cidade?: string
   estado?: string
   cep?: string
@@ -70,6 +78,10 @@ export interface ClienteUpdateData {
   endereco?: string
   endereco_complemento?: string
   endereco_obra?: string
+  endereco_obra_complemento?: string
+  cidade_obra?: string
+  estado_obra?: string
+  cep_obra?: string
   cidade?: string
   estado?: string
   cep?: string
@@ -94,6 +106,10 @@ export interface ClienteFormData {
   endereco?: string
   endereco_complemento?: string
   endereco_obra?: string
+  endereco_obra_complemento?: string
+  cidade_obra?: string
+  estado_obra?: string
+  cep_obra?: string
   cidade?: string
   estado?: string
   cep?: string
