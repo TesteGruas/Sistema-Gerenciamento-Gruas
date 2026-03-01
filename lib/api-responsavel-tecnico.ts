@@ -31,6 +31,15 @@ export interface ResponsavelTecnicoResponse {
   data: ResponsavelTecnicoBackend | null
 }
 
+export interface ResponsavelTecnicoLoteResponse {
+  success: boolean
+  data: Array<{
+    tipo: string
+    funcionario_id?: number
+    data: any
+  }>
+}
+
 // Função para fazer requisições autenticadas
 const apiRequest = async (url: string, options: RequestInit = {}) => {
   try {
@@ -65,6 +74,21 @@ export const responsavelTecnicoApi = {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(data),
+    })
+  },
+
+  // Criar ou atualizar múltiplos responsáveis técnicos em uma única requisição
+  async criarOuAtualizarEmLote(
+    obraId: number,
+    responsaveis: ResponsavelTecnicoCreateData[]
+  ): Promise<ResponsavelTecnicoLoteResponse> {
+    const url = buildApiUrl(`obras/${obraId}/responsaveis-tecnicos/lote`)
+    return apiRequest(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ responsaveis }),
     })
   },
 

@@ -52,12 +52,22 @@ export interface UploadMultipleResponse {
   success: boolean
   message: string
   data: {
-    sucessos: ArquivoObra[]
+    sucessos: Array<ArquivoObra & { client_key?: string; url?: string }>
     erros: Array<{
       arquivo: string
       erro: string
     }>
   }
+}
+
+export interface ArquivoUploadItem {
+  arquivo: File
+  nome_original?: string
+  descricao?: string
+  categoria?: string
+  grua_id?: string
+  is_public?: boolean
+  client_key?: string
 }
 
 export const obrasArquivosApi = {
@@ -108,6 +118,31 @@ export const obrasArquivosApi = {
       formData.append('arquivos', arquivo)
     })
     if (categoria) formData.append('categoria', categoria)
+
+    const response = await api.post(`/obras-arquivos/${obraId}/arquivos/upload-multiple`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    })
+    return response.data
+  },
+
+  // Upload múltiplo com metadados por arquivo (uma única requisição)
+  async uploadMultipleDetailed(obraId: number, itens: ArquivoUploadItem[]): Promise<UploadMultipleResponse> {
+    const formData = new FormData()
+    const metadados = itens.map((item) => ({
+      nome_original: item.nome_original || item.arquivo.name,
+      descricao: item.descricao || null,
+      categoria: item.categoria || 'geral',
+      grua_id: item.grua_id || null,
+      is_public: item.is_public === true,
+      client_key: item.client_key || null
+    }))
+
+    itens.forEach((item) => {
+      formData.append('arquivos', item.arquivo)
+    })
+    formData.append('metadados', JSON.stringify(metadados))
 
     const response = await api.post(`/obras-arquivos/${obraId}/arquivos/upload-multiple`, formData, {
       headers: {

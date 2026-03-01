@@ -713,7 +713,6 @@ export default function NovaObraPage() {
       console.warn('⏭️ [Nova Obra] Submissão ignorada: criação já em andamento.')
       return
     }
-    creatingObraInFlightRef.current = true
     
     // Determinar clienteId - usar clienteSelecionado como fallback
     const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
@@ -804,6 +803,7 @@ export default function NovaObraPage() {
     // O responsável técnico pode ser cadastrado depois de criar a obra
 
     try {
+      creatingObraInFlightRef.current = true
       setCreating(true)
       setError(null)
 
@@ -1187,53 +1187,54 @@ export default function NovaObraPage() {
         aterramento: { enviado: false, nome: aterramentoArquivo?.name || null, url: null }
       }
       
+      const mapCategoriaObrasArquivos = (categoriaOriginal: string) => {
+        switch (categoriaOriginal) {
+          case 'manual_tecnico':
+            return 'manual'
+          case 'termo_entrega_tecnica':
+          case 'aterramento':
+            return 'certificado'
+          case 'plano_carga':
+            return 'outro'
+          case 'art':
+            return 'certificado'
+          case 'apolice':
+          case 'cno':
+            return 'contrato'
+          default:
+            return 'geral'
+        }
+      }
+
+      const mapDescricaoArquivo = (categoriaOriginal: string, nomeArquivoPadrao: string) => {
+        switch (categoriaOriginal) {
+          case 'manual_tecnico':
+            return 'Ficha Técnica do Equipamento'
+          case 'termo_entrega_tecnica':
+            return 'Termo de Entrega Técnica'
+          case 'plano_carga':
+            return 'Plano de Cargas'
+          case 'aterramento':
+            return 'Documento de Aterramento'
+          case 'art':
+            return 'Documento ART'
+          case 'apolice':
+            return 'Apólice de Seguro'
+          case 'cno':
+            return 'Documento CNO'
+          default:
+            return nomeArquivoPadrao
+        }
+      }
+
       // Função auxiliar para fazer upload de arquivo
       const fazerUploadArquivo = async (arquivo: File, categoria: string): Promise<string> => {
-        const mapCategoriaObrasArquivos = (categoriaOriginal: string) => {
-          switch (categoriaOriginal) {
-            case 'manual_tecnico':
-              return 'manual'
-            case 'termo_entrega_tecnica':
-            case 'aterramento':
-              return 'certificado'
-            case 'plano_carga':
-              return 'outro'
-            case 'art':
-              return 'certificado'
-            case 'apolice':
-            case 'cno':
-              return 'contrato'
-            default:
-              return 'geral'
-          }
-        }
-
-        const mapDescricaoArquivo = (categoriaOriginal: string) => {
-          switch (categoriaOriginal) {
-            case 'manual_tecnico':
-              return 'Ficha Técnica do Equipamento'
-            case 'termo_entrega_tecnica':
-              return 'Termo de Entrega Técnica'
-            case 'plano_carga':
-              return 'Plano de Cargas'
-            case 'aterramento':
-              return 'Documento de Aterramento'
-            case 'art':
-              return 'Documento ART'
-            case 'apolice':
-              return 'Apólice de Seguro'
-            case 'cno':
-              return 'Documento CNO'
-            default:
-              return arquivo.name
-          }
-        }
 
         const response = await obrasArquivosApi.upload({
           obra_id: obraId,
           arquivo,
           nome_original: arquivo.name,
-          descricao: mapDescricaoArquivo(categoria),
+          descricao: mapDescricaoArquivo(categoria, arquivo.name),
           categoria: mapCategoriaObrasArquivos(categoria),
           is_public: false
         })
@@ -1247,54 +1248,164 @@ export default function NovaObraPage() {
       }
       
       try {
-        // Upload CNO
+        const uploadsParaExecutar: Array<{
+          chave: keyof typeof uploadResultados
+          arquivo: File
+          categoria: string
+          descricao: string
+          onSuccess: (url: string) => void
+        }> = []
+
         if (cnoArquivo) {
-          cnoArquivoUrl = await fazerUploadArquivo(cnoArquivo, 'cno')
-          uploadResultados.cno = { enviado: !!cnoArquivoUrl, nome: cnoArquivo.name, url: cnoArquivoUrl || null }
+          uploadsParaExecutar.push({
+            chave: 'cno',
+            arquivo: cnoArquivo,
+            categoria: 'cno',
+            descricao: 'CNO',
+            onSuccess: (url) => { cnoArquivoUrl = url }
+          })
         }
-        
-        // Upload ART
+
         if (artArquivo) {
-          artArquivoUrl = await fazerUploadArquivo(artArquivo, 'art')
-          uploadResultados.art = { enviado: !!artArquivoUrl, nome: artArquivo.name, url: artArquivoUrl || null }
+          uploadsParaExecutar.push({
+            chave: 'art',
+            arquivo: artArquivo,
+            categoria: 'art',
+            descricao: 'ART',
+            onSuccess: (url) => { artArquivoUrl = url }
+          })
         }
-        
-        // Upload Apólice
+
         if (apoliceArquivo) {
-          apoliceArquivoUrl = await fazerUploadArquivo(apoliceArquivo, 'apolice')
-          uploadResultados.apolice = { enviado: !!apoliceArquivoUrl, nome: apoliceArquivo.name, url: apoliceArquivoUrl || null }
+          uploadsParaExecutar.push({
+            chave: 'apolice',
+            arquivo: apoliceArquivo,
+            categoria: 'apolice',
+            descricao: 'Apólice',
+            onSuccess: (url) => { apoliceArquivoUrl = url }
+          })
         }
-        
-        // Upload Manual Técnico
+
         if (manualTecnicoArquivo) {
-          console.debug('📤 Fazendo upload do Manual Técnico...')
-          const manualTecnicoUrl = await fazerUploadArquivo(manualTecnicoArquivo, 'manual_tecnico')
-          uploadResultados.manual_tecnico = { enviado: !!manualTecnicoUrl, nome: manualTecnicoArquivo.name, url: manualTecnicoUrl || null }
-          console.debug('✅ Manual Técnico enviado:', manualTecnicoUrl)
+          uploadsParaExecutar.push({
+            chave: 'manual_tecnico',
+            arquivo: manualTecnicoArquivo,
+            categoria: 'manual_tecnico',
+            descricao: 'Manual Técnico',
+            onSuccess: () => {}
+          })
         }
-        
-        // Upload Termo de Entrega Técnica
+
         if (termoEntregaArquivo) {
-          console.debug('📤 Fazendo upload do Termo de Entrega Técnica...')
-          const termoEntregaUrl = await fazerUploadArquivo(termoEntregaArquivo, 'termo_entrega_tecnica')
-          uploadResultados.termo_entrega_tecnica = { enviado: !!termoEntregaUrl, nome: termoEntregaArquivo.name, url: termoEntregaUrl || null }
-          console.debug('✅ Termo de Entrega Técnica enviado:', termoEntregaUrl)
+          uploadsParaExecutar.push({
+            chave: 'termo_entrega_tecnica',
+            arquivo: termoEntregaArquivo,
+            categoria: 'termo_entrega_tecnica',
+            descricao: 'Termo de Entrega Técnica',
+            onSuccess: () => {}
+          })
         }
-        
-        // Upload Plano de Carga
+
         if (planoCargaArquivo) {
-          console.debug('📤 Fazendo upload do Plano de Carga...')
-          const planoCargaUrl = await fazerUploadArquivo(planoCargaArquivo, 'plano_carga')
-          uploadResultados.plano_carga = { enviado: !!planoCargaUrl, nome: planoCargaArquivo.name, url: planoCargaUrl || null }
-          console.debug('✅ Plano de Carga enviado:', planoCargaUrl)
+          uploadsParaExecutar.push({
+            chave: 'plano_carga',
+            arquivo: planoCargaArquivo,
+            categoria: 'plano_carga',
+            descricao: 'Plano de Carga',
+            onSuccess: () => {}
+          })
         }
-        
-        // Upload Aterramento
+
         if (aterramentoArquivo) {
-          console.debug('📤 Fazendo upload do Aterramento...')
-          const aterramentoUrl = await fazerUploadArquivo(aterramentoArquivo, 'aterramento')
-          uploadResultados.aterramento = { enviado: !!aterramentoUrl, nome: aterramentoArquivo.name, url: aterramentoUrl || null }
-          console.debug('✅ Aterramento enviado:', aterramentoUrl)
+          uploadsParaExecutar.push({
+            chave: 'aterramento',
+            arquivo: aterramentoArquivo,
+            categoria: 'aterramento',
+            descricao: 'Aterramento',
+            onSuccess: () => {}
+          })
+        }
+
+        let executouFallbackUploadIndividual = false
+        try {
+          const loteResponse = await obrasArquivosApi.uploadMultipleDetailed(
+            obraId,
+            uploadsParaExecutar.map(({ chave, arquivo, categoria }) => ({
+              arquivo,
+              nome_original: arquivo.name,
+              descricao: mapDescricaoArquivo(categoria, arquivo.name),
+              categoria: mapCategoriaObrasArquivos(categoria),
+              is_public: false,
+              client_key: String(chave)
+            }))
+          )
+
+          const sucessos = loteResponse?.data?.sucessos || []
+          const errosLote = loteResponse?.data?.erros || []
+
+          sucessos.forEach((arquivoRetorno: any) => {
+            const chave = (arquivoRetorno.client_key || '') as keyof typeof uploadResultados
+            const url = arquivoRetorno.caminho || arquivoRetorno.url || ''
+            if (chave && uploadResultados[chave]) {
+              uploadResultados[chave] = { enviado: !!url, nome: uploadResultados[chave].nome, url: url || null }
+
+              if (chave === 'cno') cnoArquivoUrl = url
+              if (chave === 'art') artArquivoUrl = url
+              if (chave === 'apolice') apoliceArquivoUrl = url
+            }
+          })
+
+          if (errosLote.length > 0) {
+            const detalhesErro = errosLote.map((e: any) => `${e.arquivo}: ${e.erro}`).join(' | ')
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Upload de arquivos/documentos (lote)', new Error(detalhesErro), {
+                obraId,
+                uploadResultados
+              })
+            }
+            console.error('Erro parcial no upload em lote:', detalhesErro)
+          }
+        } catch (uploadLoteError) {
+          executouFallbackUploadIndividual = true
+          console.warn('⚠️ Upload em lote falhou, aplicando fallback individual:', uploadLoteError)
+
+          const uploadsResultadosSettled = await Promise.allSettled(
+            uploadsParaExecutar.map(async ({ chave, arquivo, categoria, descricao, onSuccess }) => {
+              console.debug(`📤 [Fallback] Fazendo upload de ${descricao}...`)
+              const url = await fazerUploadArquivo(arquivo, categoria)
+              onSuccess(url)
+              uploadResultados[chave] = { enviado: !!url, nome: arquivo.name, url: url || null }
+
+              if (url) {
+                console.debug(`✅ [Fallback] ${descricao} enviado:`, url)
+              } else {
+                console.warn(`⚠️ [Fallback] ${descricao} sem URL de retorno.`)
+              }
+            })
+          )
+
+          const uploadErros = uploadsResultadosSettled
+            .map((resultado, index) => ({ resultado, contexto: uploadsParaExecutar[index] }))
+            .filter((item): item is { resultado: PromiseRejectedResult; contexto: typeof uploadsParaExecutar[number] } => item.resultado.status === 'rejected')
+
+          if (uploadErros.length > 0) {
+            const detalhesErro = uploadErros
+              .map(({ contexto, resultado }) => `${contexto.descricao}: ${String(resultado.reason?.message || resultado.reason)}`)
+              .join(' | ')
+
+            if (TRAVAR_FLUXO_EM_ERRO) {
+              interromperFluxo('Upload de arquivos/documentos', new Error(detalhesErro), {
+                obraId,
+                uploadResultados
+              })
+            }
+
+            console.error('Erro ao fazer upload de arquivos:', detalhesErro)
+          }
+        }
+
+        if (!executouFallbackUploadIndividual) {
+          console.debug('✅ Upload de documentos realizado em lote com sucesso.')
         }
         
         // 4. Atualizar documentos da obra (rota parcial, não exige demais campos)
@@ -1326,105 +1437,95 @@ export default function NovaObraPage() {
         console.error('Erro ao fazer upload de arquivos:', uploadError)
       }
       
-      // 5. Salvar responsável técnico (apenas se houver dados válidos)
-      // IMPORTANTE: Fora do try/catch de upload para garantir que seja executado
+      // 5. Preparar responsável técnico principal da obra para envio em lote
       console.debug('🔍 DEBUG - Responsável técnico no estado:', responsavelTecnico)
+
+      // 5.1 e 5.2. Salvar responsáveis técnicos (obra + IRBANA + adicionais) em lote
+      const responsaveisTecnicosLote: Array<any> = []
+      const mapaContextoResponsaveisLote: Array<{ tipo: string; data: any }> = []
+
       if (responsavelTecnico) {
         const temFuncionarioId = !!responsavelTecnico.funcionario_id
         const temDadosCompletos = !!(responsavelTecnico.nome && responsavelTecnico.cpf_cnpj)
-        
-        console.debug('🔍 DEBUG - Validação responsável:', { temFuncionarioId, temDadosCompletos })
-        
+
+        console.debug('🔍 DEBUG - Validação responsável principal:', { temFuncionarioId, temDadosCompletos })
+
         if (temFuncionarioId || temDadosCompletos) {
-          try {
-            // Se tiver funcionario_id, enviar apenas ele. Caso contrário, enviar os dados completos
-            const payload = responsavelTecnico.funcionario_id
-              ? { funcionario_id: responsavelTecnico.funcionario_id }
-              : {
-                  nome: responsavelTecnico.nome,
-                  cpf_cnpj: responsavelTecnico.cpf_cnpj,
-                  crea: responsavelTecnico.crea,
-                  email: responsavelTecnico.email,
-                  telefone: responsavelTecnico.telefone
-                }
-            console.debug('📤 Enviando responsável técnico:', payload)
-            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.debug('✅ Responsável técnico salvo:', response)
-          } catch (error) {
-            if (TRAVAR_FLUXO_EM_ERRO) {
-              interromperFluxo('Salvar responsável técnico', error, { obraId, payload: responsavelTecnico })
-            }
-            console.error('❌ Erro ao salvar responsável técnico:', error)
-          }
+          const payloadObra: any = responsavelTecnico.funcionario_id
+            ? { funcionario_id: responsavelTecnico.funcionario_id, tipo: 'obra' }
+            : {
+                nome: responsavelTecnico.nome,
+                cpf_cnpj: responsavelTecnico.cpf_cnpj,
+                crea: responsavelTecnico.crea,
+                email: responsavelTecnico.email,
+                telefone: responsavelTecnico.telefone,
+                tipo: 'obra'
+              }
+
+          responsaveisTecnicosLote.push(payloadObra)
+          mapaContextoResponsaveisLote.push({ tipo: 'obra', data: responsavelTecnico })
         } else {
-          console.warn('⚠️ Responsável técnico não tem dados válidos para salvar')
+          console.warn('⚠️ Responsável técnico principal sem dados válidos para salvar')
         }
       } else {
-        console.debug('⚠️ Nenhum responsável técnico no estado')
+        console.debug('⚠️ Nenhum responsável técnico principal no estado')
       }
 
-      // 5.1. Salvar responsáveis técnicos IRBANA (equipamentos, manutenções, montagem e operação)
       const responsaveisIrbana = [
         { data: responsavelEquipamentos, tipo: 'irbana_equipamentos' },
         { data: responsavelManutencoes, tipo: 'irbana_manutencoes' },
         { data: responsavelMontagemOperacao, tipo: 'irbana_montagem_operacao' }
       ]
 
-      for (const { data, tipo } of responsaveisIrbana) {
-        if (data && data.nome) {
-          try {
-            const payload: any = {
-              nome: data.nome,
-              tipo: tipo
-            }
-            if (data.cpf_cnpj) payload.cpf_cnpj = data.cpf_cnpj
-            if (data.crea) payload.crea = data.crea
-            if (data.email) payload.email = data.email
-            if (data.telefone) payload.telefone = data.telefone
-            if (tipo === 'irbana_equipamentos' || tipo === 'irbana_manutencoes') {
-              payload.crea_empresa = 'SP 2494244' // CREA da empresa IRBANA
-            }
+      for (const item of responsaveisIrbana) {
+        if (!item.data || !item.data.nome) continue
 
-            console.debug(`📤 Enviando responsável técnico ${tipo}:`, payload)
-            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.debug(`✅ Responsável técnico ${tipo} salvo:`, response)
-          } catch (error) {
-            if (TRAVAR_FLUXO_EM_ERRO) {
-              interromperFluxo(`Salvar responsável técnico ${tipo}`, error, { obraId, tipo, data })
-            }
-            console.error(`❌ Erro ao salvar responsável técnico ${tipo}:`, error)
+        const payload: any = {
+          nome: item.data.nome,
+          tipo: item.tipo
+        }
+        if (item.data.cpf_cnpj) payload.cpf_cnpj = item.data.cpf_cnpj
+        if (item.data.crea) payload.crea = item.data.crea
+        if (item.data.email) payload.email = item.data.email
+        if (item.data.telefone) payload.telefone = item.data.telefone
+        if (item.tipo === 'irbana_equipamentos' || item.tipo === 'irbana_manutencoes') {
+          payload.crea_empresa = 'SP 2494244' // CREA da empresa IRBANA
+        }
+
+        responsaveisTecnicosLote.push(payload)
+        mapaContextoResponsaveisLote.push({ tipo: item.tipo, data: item.data })
+      }
+
+      if (responsaveisAdicionais && responsaveisAdicionais.length > 0) {
+        const responsaveisAdicionaisValidos = responsaveisAdicionais.filter(rt => rt.nome && rt.cpf_cnpj)
+        for (const responsavel of responsaveisAdicionaisValidos) {
+          const payload: any = {
+            nome: responsavel.nome,
+            cpf_cnpj: responsavel.cpf_cnpj,
+            tipo: 'adicional'
           }
+          if (responsavel.crea) payload.crea = responsavel.crea
+          if (responsavel.email) payload.email = responsavel.email
+          if (responsavel.telefone) payload.telefone = responsavel.telefone
+          if (responsavel.area) {
+            payload.nome = `${responsavel.nome} - ${responsavel.area}`
+          }
+
+          responsaveisTecnicosLote.push(payload)
+          mapaContextoResponsaveisLote.push({ tipo: 'adicional', data: responsavel })
         }
       }
 
-      // 5.2. Salvar responsáveis técnicos adicionais dinâmicos
-      if (responsaveisAdicionais && responsaveisAdicionais.length > 0) {
-        const responsaveisValidos = responsaveisAdicionais.filter(rt => rt.nome && rt.cpf_cnpj)
-        
-        for (const responsavel of responsaveisValidos) {
-          try {
-            const payload: any = {
-              nome: responsavel.nome,
-              cpf_cnpj: responsavel.cpf_cnpj,
-              tipo: 'adicional' // Tipo genérico para responsáveis adicionais
-            }
-            if (responsavel.crea) payload.crea = responsavel.crea
-            if (responsavel.email) payload.email = responsavel.email
-            if (responsavel.telefone) payload.telefone = responsavel.telefone
-            // Incluir área no nome se fornecida (formato: "Nome - Área")
-            if (responsavel.area) {
-              payload.nome = `${responsavel.nome} - ${responsavel.area}`
-            }
-
-            console.debug(`📤 Enviando responsável técnico adicional:`, payload)
-            const response = await responsavelTecnicoApi.criarOuAtualizar(obraId, payload)
-            console.debug(`✅ Responsável técnico adicional salvo:`, response)
-          } catch (error) {
-            if (TRAVAR_FLUXO_EM_ERRO) {
-              interromperFluxo('Salvar responsável técnico adicional', error, { obraId, responsavel })
-            }
-            console.error(`❌ Erro ao salvar responsável técnico adicional:`, error)
+      if (responsaveisTecnicosLote.length > 0) {
+        try {
+          console.debug(`📤 Enviando ${responsaveisTecnicosLote.length} responsável(is) técnico(s) em lote...`)
+          const loteResponse = await responsavelTecnicoApi.criarOuAtualizarEmLote(obraId, responsaveisTecnicosLote)
+          console.debug('✅ Responsáveis técnicos em lote salvos:', loteResponse)
+        } catch (error) {
+          if (TRAVAR_FLUXO_EM_ERRO) {
+            interromperFluxo('Salvar responsáveis técnicos em lote', error, { obraId, responsaveis: mapaContextoResponsaveisLote })
           }
+          console.error('❌ Erro ao salvar responsáveis técnicos em lote:', error)
         }
       }
       
@@ -1751,17 +1852,22 @@ export default function NovaObraPage() {
       // 7. Salvar responsáveis de obra (aprovadores de horas)
       if (responsaveisObra.length > 0) {
         console.debug(`📤 Salvando ${responsaveisObra.length} responsáveis de obra...`)
-        for (const responsavel of responsaveisObra) {
-          try {
+        const resultadosResponsaveisObra = await Promise.allSettled(
+          responsaveisObra.map(async (responsavel) => {
             await responsaveisObraApi.criar(obraId, responsavel)
             console.debug(`✅ Responsável de obra salvo: ${responsavel.nome}`)
-          } catch (error: any) {
+          })
+        )
+
+        resultadosResponsaveisObra.forEach((resultado, index) => {
+          if (resultado.status === 'rejected') {
+            const responsavel = responsaveisObra[index]
             if (TRAVAR_FLUXO_EM_ERRO) {
-              interromperFluxo('Salvar responsável de obra', error, { obraId, responsavel })
+              interromperFluxo('Salvar responsável de obra', resultado.reason, { obraId, responsavel })
             }
-            console.error(`❌ Erro ao salvar responsável de obra ${responsavel.nome}:`, error)
+            console.error(`❌ Erro ao salvar responsável de obra ${responsavel.nome}:`, resultado.reason)
           }
-        }
+        })
       }
       
       toast({

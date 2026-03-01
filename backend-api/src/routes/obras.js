@@ -2908,6 +2908,146 @@ router.post('/:id/responsavel-tecnico', authenticateToken, requirePermission('ob
 })
 
 /**
+ * POST /api/obras/:id/responsaveis-tecnicos/lote
+ * Criar ou atualizar responsáveis técnicos em lote (incluindo tipos IRBANA e adicionais)
+ */
+router.post('/:id/responsaveis-tecnicos/lote', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const schema = Joi.object({
+      responsaveis: Joi.array().min(1).items(
+        Joi.object({
+          funcionario_id: Joi.number().integer().positive().optional(),
+          nome: Joi.string().min(2).when('funcionario_id', { is: Joi.exist(), then: Joi.optional(), otherwise: Joi.required() }),
+          cpf_cnpj: Joi.string().allow(null, '').optional(),
+          crea: Joi.string().allow(null, '').optional(),
+          crea_empresa: Joi.string().allow(null, '').optional(),
+          email: Joi.string().email().allow(null, '').optional(),
+          telefone: Joi.string().allow(null, '').optional(),
+          tipo: Joi.string().valid('obra', 'irbana_equipamentos', 'irbana_manutencoes', 'irbana_montagem_operacao', 'adicional').default('obra')
+        })
+      ).required()
+    })
+
+    const { error: validationError, value } = schema.validate(req.body, { stripUnknown: true })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const resultados = []
+
+    // Processamento sequencial evita corrida em tipos repetidos (ex: múltiplos "adicional")
+    for (const responsavel of value.responsaveis) {
+      const { nome, cpf_cnpj, crea, crea_empresa, email, telefone, funcionario_id } = responsavel
+      const tipoFinal = responsavel.tipo || 'obra'
+
+      // Compatibilidade com regra atual: tipo "obra" pode vir por funcionário
+      if (funcionario_id && tipoFinal === 'obra') {
+        const { data: func, error: errFunc } = await supabaseAdmin
+          .from('funcionarios')
+          .select('id, nome')
+          .eq('id', funcionario_id)
+          .single()
+
+        if (errFunc) throw errFunc
+        if (!func) {
+          return res.status(400).json({ error: `Funcionário não encontrado (id=${funcionario_id})` })
+        }
+
+        const { data: obraAtualizada, error: errUpdateObra } = await supabaseAdmin
+          .from('obras')
+          .update({ responsavel_id: func.id, responsavel_nome: func.nome })
+          .eq('id', id)
+          .select('id, responsavel_id, responsavel_nome')
+          .single()
+
+        if (errUpdateObra) throw errUpdateObra
+
+        resultados.push({
+          tipo: tipoFinal,
+          funcionario_id,
+          data: obraAtualizada
+        })
+
+        continue
+      }
+
+      const { data: existing, error: checkError } = await supabaseAdmin
+        .from('responsaveis_tecnicos')
+        .select('id')
+        .eq('obra_id', id)
+        .eq('tipo', tipoFinal)
+        .maybeSingle()
+
+      if (checkError) throw checkError
+
+      let result
+      if (existing) {
+        const updateData = { nome }
+        if (cpf_cnpj !== undefined) updateData.cpf_cnpj = cpf_cnpj || ''
+        if (crea !== undefined) updateData.crea = crea || null
+        if (crea_empresa !== undefined) updateData.crea_empresa = crea_empresa || null
+        if (email !== undefined) updateData.email = email || null
+        if (telefone !== undefined) updateData.telefone = telefone || null
+
+        const { data, error } = await supabaseAdmin
+          .from('responsaveis_tecnicos')
+          .update(updateData)
+          .eq('id', existing.id)
+          .select()
+          .single()
+
+        if (error) throw error
+        result = data
+      } else {
+        const insertData = {
+          obra_id: id,
+          nome,
+          cpf_cnpj: cpf_cnpj || '',
+          crea: crea || null,
+          crea_empresa: crea_empresa || null,
+          email: email || null,
+          telefone: telefone || null,
+          tipo: tipoFinal
+        }
+
+        const { data, error } = await supabaseAdmin
+          .from('responsaveis_tecnicos')
+          .insert(insertData)
+          .select()
+          .single()
+
+        if (error) throw error
+        result = data
+      }
+
+      if (tipoFinal === 'obra') {
+        const { error: errUpdateObraManual } = await supabaseAdmin
+          .from('obras')
+          .update({ responsavel_id: null, responsavel_nome: nome })
+          .eq('id', id)
+
+        if (errUpdateObraManual) throw errUpdateObraManual
+      }
+
+      resultados.push({
+        tipo: tipoFinal,
+        data: result
+      })
+    }
+
+    res.json({
+      success: true,
+      data: resultados
+    })
+  } catch (error) {
+    console.error('Erro ao salvar responsáveis técnicos em lote:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
  * GET /api/obras/:id/responsavel-tecnico
  * Obter responsável técnico da obra
  */

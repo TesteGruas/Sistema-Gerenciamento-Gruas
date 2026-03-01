@@ -941,7 +941,7 @@ router.delete('/:obraId/arquivos/:arquivoId', authenticateToken, requirePermissi
 router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermission('obras:editar'), upload.array('arquivos', 10), async (req, res) => {
   try {
     const { obraId } = req.params
-    const { categoria } = req.body
+    const { categoria, metadados } = req.body
     const files = req.files
 
     if (!files || files.length === 0) {
@@ -965,14 +965,66 @@ router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermi
       })
     }
 
+    let metadadosArray = []
+    if (metadados) {
+      try {
+        const parsed = typeof metadados === 'string' ? JSON.parse(metadados) : metadados
+        metadadosArray = Array.isArray(parsed) ? parsed : []
+      } catch (parseError) {
+        return res.status(400).json({
+          success: false,
+          message: 'Campo "metadados" inválido. Envie um JSON array válido.',
+          error: parseError.message
+        })
+      }
+    }
+
     const resultados = []
     const erros = []
 
     // Processar cada arquivo
-    for (const file of files) {
+    for (let index = 0; index < files.length; index++) {
+      const file = files[index]
       try {
+        const metadata = metadadosArray[index]
+          || metadadosArray.find((m) => m?.nome_original && m.nome_original === file.originalname)
+          || {}
+
+        const categoriaArquivo = metadata.categoria || categoria || 'geral'
+        const descricaoArquivo = metadata.descricao || null
+        const gruaIdArquivo = metadata.grua_id || null
+        const isPublicArquivo = metadata.is_public === true || metadata.is_public === 'true'
+        const clientKey = metadata.client_key || null
+
         const fileName = generateFileName(file.originalname, obraId)
         const filePath = `obras/${obraId}/arquivos/${fileName}`
+
+        // Validar categoria por arquivo
+        const categoriasPermitidas = ['geral', 'manual', 'certificado', 'licenca', 'contrato', 'relatorio', 'foto', 'outro']
+        if (!categoriasPermitidas.includes(categoriaArquivo)) {
+          erros.push({
+            arquivo: file.originalname,
+            erro: `Categoria inválida: ${categoriaArquivo}`
+          })
+          continue
+        }
+
+        // Verificar se a grua existe (se fornecida no metadado)
+        if (gruaIdArquivo) {
+          const { data: grua, error: gruaError } = await supabaseAdmin
+            .from('gruas')
+            .select('id')
+            .eq('id', gruaIdArquivo)
+            .single()
+
+          if (gruaError || !grua) {
+            erros.push({
+              arquivo: file.originalname,
+              erro: `Grua não encontrada: ${gruaIdArquivo}`
+            })
+            continue
+          }
+        }
 
         // Upload para o Supabase Storage
         const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
@@ -994,16 +1046,17 @@ router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermi
         // Salvar metadados do arquivo no banco
         const arquivoData = {
           obra_id: parseInt(obraId),
+          grua_id: gruaIdArquivo,
           nome_original: file.originalname,
           nome_arquivo: fileName,
           caminho: filePath,
           tamanho: file.size,
           tipo_mime: file.mimetype,
           tipo_arquivo: getFileType(file.mimetype),
-          descricao: null,
-          categoria: categoria || 'geral',
+          descricao: descricaoArquivo,
+          categoria: categoriaArquivo,
           uploaded_by: req.user.id,
-          is_public: false
+          is_public: isPublicArquivo
         }
 
         const { data: arquivoRecord, error: dbError } = await supabaseAdmin
@@ -1023,7 +1076,11 @@ router.post('/:obraId/arquivos/upload-multiple', authenticateToken, requirePermi
             erro: dbError.message
           })
         } else {
-          resultados.push(arquivoRecord)
+          resultados.push({
+            ...arquivoRecord,
+            client_key: clientKey,
+            url: uploadData?.path || filePath
+          })
         }
 
       } catch (error) {
