@@ -54,6 +54,13 @@ const userUpdateSchema = Joi.object({
   perfil_id: Joi.number().integer().positive().optional()
 })
 
+// Schema de validação para envio de credenciais por email
+const sendCredentialsSchema = Joi.object({
+  senha: Joi.string().min(6).required(),
+  email: Joi.string().email().optional(),
+  nome: Joi.string().min(2).optional()
+})
+
 /**
  * @swagger
  * /api/users:
@@ -761,6 +768,121 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
     })
   } catch (error) {
     console.error('Erro ao atualizar usuário:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * @swagger
+ * /api/users/{id}/send-credentials:
+ *   post:
+ *     summary: Enviar email com credenciais do usuário
+ *     tags: [Usuários]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *         description: ID do usuário
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - senha
+ *             properties:
+ *               senha:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *                 format: email
+ *               nome:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Credenciais enviadas com sucesso
+ *       404:
+ *         description: Usuário não encontrado
+ */
+router.post('/:id/send-credentials', authenticateToken, requirePermission('usuarios:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { error, value } = sendCredentialsSchema.validate(req.body)
+
+    if (error) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    // Buscar usuário para obter nome/email atuais
+    const { data: usuarioData, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email')
+      .eq('id', id)
+      .single()
+
+    if (usuarioError || !usuarioData) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado',
+        message: 'O usuário com o ID especificado não existe'
+      })
+    }
+
+    const emailDestino = value.email || usuarioData.email
+    const nomeDestino = value.nome || usuarioData.nome
+
+    // Atualizar senha no Auth para garantir que a senha enviada é válida
+    const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+    if (authListError) {
+      return res.status(500).json({
+        error: 'Erro ao localizar usuário no sistema de autenticação',
+        message: authListError.message
+      })
+    }
+
+    const authUser = users.find(u => u.email === usuarioData.email)
+    if (!authUser) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado no sistema de autenticação',
+        message: 'Não foi possível localizar o usuário para atualizar a senha'
+      })
+    }
+
+    const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
+      authUser.id,
+      { password: value.senha }
+    )
+
+    if (authUpdateError) {
+      return res.status(500).json({
+        error: 'Erro ao atualizar senha',
+        message: authUpdateError.message
+      })
+    }
+
+    // Enviar email com as credenciais
+    await sendWelcomeEmail({
+      nome: nomeDestino,
+      email: emailDestino,
+      senha_temporaria: value.senha
+    })
+
+    res.json({
+      success: true,
+      message: 'Credenciais enviadas por email com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao enviar credenciais por email:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

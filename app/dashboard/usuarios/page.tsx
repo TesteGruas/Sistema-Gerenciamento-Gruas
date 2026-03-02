@@ -118,6 +118,7 @@ export default function UsuariosPage() {
   const [loading, setLoading] = useState(false)
   const [creating, setCreating] = useState(false)
   const [updating, setUpdating] = useState(false)
+  const [sendingCredentials, setSendingCredentials] = useState(false)
   const [deleting, setDeleting] = useState(false)
   
   const [usuarios, setUsuarios] = useState<UsuarioFrontend[]>([])
@@ -604,6 +605,61 @@ export default function UsuariosPage() {
       })
     } finally {
       setUpdating(false)
+    }
+  }
+
+  const handleSendCredentialsEmail = async () => {
+    if (!editingUser) return
+
+    if (!userFormData.email?.trim()) {
+      toast({
+        title: "Erro",
+        description: "Informe um email válido para envio das credenciais",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!userFormData.senha || userFormData.senha.length < 6) {
+      toast({
+        title: "Erro",
+        description: "Informe uma senha com no mínimo 6 caracteres para enviar as credenciais",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (userFormData.senha !== userFormData.confirmarSenha) {
+      toast({
+        title: "Erro",
+        description: "As senhas não coincidem",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setSendingCredentials(true)
+
+      await apiUsuarios.enviarCredenciais(parseInt(editingUser.id), {
+        nome: userFormData.name,
+        email: userFormData.email,
+        senha: userFormData.senha
+      })
+
+      toast({
+        title: "Sucesso",
+        description: "Credenciais reenviadas por email com sucesso!"
+      })
+    } catch (error: any) {
+      console.error('Erro ao enviar credenciais por email:', error)
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao enviar email com as credenciais",
+        variant: "destructive"
+      })
+    } finally {
+      setSendingCredentials(false)
     }
   }
 
@@ -1417,11 +1473,26 @@ export default function UsuariosPage() {
                 type="button" 
                 variant="outline" 
                 onClick={() => setIsEditDialogOpen(false)}
-                disabled={updating || uploadingFiles}
+                disabled={updating || uploadingFiles || sendingCredentials}
               >
                 Cancelar
               </Button>
-              <Button type="submit" disabled={updating || uploadingFiles}>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSendCredentialsEmail}
+                disabled={updating || uploadingFiles || sendingCredentials}
+              >
+                {sendingCredentials ? (
+                  <ButtonLoader text="Reenviando credenciais..." />
+                ) : (
+                  <>
+                    <Mail className="w-4 h-4 mr-2" />
+                    Reenviar Credenciais por Email
+                  </>
+                )}
+              </Button>
+              <Button type="submit" disabled={updating || uploadingFiles || sendingCredentials}>
                 {updating || uploadingFiles ? (
                   <ButtonLoader text={updating ? "Atualizando..." : "Enviando arquivos..."} />
                 ) : (

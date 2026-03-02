@@ -113,6 +113,12 @@ export interface UsuarioUpdateData {
   perfil_id?: number;
 }
 
+export interface UsuarioSendCredentialsData {
+  senha: string;
+  email?: string;
+  nome?: string;
+}
+
 // Helper function to get auth token
 const getAuthToken = () => {
   if (typeof window !== 'undefined') {
@@ -182,6 +188,15 @@ export const apiUsuarios = {
       body: JSON.stringify(dados),
     });
     return response.data;
+  },
+
+  // Enviar email com credenciais (email + senha)
+  enviarCredenciais: async (id: number, dados: UsuarioSendCredentialsData): Promise<{ success: boolean; message: string }> => {
+    const response = await apiRequest(`/api/users/${id}/send-credentials`, {
+      method: 'POST',
+      body: JSON.stringify(dados),
+    });
+    return response;
   },
 
   // Excluir usuário
