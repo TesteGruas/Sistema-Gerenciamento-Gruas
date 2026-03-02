@@ -35,6 +35,7 @@ export const usePWAPermissions = () => {
   
   // Estado para armazenar o tipo do usuário
   const [userTipo, setUserTipo] = useState<string | null>(null)
+  const [isResponsavelObra, setIsResponsavelObra] = useState(false)
   
   // Verificar user_metadata.tipo quando os dados mudarem
   useEffect(() => {
@@ -45,23 +46,30 @@ export const usePWAPermissions = () => {
       if (userDataStr) {
         const userData = JSON.parse(userDataStr)
         const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
+        const responsavelFlag = Boolean(userData?.is_responsavel_obra) ||
+          (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
         setUserTipo(tipo || null)
+        setIsResponsavelObra(responsavelFlag)
+      } else {
+        setUserTipo(null)
+        setIsResponsavelObra(false)
       }
     } catch (error) {
       setUserTipo(null)
+      setIsResponsavelObra(false)
     }
   }, [user])
   
   // Determinar role: verificar user_metadata.tipo primeiro, depois role do perfil
   const userRole = useMemo(() => {
     // Se user_metadata.tipo === 'cliente' ou 'responsavel_obra', mapear para 'Clientes'
-    if (userTipo === 'cliente' || userTipo === 'responsavel_obra') {
+    if (userTipo === 'cliente' || userTipo === 'responsavel_obra' || isResponsavelObra) {
       return 'Clientes' as RoleName
     }
     
     // Caso contrário, usar o role do user
     return (user?.role as RoleName) || null
-  }, [user?.role, userTipo])
+  }, [user?.role, userTipo, isResponsavelObra])
 
   // ========================================
   // PERMISSÕES

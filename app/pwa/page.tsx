@@ -113,7 +113,9 @@ export default function PWAMainPage() {
       if (userDataStr) {
         const ud = JSON.parse(userDataStr)
         const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
-        return tipo === 'responsavel_obra'
+        const responsavelFlag = Boolean(ud?.is_responsavel_obra) ||
+          (Array.isArray(ud?.obras_responsavel) && ud.obras_responsavel.length > 0)
+        return tipo === 'responsavel_obra' || responsavelFlag
       }
     } catch { /* ignore */ }
     return false
@@ -1171,7 +1173,9 @@ export default function PWAMainPage() {
                   if (userDataStr) {
                     const userData = JSON.parse(userDataStr)
                     const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-                    if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
+                    const responsavelFlag = Boolean(userData?.is_responsavel_obra) ||
+                      (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
+                    if (tipo === 'cliente' || tipo === 'responsavel_obra' || responsavelFlag) return true
                   }
                 } catch (error) {
                   // Ignorar erro

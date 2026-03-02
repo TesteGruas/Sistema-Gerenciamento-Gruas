@@ -518,7 +518,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       if (userDataStr) {
         const ud = JSON.parse(userDataStr)
         const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
-        return tipo === 'responsavel_obra'
+        const responsavelFlag = Boolean(ud?.is_responsavel_obra) ||
+          (Array.isArray(ud?.obras_responsavel) && ud.obras_responsavel.length > 0)
+        return tipo === 'responsavel_obra' || responsavelFlag
       }
     } catch { /* ignore */ }
     return false
