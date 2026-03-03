@@ -47,6 +47,8 @@ export interface RegistroPonto {
   is_facultativo?: boolean;
   feriado_id?: number;
   observacoes_feriado?: string;
+  trabalho_corrido?: boolean;
+  trabalho_corrido_confirmado?: boolean;
 }
 
 export interface RegistroPontoPayload {
@@ -66,6 +68,7 @@ export interface RegistroPontoPayload {
   is_facultativo?: boolean;
   feriado_tipo?: 'nacional' | 'estadual' | 'local';
   observacoes_feriado?: string;
+  trabalho_corrido?: boolean;
 }
 
 export interface Justificativa {

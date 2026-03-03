@@ -25,7 +25,7 @@ import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado } from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
-import { processarRespostaAlmoco } from '../services/almoco-automatico-service.js';
+import { processarRespostaAlmoco, enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
 
 const router = express.Router();
 
@@ -1545,6 +1545,7 @@ router.post('/registros', async (req, res) => {
       saida_almoco,
       volta_almoco,
       saida,
+      trabalho_corrido,
       observacoes,
       localizacao,
       tipo_dia,
@@ -1781,10 +1782,17 @@ router.post('/registros', async (req, res) => {
       });
     }
 
+    if (trabalho_corrido === true && (saida_almoco || volta_almoco)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Não é possível marcar trabalho corrido e informar horários de almoço no mesmo registro.'
+      });
+    }
+
     // Verificar se já existe registro para este funcionário nesta data
     const { data: existingRecord } = await supabaseAdmin
       .from('registros_ponto')
-      .select('id, entrada, saida, saida_almoco, volta_almoco, status')
+      .select('id, entrada, saida, saida_almoco, volta_almoco, status, trabalho_corrido, tipo_dia')
       .eq('funcionario_id', funcionario_id)
       .eq('data', data)
       .single();
@@ -1811,6 +1819,13 @@ router.post('/registros', async (req, res) => {
         return res.status(409).json({
           success: false,
           message: 'Não é possível registrar uma nova saída para almoço. O funcionário já possui uma saída para almoço registrada sem volta. Registre a volta do almoço primeiro.'
+        });
+      }
+
+      if (saida_almoco && existingRecord.trabalho_corrido) {
+        return res.status(409).json({
+          success: false,
+          message: 'Este dia foi marcado como trabalho corrido. Remova o trabalho corrido para registrar almoço.'
         });
       }
 
@@ -1849,6 +1864,7 @@ router.post('/registros', async (req, res) => {
       if (saida_almoco) dadosAtualizacao.saida_almoco = saida_almoco;
       if (volta_almoco) dadosAtualizacao.volta_almoco = volta_almoco;
       if (saida) dadosAtualizacao.saida = saida;
+      if (trabalho_corrido !== undefined) dadosAtualizacao.trabalho_corrido = Boolean(trabalho_corrido);
       if (observacoes) dadosAtualizacao.observacoes = observacoes;
       if (localizacao) dadosAtualizacao.localizacao = localizacao;
 
@@ -2058,6 +2074,7 @@ router.post('/registros', async (req, res) => {
       saida_almoco,
       volta_almoco,
       saida,
+      trabalho_corrido: trabalho_corrido === true,
       horas_trabalhadas: horasTrabalhadas,
       horas_extras: horasExtras,
       status,
@@ -7381,6 +7398,137 @@ router.post('/webhook-almoco', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/debug/disparar-notificacao-almoco:
+ *   post:
+ *     summary: Dispara notificação de almoço manualmente (debug)
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               funcionario_id:
+ *                 type: integer
+ *                 description: ID do funcionário para debug (opcional, padrão usuário logado)
+ *               data:
+ *                 type: string
+ *                 format: date
+ *                 description: Data no formato YYYY-MM-DD (opcional, padrão hoje)
+ *     responses:
+ *       200:
+ *         description: Disparo realizado com sucesso
+ *       400:
+ *         description: Registro não elegível para notificação
+ *       404:
+ *         description: Funcionário ou registro não encontrado
+ */
+router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
+  try {
+    const usuarioId = req.user?.id || req.user?.userId;
+    if (!usuarioId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuário não autenticado'
+      });
+    }
+
+    const dataAlvo = req.body?.data || new Date().toISOString().split('T')[0];
+
+    // Descobrir funcionário vinculado ao usuário autenticado
+    const { data: funcionarioUsuario, error: funcionarioUsuarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, status')
+      .eq('usuario_id', usuarioId)
+      .single();
+
+    if (funcionarioUsuarioError || !funcionarioUsuario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário vinculado ao usuário não encontrado'
+      });
+    }
+
+    // Permitir debug para outro funcionário somente para níveis administrativos
+    const funcionarioIdCorpo = Number(req.body?.funcionario_id);
+    const isAdmin = req.user?.level === 'Administrador' || req.user?.level === 'Administrador Master';
+    const funcionarioIdAlvo = (!Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0 && isAdmin)
+      ? funcionarioIdCorpo
+      : funcionarioUsuario.id;
+
+    const { data: registro, error: registroError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        id,
+        funcionario_id,
+        data,
+        entrada,
+        saida_almoco,
+        volta_almoco,
+        saida,
+        trabalho_corrido,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(
+          id,
+          nome,
+          telefone,
+          status,
+          usuarios:usuarios!funcionario_id(
+            id
+          )
+        )
+      `)
+      .eq('funcionario_id', funcionarioIdAlvo)
+      .eq('data', dataAlvo)
+      .single();
+
+    if (registroError || !registro) {
+      return res.status(404).json({
+        success: false,
+        message: 'Registro de ponto não encontrado para disparo de debug'
+      });
+    }
+
+    if (!registro.entrada || registro.saida || registro.saida_almoco || registro.volta_almoco || registro.trabalho_corrido) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registro não elegível para notificação de almoço (precisa ter entrada e estar sem saída/almoço/trabalho corrido).'
+      });
+    }
+
+    const resultado = await enviarNotificacaoAlmoco(registro);
+
+    if (!resultado.sucesso) {
+      return res.status(400).json({
+        success: false,
+        message: resultado.erro || 'Falha ao disparar notificação de almoço'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Notificação de almoço disparada com sucesso (debug)',
+      data: {
+        registro_ponto_id: registro.id,
+        funcionario_id: registro.funcionario_id,
+        funcionario_nome: registro.funcionario?.nome,
+        canais: resultado.canais || { app: false, whatsapp: false }
+      }
+    });
+  } catch (error) {
+    console.error('[debug-almoco] ❌ Erro ao disparar notificação manual:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno ao disparar notificação de almoço',
       error: error.message
     });
   }

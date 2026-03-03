@@ -2264,3 +2264,4 @@ function ClienteDetails({
     </div>
   )
 }
+}

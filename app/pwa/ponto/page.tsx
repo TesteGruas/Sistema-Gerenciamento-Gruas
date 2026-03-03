@@ -44,7 +44,8 @@ export default function PWAPontoPage() {
     entrada: null as string | null,
     saida_almoco: null as string | null,
     volta_almoco: null as string | null,
-    saida: null as string | null
+    saida: null as string | null,
+    trabalho_corrido: false
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingRegistros, setIsLoadingRegistros] = useState(true) // Loading específico para carregar registros
@@ -64,6 +65,10 @@ export default function PWAPontoPage() {
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
+  const [showEscolhaAlmocoDialog, setShowEscolhaAlmocoDialog] = useState(false)
+  const [preferenciaAlmoco, setPreferenciaAlmoco] = useState<'pausa' | 'corrido' | null>(null)
+  const [autoPerguntaAlmocoExibida, setAutoPerguntaAlmocoExibida] = useState(false)
+  const [isDisparandoDebugAlmoco, setIsDisparandoDebugAlmoco] = useState(false)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -160,6 +165,12 @@ export default function PWAPontoPage() {
     }
   }, [isOnline, user])
 
+  const getChavePreferenciaAlmoco = () => {
+    const hoje = new Date().toISOString().split('T')[0]
+    const identificadorUsuario = user?.profile?.funcionario_id || user?.id || 'anonimo'
+    return `preferencia_almoco_${identificadorUsuario}_${hoje}`
+  }
+
   const sincronizarFilaDeRegistros = async () => {
     const fila = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]')
     
@@ -230,13 +241,17 @@ export default function PWAPontoPage() {
         if (cachedRegistros) {
           const registros = JSON.parse(cachedRegistros)
           setRegistrosHoje(registros)
+          if (registros.trabalho_corrido === true) {
+            setPreferenciaAlmoco('corrido')
+          }
         } else {
           // Se não tem cache e está offline, definir valores vazios
           setRegistrosHoje({
             entrada: null,
             saida_almoco: null,
             volta_almoco: null,
-            saida: null
+            saida: null,
+            trabalho_corrido: false
           })
         }
         setIsLoadingRegistros(false)
@@ -269,9 +284,13 @@ export default function PWAPontoPage() {
           entrada: registro.entrada || null,
           saida_almoco: registro.saida_almoco || null,
           volta_almoco: registro.volta_almoco || null,
-          saida: registro.saida || null
+          saida: registro.saida || null,
+          trabalho_corrido: Boolean(registro.trabalho_corrido)
         }
         setRegistrosHoje(registros)
+        if (registro.trabalho_corrido) {
+          setPreferenciaAlmoco('corrido')
+        }
         
         // Salvar no cache
         localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(registros))
@@ -281,7 +300,8 @@ export default function PWAPontoPage() {
           entrada: null,
           saida_almoco: null,
           volta_almoco: null,
-          saida: null
+          saida: null,
+          trabalho_corrido: false
         }
         setRegistrosHoje(registrosVazios)
         localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(registrosVazios))
@@ -300,11 +320,168 @@ export default function PWAPontoPage() {
           entrada: null,
           saida_almoco: null,
           volta_almoco: null,
-          saida: null
+          saida: null,
+          trabalho_corrido: false
         })
       }
     } finally {
       setIsLoadingRegistros(false) // Finalizar loading
+    }
+  }
+
+  useEffect(() => {
+    if (!user?.id) return
+    const preferenciaSalva = localStorage.getItem(getChavePreferenciaAlmoco())
+    if (preferenciaSalva === 'pausa' || preferenciaSalva === 'corrido') {
+      setPreferenciaAlmoco(preferenciaSalva)
+    }
+  }, [user?.id])
+
+  useEffect(() => {
+    if (!currentTime) return
+    if (autoPerguntaAlmocoExibida || showEscolhaAlmocoDialog) return
+    if (!registrosHoje.entrada || registrosHoje.saida || registrosHoje.saida_almoco || registrosHoje.volta_almoco) return
+    if (registrosHoje.trabalho_corrido || preferenciaAlmoco === 'corrido' || preferenciaAlmoco === 'pausa') return
+
+    const minutosAgora = currentTime.getHours() * 60 + currentTime.getMinutes()
+    const limitePergunta = 11 * 60 + 50
+
+    if (minutosAgora >= limitePergunta) {
+      setShowEscolhaAlmocoDialog(true)
+      setAutoPerguntaAlmocoExibida(true)
+    }
+  }, [
+    currentTime,
+    autoPerguntaAlmocoExibida,
+    showEscolhaAlmocoDialog,
+    registrosHoje.entrada,
+    registrosHoje.saida,
+    registrosHoje.saida_almoco,
+    registrosHoje.volta_almoco,
+    registrosHoje.trabalho_corrido,
+    preferenciaAlmoco
+  ])
+
+  const salvarPreferenciaAlmoco = async (escolha: 'pausa' | 'corrido') => {
+    setShowEscolhaAlmocoDialog(false)
+    setPreferenciaAlmoco(escolha)
+    localStorage.setItem(getChavePreferenciaAlmoco(), escolha)
+
+    if (escolha !== 'corrido') {
+      toast({
+        title: "Pausa para almoço confirmada",
+        description: "O fluxo seguirá com saída e retorno do almoço.",
+        variant: "default"
+      })
+      return
+    }
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user,
+        token,
+        'ID do funcionário não encontrado'
+      )
+      const hoje = new Date().toISOString().split('T')[0]
+      const dadosAtualizacao = {
+        funcionario_id: funcionarioId,
+        data: hoje,
+        trabalho_corrido: true
+      }
+
+      if (!isOnline) {
+        const filaRegistros = JSON.parse(localStorage.getItem('fila_registros_ponto') || '[]')
+        filaRegistros.push({
+          dados: dadosAtualizacao,
+          timestamp: new Date().toISOString()
+        })
+        localStorage.setItem('fila_registros_ponto', JSON.stringify(filaRegistros))
+      } else {
+        const registrosExistentes = await pontoApi.getRegistros({
+          funcionario_id: funcionarioId,
+          data_inicio: hoje,
+          data_fim: hoje
+        })
+
+        if (registrosExistentes && registrosExistentes.length > 0) {
+          await pontoApi.atualizarRegistro(registrosExistentes[0].id!, {
+            ...dadosAtualizacao,
+            justificativa_alteracao: 'Definição de trabalho corrido via PWA'
+          })
+        }
+      }
+
+      setRegistrosHoje(prev => {
+        const atualizado = {
+          ...prev,
+          trabalho_corrido: true
+        }
+        localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(atualizado))
+        return atualizado
+      })
+
+      toast({
+        title: "Trabalho direto confirmado",
+        description: "Saída para almoço não será obrigatória hoje.",
+        variant: "default"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro ao salvar escolha",
+        description: error.message || "Não foi possível salvar a preferência de almoço.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const dispararNotificacaoAlmocoDebug = async () => {
+    setIsDisparandoDebugAlmoco(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user,
+        token,
+        'ID do funcionário não encontrado'
+      )
+      const hoje = new Date().toISOString().split('T')[0]
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+
+      const response = await fetch(`${apiUrl}/api/ponto-eletronico/debug/disparar-notificacao-almoco`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          funcionario_id: funcionarioId,
+          data: hoje
+        })
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.message || 'Falha ao disparar notificação de almoço')
+      }
+
+      const canais = data?.data?.canais || {}
+      toast({
+        title: "Debug executado",
+        description: `Notificação enviada. App: ${canais.app ? 'sim' : 'não'} | WhatsApp: ${canais.whatsapp ? 'sim' : 'não'}`,
+        variant: "default"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro no debug de almoço",
+        description: error.message || "Não foi possível disparar a notificação.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDisparandoDebugAlmoco(false)
     }
   }
 
@@ -444,9 +621,11 @@ export default function PWAPontoPage() {
         
         const entradaMinutos = parseInt(entradaParts[0]) * 60 + parseInt(entradaParts[1])
         const saidaMinutos = parseInt(saidaParts[0]) * 60 + parseInt(saidaParts[1])
-        
-        // Considerar intervalo de almoço (1h)
-        const totalMinutos = saidaMinutos - entradaMinutos - 60
+
+        // Descontar intervalo apenas quando houver saída e retorno de almoço.
+        const possuiIntervaloAlmoco = Boolean(registrosHoje.saida_almoco && registrosHoje.volta_almoco)
+        const minutosIntervalo = possuiIntervaloAlmoco ? 60 : 0
+        const totalMinutos = saidaMinutos - entradaMinutos - minutosIntervalo
         const horasTrabalhadas = totalMinutos / 60
         
         // Jornada normal é 8 horas
@@ -781,7 +960,22 @@ export default function PWAPontoPage() {
         corTexto: 'text-green-700'
       }
     }
-    
+
+    if (
+      registrosHoje.entrada &&
+      !registrosHoje.saida &&
+      (registrosHoje.trabalho_corrido || preferenciaAlmoco === 'corrido')
+    ) {
+      return {
+        tipo: 'saida',
+        label: 'Saída',
+        descricao: 'Finalizar jornada de trabalho',
+        icone: Square,
+        cor: 'from-red-500 to-red-600 hover:from-red-600 hover:to-red-700',
+        corTexto: 'text-red-700'
+      }
+    }
+
     if (registrosHoje.entrada && !registrosHoje.saida_almoco && !registrosHoje.saida) {
       return {
         tipo: 'saida_almoco',
@@ -963,6 +1157,18 @@ export default function PWAPontoPage() {
                 <p className="text-gray-600">Você já registrou todos os pontos do dia</p>
               </div>
             )}
+
+            {registrosHoje.entrada && !registrosHoje.saida && !registrosHoje.saida_almoco && !registrosHoje.volta_almoco && !registrosHoje.trabalho_corrido && preferenciaAlmoco !== 'corrido' && (
+              <div className="flex justify-center">
+                <Button
+                  variant="outline"
+                  onClick={() => setShowEscolhaAlmocoDialog(true)}
+                  className="w-full max-w-sm"
+                >
+                  Definir pausa de almoço
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -1043,6 +1249,66 @@ export default function PWAPontoPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Debug - Disparo manual da notificação de almoço */}
+      <Card className="bg-slate-50 border-slate-200">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-sm">Debug de almoço</p>
+              <p className="text-xs text-muted-foreground">
+                Dispara agora notificação no app e WhatsApp para teste
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={dispararNotificacaoAlmocoDebug}
+              disabled={isDisparandoDebugAlmoco}
+            >
+              {isDisparandoDebugAlmoco ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Disparando...
+                </>
+              ) : (
+                'Disparar agora'
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Diálogo de Escolha de Almoço */}
+      <Dialog open={showEscolhaAlmocoDialog} onOpenChange={setShowEscolhaAlmocoDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Coffee className="w-5 h-5" />
+              Intervalo de Almoço
+            </DialogTitle>
+            <DialogDescription>
+              Você fará pausa para almoço hoje?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 pt-2">
+            <Button
+              onClick={() => salvarPreferenciaAlmoco('pausa')}
+              className="w-full bg-yellow-600 hover:bg-yellow-700"
+            >
+              Fazer pausa para almoço
+            </Button>
+            <Button
+              onClick={() => salvarPreferenciaAlmoco('corrido')}
+              variant="outline"
+              className="w-full"
+            >
+              Trabalhar direto (sem pausa)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Pergunta sobre Feriado */}
       <Dialog open={showFeriadoDialog} onOpenChange={setShowFeriadoDialog}>
