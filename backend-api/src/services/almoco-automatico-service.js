@@ -152,20 +152,15 @@ export async function enviarNotificacaoAlmoco(registro) {
     const hoje = new Date().toISOString().split('T')[0];
     const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
-    // Criar mensagem com opções de resposta
+    // WhatsApp agora é apenas aviso (sem coleta de resposta)
     const mensagem = `🍽️ *Notificação de Almoço*
 
 Olá, ${funcionario.nome}!
 
 Está se aproximando o horário de almoço (12:00).
 
-*Como você prefere?*
-
-Responda com:
-• *PAUSA* - Para parada para almoço
-• *CORRIDO* - Para trabalho corrido (sem pausa)
-
-⚠️ Se não responder até 12:00, será registrado como pausa para almoço.
+Acesse o app para registrar corretamente seu ponto de almoço.
+Se for trabalhar direto, marque trabalho corrido no PWA.
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -263,7 +258,7 @@ _Sistema de Gestão de Gruas_`;
     // Registrar disparo do job para evitar reenvio no mesmo dia (mesmo se só app tiver sucesso)
     const telefoneRegistro = telefone || 'SEM_TELEFONE';
     const statusDisparo = resultadoCanais.app || resultadoCanais.whatsapp ? 'enviada' : 'expirada';
-    const respostaDefault = resultadoCanais.whatsapp ? 'nao_respondido' : null;
+    const respostaDefault = null;
 
     const { error: insertError } = await supabaseAdmin
       .from('notificacoes_almoco')
@@ -359,7 +354,7 @@ export async function enviarNotificacoesAlmoco() {
 
 /**
  * Registra saída de almoço automaticamente às 12:00
- * Para funcionários que não responderam ou escolheram "pausa"
+ * Para funcionários sem trabalho corrido marcado
  */
 export async function registrarAlmocoAutomatico() {
   try {
@@ -386,7 +381,7 @@ export async function registrarAlmocoAutomatico() {
       return { sucesso: true, registrados: 0, erros: [] };
     }
     
-    // Verificar notificações para saber quem escolheu trabalho corrido
+    // Compatibilidade: manter leitura de respostas antigas de WhatsApp
     const { data: notificacoes, error: notifError } = await supabaseAdmin
       .from('notificacoes_almoco')
       .select('registro_ponto_id, resposta')
@@ -413,7 +408,9 @@ export async function registrarAlmocoAutomatico() {
     
     // Processar cada registro
     for (const registro of registros) {
-      const isTrabalhoCorrido = trabalhoCorridoPorRegistro.get(registro.id) || false;
+      // Regra atual: trabalho corrido é decidido pelo app/PWA.
+      // Mantemos fallback por respostas antigas para não quebrar histórico.
+      const isTrabalhoCorrido = Boolean(registro.trabalho_corrido) || trabalhoCorridoPorRegistro.get(registro.id) || false;
       
       if (isTrabalhoCorrido) {
         // Marcar como trabalho corrido (não registra saída de almoço)

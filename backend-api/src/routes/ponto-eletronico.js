@@ -25,7 +25,7 @@ import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado } from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
-import { processarRespostaAlmoco, enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
+import { enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
 
 const router = express.Router();
 
@@ -7304,7 +7304,7 @@ router.get('/relatorios/exportar', async (req, res) => {
  * @swagger
  * /api/ponto-eletronico/webhook-almoco:
  *   post:
- *     summary: Webhook para receber respostas de almoço via WhatsApp
+ *     summary: Endpoint desativado (respostas de almoço via WhatsApp)
  *     tags: [Ponto Eletrônico]
  *     requestBody:
  *       required: true
@@ -7321,13 +7321,13 @@ router.get('/relatorios/exportar', async (req, res) => {
  *                 description: Número de telefone do remetente
  *               mensagem:
  *                 type: string
- *                 description: Mensagem recebida (deve conter "PAUSA" ou "CORRIDO")
+ *                 description: Mensagem recebida (ignorada)
  *               registro_ponto_id:
  *                 type: string
  *                 description: ID do registro de ponto (opcional)
  *     responses:
  *       200:
- *         description: Resposta processada com sucesso
+ *         description: Endpoint recebido, mas processamento desativado
  *       400:
  *         description: Dados inválidos ou resposta não reconhecida
  *       500:
@@ -7335,64 +7335,16 @@ router.get('/relatorios/exportar', async (req, res) => {
  */
 router.post('/webhook-almoco', async (req, res) => {
   try {
-    const { telefone, mensagem, registro_ponto_id } = req.body;
-
-    // Validações
-    if (!telefone || !mensagem) {
-      return res.status(400).json({
-        success: false,
-        message: 'Telefone e mensagem são obrigatórios'
-      });
-    }
-
-    console.log('[webhook-almoco] 📥 Recebida resposta de almoço:', {
-      telefone,
-      mensagem: mensagem.substring(0, 50),
-      registro_ponto_id
+    const { telefone, mensagem } = req.body || {};
+    console.log('[webhook-almoco] ℹ️ Endpoint desativado. Respostas via WhatsApp não são mais processadas.', {
+      telefone: telefone || null,
+      mensagem: typeof mensagem === 'string' ? mensagem.substring(0, 50) : null
     });
-
-    // Processar resposta
-    const resultado = await processarRespostaAlmoco(telefone, mensagem, registro_ponto_id);
-
-    if (!resultado.sucesso) {
-      return res.status(400).json({
-        success: false,
-        message: resultado.erro || 'Erro ao processar resposta'
-      });
-    }
-
-    // Enviar mensagem de confirmação via WhatsApp
-    const mensagemConfirmacao = resultado.resposta === 'pausa'
-      ? '✅ *Almoço confirmado!*\n\nSeu horário de almoço será registrado automaticamente às 12:00.\n\nBom almoço! 🍽️'
-      : '✅ *Trabalho corrido confirmado!*\n\nSeu encarregado será notificado para confirmar ao final do dia.\n\nBom trabalho! 💪';
-
-    // Enviar confirmação de forma assíncrona (não bloqueia a resposta)
-    (async () => {
-      try {
-        const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
-        await enviarMensagemWebhook(
-          telefone,
-          mensagemConfirmacao,
-          null,
-          {
-            tipo: 'confirmacao_almoco',
-            registro_ponto_id: resultado.registro_ponto_id
-          }
-        );
-      } catch (error) {
-        console.error('[webhook-almoco] ❌ Erro ao enviar confirmação:', error);
-      }
-    })();
-
     res.json({
       success: true,
-      message: 'Resposta processada com sucesso',
-      data: {
-        resposta: resultado.resposta,
-        registro_ponto_id: resultado.registro_ponto_id
-      }
+      message: 'Webhook de almoço desativado. Use o app/PWA para decidir pausa ou trabalho corrido.',
+      data: { webhook_ativo: false }
     });
-
   } catch (error) {
     console.error('[webhook-almoco] ❌ Erro ao processar webhook:', error);
     res.status(500).json({
@@ -7445,26 +7397,33 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
 
     const dataAlvo = req.body?.data || new Date().toISOString().split('T')[0];
 
-    // Descobrir funcionário vinculado ao usuário autenticado
-    const { data: funcionarioUsuario, error: funcionarioUsuarioError } = await supabaseAdmin
-      .from('funcionarios')
-      .select('id, nome, status')
-      .eq('usuario_id', usuarioId)
-      .single();
-
-    if (funcionarioUsuarioError || !funcionarioUsuario) {
-      return res.status(404).json({
-        success: false,
-        message: 'Funcionário vinculado ao usuário não encontrado'
-      });
-    }
-
-    // Permitir debug para outro funcionário somente para níveis administrativos
+    // Permitir debug para qualquer funcionário informado no corpo (endpoint de debug)
     const funcionarioIdCorpo = Number(req.body?.funcionario_id);
-    const isAdmin = req.user?.level === 'Administrador' || req.user?.level === 'Administrador Master';
-    const funcionarioIdAlvo = (!Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0 && isAdmin)
-      ? funcionarioIdCorpo
-      : funcionarioUsuario.id;
+    const funcionarioIdValidoNoCorpo = !Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0;
+
+    let funcionarioIdAlvo = null;
+    let funcionarioUsuario = null;
+
+    if (funcionarioIdValidoNoCorpo) {
+      funcionarioIdAlvo = funcionarioIdCorpo;
+    } else {
+      // Fallback: usar funcionário vinculado ao usuário autenticado
+      const { data: funcionarioVinculado, error: funcionarioUsuarioError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id, nome, status')
+        .eq('usuario_id', usuarioId)
+        .single();
+
+      if (funcionarioUsuarioError || !funcionarioVinculado) {
+        return res.status(404).json({
+          success: false,
+          message: 'Funcionário vinculado ao usuário não encontrado. Envie funcionario_id no corpo.'
+        });
+      }
+
+      funcionarioUsuario = funcionarioVinculado;
+      funcionarioIdAlvo = funcionarioVinculado.id;
+    }
 
     const { data: registro, error: registroError } = await supabaseAdmin
       .from('registros_ponto')
@@ -7491,21 +7450,52 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
       .eq('data', dataAlvo)
       .single();
 
-    if (registroError || !registro) {
-      return res.status(404).json({
-        success: false,
-        message: 'Registro de ponto não encontrado para disparo de debug'
-      });
-    }
+    let registroParaEnvio = registro;
+    let modoDebugSemRegistro = false;
 
-    if (!registro.entrada || registro.saida || registro.saida_almoco || registro.volta_almoco || registro.trabalho_corrido) {
+    // Se não houver registro do dia, permitir disparo em modo debug usando apenas dados do funcionário.
+    if (registroError || !registro) {
+      const { data: funcionarioDebug, error: funcionarioDebugError } = await supabaseAdmin
+        .from('funcionarios')
+        .select(`
+          id,
+          nome,
+          telefone,
+          status,
+          usuarios:usuarios!funcionario_id(
+            id
+          )
+        `)
+        .eq('id', funcionarioIdAlvo)
+        .single();
+
+      if (funcionarioDebugError || !funcionarioDebug) {
+        return res.status(404).json({
+          success: false,
+          message: 'Funcionário não encontrado para disparo de debug'
+        });
+      }
+
+      registroParaEnvio = {
+        id: null,
+        funcionario_id: funcionarioDebug.id,
+        data: dataAlvo,
+        entrada: '07:00',
+        saida_almoco: null,
+        volta_almoco: null,
+        saida: null,
+        trabalho_corrido: false,
+        funcionario: funcionarioDebug
+      };
+      modoDebugSemRegistro = true;
+    } else if (!registro.entrada || registro.saida || registro.saida_almoco || registro.volta_almoco || registro.trabalho_corrido) {
       return res.status(400).json({
         success: false,
         message: 'Registro não elegível para notificação de almoço (precisa ter entrada e estar sem saída/almoço/trabalho corrido).'
       });
     }
 
-    const resultado = await enviarNotificacaoAlmoco(registro);
+    const resultado = await enviarNotificacaoAlmoco(registroParaEnvio);
 
     if (!resultado.sucesso) {
       return res.status(400).json({
@@ -7518,9 +7508,10 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
       success: true,
       message: 'Notificação de almoço disparada com sucesso (debug)',
       data: {
-        registro_ponto_id: registro.id,
-        funcionario_id: registro.funcionario_id,
-        funcionario_nome: registro.funcionario?.nome,
+        registro_ponto_id: registroParaEnvio.id,
+        funcionario_id: registroParaEnvio.funcionario_id,
+        funcionario_nome: registroParaEnvio.funcionario?.nome,
+        modo_debug_sem_registro: modoDebugSemRegistro,
         canais: resultado.canais || { app: false, whatsapp: false }
       }
     });
