@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -232,6 +232,15 @@ export default function FuncionarioDetalhesPage() {
   const [folhaParaUpload, setFolhaParaUpload] = useState<SalarioDetalhado | null>(null)
   const [arquivoHolerite, setArquivoHolerite] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const isDocumentoUploadInFlightRef = useRef(false)
+  const isHoleriteUploadInFlightRef = useRef(false)
+
+  const buildUploadEndpoint = (baseUrl: string) => {
+    const normalizedBase = baseUrl.replace(/\/+$/, "")
+    return normalizedBase.endsWith("/api")
+      ? `${normalizedBase}/arquivos/upload`
+      : `${normalizedBase}/api/arquivos/upload`
+  }
 
   // Estados para histórico de salários e modal de edição
   const [mostrarHistoricoSalarios, setMostrarHistoricoSalarios] = useState(false)
@@ -878,6 +887,7 @@ export default function FuncionarioDetalhesPage() {
   }
 
   const handleSalvarEdicaoDocumento = async () => {
+    if (isDocumentoUploadInFlightRef.current) return
     if (!documentoSelecionado) return
 
     // Validação de campos obrigatórios
@@ -916,13 +926,14 @@ export default function FuncionarioDetalhesPage() {
       // Se tiver arquivo novo, fazer upload primeiro
       if (documentoForm.arquivo) {
         try {
+          isDocumentoUploadInFlightRef.current = true
           const formDataUpload = new FormData()
           formDataUpload.append('arquivo', documentoForm.arquivo)
           
           const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
-          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+          const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -957,6 +968,8 @@ export default function FuncionarioDetalhesPage() {
             variant: "destructive"
           })
           return
+        } finally {
+          isDocumentoUploadInFlightRef.current = false
         }
       }
 
@@ -1250,6 +1263,7 @@ export default function FuncionarioDetalhesPage() {
   }
   
   const handleCriarDocumento = async () => {
+    if (isDocumentoUploadInFlightRef.current) return
     // Validação de campos obrigatórios
     const camposFaltando: string[] = []
 
@@ -1286,13 +1300,14 @@ export default function FuncionarioDetalhesPage() {
       // Se tiver arquivo, fazer upload primeiro
       if (documentoForm.arquivo) {
         try {
+          isDocumentoUploadInFlightRef.current = true
           const formDataUpload = new FormData()
           formDataUpload.append('arquivo', documentoForm.arquivo)
           
           const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
-          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+          const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${token}`
@@ -1337,6 +1352,8 @@ export default function FuncionarioDetalhesPage() {
             description: "Upload do arquivo falhou, mas o documento será salvo",
             variant: "default"
           })
+        } finally {
+          isDocumentoUploadInFlightRef.current = false
         }
       }
       
@@ -1409,6 +1426,7 @@ export default function FuncionarioDetalhesPage() {
   }
 
   const handleUploadHolerite = async () => {
+    if (isHoleriteUploadInFlightRef.current) return
     if (!folhaParaUpload || !arquivoHolerite || !funcionario) {
       toast({
         title: "Erro",
@@ -1419,6 +1437,7 @@ export default function FuncionarioDetalhesPage() {
     }
 
     setUploading(true)
+    isHoleriteUploadInFlightRef.current = true
     try {
       // Fazer upload do arquivo primeiro
       const formData = new FormData()
@@ -1427,7 +1446,7 @@ export default function FuncionarioDetalhesPage() {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
-      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+      const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1492,6 +1511,7 @@ export default function FuncionarioDetalhesPage() {
         variant: "destructive"
       })
     } finally {
+      isHoleriteUploadInFlightRef.current = false
       setUploading(false)
     }
   }
@@ -3108,7 +3128,7 @@ export default function FuncionarioDetalhesPage() {
                         >
                           Cancelar
                         </Button>
-                        <Button onClick={handleCriarDocumento}>
+                        <Button type="button" onClick={handleCriarDocumento}>
                           Adicionar Documento
                         </Button>
                       </div>
@@ -3222,7 +3242,7 @@ export default function FuncionarioDetalhesPage() {
                         >
                           Cancelar
                         </Button>
-                        <Button onClick={handleSalvarEdicaoDocumento}>
+                        <Button type="button" onClick={handleSalvarEdicaoDocumento}>
                           Salvar Alterações
                         </Button>
                       </div>
@@ -3473,6 +3493,7 @@ export default function FuncionarioDetalhesPage() {
                   Cancelar
                 </Button>
                 <Button
+                  type="button"
                   onClick={handleUploadHolerite}
                   disabled={!arquivoHolerite || uploading}
                 >
