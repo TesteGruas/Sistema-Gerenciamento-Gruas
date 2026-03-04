@@ -1065,9 +1065,72 @@ router.get('/:id', async (req, res) => {
     }
 
     if (!data) {
-      return res.status(404).json({
-        error: 'Funcionário não encontrado',
-        message: 'O funcionário com o ID especificado não existe'
+      // Fallback: alguns itens da listagem de funcionários são usuários sem funcionario_id.
+      // Nesses casos, o "id" exibido na lista é o id da tabela usuarios.
+      const { data: usuarioSemFuncionario, error: usuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select(`
+          *,
+          usuario_perfis!usuario_perfis_usuario_id_fkey(
+            id,
+            perfil_id,
+            status,
+            data_atribuicao,
+            perfis(
+              id,
+              nome,
+              descricao,
+              nivel_acesso
+            )
+          )
+        `)
+        .eq('id', funcionarioId)
+        .is('funcionario_id', null)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (usuarioError) {
+        return res.status(500).json({
+          error: 'Erro ao buscar funcionário',
+          message: usuarioError.message
+        })
+      }
+
+      if (!usuarioSemFuncionario) {
+        return res.status(404).json({
+          error: 'Funcionário não encontrado',
+          message: 'O funcionário com o ID especificado não existe'
+        })
+      }
+
+      const perfil = usuarioSemFuncionario.usuario_perfis?.[0]?.perfis || null
+
+      return res.json({
+        success: true,
+        data: {
+          id: usuarioSemFuncionario.id,
+          nome: usuarioSemFuncionario.nome,
+          email: usuarioSemFuncionario.email,
+          telefone: usuarioSemFuncionario.telefone,
+          cpf: usuarioSemFuncionario.cpf,
+          status: usuarioSemFuncionario.status,
+          cargo: usuarioSemFuncionario.cargo || null,
+          turno: usuarioSemFuncionario.turno || null,
+          data_admissao: usuarioSemFuncionario.data_admissao || null,
+          salario: usuarioSemFuncionario.salario || null,
+          funcionario_id: null,
+          usuario_existe: true,
+          usuario_criado: true,
+          perfil_usuario: perfil ? {
+            id: perfil.id,
+            nome: perfil.nome,
+            nivel_acesso: perfil.nivel_acesso
+          } : null,
+          funcionarios_obras: [],
+          obra_atual: null,
+          obras_vinculadas: [],
+          historico_obras: []
+        }
       })
     }
 
@@ -1833,9 +1896,53 @@ router.delete('/:id', async (req, res) => {
 
     if (checkError) {
       if (checkError.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Funcionário não encontrado',
-          message: 'O funcionário com o ID especificado não existe'
+        // Fallback: item da lista pode ser um usuário sem funcionario_id
+        const { data: usuarioSemFuncionario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, nome, email')
+          .eq('id', funcionarioId)
+          .is('funcionario_id', null)
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        if (usuarioError) {
+          return res.status(500).json({
+            error: 'Erro ao verificar funcionário',
+            message: usuarioError.message
+          })
+        }
+
+        if (!usuarioSemFuncionario) {
+          return res.status(404).json({
+            error: 'Funcionário não encontrado',
+            message: 'O funcionário com o ID especificado não existe'
+          })
+        }
+
+        const { error: deleteUsuarioDiretoError } = await supabaseAdmin
+          .from('usuarios')
+          .update({
+            deleted_at: new Date().toISOString(),
+            status: 'Inativo'
+          })
+          .eq('id', funcionarioId)
+          .is('deleted_at', null)
+
+        if (deleteUsuarioDiretoError) {
+          return res.status(500).json({
+            error: 'Erro ao excluir usuário',
+            message: deleteUsuarioDiretoError.message
+          })
+        }
+
+        return res.json({
+          success: true,
+          message: `Usuário ${usuarioSemFuncionario.nome} excluído com sucesso`,
+          usuario_excluido: {
+            id: usuarioSemFuncionario.id,
+            email: usuarioSemFuncionario.email
+          },
+          desassociacoes_realizadas: 0
         })
       }
       return res.status(500).json({
