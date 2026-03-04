@@ -36,6 +36,17 @@ interface ColaboradorHoleritesProps {
 
 export function ColaboradorHolerites({ colaboradorId, readOnly = false, isCliente = false, isFuncionario = false }: ColaboradorHoleritesProps) {
   const { toast } = useToast()
+  const getApiBase = () => {
+    return (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/+$/, '')
+  }
+  const buildApiEndpoint = (path: string) => {
+    const base = getApiBase()
+    const normalizedPath = path.replace(/^\/+/, '')
+    const pathWithoutApiPrefix = normalizedPath.replace(/^api\/+/, '')
+    return base.endsWith('/api')
+      ? `${base}/${pathWithoutApiPrefix}`
+      : `${base}/${normalizedPath}`
+  }
   const [holerites, setHolerites] = useState<Holerite[]>([])
   const [holeritesFiltrados, setHoleritesFiltrados] = useState<Holerite[]>([])
   const [loading, setLoading] = useState(true)
@@ -301,13 +312,12 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
 
       // Método antigo (URL direta)
       if (holerite.arquivo_url) {
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         // Tentar obter URL assinada do arquivo
         try {
           const urlResponse = await fetch(
-            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(holerite.arquivo_url)}`,
+            `${buildApiEndpoint('api/arquivos/url-assinada')}?caminho=${encodeURIComponent(holerite.arquivo_url)}`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`
@@ -383,10 +393,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       const formData = new FormData()
       formData.append('arquivo', arquivoHolerite)
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
-      const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+      const uploadResponse = await fetch(buildApiEndpoint('api/arquivos/upload'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -403,7 +412,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       
       // Salvar holerite usando a API de colaboradores-documentos
       const holeriteResponse = await fetch(
-        `${apiUrl}/api/colaboradores/${colaboradorId}/holerites`,
+        buildApiEndpoint(`api/colaboradores/${colaboradorId}/holerites`),
         {
           method: 'POST',
           headers: {
