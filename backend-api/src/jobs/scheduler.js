@@ -3,6 +3,7 @@ import { cancelarAprovacoesVencidas } from './cancelar-aprovacoes-vencidas.js';
 import { enviarLembretesAprovacoes } from './enviar-lembretes-aprovacoes.js';
 import { iniciarJobNotificacoesAlmoco } from './enviar-notificacoes-almoco.js';
 import { iniciarJobAlmocoAutomatico } from './registrar-almoco-automatico.js';
+import { iniciarJobVoltaAlmocoAutomatico } from './registrar-volta-almoco-automatico.js';
 
 /**
  * Inicializa os jobs automáticos do sistema
@@ -41,18 +42,23 @@ function inicializarScheduler() {
   });
 
   // Job 3: Enviar notificações de almoço
-  // Executa diariamente às 11h50
+  // Executa diariamente às 11h30
   iniciarJobNotificacoesAlmoco();
 
   // Job 4: Registrar almoço automático
   // Executa diariamente às 12h00
   iniciarJobAlmocoAutomatico();
 
+  // Job 5: Registrar volta de almoço automática
+  // Executa diariamente às 13h00
+  iniciarJobVoltaAlmocoAutomatico();
+
   console.log('[scheduler] ✓ Jobs agendados com sucesso:');
   console.log('  - Cancelar aprovações vencidas: diariamente às 00:00');
   console.log('  - Enviar lembretes: diariamente às 09:00');
-  console.log('  - Notificações de almoço: diariamente às 11:50');
+  console.log('  - Notificações de almoço: diariamente às 11:30');
   console.log('  - Registrar almoço automático: diariamente às 12:00');
+  console.log('  - Registrar volta de almoço automático: diariamente às 13:00');
 
   return {
     jobCancelar,

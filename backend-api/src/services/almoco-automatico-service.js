@@ -48,6 +48,7 @@ export async function buscarFuncionariosParaNotificacaoAlmoco() {
         saida_almoco,
         volta_almoco,
         saida,
+        trabalho_corrido,
         funcionario:funcionarios!fk_registros_ponto_funcionario(
           id,
           nome,
@@ -153,14 +154,15 @@ export async function enviarNotificacaoAlmoco(registro) {
     const horaAtual = new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
 
     // WhatsApp agora é apenas aviso (sem coleta de resposta)
-    const mensagem = `🍽️ *Notificação de Almoço*
+    const mensagem = `🍽️ *Lembrete de Ponto*
 
 Olá, ${funcionario.nome}!
 
-Está se aproximando o horário de almoço (12:00).
+Está se aproximando o horário de almoço.
 
-Acesse o app para registrar corretamente seu ponto de almoço.
-Se for trabalhar direto, marque trabalho corrido no PWA.
+Acesse o app para escolher:
+• Pausa de almoço (fluxo automático 12:00 e 13:00)
+• Dia corrido (sem pausas automáticas)
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -173,8 +175,8 @@ _Sistema de Gestão de Gruas_`;
     // 1) Enviar notificação no app (sempre que existir usuário vinculado)
     if (usuarioId) {
       try {
-        const tituloNotificacao = '🍽️ Notificação de Almoço';
-        const mensagemNotificacao = `Olá, ${funcionario.nome}!\n\nEstá se aproximando o horário de almoço (12:00).\n\nComo você prefere?\n\n• PAUSA - Para parada para almoço\n• CORRIDO - Para trabalho corrido (sem pausa)\n\n⚠️ Se não responder até 12:00, será registrado como pausa para almoço.`;
+        const tituloNotificacao = '🍽️ Lembrete de Ponto';
+        const mensagemNotificacao = `Olá, ${funcionario.nome}!\n\nEstá se aproximando o horário de almoço.\n\nAcesse o app para escolher:\n• Pausa de almoço (fluxo automático 12:00 e 13:00)\n• Dia corrido (sem pausas automáticas).`;
 
         const { data: notificacaoApp, error: notifAppError } = await supabaseAdmin
           .from('notificacoes')
@@ -363,12 +365,13 @@ export async function registrarAlmocoAutomatico() {
     
     console.log(`[almoco-automatico] 🍽️ Registrando almoço automático - ${hoje} ${horaAlmoco}`);
     
-    // Buscar registros de hoje com entrada mas sem saída de almoço
+    // Buscar registros de hoje com entrada mas sem saída de almoço e sem fechamento do dia
     const { data: registros, error: registrosError } = await supabaseAdmin
       .from('registros_ponto')
-      .select('id, funcionario_id, data, entrada, saida_almoco, trabalho_corrido')
+      .select('id, funcionario_id, data, entrada, saida_almoco, volta_almoco, saida, trabalho_corrido')
       .eq('data', hoje)
       .not('entrada', 'is', null)
+      .is('saida', null)
       .is('saida_almoco', null);
     
     if (registrosError) {
@@ -462,6 +465,75 @@ export async function registrarAlmocoAutomatico() {
       sucesso: false,
       registrados: 0,
       trabalho_corrido: 0,
+      erros: [{ erro: error.message }]
+    };
+  }
+}
+
+/**
+ * Registra volta de almoço automaticamente às 13:00
+ * Apenas para jornada normal (sem trabalho corrido)
+ */
+export async function registrarVoltaAlmocoAutomatico() {
+  try {
+    const hoje = new Date().toISOString().split('T')[0];
+    const horaVoltaAlmoco = '13:00';
+
+    console.log(`[almoco-automatico] 🍽️ Registrando volta de almoço automática - ${hoje} ${horaVoltaAlmoco}`);
+
+    const { data: registros, error: registrosError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id, funcionario_id, data, entrada, saida_almoco, volta_almoco, saida, trabalho_corrido')
+      .eq('data', hoje)
+      .not('entrada', 'is', null)
+      .not('saida_almoco', 'is', null)
+      .is('volta_almoco', null)
+      .is('saida', null)
+      .or('trabalho_corrido.is.null,trabalho_corrido.eq.false');
+
+    if (registrosError) {
+      console.error('[almoco-automatico] ❌ Erro ao buscar registros para volta automática:', registrosError);
+      return { sucesso: false, registrados: 0, erros: [] };
+    }
+
+    if (!registros || registros.length === 0) {
+      console.log('[almoco-automatico] ℹ️ Nenhum registro para volta de almoço automática');
+      return { sucesso: true, registrados: 0, erros: [] };
+    }
+
+    const resultados = {
+      sucesso: true,
+      registrados: 0,
+      erros: []
+    };
+
+    for (const registro of registros) {
+      const { error: updateError } = await supabaseAdmin
+        .from('registros_ponto')
+        .update({
+          volta_almoco: horaVoltaAlmoco,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', registro.id);
+
+      if (updateError) {
+        resultados.erros.push({
+          registro_id: registro.id,
+          erro: updateError.message
+        });
+      } else {
+        resultados.registrados++;
+        console.log(`[almoco-automatico] ✅ Volta de almoço registrada automaticamente para ${registro.id}`);
+      }
+    }
+
+    console.log(`[almoco-automatico] ✅ Processo concluído (volta automática): ${resultados.registrados} registros`);
+    return resultados;
+  } catch (error) {
+    console.error('[almoco-automatico] ❌ Erro ao registrar volta de almoço automática:', error);
+    return {
+      sucesso: false,
+      registrados: 0,
       erros: [{ erro: error.message }]
     };
   }

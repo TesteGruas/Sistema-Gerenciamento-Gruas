@@ -3,9 +3,9 @@ import { enviarNotificacoesAlmoco } from '../services/almoco-automatico-service.
 
 /**
  * Job para enviar notificações de almoço
- * Executa diariamente às 11h50
+ * Executa diariamente às 11h30
  */
-const jobNotificacoesAlmoco = cron.schedule('50 11 * * *', async () => {
+const jobNotificacoesAlmoco = cron.schedule('30 11 * * *', async () => {
   console.log('[scheduler] 🍽️ Executando job: enviar notificações de almoço');
   try {
     const resultado = await enviarNotificacoesAlmoco();
@@ -25,7 +25,7 @@ export function iniciarJobNotificacoesAlmoco() {
   try {
     jobNotificacoesAlmoco.start();
     console.log('[scheduler] 🚀 Job de notificações de almoço iniciado');
-    console.log('[scheduler] ⏰ Agendado para executar diariamente às 11h50');
+    console.log('[scheduler] ⏰ Agendado para executar diariamente às 11h30');
   } catch (error) {
     console.error('[scheduler] ❌ Erro ao iniciar job notificações almoço:', error);
   }
