@@ -831,16 +831,37 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
             destinatariosUsuarios.push(cliente.contato_usuario_id)
           }
         } else if (dest.tipo === 'funcionario' && dest.id) {
-          // Buscar usuario_id vinculado ao funcionario_id
-          const { data: usuario } = await supabaseAdmin
-            .from('usuarios')
-            .select('id')
-            .eq('funcionario_id', dest.id)
-            .eq('status', 'Ativo')
-            .single()
+          // Buscar usuario_id vinculado ao funcionario_id (com fallback robusto)
+          const funcionarioId = Number(dest.id)
+          if (Number.isNaN(funcionarioId)) {
+            console.warn(`[notificacoes] ⚠️ destinatário funcionario_id inválido: ${dest.id}`)
+            continue
+          }
 
-          if (usuario?.id) {
-            destinatariosUsuarios.push(usuario.id)
+          const { data: usuariosFuncionario } = await supabaseAdmin
+            .from('usuarios')
+            .select('id, status')
+            .eq('funcionario_id', funcionarioId)
+            .limit(10)
+
+          if (usuariosFuncionario && usuariosFuncionario.length > 0) {
+            // Preferir usuário ativo, com fallback para qualquer vínculo existente.
+            const usuarioAtivo = usuariosFuncionario.find(u => String(u.status).toLowerCase() === 'ativo')
+            const usuarioSelecionado = usuarioAtivo || usuariosFuncionario[0]
+            destinatariosUsuarios.push(usuarioSelecionado.id)
+          } else {
+            // Fallback: permitir que dest.id seja o próprio usuario_id
+            const { data: usuarioPorId } = await supabaseAdmin
+              .from('usuarios')
+              .select('id')
+              .eq('id', funcionarioId)
+              .single()
+
+            if (usuarioPorId?.id) {
+              destinatariosUsuarios.push(usuarioPorId.id)
+            } else {
+              console.warn(`[notificacoes] ⚠️ Nenhum usuário encontrado para funcionário ${funcionarioId}`)
+            }
           }
         } else if (dest.tipo === 'obra' && dest.id) {
           // Buscar usuários relacionados à obra (pode expandir essa lógica)

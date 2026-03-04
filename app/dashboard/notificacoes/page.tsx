@@ -42,6 +42,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { clientesApi, type ClienteBackend } from '@/lib/api-clientes'
+import { funcionariosApi, type FuncionarioBackend } from '@/lib/api-funcionarios'
 
 // Lazy load de componentes pesados para melhorar performance inicial
 const NovaNotificacaoDialog = dynamic(
@@ -149,12 +150,13 @@ export default function NotificacoesPage() {
   const [modalAberto, setModalAberto] = useState(false)
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
   const [notificacaoParaDeletar, setNotificacaoParaDeletar] = useState<string | null>(null)
-  const [debugModo, setDebugModo] = useState<'geral' | 'cliente'>('geral')
-  const [debugClienteId, setDebugClienteId] = useState<string>('')
+  const [debugModo, setDebugModo] = useState<'geral' | 'cliente' | 'funcionario'>('geral')
+  const [debugDestinatarioId, setDebugDestinatarioId] = useState<string>('')
   const [debugTitulo, setDebugTitulo] = useState<string>('🔔 Push de teste')
   const [debugMensagem, setDebugMensagem] = useState<string>('Esta é uma notificação de teste enviada pelo painel administrativo.')
   const [debugEnviando, setDebugEnviando] = useState(false)
   const [clientesDebug, setClientesDebug] = useState<Array<Pick<ClienteBackend, 'id' | 'nome' | 'cnpj'>>>([])
+  const [funcionariosDebug, setFuncionariosDebug] = useState<Array<Pick<FuncionarioBackend, 'id' | 'nome' | 'cargo'>>>([])
   const [carregandoClientesDebug, setCarregandoClientesDebug] = useState(false)
   const { toast } = useToast()
   
@@ -283,20 +285,34 @@ export default function NotificacoesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busca, filtroTipo, filtroTipoNotificacao, limite, dadosIniciaisCarregados])
 
-  // Carregar clientes para debug (somente quando necessário)
+  // Carregar destinatários de debug (clientes e funcionários)
   useEffect(() => {
-    if (!isAdmin || debugModo !== 'cliente' || clientesDebug.length > 0 || carregandoClientesDebug) return
+    if (!isAdmin || carregandoClientesDebug || (clientesDebug.length > 0 && funcionariosDebug.length > 0)) return
 
-    const carregarClientesDebug = async () => {
+    const carregarDestinatariosDebug = async () => {
       setCarregandoClientesDebug(true)
       try {
-        const response = await clientesApi.listarClientes({ page: 1, limit: 200, status: 'Ativo' })
-        setClientesDebug(response.data || [])
+        const [clientesResult, funcionariosResult] = await Promise.allSettled([
+          clientesApi.listarClientes({ page: 1, limit: 200 }),
+          funcionariosApi.listarFuncionarios({ page: 1, limit: 200 })
+        ])
+
+        if (clientesResult.status === 'fulfilled') {
+          setClientesDebug(clientesResult.value.data || [])
+        } else {
+          console.error('Erro ao carregar clientes para debug:', clientesResult.reason)
+        }
+
+        if (funcionariosResult.status === 'fulfilled') {
+          setFuncionariosDebug(funcionariosResult.value.data || [])
+        } else {
+          console.error('Erro ao carregar funcionários para debug:', funcionariosResult.reason)
+        }
       } catch (error) {
-        console.error('Erro ao carregar clientes para debug:', error)
+        console.error('Erro ao carregar destinatários para debug:', error)
         toast({
-          title: 'Erro ao carregar clientes',
-          description: 'Não foi possível carregar a lista de clientes para o debug.',
+          title: 'Erro ao carregar destinatários',
+          description: 'Não foi possível carregar clientes/funcionários para o debug.',
           variant: 'destructive',
         })
       } finally {
@@ -304,8 +320,8 @@ export default function NotificacoesPage() {
       }
     }
 
-    carregarClientesDebug()
-  }, [isAdmin, debugModo, clientesDebug.length, carregandoClientesDebug, toast])
+    carregarDestinatariosDebug()
+  }, [isAdmin, clientesDebug.length, funcionariosDebug.length, carregandoClientesDebug, toast])
 
   // Mudar página
   const mudarPagina = (novaPagina: number) => {
@@ -433,10 +449,10 @@ export default function NotificacoesPage() {
       return
     }
 
-    if (debugModo === 'cliente' && !debugClienteId) {
+    if (debugModo !== 'geral' && !debugDestinatarioId) {
       toast({
-        title: 'Cliente obrigatório',
-        description: 'Selecione um cliente para envio específico.',
+        title: 'Destinatário obrigatório',
+        description: 'Selecione um destinatário para envio específico.',
         variant: 'destructive',
       })
       return
@@ -444,14 +460,22 @@ export default function NotificacoesPage() {
 
     setDebugEnviando(true)
     try {
-      const clienteSelecionado = clientesDebug.find(c => String(c.id) === debugClienteId)
+      const clienteSelecionado = clientesDebug.find(c => String(c.id) === debugDestinatarioId)
+      const funcionarioSelecionado = funcionariosDebug.find(f => String(f.id) === debugDestinatarioId)
       const destinatarios = debugModo === 'geral'
         ? [{ tipo: 'geral' as const }]
-        : [{
+        : debugModo === 'cliente'
+        ? [{
             tipo: 'cliente' as const,
-            id: debugClienteId,
-            nome: clienteSelecionado?.nome || `Cliente ${debugClienteId}`,
+            id: debugDestinatarioId,
+            nome: clienteSelecionado?.nome || `Cliente ${debugDestinatarioId}`,
             info: clienteSelecionado?.cnpj || ''
+          }]
+        : [{
+            tipo: 'funcionario' as const,
+            id: debugDestinatarioId,
+            nome: funcionarioSelecionado?.nome || `Funcionário ${debugDestinatarioId}`,
+            info: funcionarioSelecionado?.cargo || ''
           }]
 
       await NotificacoesAPI.criar({
@@ -468,7 +492,9 @@ export default function NotificacoesPage() {
         title: 'Push enviado',
         description: debugModo === 'geral'
           ? 'Notificação enviada para todos os clientes.'
-          : 'Notificação enviada para o cliente selecionado.',
+          : debugModo === 'cliente'
+          ? 'Notificação enviada para o cliente selecionado.'
+          : 'Notificação enviada para o funcionário selecionado.',
       })
 
       await carregarNotificacoes()
@@ -566,7 +592,7 @@ export default function NotificacoesPage() {
               Debug Push Notification
             </CardTitle>
             <CardDescription>
-              Envie uma notificação de teste para todos os clientes ou para um cliente específico.
+              Envie uma notificação de teste para todos, cliente específico ou funcionário específico.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -575,34 +601,45 @@ export default function NotificacoesPage() {
                 <label className="text-xs font-medium text-gray-600 mb-1 block">Destino</label>
                 <Select
                   value={debugModo}
-                  onValueChange={(value: 'geral' | 'cliente') => {
+                  onValueChange={(value: 'geral' | 'cliente' | 'funcionario') => {
                     setDebugModo(value)
-                    if (value === 'geral') setDebugClienteId('')
+                    setDebugDestinatarioId('')
                   }}
                 >
                   <SelectTrigger className="h-9">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="geral">Todos os clientes</SelectItem>
+                    <SelectItem value="geral">Geral (todos usuários)</SelectItem>
                     <SelectItem value="cliente">Cliente específico</SelectItem>
+                    <SelectItem value="funcionario">Funcionário específico</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
-              {debugModo === 'cliente' && (
+              {debugModo !== 'geral' && (
                 <div className="lg:col-span-1">
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">Cliente</label>
-                  <Select value={debugClienteId} onValueChange={setDebugClienteId}>
+                  <label className="text-xs font-medium text-gray-600 mb-1 block">
+                    {debugModo === 'cliente' ? 'Cliente' : 'Funcionário'}
+                  </label>
+                  <Select value={debugDestinatarioId} onValueChange={setDebugDestinatarioId}>
                     <SelectTrigger className="h-9">
-                      <SelectValue placeholder={carregandoClientesDebug ? 'Carregando...' : 'Selecione o cliente'} />
+                      <SelectValue placeholder={carregandoClientesDebug ? 'Carregando...' : `Selecione ${debugModo === 'cliente' ? 'o cliente' : 'o funcionário'}`} />
                     </SelectTrigger>
                     <SelectContent>
-                      {clientesDebug.map((cliente) => (
-                        <SelectItem key={cliente.id} value={String(cliente.id)}>
-                          {cliente.nome}
-                        </SelectItem>
-                      ))}
+                      {debugModo === 'cliente' ? (
+                        clientesDebug.map((cliente) => (
+                          <SelectItem key={cliente.id} value={String(cliente.id)}>
+                            {cliente.nome}
+                          </SelectItem>
+                        ))
+                      ) : (
+                        funcionariosDebug.map((funcionario) => (
+                          <SelectItem key={funcionario.id} value={String(funcionario.id)}>
+                            {funcionario.nome}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
                 </div>
@@ -632,7 +669,7 @@ export default function NotificacoesPage() {
             <div className="flex justify-end">
               <Button
                 onClick={enviarDebugPush}
-                disabled={debugEnviando || (debugModo === 'cliente' && !debugClienteId)}
+                disabled={debugEnviando || (debugModo !== 'geral' && !debugDestinatarioId)}
                 className="bg-blue-600 hover:bg-blue-700"
               >
                 <SendHorizontal className="h-4 w-4 mr-2" />
