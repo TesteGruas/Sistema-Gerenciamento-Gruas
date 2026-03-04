@@ -114,6 +114,26 @@ function PWALoginPageContent(): JSX.Element {
     }
   }, [])
 
+  const solicitarPermissaoNotificacoesPosLogin = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) return
+    if (Notification.permission !== 'default') return
+
+    const desejaAtivar = window.confirm(
+      "Deseja ativar notificações no celular para receber avisos de ponto e lembretes importantes?"
+    )
+
+    if (!desejaAtivar) return
+
+    try {
+      const permission = await Notification.requestPermission()
+      if (permission === 'granted') {
+        showSuccess("Notificações ativadas com sucesso!")
+      }
+    } catch (error) {
+      console.error('[PWA Login] Erro ao solicitar permissão de notificações:', error)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
@@ -259,6 +279,9 @@ function PWALoginPageContent(): JSX.Element {
           data.data.access_token,
           data.data.refresh_token
         )
+
+        // Perguntar no login se o usuário aceita receber notificações
+        await solicitarPermissaoNotificacoesPosLogin()
 
         // Salvar email se solicitado
         if (rememberEmail) {

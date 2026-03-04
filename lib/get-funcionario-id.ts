@@ -72,7 +72,12 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   // O funcionario_id do metadata pode estar desatualizado, mas é melhor que nada
   const funcionarioIdFromMetadata = user.user_metadata?.funcionario_id
   
-  if (funcionarioIdFromMetadata && !isNaN(Number(funcionarioIdFromMetadata)) && Number(funcionarioIdFromMetadata) > 0) {
+  if (
+    funcionarioIdFromMetadata &&
+    !isNaN(Number(funcionarioIdFromMetadata)) &&
+    Number(funcionarioIdFromMetadata) > 0 &&
+    Number(funcionarioIdFromMetadata) !== Number(funcionarioIdFromTable)
+  ) {
     // Verificar se o funcionário existe na API antes de retornar
     try {
       const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
@@ -107,16 +112,7 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
     }
   }
   
-  // PRIORIDADE 3: Se user.id for numérico e válido, usar como fallback
-  // O user.id (119) é o ID da tabela usuarios, mas pode ser usado como fallback
-  // se o funcionario_id não existir ou não for encontrado na API
-  if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
-    const userId = Number(user.id)
-    console.log(`[getFuncionarioId] ✅ PRIORIDADE 3: Usando user.id (${userId}) como fallback`)
-    return userId
-  }
-  
-  // PRIORIDADE 2: Tentar usar funcionario_id do metadata se user.id não for válido
+  // PRIORIDADE 3: Tentar usar funcionario_id sem validação de API como fallback
   const funcionarioId = user.profile?.funcionario_id || 
                         user.funcionario_id || 
                         user.user_metadata?.funcionario_id
@@ -209,8 +205,21 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
       return null
     }
     
+    // PRIORIDADE 4 (último fallback): usar user.id numérico
+    if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+      const userId = Number(user.id)
+      console.log(`[getFuncionarioId] ⚠️ Usando user.id (${userId}) como último fallback`)
+      return userId
+    }
+
     return null
   } catch (error) {
+    // PRIORIDADE 4 (último fallback): usar user.id numérico
+    if (user.id && !isNaN(Number(user.id)) && Number(user.id) > 0) {
+      const userId = Number(user.id)
+      console.log(`[getFuncionarioId] ⚠️ Erro na busca, usando user.id (${userId}) como último fallback`)
+      return userId
+    }
     return null
   }
 }

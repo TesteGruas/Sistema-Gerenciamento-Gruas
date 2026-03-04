@@ -258,7 +258,7 @@ export default function FuncionarioDetalhesPage() {
       
       try {
         const holeritesResponse = await fetch(
-          `${apiUrl}/api/colaboradores/${funcionarioId}/holerites`,
+          `${apiUrl}/colaboradores/${funcionarioId}/holerites`,
           {
             headers: {
               'Authorization': `Bearer ${token}`,
@@ -1453,7 +1453,7 @@ export default function FuncionarioDetalhesPage() {
       
       // Salvar holerite usando a API de colaboradores-documentos
       const holeriteResponse = await fetch(
-        `${apiUrl}/api/colaboradores/${funcionario.id}/holerites`,
+        `${apiUrl}/colaboradores/${funcionario.id}/holerites`,
         {
           method: 'POST',
           headers: {
