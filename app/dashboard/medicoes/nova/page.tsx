@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { useDebugMode } from "@/hooks/use-debug-mode"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -54,13 +53,15 @@ interface Obra {
   id: number
   nome: string
   cliente_id?: number
+  clientes?: {
+    nome?: string
+  }
   status?: string
 }
 
 export default function NovaMedicaoPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { debugMode } = useDebugMode()
   
   const [obras, setObras] = useState<Obra[]>([])
   const [gruas, setGruas] = useState<Grua[]>([])
@@ -69,6 +70,7 @@ export default function NovaMedicaoPage() {
   const [salvando, setSalvando] = useState(false)
   const [obraSearchOpen, setObraSearchOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [arquivoPdfMedicao, setArquivoPdfMedicao] = useState<File | null>(null)
   
   // Estados para itens de custos mensais
   const [itens, setItens] = useState<ItemCustoMensal[]>([])
@@ -98,6 +100,9 @@ export default function NovaMedicaoPage() {
     valor_descontos: 0,
     observacoes: ""
   })
+  const obraSelecionada = obras.find((obra) => String(obra.id) === medicaoForm.obra_id)
+  const clienteMedicao = obraSelecionada?.clientes?.nome || (obraSelecionada?.cliente_id ? `Cliente ID ${obraSelecionada.cliente_id}` : "")
+  const dataMedicaoAtual = new Date().toISOString().split('T')[0]
   
   // Lista de custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensalForm[]>([])
@@ -427,9 +432,15 @@ export default function NovaMedicaoPage() {
     if (!medicaoForm.periodo || !medicaoForm.periodo.trim()) {
       camposFaltando.push('Período')
     }
+    if (!medicaoForm.numero || !medicaoForm.numero.trim()) {
+      camposFaltando.push('Número da Medição')
+    }
 
-    if (!medicaoForm.data_medicao || !medicaoForm.data_medicao.trim()) {
+    if (!dataMedicaoAtual || !dataMedicaoAtual.trim()) {
       camposFaltando.push('Data da Medição')
+    }
+    if (!arquivoPdfMedicao) {
+      camposFaltando.push('PDF da Medição')
     }
 
     if (camposFaltando.length > 0) {
@@ -470,8 +481,7 @@ export default function NovaMedicaoPage() {
       // Extrair mês e ano do período
       const [ano, mes] = medicaoForm.periodo.split('-')
       
-      // Gerar número da medição se não fornecido
-      const numero = medicaoForm.numero || `MED-${medicaoForm.periodo}-${Date.now()}`
+      const numero = medicaoForm.numero.trim()
 
       // Converter custos mensais para o formato da API
       const custosMensaisApi = custosMensais.map(custo => ({
@@ -494,7 +504,7 @@ export default function NovaMedicaoPage() {
         grua_id: medicaoForm.grua_id as any,
         numero,
         periodo: medicaoForm.periodo,
-        data_medicao: medicaoForm.data_medicao,
+        data_medicao: dataMedicaoAtual,
         mes_referencia: parseInt(mes),
         ano_referencia: parseInt(ano),
         valor_mensal_bruto: medicaoForm.valor_mensal_bruto,
@@ -508,10 +518,31 @@ export default function NovaMedicaoPage() {
 
       const response = await medicoesMensaisApi.criar(medicaoData)
       
-      if (response.success) {
+      if (response.success && response.data?.id) {
+        let uploadPdfSucesso = true
+        try {
+          await medicoesMensaisApi.criarDocumento(
+            response.data.id,
+            {
+              tipo_documento: 'medicao_pdf',
+              numero_documento: numero,
+              observacoes: `PDF da medição ${numero} (${clienteMedicao || 'cliente não informado'})`
+            },
+            arquivoPdfMedicao || undefined
+          )
+        } catch (uploadError: any) {
+          toast({
+            title: "Atenção",
+            description: uploadError.response?.data?.message || "Medição criada, mas houve erro no upload do PDF.",
+            variant: "destructive"
+          })
+          uploadPdfSucesso = false
+        }
         toast({
           title: "Sucesso",
-          description: "Medição criada com sucesso"
+          description: uploadPdfSucesso
+            ? "Medição criada com PDF enviado com sucesso"
+            : "Medição criada. O PDF pode ser enviado depois na tela de detalhes."
         })
         router.push('/dashboard/medicoes')
       }
@@ -551,17 +582,15 @@ export default function NovaMedicaoPage() {
             <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
           </div>
         </div>
-        {debugMode && (
-          <Button 
-            type="button"
-            variant="outline" 
-            onClick={preencherDadosDebug}
-            className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-          >
-            <Calculator className="w-4 h-4 mr-2" />
-            Preencher Dados
-          </Button>
-        )}
+        <Button 
+          type="button"
+          variant="outline" 
+          onClick={preencherDadosDebug}
+          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
+        >
+          <Calculator className="w-4 h-4 mr-2" />
+          Preencher Dados
+        </Button>
       </div>
 
       {/* Mensagem de Erro */}
@@ -593,7 +622,7 @@ export default function NovaMedicaoPage() {
           <CardContent className="space-y-3">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
-                <Label htmlFor="obra_id" className="text-xs">Obra *</Label>
+                <Label htmlFor="obra_id" className="text-xs">Medição da Obra *</Label>
                 <Popover open={obraSearchOpen} onOpenChange={setObraSearchOpen}>
                   <PopoverTrigger asChild>
                     <Button
@@ -670,31 +699,24 @@ export default function NovaMedicaoPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-7 gap-2">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
               <div>
-                <Label htmlFor="numero" className="text-xs">Número</Label>
+                <Label htmlFor="numero" className="text-xs">Número da Medição *</Label>
                 <Input
                   id="numero"
                   value={medicaoForm.numero}
                   onChange={(e) => setMedicaoForm({ ...medicaoForm, numero: e.target.value })}
-                  placeholder="Auto-gerado se vazio"
+                  placeholder="Ex: MED-2026-03-001"
                   className="bg-white h-8 text-sm"
                 />
               </div>
               <div>
-                <Label htmlFor="periodo" className="text-xs">Período (YYYY-MM) *</Label>
+                <Label htmlFor="periodo" className="text-xs">Medição Referente ao Mês (YYYY-MM) *</Label>
                 <Input
                   id="periodo"
-                  type="text"
-                  placeholder="2025-01"
+                  type="month"
                   value={medicaoForm.periodo}
-                  onChange={(e) => {
-                    const value = e.target.value.replace(/[^0-9-]/g, '')
-                    if (value.length <= 7) {
-                      setMedicaoForm({ ...medicaoForm, periodo: value })
-                    }
-                  }}
-                  pattern="\d{4}-\d{2}"
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, periodo: e.target.value })}
                   className="bg-white h-8 text-sm"
                 />
               </div>
@@ -703,13 +725,26 @@ export default function NovaMedicaoPage() {
                 <Input
                   id="data_medicao"
                   type="date"
-                  value={medicaoForm.data_medicao}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, data_medicao: e.target.value })}
+                  value={dataMedicaoAtual}
+                  disabled
                   className="bg-white h-8 text-sm"
                 />
               </div>
               <div>
-                <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor Mensal Bruto (R$)</Label>
+                <Label htmlFor="cliente_medicao" className="text-xs">Medição do Cliente *</Label>
+                <Input
+                  id="cliente_medicao"
+                  value={clienteMedicao}
+                  readOnly
+                  placeholder="Selecione uma obra para carregar o cliente"
+                  className="bg-gray-100 h-8 text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div>
+                <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor de Locação (R$)</Label>
                 <Input
                   id="valor_mensal_bruto"
                   type="number"
@@ -722,7 +757,7 @@ export default function NovaMedicaoPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="valor_aditivos" className="text-xs">Valor Aditivos (R$)</Label>
+                <Label htmlFor="valor_aditivos" className="text-xs">Valor de Aditivos (R$)</Label>
                 <Input
                   id="valor_aditivos"
                   type="number"
@@ -735,7 +770,7 @@ export default function NovaMedicaoPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="valor_custos_extras" className="text-xs">Custos Extras (R$)</Label>
+                <Label htmlFor="valor_custos_extras" className="text-xs">Valor de Serviço (R$)</Label>
                 <Input
                   id="valor_custos_extras"
                   type="number"
@@ -758,6 +793,44 @@ export default function NovaMedicaoPage() {
                   onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_descontos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
                   placeholder="0.00"
                   className="bg-white h-8 text-sm"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+              <div>
+                <Label htmlFor="valor_total_medicao" className="text-xs">Valor Total da Medição</Label>
+                <Input
+                  id="valor_total_medicao"
+                  value={formatCurrency(
+                    medicaoForm.valor_mensal_bruto +
+                    medicaoForm.valor_aditivos +
+                    medicaoForm.valor_custos_extras -
+                    medicaoForm.valor_descontos
+                  )}
+                  readOnly
+                  className="bg-gray-100 h-8 text-sm"
+                />
+              </div>
+              <div className="lg:col-span-2">
+                <Label htmlFor="pdf_medicao" className="text-xs">PDF da Medição *</Label>
+                <Input
+                  id="pdf_medicao"
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0] || null
+                    if (file && file.type !== 'application/pdf') {
+                      toast({
+                        title: "Erro",
+                        description: "Apenas arquivos PDF são permitidos",
+                        variant: "destructive"
+                      })
+                      setArquivoPdfMedicao(null)
+                      return
+                    }
+                    setArquivoPdfMedicao(file)
+                  }}
+                  className="bg-white text-sm"
                 />
               </div>
             </div>

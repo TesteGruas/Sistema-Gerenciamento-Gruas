@@ -43,7 +43,7 @@ export default function MedicaoDetalhesPage() {
   
   // Estados para upload de documentos
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
-  const [tipoDocumentoUpload, setTipoDocumentoUpload] = useState<'nf_servico' | 'nf_produto' | 'boleto' | null>(null)
+  const [tipoDocumentoUpload, setTipoDocumentoUpload] = useState<'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf' | null>(null)
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null)
   const [numeroDocumentoUpload, setNumeroDocumentoUpload] = useState("")
   const [uploading, setUploading] = useState(false)
@@ -131,7 +131,7 @@ export default function MedicaoDetalhesPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
-  const handleUploadDocumento = (tipo: 'nf_servico' | 'nf_produto' | 'boleto') => {
+  const handleUploadDocumento = (tipo: 'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf') => {
     if (!medicao) return
     setTipoDocumentoUpload(tipo)
     setIsUploadDialogOpen(true)
@@ -473,9 +473,10 @@ export default function MedicaoDetalhesPage() {
                 </div>
               ) : (
                 <>
-                  {['nf_servico', 'nf_produto', 'boleto'].map((tipo) => {
+                  {['medicao_pdf', 'nf_servico', 'nf_produto', 'boleto'].map((tipo) => {
                     const documento = documentos.find(d => d.tipo_documento === tipo)
                     const labels: Record<string, { label: string; icon: any; color: string }> = {
+                      medicao_pdf: { label: 'PDF da Medição', icon: FileText, color: 'text-purple-600' },
                       nf_servico: { label: 'NF de Serviço', icon: Receipt, color: 'text-blue-600' },
                       nf_produto: { label: 'NF de Produto', icon: FileCheck, color: 'text-green-600' },
                       boleto: { label: 'Boleto', icon: FileText, color: 'text-orange-600' }
@@ -521,7 +522,7 @@ export default function MedicaoDetalhesPage() {
                             variant={documento ? "outline" : "default"}
                             size="sm"
                             className="flex-1 h-8 text-xs"
-                            onClick={() => handleUploadDocumento(tipo as 'nf_servico' | 'nf_produto' | 'boleto')}
+                            onClick={() => handleUploadDocumento(tipo as 'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf')}
                           >
                             <Upload className="w-3 h-3 mr-1" />
                             {documento ? 'Substituir' : 'Enviar'}
@@ -545,6 +546,7 @@ export default function MedicaoDetalhesPage() {
               {tipoDocumentoUpload === 'nf_servico' && 'Enviar Nota Fiscal de Serviço'}
               {tipoDocumentoUpload === 'nf_produto' && 'Enviar Nota Fiscal de Produto'}
               {tipoDocumentoUpload === 'boleto' && 'Enviar Boleto'}
+              {tipoDocumentoUpload === 'medicao_pdf' && 'Enviar PDF da Medição'}
             </DialogTitle>
             <DialogDescription>
               Faça upload do arquivo do documento

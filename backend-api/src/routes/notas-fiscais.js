@@ -3,6 +3,7 @@ import multer from 'multer';
 import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
 import { XMLParser } from 'fast-xml-parser';
+import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
@@ -31,6 +32,7 @@ const upload = multer({
 });
 
 const router = express.Router();
+const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 // Função helper para formatar datas para string YYYY-MM-DD (evita problemas de timezone)
 const formatarDataParaString = (dateValue) => {
@@ -87,6 +89,69 @@ const processarDatasNotaFiscal = (nota) => {
   }
   
   return notaProcessada;
+};
+
+const formatarTelefoneParaWhatsapp = (telefone) => {
+  if (!telefone) return null;
+  let numero = String(telefone).replace(/\D/g, '');
+  if (!numero) return null;
+  if (!numero.startsWith('55')) {
+    if (numero.startsWith('0')) {
+      numero = numero.slice(1);
+    }
+    numero = `55${numero}`;
+  }
+  return numero;
+};
+
+const enviarNotificacaoNotaPagaCliente = async (notaFiscal) => {
+  try {
+    if (!notaFiscal || notaFiscal.tipo !== 'saida' || notaFiscal.status !== 'paga' || !notaFiscal.cliente_id) {
+      return;
+    }
+
+    const { data: cliente, error: clienteError } = await supabaseAdmin
+      .from('clientes')
+      .select('id, nome, telefone')
+      .eq('id', notaFiscal.cliente_id)
+      .single();
+
+    if (clienteError || !cliente) {
+      console.warn('[notas-fiscais] Cliente não encontrado para envio WhatsApp:', clienteError?.message || notaFiscal.cliente_id);
+      return;
+    }
+
+    const telefone = formatarTelefoneParaWhatsapp(cliente.telefone);
+    if (!telefone) {
+      console.warn('[notas-fiscais] Cliente sem telefone válido para WhatsApp:', cliente.id);
+      return;
+    }
+
+    const valorFormatado = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(Number(notaFiscal.valor_total || 0));
+
+    const mensagem = `✅ *Nota Fiscal de Saída Paga*\n\n` +
+      `Olá, ${cliente.nome || 'cliente'}.\n` +
+      `A nota fiscal *${notaFiscal.numero_nf}* foi marcada como *paga*.\n` +
+      `💰 Valor: ${valorFormatado}\n` +
+      `📅 Emissão: ${notaFiscal.data_emissao || '-'}\n` +
+      `${notaFiscal.data_vencimento ? `📌 Vencimento: ${notaFiscal.data_vencimento}\n` : ''}\n` +
+      `Você pode acompanhar no portal: ${FRONTEND_URL}/dashboard/financeiro/notas-fiscais`;
+
+    await enviarMensagemWebhook(
+      telefone,
+      mensagem,
+      `${FRONTEND_URL}/dashboard/financeiro/notas-fiscais`,
+      {
+        tipo: 'nota_fiscal_paga',
+        destinatario_nome: cliente.nome || 'Cliente'
+      }
+    );
+  } catch (error) {
+    console.error('[notas-fiscais] Erro ao enviar notificação WhatsApp de nota paga:', error);
+  }
 };
 
 // Schema de validação para nota fiscal
@@ -714,6 +779,9 @@ router.post('/', async (req, res) => {
     // NOTA: A criação de boleto agora é controlada pelo frontend através do checkbox "Criar boleto"
     // O boleto só será criado se o usuário marcar essa opção no formulário de criação da nota fiscal
 
+    // Enviar notificação WhatsApp para cliente quando for nota de saída paga
+    await enviarNotificacaoNotaPagaCliente(data);
+
     res.status(201).json({
       success: true,
       data,
@@ -1018,6 +1086,20 @@ router.put('/:id', async (req, res) => {
       });
     }
 
+    // Buscar estado anterior para detectar mudança de status para "paga"
+    const { data: notaAnterior, error: notaAnteriorError } = await supabase
+      .from('notas_fiscais')
+      .select('id, status')
+      .eq('id', id)
+      .single();
+
+    if (notaAnteriorError || !notaAnterior) {
+      return res.status(404).json({
+        success: false,
+        message: 'Nota fiscal não encontrada'
+      });
+    }
+
     // Limpar dados antes de atualizar no banco
     const dadosLimpos = limparDadosParaBanco(value);
 
@@ -1035,6 +1117,11 @@ router.put('/:id', async (req, res) => {
         success: false,
         message: 'Nota fiscal não encontrada'
       });
+    }
+
+    // Enviar notificação quando mudar para "paga" em nota de saída
+    if (notaAnterior.status !== 'paga' && data.status === 'paga' && data.tipo === 'saida') {
+      await enviarNotificacaoNotaPagaCliente(data);
     }
 
     res.json({

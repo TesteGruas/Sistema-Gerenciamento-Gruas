@@ -65,6 +65,10 @@ interface Obra {
   id: number
   nome: string
   cliente_id?: number
+  clientes?: {
+    id: number
+    nome: string
+  }
   status?: string
 }
 
@@ -84,6 +88,8 @@ export default function MedicoesPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterStatus, setFilterStatus] = useState("all")
   const [gruaFilter, setGruaFilter] = useState("all")
+  const [clienteFilter, setClienteFilter] = useState("all")
+  const [obraFilter, setObraFilter] = useState("all")
   const [filterPeriodo, setFilterPeriodo] = useState("")
   
   // Paginação
@@ -166,6 +172,9 @@ export default function MedicoesPage() {
       if (gruaFilter !== "all") {
         filters.grua_id = parseInt(gruaFilter)
       }
+      if (obraFilter !== "all") {
+        filters.obra_id = parseInt(obraFilter)
+      }
       if (filterPeriodo) {
         filters.periodo = filterPeriodo
       }
@@ -194,13 +203,13 @@ export default function MedicoesPage() {
     } finally {
       setIsLoading(false)
     }
-  }, [gruaFilter, filterPeriodo, filterStatus, searchTerm, currentPage, toast])
+  }, [gruaFilter, obraFilter, filterPeriodo, filterStatus, searchTerm, currentPage, toast])
 
   // Recarregar medições quando os filtros mudarem (incluindo busca)
   useEffect(() => {
     // Resetar para primeira página quando filtros mudarem
     setCurrentPage(1)
-  }, [gruaFilter, filterPeriodo, filterStatus, searchTerm])
+  }, [gruaFilter, obraFilter, clienteFilter, filterPeriodo, filterStatus, searchTerm])
 
   // Recarregar medições quando os filtros ou página mudarem
   useEffect(() => {
@@ -235,8 +244,38 @@ export default function MedicoesPage() {
 
   // Os filtros são aplicados via API, então filteredMedicoes é igual a medicoes
   const filteredMedicoes = useMemo(() => {
-    return medicoes
-  }, [medicoes])
+    let data = [...medicoes]
+
+    if (clienteFilter !== "all") {
+      data = data.filter((medicao) => {
+        const clienteIdDaObra = medicao.obras?.clientes?.id || medicao.obras?.cliente_id
+        return String(clienteIdDaObra) === clienteFilter
+      })
+    }
+
+    if (obraFilter !== "all") {
+      data = data.filter((medicao) => String(medicao.obra_id) === obraFilter)
+    }
+
+    return data
+  }, [medicoes, clienteFilter, obraFilter])
+
+  const clientesOptions = useMemo(() => {
+    const mapa = new Map<string, { id: string; nome: string }>()
+
+    for (const obra of obras) {
+      const clienteId = obra.clientes?.id || obra.cliente_id
+      const clienteNome = obra.clientes?.nome
+      if (clienteId) {
+        mapa.set(String(clienteId), {
+          id: String(clienteId),
+          nome: clienteNome || `Cliente ${clienteId}`
+        })
+      }
+    }
+
+    return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome))
+  }, [obras])
 
   const handleEditar = (medicao: MedicaoMensal) => {
     router.push(`/dashboard/medicoes/${medicao.id}/editar`)
@@ -417,33 +456,17 @@ export default function MedicoesPage() {
           <p className="text-gray-600">Gestão de medições, receitas e custos</p>
         </div>
         <div className="flex gap-2">
-          {activeTab === 'medicoes' && (
-            <Button onClick={() => router.push('/dashboard/medicoes/nova')}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Medição
-            </Button>
-          )}
-          {activeTab === 'receitas' && (
-            <Button onClick={() => setIsCreateReceitaDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Nova Receita
-            </Button>
-          )}
-          {activeTab === 'custos' && (
-            <Button onClick={() => setIsCreateCustoDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Custo
-            </Button>
-          )}
+          <Button onClick={() => router.push('/dashboard/medicoes/nova')}>
+            <Plus className="w-4 h-4 mr-2" />
+            Nova Medição
+          </Button>
         </div>
       </div>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-1">
           <TabsTrigger value="medicoes">Medições</TabsTrigger>
-          <TabsTrigger value="receitas">Receitas</TabsTrigger>
-          <TabsTrigger value="custos">Custos</TabsTrigger>
         </TabsList>
 
         {/* Aba de Medições */}
@@ -457,73 +480,99 @@ export default function MedicoesPage() {
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="grid grid-cols-1 lg:grid-cols-7 gap-3 items-end">
-                <div className="lg:col-span-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <div className="space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                  <div className="xl:col-span-2">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Buscar por número, período, obra ou grua..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                  </div>
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Status</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                      <SelectItem value="enviada">Enviada</SelectItem>
+                      <SelectItem value="cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={clienteFilter} onValueChange={setClienteFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Cliente" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os Clientes</SelectItem>
+                      {clientesOptions.map((cliente) => (
+                        <SelectItem key={cliente.id} value={cliente.id}>
+                          {cliente.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={gruaFilter} onValueChange={setGruaFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Grua" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as Gruas</SelectItem>
+                      {gruas.map((grua) => (
+                        <SelectItem key={grua.id} value={String(grua.id)}>
+                          {grua.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={obraFilter} onValueChange={setObraFilter}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Obra" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todas as Obras</SelectItem>
+                      {obras.map((obra) => (
+                        <SelectItem key={obra.id} value={String(obra.id)}>
+                          {obra.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3 items-end">
+                  <div className="xl:col-span-2">
+                    <Label className="font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs">Mês (YYYY-MM)</Label>
                     <Input
-                      placeholder="Buscar por número, período, obra ou grua..."
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                      className="pl-10"
+                      type="month"
+                      value={filterPeriodo}
+                      onChange={(e) => setFilterPeriodo(e.target.value)}
                     />
                   </div>
-                </div>
-                <Select value={filterStatus} onValueChange={setFilterStatus}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todos os Status</SelectItem>
-                    <SelectItem value="pendente">Pendente</SelectItem>
-                    <SelectItem value="finalizada">Finalizada</SelectItem>
-                    <SelectItem value="enviada">Enviada</SelectItem>
-                    <SelectItem value="cancelada">Cancelada</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={gruaFilter} onValueChange={setGruaFilter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Grua" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">Todas as Gruas</SelectItem>
-                    {gruas.map((grua) => (
-                      <SelectItem key={grua.id} value={String(grua.id)}>
-                        {grua.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <div>
-                  <Label className="font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs">Período (YYYY-MM)</Label>
-                  <Input
-                    type="text"
-                    placeholder="2025-01"
-                    value={filterPeriodo}
-                    onChange={(e) => {
-                      const value = e.target.value.replace(/[^0-9-]/g, '')
-                      if (value.length <= 7) {
-                        setFilterPeriodo(value)
-                      }
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setFilterStatus("all")
+                      setGruaFilter("all")
+                      setClienteFilter("all")
+                      setObraFilter("all")
+                      setFilterPeriodo("")
                     }}
-                    pattern="\d{4}-\d{2}"
-                  />
+                  >
+                    Limpar
+                  </Button>
+                  <Button variant="outline" onClick={carregarMedicoes}>
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Atualizar
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setSearchTerm("")
-                    setFilterStatus("all")
-                    setGruaFilter("all")
-                    setFilterPeriodo("")
-                  }}
-                >
-                  Limpar
-                </Button>
-                <Button variant="outline" onClick={carregarMedicoes}>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Atualizar
-                </Button>
               </div>
             </CardContent>
           </Card>
