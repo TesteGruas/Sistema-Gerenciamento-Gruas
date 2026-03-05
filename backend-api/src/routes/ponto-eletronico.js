@@ -1563,13 +1563,49 @@ router.post('/registros', async (req, res) => {
       });
     }
 
+    const funcionarioIdInformado = Number(funcionario_id);
+    if (!Number.isInteger(funcionarioIdInformado) || funcionarioIdInformado <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do funcionário inválido'
+      });
+    }
+
     // Verificar se o funcionário existe na tabela funcionarios
-    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+    let { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome, status, obra_atual_id, cargo, cargo_id, cargos(nome)')
-      .eq('id', funcionario_id)
-      .eq('status', 'Ativo')
+      .eq('id', funcionarioIdInformado)
       .single();
+
+    // Fallback: quando chegar id da tabela usuarios, tentar resolver para funcionario_id vinculado
+    if (funcionarioError || !funcionario) {
+      const { data: usuarioVinculado, error: usuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, funcionario_id')
+        .eq('id', funcionarioIdInformado)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (!usuarioError && usuarioVinculado?.funcionario_id) {
+        const {
+          data: funcionarioResolvido,
+          error: funcionarioResolvidoError
+        } = await supabaseAdmin
+          .from('funcionarios')
+          .select('id, nome, status, obra_atual_id, cargo, cargo_id, cargos(nome)')
+          .eq('id', usuarioVinculado.funcionario_id)
+          .single();
+
+        if (!funcionarioResolvidoError && funcionarioResolvido) {
+          funcionario = funcionarioResolvido;
+          funcionarioError = null;
+          console.log(
+            `[ponto-eletronico] ID de usuário ${funcionarioIdInformado} resolvido para funcionário ativo ${funcionario.id}`
+          );
+        }
+      }
+    }
 
     if (funcionarioError || !funcionario) {
       return res.status(404).json({
@@ -1577,6 +1613,16 @@ router.post('/registros', async (req, res) => {
         message: 'Funcionário não encontrado ou inativo'
       });
     }
+
+    const statusFuncionario = String(funcionario.status || '').trim().toLowerCase();
+    if (statusFuncionario !== 'ativo') {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado ou inativo'
+      });
+    }
+
+    const funcionarioId = funcionario.id;
 
     // Validação de cargo removida - todos os funcionários podem bater ponto
 
@@ -1619,7 +1665,7 @@ router.post('/registros', async (req, res) => {
                 estado
               )
             `)
-            .eq('funcionario_id', funcionario_id)
+            .eq('funcionario_id', funcionarioId)
             .eq('status', 'Ativo')
             .order('data_inicio', { ascending: false })
             .limit(1)
@@ -1724,7 +1770,7 @@ router.post('/registros', async (req, res) => {
             console.log(`[ponto-eletronico] Localização validada: ${validacao.mensagem}`);
           } else {
             // Se não encontrou coordenadas nem da grua nem da obra, apenas avisar mas não bloquear
-            console.warn(`[ponto-eletronico] Funcionário ${funcionario_id} não possui grua ou obra com coordenadas configuradas. Validação de localização ignorada.`);
+            console.warn(`[ponto-eletronico] Funcionário ${funcionarioId} não possui grua ou obra com coordenadas configuradas. Validação de localização ignorada.`);
           }
         }
       } catch (geoError) {
@@ -1793,7 +1839,7 @@ router.post('/registros', async (req, res) => {
     const { data: existingRecord } = await supabaseAdmin
       .from('registros_ponto')
       .select('id, entrada, saida, saida_almoco, volta_almoco, status, trabalho_corrido, tipo_dia')
-      .eq('funcionario_id', funcionario_id)
+      .eq('funcionario_id', funcionarioId)
       .eq('data', data)
       .single();
 
@@ -2068,7 +2114,7 @@ router.post('/registros', async (req, res) => {
     // Criar registro
     const novoRegistro = {
       id: gerarIdRegistro(),
-      funcionario_id,
+      funcionario_id: funcionarioId,
       data,
       entrada,
       saida_almoco,
@@ -2274,6 +2320,7 @@ router.put('/registros/:id', async (req, res) => {
       saida_almoco,
       volta_almoco,
       saida,
+      trabalho_corrido,
       observacoes,
       localizacao,
       justificativa_alteracao,
@@ -2349,6 +2396,16 @@ router.put('/registros/:id', async (req, res) => {
     const novaSaida = saidaNormalizada || registroAtual.saida;
     const novaSaidaAlmoco = saidaAlmocoNormalizada || registroAtual.saida_almoco;
     const novaVoltaAlmoco = voltaAlmocoNormalizada || registroAtual.volta_almoco;
+    const novoTrabalhoCorrido = trabalho_corrido !== undefined
+      ? Boolean(trabalho_corrido)
+      : Boolean(registroAtual.trabalho_corrido);
+
+    if (novoTrabalhoCorrido && (novaSaidaAlmoco || novaVoltaAlmoco)) {
+      return res.status(409).json({
+        success: false,
+        message: 'Este dia foi marcado como trabalho corrido. Remova o trabalho corrido para registrar almoço.'
+      });
+    }
 
     const horasTrabalhadas = calcularHorasTrabalhadas(novaEntrada, novaSaida, novaSaidaAlmoco, novaVoltaAlmoco);
     const horasExtras = calcularHorasExtras(horasTrabalhadas);
@@ -2367,6 +2424,7 @@ router.put('/registros/:id', async (req, res) => {
       horas_trabalhadas: horasTrabalhadas,
       horas_extras: horasExtras,
       status: novoStatus,
+      trabalho_corrido: novoTrabalhoCorrido,
       observacoes: observacoes || registroAtual.observacoes,
       localizacao: localizacao || registroAtual.localizacao,
       updated_at: new Date().toISOString()
@@ -2489,6 +2547,13 @@ router.put('/registros/:id', async (req, res) => {
         campo_alterado: 'saida',
         valor_anterior: registroAtual.saida,
         valor_novo: saidaNormalizada
+      });
+    }
+    if (trabalho_corrido !== undefined && novoTrabalhoCorrido !== Boolean(registroAtual.trabalho_corrido)) {
+      alteracoes.push({
+        campo_alterado: 'trabalho_corrido',
+        valor_anterior: String(Boolean(registroAtual.trabalho_corrido)),
+        valor_novo: String(novoTrabalhoCorrido)
       });
     }
 

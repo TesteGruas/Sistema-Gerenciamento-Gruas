@@ -178,7 +178,7 @@ const sanitizarUpdateGruaObra = (payload = {}) => {
  */
 router.get('/grua-obra', async (req, res) => {
   try {
-    let query = supabaseAdmin
+    let queryGruaObra = supabaseAdmin
       .from('grua_obra')
       .select(`
         *,
@@ -188,16 +188,16 @@ router.get('/grua-obra', async (req, res) => {
 
     // Aplicar filtros
     if (req.query.grua_id) {
-      query = query.eq('grua_id', req.query.grua_id)
+      queryGruaObra = queryGruaObra.eq('grua_id', req.query.grua_id)
     }
     if (req.query.obra_id) {
-      query = query.eq('obra_id', req.query.obra_id)
+      queryGruaObra = queryGruaObra.eq('obra_id', req.query.obra_id)
     }
     if (req.query.status) {
-      query = query.eq('status', req.query.status)
+      queryGruaObra = queryGruaObra.eq('status', req.query.status)
     }
 
-    const { data, error } = await query.order('data_inicio_locacao', { ascending: false })
+    const { data: relacionamentosGruaObra, error } = await queryGruaObra.order('data_inicio_locacao', { ascending: false })
 
     if (error) {
       return res.status(500).json({
@@ -206,9 +206,97 @@ router.get('/grua-obra', async (req, res) => {
       })
     }
 
+    // Compatibilidade com /api/obras:
+    // também retornar vínculos ativos da tabela nova (obra_gruas_configuracao).
+    let relacionamentosConfiguracao = []
+    const statusFiltro = req.query.status
+    const deveBuscarConfiguracao = !statusFiltro || statusFiltro === 'Ativa'
+
+    if (deveBuscarConfiguracao) {
+      let queryConfiguracao = supabaseAdmin
+        .from('obra_gruas_configuracao')
+        .select(`
+          id,
+          grua_id,
+          obra_id,
+          posicao_x,
+          posicao_y,
+          posicao_z,
+          angulo_rotacao,
+          alcance_operacao,
+          area_cobertura,
+          data_instalacao,
+          data_remocao,
+          status,
+          observacoes,
+          created_at,
+          updated_at,
+          grua:gruas(id, modelo, fabricante, tipo, capacidade, altura_trabalho, capacidade_ponta, ano),
+          obra:obras(id, nome, cliente_id, status)
+        `)
+        .eq('status', 'ativa')
+
+      if (req.query.grua_id) {
+        queryConfiguracao = queryConfiguracao.eq('grua_id', req.query.grua_id)
+      }
+      if (req.query.obra_id) {
+        queryConfiguracao = queryConfiguracao.eq('obra_id', req.query.obra_id)
+      }
+
+      const { data: configuracoesAtivas, error: configuracaoError } = await queryConfiguracao.order('data_instalacao', { ascending: false })
+
+      if (configuracaoError) {
+        return res.status(500).json({
+          error: 'Erro ao buscar relacionamentos grua-obra',
+          message: configuracaoError.message
+        })
+      }
+
+      relacionamentosConfiguracao = (configuracoesAtivas || []).map((config) => ({
+        id: config.id,
+        grua_id: config.grua_id,
+        obra_id: config.obra_id,
+        data_inicio_locacao: config.data_instalacao,
+        data_fim_locacao: config.data_remocao,
+        valor_locacao_mensal: null,
+        status: 'Ativa',
+        observacoes: config.observacoes,
+        created_at: config.created_at,
+        updated_at: config.updated_at,
+        posicao_x: config.posicao_x,
+        posicao_y: config.posicao_y,
+        posicao_z: config.posicao_z,
+        angulo_rotacao: config.angulo_rotacao,
+        alcance_operacao: config.alcance_operacao,
+        area_cobertura: config.area_cobertura,
+        data_instalacao: config.data_instalacao,
+        data_remocao: config.data_remocao,
+        grua: config.grua,
+        obra: config.obra
+      }))
+    }
+
+    // Unificar sem duplicar pares obra/grua.
+    // Prioriza registros de grua_obra para manter campos técnicos completos.
+    const relacoesUnificadas = []
+    const chaves = new Set()
+
+    for (const relacionamento of [...(relacionamentosGruaObra || []), ...relacionamentosConfiguracao]) {
+      const chave = `${relacionamento.obra_id}-${relacionamento.grua_id}`
+      if (chaves.has(chave)) continue
+      chaves.add(chave)
+      relacoesUnificadas.push(relacionamento)
+    }
+
+    relacoesUnificadas.sort((a, b) => {
+      const dataA = a.data_inicio_locacao ? new Date(a.data_inicio_locacao).getTime() : 0
+      const dataB = b.data_inicio_locacao ? new Date(b.data_inicio_locacao).getTime() : 0
+      return dataB - dataA
+    })
+
     res.json({
       success: true,
-      data: data || []
+      data: relacoesUnificadas
     })
   } catch (error) {
     console.error('Erro ao listar relacionamentos grua-obra:', error)

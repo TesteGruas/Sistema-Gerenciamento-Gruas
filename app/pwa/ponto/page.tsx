@@ -361,6 +361,113 @@ export default function PWAPontoPage() {
     }
   }
 
+  const estaNaJanelaTrabalhoCorrido = () => {
+    if (!currentTime) return false
+
+    const minutosAtuais = currentTime.getHours() * 60 + currentTime.getMinutes()
+    const inicioJanela = 11 * 60 + 30 // 11:30
+    const fimJanela = 12 * 60 // 12:00
+
+    return minutosAtuais >= inicioJanela && minutosAtuais <= fimJanela
+  }
+
+  const podeSelecionarTrabalhoCorrido = () => {
+    return Boolean(
+      registrosHoje.entrada &&
+      !registrosHoje.saida_almoco &&
+      !registrosHoje.volta_almoco &&
+      !registrosHoje.saida &&
+      !registrosHoje.trabalho_corrido &&
+      estaNaJanelaTrabalhoCorrido()
+    )
+  }
+
+  const marcarTrabalhoCorrido = async () => {
+    if (!podeSelecionarTrabalhoCorrido()) {
+      toast({
+        title: "Fora do horário",
+        description: "A opção Dia corrido fica disponível apenas entre 11:30 e 12:00.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    if (!isOnline) {
+      toast({
+        title: "Sem conexão",
+        description: "Para marcar Dia corrido, conecte-se à internet.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setIsLoading(true)
+
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user,
+        token,
+        'ID do funcionário não encontrado'
+      )
+
+      const hoje = new Date().toISOString().split('T')[0]
+      const registrosExistentes = await pontoApi.getRegistros({
+        funcionario_id: funcionarioId,
+        data_inicio: hoje,
+        data_fim: hoje
+      })
+
+      if (!registrosExistentes || registrosExistentes.length === 0) {
+        throw new Error('Registre a entrada antes de selecionar Dia corrido.')
+      }
+
+      const registroAtualizado = await pontoApi.criarRegistro({
+        funcionario_id: funcionarioId,
+        data: hoje,
+        trabalho_corrido: true,
+        justificativa_alteracao: 'Dia corrido marcado via PWA'
+      })
+
+      if (!registroAtualizado?.trabalho_corrido) {
+        const registrosPosAtualizacao = await pontoApi.getRegistros({
+          funcionario_id: funcionarioId,
+          data_inicio: hoje,
+          data_fim: hoje
+        })
+        const registroHojeAtualizado = registrosPosAtualizacao?.[0]
+        if (!registroHojeAtualizado?.trabalho_corrido) {
+          throw new Error('O servidor não confirmou o Dia corrido para hoje. Tente novamente.')
+        }
+      }
+
+      const novosRegistros = {
+        ...registrosHoje,
+        trabalho_corrido: true
+      }
+
+      setRegistrosHoje(novosRegistros)
+      localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(novosRegistros))
+      await carregarRegistrosHoje()
+
+      toast({
+        title: "Dia corrido selecionado",
+        description: "Seu dia foi marcado como trabalho corrido (sem pausa automática de almoço).",
+        variant: "default"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro ao marcar dia corrido",
+        description: error.message || 'Não foi possível marcar o dia corrido.',
+        variant: "destructive"
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   const registrarPonto = async (tipo: string) => {
     // VALIDAÇÃO: Verificar se já existe um registro completo (entrada + saída)
     if (registrosHoje.entrada && registrosHoje.saida) {
@@ -969,6 +1076,31 @@ export default function PWAPontoPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
+            {registrosHoje.trabalho_corrido && (
+              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                <p className="text-sm font-semibold text-emerald-700">Dia corrido ativo</p>
+                <p className="text-xs text-emerald-700/90">
+                  Você optou por trabalho corrido hoje (sem pausa automática de almoço).
+                </p>
+              </div>
+            )}
+
+            {podeSelecionarTrabalhoCorrido() && !registrosHoje.trabalho_corrido && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
+                <p className="text-sm font-semibold text-amber-800">Opção de almoço disponível</p>
+                <p className="text-xs text-amber-800/90">
+                  Você pode escolher Dia corrido entre 11:30 e 12:00.
+                </p>
+                <Button
+                  onClick={marcarTrabalhoCorrido}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="w-full border-amber-300 text-amber-900 hover:bg-amber-100"
+                >
+                  Marcar Dia corrido
+                </Button>
+              </div>
+            )}
 
             {/* Botão único baseado no próximo registro */}
             {proximoRegistro ? (
@@ -1055,6 +1187,17 @@ export default function PWAPontoPage() {
                   <p className="font-medium text-sm">Saída</p>
                   <p className="text-lg font-bold">
                     {registrosHoje.saida || '--:--'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <div className={`w-3 h-3 rounded-full shadow-sm ${
+                  registrosHoje.trabalho_corrido ? 'bg-emerald-500' : 'bg-gray-300'
+                }`} />
+                <div>
+                  <p className="font-medium text-sm">Dia Corrido</p>
+                  <p className="text-lg font-bold">
+                    {registrosHoje.trabalho_corrido ? 'Sim' : 'Não'}
                   </p>
                 </div>
               </div>
