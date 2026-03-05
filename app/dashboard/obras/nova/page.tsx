@@ -3926,6 +3926,7 @@ startxref
                     placeholder="Buscar funcionário por nome ou cargo..."
                     className="mt-1"
                     onlyActive={true}
+                    onlyRealEmployees={true}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     Digite o nome ou cargo do funcionário para buscar

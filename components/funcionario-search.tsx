@@ -13,6 +13,15 @@ import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 // Array padrão de cargos permitidos (fora do componente para evitar recriação)
 const DEFAULT_ALLOWED_ROLES = ['Operador', 'Sinaleiro', 'Técnico Manutenção', 'Supervisor', 'Mecânico', 'Engenheiro', 'Chefe de Obras', 'Auxiliar Operacional']
 
+type FuncionarioSearchApiItem = FuncionarioBackend & {
+  funcionario_id?: number | null
+  perfil_usuario?: {
+    id?: number
+    nome?: string
+    nivel_acesso?: number
+  } | null
+}
+
 interface FuncionarioSearchProps {
   onFuncionarioSelect: (funcionario: any) => void
   selectedFuncionario?: any
@@ -20,6 +29,7 @@ interface FuncionarioSearchProps {
   className?: string
   onlyActive?: boolean
   allowedRoles?: string[]
+  onlyRealEmployees?: boolean
 }
 
 export function FuncionarioSearch({ 
@@ -28,7 +38,8 @@ export function FuncionarioSearch({
   placeholder = "Buscar funcionário por nome ou cargo...",
   className = "",
   onlyActive = true,
-  allowedRoles
+  allowedRoles,
+  onlyRealEmployees = false
 }: FuncionarioSearchProps) {
   // Se allowedRoles não for fornecido ou for undefined, não filtrar por cargo (mostrar todos)
   // Se for um array vazio [], também não filtrar
@@ -69,12 +80,26 @@ export function FuncionarioSearch({
 
         const response = await funcionariosApi.buscarFuncionarios(searchTerm, {
           status: onlyActive ? 'Ativo' : undefined,
-          cargo: cargoApi
+          cargo: cargoApi,
+          apenasFuncionarios: onlyRealEmployees
         })
         
         if (response.success) {
           console.log('🔍 Funcionários recebidos da API:', response.data)
-          let funcionariosConvertidos = response.data.map(converterFuncionarioBackendParaFrontend)
+          const funcionariosValidos = onlyRealEmployees
+            ? (response.data as FuncionarioSearchApiItem[]).filter((funcionario) => {
+                const perfilNome = normalizarTexto(funcionario.perfil_usuario?.nome || '')
+                const cargoNormalizado = normalizarTexto(funcionario.cargo_info?.nome || funcionario.cargo || '')
+                const temCargoValido = cargoNormalizado.length > 0
+
+                // Evita retornar registros de Cliente/Responsável de obra no seletor de funcionários.
+                if (perfilNome === 'cliente') return false
+
+                return temCargoValido || funcionario.funcionario_id != null
+              })
+            : response.data
+
+          let funcionariosConvertidos = funcionariosValidos.map(converterFuncionarioBackendParaFrontend)
           console.log('🔄 Funcionários convertidos:', funcionariosConvertidos)
           
           // Filtrar por cargos permitidos apenas se rolesFilter for fornecido e não vazio
@@ -119,7 +144,7 @@ export function FuncionarioSearch({
 
     const timeoutId = setTimeout(buscarFuncionarios, 300) // Debounce de 300ms
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, onlyActive, rolesFilter])
+  }, [searchTerm, onlyActive, rolesFilter, onlyRealEmployees])
 
   // Fechar resultados quando clicar fora
   useEffect(() => {

@@ -224,6 +224,7 @@ export const funcionariosApi = {
   async buscarFuncionarios(termo: string, filtros?: {
     cargo?: string
     status?: string
+    apenasFuncionarios?: boolean
   }, options?: { signal?: AbortSignal }): Promise<{ success: boolean; data: FuncionarioBackend[] }> {
     if (!termo || termo.length < 2) {
       return { success: true, data: [] }
@@ -236,6 +237,7 @@ export const funcionariosApi = {
     
     if (filtros?.cargo) searchParams.append('cargo', filtros.cargo)
     if (filtros?.status) searchParams.append('status', filtros.status)
+    if (filtros?.apenasFuncionarios) searchParams.append('apenas_funcionarios', 'true')
 
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
     return apiRequest(url, { signal: options?.signal })

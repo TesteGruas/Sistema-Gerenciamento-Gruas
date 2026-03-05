@@ -151,6 +151,19 @@ router.get('/', authenticateToken, async (req, res) => {
       .toLowerCase()
       .trim()
 
+    const apenasFuncionarios = ['true', '1', 'sim'].includes(String(req.query.apenas_funcionarios || '').toLowerCase())
+
+    const isUsuarioElegivelComoFuncionario = (usuario) => {
+      const perfilNome = normalizarTexto(usuario?.usuario_perfis?.[0]?.perfis?.nome || '')
+      const cargo = normalizarTexto(usuario?.cargo || '')
+
+      // Não considerar perfis de cliente/responsável de obra como funcionário.
+      if (perfilNome === 'cliente') return false
+
+      // Para usuários sem funcionario_id, exigir ao menos um cargo definido.
+      return cargo.length > 0
+    }
+
     console.log('='.repeat(80))
     console.log('[FUNCIONARIOS] Rota GET / chamada')
     console.log('[FUNCIONARIOS] Query params:', JSON.stringify(req.query, null, 2))
@@ -380,8 +393,17 @@ router.get('/', authenticateToken, async (req, res) => {
             })
           }
         
-          // Converter usuários para formato de funcionário
-          usuariosSemFuncionario = usuariosData
+          // Converter usuários para formato de funcionário.
+          // Quando solicitado, filtrar fora perfis de cliente/responsável de obra.
+          const usuariosElegiveis = apenasFuncionarios
+            ? usuariosData.filter(isUsuarioElegivelComoFuncionario)
+            : usuariosData
+
+          console.log(
+            `[DEBUG] Usuários elegíveis para lista de funcionários: ${usuariosElegiveis.length}/${usuariosData.length} (apenas_funcionarios=${apenasFuncionarios})`
+          )
+
+          usuariosSemFuncionario = usuariosElegiveis
             .map(usuario => {
               const perfil = usuario.usuario_perfis?.[0]?.perfis
               return {

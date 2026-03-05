@@ -3297,6 +3297,7 @@ useEffect(() => {
       'geral': 'Geral',
       'gruas': 'Gruas',
       'funcionarios': 'Funcionários',
+      'medicoes-mensais': 'Medições Mensais',
       'custos': 'Custos',
       'complementos': 'Complementos',
       'documentos': 'Documentos',
@@ -3570,47 +3571,16 @@ useEffect(() => {
                 // Aguardar um pouco para garantir que o DOM está atualizado
                 await new Promise(resolve => setTimeout(resolve, 200))
 
-                // Encontrar o conteúdo da tab ativa usando múltiplas estratégias
-                let tabElement: HTMLElement | null = null
+                // Encontrar o conteúdo da tab ativa por marcador estável
+                let tabElement = document.querySelector(
+                  `[data-export-tab="${activeTab}"]`
+                ) as HTMLElement | null
 
-                // Estratégia 1: Buscar pelo TabsContent do Radix UI (mais confiável)
-                // O Radix UI usa data-state e data-value nos TabsContent
-                const allTabsContent = document.querySelectorAll('[role="tabpanel"], [data-radix-tabs-content]')
-                allTabsContent.forEach((el) => {
-                  const value = el.getAttribute('data-value') || el.getAttribute('value')
-                  const state = el.getAttribute('data-state')
-                  
-                  if (value === activeTab || (state === 'active' && value === activeTab)) {
-                    tabElement = el as HTMLElement
-                  }
-                })
-
-                // Estratégia 2: Buscar diretamente pelo seletor de classe que contém o value
+                // Fallback: painel ativo do Radix UI
                 if (!tabElement) {
-                  // Tentar encontrar pelo seletor CSS que o Radix UI usa
-                  const radixContent = document.querySelector(`[data-radix-tabs-content][value="${activeTab}"]`) as HTMLElement
-                  if (radixContent) {
-                    tabElement = radixContent
-                  }
-                }
-
-                // Estratégia 3: Buscar pelo TabsContent com value
-                if (!tabElement) {
-                  const contentByValue = document.querySelector(`[data-value="${activeTab}"]`) as HTMLElement
-                  if (contentByValue && contentByValue.classList.contains('space-y-4')) {
-                    tabElement = contentByValue
-                  }
-                }
-
-                // Estratégia 4: Buscar todos os TabsContent e verificar qual está visível
-                if (!tabElement) {
-                  const allContent = document.querySelectorAll('[class*="TabsContent"], [class*="space-y-4"]')
-                  allContent.forEach((el) => {
-                    const computedStyle = window.getComputedStyle(el)
-                    if (computedStyle.display !== 'none' && el.getAttribute('data-value') === activeTab) {
-                      tabElement = el as HTMLElement
-                    }
-                  })
+                  tabElement = document.querySelector(
+                    '[role="tabpanel"][data-state="active"]'
+                  ) as HTMLElement | null
                 }
 
                 if (!tabElement) {
@@ -3664,7 +3634,7 @@ useEffect(() => {
         <TabsTrigger value="complementos" className="px-4 flex-1 min-w-[120px] whitespace-nowrap">Complementos</TabsTrigger>
       </TabsList>
 
-        <TabsContent value="geral" className="space-y-4">
+        <TabsContent value="geral" data-export-tab="geral" className="space-y-4">
           <div className="flex flex-col gap-4 w-full" style={{display: 'flex', flexDirection: 'column', width: '100%'}}>
             <Card>
               <CardHeader>
@@ -4531,7 +4501,7 @@ useEffect(() => {
         </TabsContent>
 
         {/* Aba: Gruas */}
-        <TabsContent value="gruas" className="space-y-4">
+        <TabsContent value="gruas" data-export-tab="gruas" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -4907,7 +4877,7 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="funcionarios" className="space-y-4">
+        <TabsContent value="funcionarios" data-export-tab="funcionarios" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">
@@ -5389,7 +5359,7 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="complementos" className="space-y-4">
+        <TabsContent value="complementos" data-export-tab="complementos" className="space-y-4">
           {/* Complementos de Obra (sem grua) */}
           <Card className="border-l-4 border-l-green-500">
             <CardHeader>
@@ -5505,7 +5475,7 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="documentos" className="space-y-4">
+        <TabsContent value="documentos" data-export-tab="documentos" className="space-y-4">
           {/* Seção: Documentos */}
           <Card>
             <CardHeader>
@@ -5837,7 +5807,7 @@ useEffect(() => {
         </TabsContent>
 
         {/* Aba: Checklists Diários */}
-        <TabsContent value="checklists" className="space-y-4">
+        <TabsContent value="checklists" data-export-tab="checklists" className="space-y-4">
           {gruasVinculadas.length > 0 ? (
             <div className="space-y-6">
               {gruasVinculadas.map((grua) => (
@@ -5904,11 +5874,11 @@ useEffect(() => {
         </TabsContent>
 
         {/* Aba: Livro da Grua */}
-        <TabsContent value="livro-grua" className="space-y-4">
+        <TabsContent value="livro-grua" data-export-tab="livro-grua" className="space-y-4">
           <LivroGruaObra obraId={obraId} onRequestEdit={iniciarEdicao} />
         </TabsContent>
 
-        <TabsContent value="medicoes-mensais" className="space-y-4">
+        <TabsContent value="medicoes-mensais" data-export-tab="medicoes-mensais" className="space-y-4">
           <Card>
             <CardHeader>
               <div className="flex justify-between items-center">

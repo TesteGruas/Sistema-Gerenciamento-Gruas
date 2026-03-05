@@ -2432,7 +2432,11 @@ router.put('/itens/:itemId', async (req, res) => {
   try {
     const { itemId } = req.params;
     const updateData = { ...req.body };
+    // Ignorar campos controlados pelo backend para evitar falha de validação
+    delete updateData.id;
     delete updateData.nota_fiscal_id; // Não permitir alterar a nota fiscal
+    delete updateData.created_at;
+    delete updateData.updated_at;
 
     const { error: validationError, value } = notaFiscalItemSchema.fork(['nota_fiscal_id'], (schema) => schema.optional()).validate(updateData);
     if (validationError) {

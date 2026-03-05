@@ -525,8 +525,145 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)} ${normalizeText(doc?.categoria)}`
     return (
       normalizeText(doc?.categoria) === 'manual_montagem' ||
-      (texto.includes('manual') && (texto.includes('montagem') || texto.includes('instalacao')))
+      (texto.includes('manual') && (texto.includes('montagem') || texto.includes('instalacao'))) ||
+      texto.includes('procedimento de montagem') ||
+      texto.includes('plano de montagem')
     )
+  }
+
+  const obterTopicoDocumentoAnexo = (doc: any): string => {
+    const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)} ${normalizeText(doc?.categoria)}`
+
+    if (isManualMontagemDocumento(doc)) return '6.6. MANUAL DE MONTAGEM'
+    if (isFichaTecnicaDocumento(doc)) return '6.5. DADOS TÉCNICOS DO EQUIPAMENTO'
+
+    if (
+      normalizeText(doc?.categoria) === 'termo_entrega_tecnica' ||
+      (texto.includes('entrega') && texto.includes('tecnica')) ||
+      (texto.includes('termo') && texto.includes('entrega'))
+    ) {
+      return '6.7. ENTREGA TÉCNICA'
+    }
+
+    if (
+      normalizeText(doc?.categoria) === 'plano_carga' ||
+      (texto.includes('plano') && texto.includes('carga')) ||
+      texto.includes('anexo')
+    ) {
+      return '6.8. PLANO DE CARGAS'
+    }
+
+    return '6. DOCUMENTOS E CERTIFICAÇÕES - OUTROS ANEXOS'
+  }
+
+  const obterDocumentoArrayBuffer = async (documento: any): Promise<ArrayBuffer> => {
+    const token = localStorage.getItem('access_token') || localStorage.getItem('token') || ''
+
+    const baixarComFetch = async (url: string, comAuth: boolean) => {
+      const headers: Record<string, string> = {}
+      if (comAuth && token) headers.Authorization = `Bearer ${token}`
+      const response = await fetch(url, { headers })
+      if (!response.ok) {
+        throw new Error(`Falha ao baixar PDF (${response.status})`)
+      }
+      return await response.arrayBuffer()
+    }
+
+    const tentarBaixar = async (url: string) => {
+      try {
+        return await baixarComFetch(url, false)
+      } catch {
+        return await baixarComFetch(url, true)
+      }
+    }
+
+    const normalizarCaminhoStorage = (caminhoOriginal: string): string => {
+      const semQuery = caminhoOriginal.split('?')[0]
+      return semQuery
+        .replace(/^https?:\/\/[^/]+/i, '')
+        .replace(/^\/+/, '')
+        .replace(/^uploads\/+/i, '')
+        .trim()
+    }
+
+    const documentoIdNumerico =
+      typeof documento?.id === 'number'
+        ? documento.id
+        : (typeof documento?.id === 'string' && /^\d+$/.test(documento.id))
+          ? parseInt(documento.id, 10)
+          : null
+
+    if (documentoIdNumerico && obraId) {
+      try {
+        const downloadData = await obrasDocumentosApi.download(parseInt(obraId, 10), documentoIdNumerico)
+        if (downloadData?.download_url) {
+          return await tentarBaixar(downloadData.download_url)
+        }
+      } catch (error) {
+        console.log('Falha no download via API, tentando URL direta do documento', error)
+      }
+    }
+
+    const arquivoIdObra =
+      typeof documento?.id === 'string' && documento.id.startsWith('arquivo_')
+        ? parseInt(documento.id.replace('arquivo_', ''), 10)
+        : null
+
+    if (arquivoIdObra && obraId) {
+      try {
+        const dadosArquivo = await obrasArquivosApi.download(parseInt(obraId, 10), arquivoIdObra)
+        if (dadosArquivo?.download_url) {
+          return await tentarBaixar(dadosArquivo.download_url)
+        }
+      } catch (error) {
+        console.log('Falha no download via obras-arquivos, tentando fallback por caminho', error)
+      }
+    }
+
+    const arquivoIdLegado =
+      typeof documento?.id === 'string' && documento.id.startsWith('legacy_')
+        ? parseInt(documento.id.replace('legacy_', ''), 10)
+        : null
+
+    if (arquivoIdLegado) {
+      try {
+        const legacyResponse = await api.get(`/arquivos/download/${arquivoIdLegado}`)
+        const legacyUrl = legacyResponse?.data?.data?.url
+        if (legacyUrl) {
+          return await tentarBaixar(legacyUrl)
+        }
+      } catch (error) {
+        console.log('Falha no download legado, tentando fallback por caminho', error)
+      }
+    }
+
+    const arquivoUrl = documento?.arquivo_assinado || documento?.caminho_arquivo || documento?.arquivo_original
+    if (!arquivoUrl) {
+      throw new Error(`Documento sem URL de arquivo: ${documento?.titulo || 'Sem título'}`)
+    }
+
+    // Fallback final: sempre tentar resolver URL assinada no backend a partir do caminho do storage
+    const caminhoStorage = normalizarCaminhoStorage(String(arquivoUrl))
+    try {
+      const signedResponse = await api.get('/arquivos/url-assinada', {
+        params: {
+          caminho: caminhoStorage,
+          bucket: 'arquivos-obras'
+        }
+      })
+      const signedUrl = signedResponse?.data?.data?.url
+      if (signedUrl) {
+        return await tentarBaixar(String(signedUrl))
+      }
+    } catch (error) {
+      console.log('Falha ao gerar URL assinada por caminho, tentando URL original', error)
+    }
+
+    if (String(arquivoUrl).startsWith('http://') || String(arquivoUrl).startsWith('https://')) {
+      return await tentarBaixar(String(arquivoUrl))
+    }
+
+    throw new Error(`Falha ao baixar PDF (caminho inválido ou arquivo ausente): ${caminhoStorage}`)
   }
 
   // Função auxiliar para fazer download de arquivo
@@ -1638,14 +1775,125 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       // Adicionar rodapé
       const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
       adicionarRodapeEmpresaFrontend(doc)
+      const pdfPrincipalBytes = doc.output('arraybuffer')
 
-      // Salvar PDF
+      // Mesclar o PDF principal com todos os documentos anexados da obra
+      const { PDFDocument } = await import('pdf-lib')
+      const pdfFinal = await PDFDocument.create()
+
+      const anexarBytesNoPdfFinal = async (bytes: ArrayBuffer) => {
+        const pdfOrigem = await PDFDocument.load(bytes, { ignoreEncryption: true })
+        const paginas = await pdfFinal.copyPages(pdfOrigem, pdfOrigem.getPageIndices())
+        paginas.forEach((pagina) => pdfFinal.addPage(pagina))
+      }
+
+      await anexarBytesNoPdfFinal(pdfPrincipalBytes)
+
+      const documentosComArquivo = documentos.filter((doc: any) =>
+        Boolean(doc?.id || doc?.arquivo_assinado || doc?.caminho_arquivo || doc?.arquivo_original)
+      )
+
+      const gruposAnexos = new Map<string, any[]>()
+      for (const documento of documentosComArquivo) {
+        const topico = obterTopicoDocumentoAnexo(documento)
+        const lista = gruposAnexos.get(topico) || []
+        lista.push(documento)
+        gruposAnexos.set(topico, lista)
+      }
+
+      // Garantir tópico 6.6 na seção de anexos:
+      // se não houver manual de montagem próprio, reutiliza a ficha técnica como fallback.
+      const TOPICO_MANUAL_MONTAGEM = '6.6. MANUAL DE MONTAGEM'
+      const TOPICO_FICHA_TECNICA = '6.5. DADOS TÉCNICOS DO EQUIPAMENTO'
+      let manualMontagemUsandoFallback = false
+
+      if (!gruposAnexos.has(TOPICO_MANUAL_MONTAGEM)) {
+        const fichaParaFallback = (gruposAnexos.get(TOPICO_FICHA_TECNICA) || [])[0]
+        if (fichaParaFallback) {
+          gruposAnexos.set(TOPICO_MANUAL_MONTAGEM, [fichaParaFallback])
+          manualMontagemUsandoFallback = true
+        }
+      }
+
+      const errosAnexos: string[] = []
+      const ordemTopicos = [
+        '6.5. DADOS TÉCNICOS DO EQUIPAMENTO',
+        '6.6. MANUAL DE MONTAGEM',
+        '6.7. ENTREGA TÉCNICA',
+        '6.8. PLANO DE CARGAS',
+        '6. DOCUMENTOS E CERTIFICAÇÕES - OUTROS ANEXOS'
+      ]
+      const topicosOrdenados = [
+        ...ordemTopicos.filter((topico) => gruposAnexos.has(topico)),
+        ...Array.from(gruposAnexos.keys()).filter((topico) => !ordemTopicos.includes(topico))
+      ]
+
+      for (const topico of topicosOrdenados) {
+        const docsDoTopico = gruposAnexos.get(topico) || []
+        const separador = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+        let separadorY = 22
+
+        separador.setFont('helvetica', 'bold')
+        separador.setFontSize(16)
+        separador.text('ANEXOS DO LIVRO DA GRUA', 105, separadorY, { align: 'center' })
+        separadorY += 10
+
+        separador.setFontSize(12)
+        separador.text(topico, 14, separadorY)
+        separadorY += 8
+
+        separador.setFont('helvetica', 'normal')
+        separador.setFontSize(10)
+        separador.text(`Quantidade de documentos: ${docsDoTopico.length}`, 14, separadorY)
+        separadorY += 8
+
+        if (topico === TOPICO_MANUAL_MONTAGEM && manualMontagemUsandoFallback) {
+          separador.setFontSize(9)
+          separador.text('Observação: seção 6.6 usando fallback da ficha técnica (6.5).', 14, separadorY)
+          separadorY += 7
+        }
+
+        docsDoTopico.forEach((docTopico: any, idx: number) => {
+          if (separadorY > 275) {
+            separador.addPage()
+            separadorY = 22
+          }
+          const tituloDoc = docTopico?.titulo || `Documento ${idx + 1}`
+          separador.text(`${idx + 1}. ${tituloDoc}`, 14, separadorY)
+          separadorY += 6
+        })
+
+        await anexarBytesNoPdfFinal(separador.output('arraybuffer'))
+
+        for (const docTopico of docsDoTopico) {
+          try {
+            const bytes = await obterDocumentoArrayBuffer(docTopico)
+            await anexarBytesNoPdfFinal(bytes)
+          } catch (error) {
+            const nomeErro = docTopico?.titulo || `Documento ${docTopico?.id || 'sem-id'}`
+            errosAnexos.push(nomeErro)
+            console.error(`Erro ao anexar documento "${nomeErro}"`, error)
+          }
+        }
+      }
+
+      const pdfFinalBytes = await pdfFinal.save()
+      const blob = new Blob([pdfFinalBytes], { type: 'application/pdf' })
+      const blobUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = blobUrl
       const nomeArquivo = `livro-grua-${gruaSelecionada.id}-${obra.name?.replace(/\s+/g, '-') || 'obra'}-${new Date().toISOString().split('T')[0]}.pdf`
-      doc.save(nomeArquivo)
+      link.download = nomeArquivo
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(blobUrl)
 
       toast({
         title: "Exportação concluída!",
-        description: "Arquivo PDF baixado com sucesso.",
+        description: errosAnexos.length > 0
+          ? `PDF gerado com anexos. ${errosAnexos.length} documento(s) não puderam ser incluídos.`
+          : "Arquivo PDF baixado com todos os anexos.",
       })
     } catch (error) {
       console.error('Erro ao exportar PDF:', error)
