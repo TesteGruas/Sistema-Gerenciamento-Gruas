@@ -25,6 +25,11 @@ function generateSecurePassword(length = 12) {
 
 const router = express.Router()
 
+function possuiUsuarioVinculado(usuario) {
+  if (Array.isArray(usuario)) return usuario.length > 0
+  return Boolean(usuario)
+}
+
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
@@ -505,8 +510,8 @@ router.get('/', authenticateToken, async (req, res) => {
       
       return {
         ...funcionario,
-        usuario_existe: funcionario.usuario_existe ?? !!funcionario.usuario,
-        usuario_criado: funcionario.usuario_criado ?? !!funcionario.usuario,
+        usuario_existe: funcionario.usuario_existe ?? possuiUsuarioVinculado(funcionario.usuario),
+        usuario_criado: funcionario.usuario_criado ?? possuiUsuarioVinculado(funcionario.usuario),
         obra_atual: obraAtual,
         obras_vinculadas: obrasVinculadas // Apenas se houver registros de ponto
       }
@@ -1184,8 +1189,8 @@ router.get('/:id', async (req, res) => {
     // Adicionar informações sobre o usuário vinculado e obra atual
     const responseData = {
       ...data,
-      usuario_existe: !!data.usuario,
-      usuario_criado: !!data.usuario,
+      usuario_existe: possuiUsuarioVinculado(data.usuario),
+      usuario_criado: possuiUsuarioVinculado(data.usuario),
       obra_atual: obraAtual,
       obras_vinculadas: temRegistrosPonto ? alocacoesAtivas : [], // Apenas se houver registros de ponto
       historico_obras: todasObras // Todas as obras, incluindo finalizadas
