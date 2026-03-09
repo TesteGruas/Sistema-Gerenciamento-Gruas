@@ -535,15 +535,24 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   const obterTopicoDocumentoAnexo = (doc: any): string => {
     const texto = `${normalizeText(doc?.titulo)} ${normalizeText(doc?.descricao)} ${normalizeText(doc?.categoria)}`
 
-    if (isManualMontagemDocumento(doc)) return '6.6. MANUAL DE MONTAGEM'
-    if (isFichaTecnicaDocumento(doc)) return '6.5. DADOS TÉCNICOS DO EQUIPAMENTO'
+    if (isManualMontagemDocumento(doc) || isFichaTecnicaDocumento(doc)) {
+      return '6.9. PLANO DE CARGAS E FICHA TÉCNICA'
+    }
 
     if (
       normalizeText(doc?.categoria) === 'termo_entrega_tecnica' ||
       (texto.includes('entrega') && texto.includes('tecnica')) ||
       (texto.includes('termo') && texto.includes('entrega'))
     ) {
-      return '6.7. ENTREGA TÉCNICA'
+      return '6.6. TERMO DE ENTREGA TÉCNICA'
+    }
+
+    if (
+      normalizeText(doc?.categoria) === 'aterramento' ||
+      (texto.includes('laudo') && texto.includes('aterramento')) ||
+      texto.includes('aterramento')
+    ) {
+      return '6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO'
     }
 
     if (
@@ -551,7 +560,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       (texto.includes('plano') && texto.includes('carga')) ||
       texto.includes('anexo')
     ) {
-      return '6.8. PLANO DE CARGAS'
+      return '6.9. PLANO DE CARGAS E FICHA TÉCNICA'
     }
 
     return '6. DOCUMENTOS E CERTIFICAÇÕES - OUTROS ANEXOS'
@@ -1541,7 +1550,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       yPos += 8
 
-      // 6.5. DADOS TÉCNICOS DO EQUIPAMENTO
+      // 6.5. DADOS TÉCNICOS DO EQUIPAMENTO (APÓS RESPONSÁVEL, INCLUI CNO)
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
@@ -1563,13 +1572,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       const fichaTecnica = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
 
       const dadosTecnicosEquipamento = [
+        [`CNO da Obra:`, obra.cno || obra.cno_obra || 'Não informado'],
         [`Ficha Técnica:`, fichaTecnica ? (fichaTecnica.titulo || 'Ficha Técnica do Equipamento') : 'Não cadastrada'],
         [`Descrição:`, fichaTecnica?.descricao || 'Não informado']
       ]
       renderTabelaPares(dadosTecnicosEquipamento, true)
       yPos += 8
 
-      // 6.6. MANUAL DE MONTAGEM
+      // 6.6. TERMO DE ENTREGA TÉCNICA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
@@ -1581,37 +1591,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('6.6. MANUAL DE MONTAGEM', 18, secao66Y + 6)
+      doc.text('6.6. TERMO DE ENTREGA TÉCNICA', 18, secao66Y + 6)
       yPos = secao66Y + 12
-
-      doc.setTextColor(0, 0, 0)
-      doc.setFontSize(9)
-      doc.setFont('helvetica', 'normal')
-
-      const manualMontagem = documentos.find((doc: any) => isManualMontagemDocumento(doc))
-        || documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
-
-      const dadosManualMontagem = [
-        [`Manual de Montagem:`, manualMontagem ? (manualMontagem.titulo || 'Manual de Montagem') : 'Não informado'],
-        [`Descrição:`, manualMontagem?.descricao || 'Não informado']
-      ]
-      renderTabelaPares(dadosManualMontagem, true)
-      yPos += 8
-
-      // 6.7. ENTREGA TÉCNICA
-      if (yPos > MAX_Y - 20) {
-        yPos = await adicionarNovaPaginaComLogos()
-      }
-
-      const secao67Y = yPos
-      doc.setFillColor(...COR_BASE)
-      doc.roundedRect(14, secao67Y, 182, 8, 2, 2, 'F')
-      
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'bold')
-      doc.text('6.7. ENTREGA TÉCNICA', 18, secao67Y + 6)
-      yPos = secao67Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1634,9 +1615,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Assinado por:`, termoAssinadoPor]
       ]
       renderTabelaPares(dadosEntregaTecnica, true)
-      yPos += 10
+      yPos += 8
 
-      // 6.8. PLANO DE CARGAS
+      // 6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
       }
@@ -1648,8 +1629,66 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setTextColor(255, 255, 255)
       doc.setFontSize(11)
       doc.setFont('helvetica', 'bold')
-      doc.text('6.8. PLANO DE CARGAS', 18, secao68Y + 6)
+      doc.text('6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO', 18, secao68Y + 6)
       yPos = secao68Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const laudoAterramento = documentos.find((doc: any) => {
+        const texto = `${doc?.titulo || ''} ${doc?.descricao || ''}`.toLowerCase()
+        return doc?.categoria === 'aterramento' || texto.includes('aterramento')
+      })
+      const dadosArtEAterramento = [
+        [`ART de Instalação:`, obra.art_numero || obra.artNumero || 'Não informado'],
+        [`Laudo de Aterramento:`, laudoAterramento ? (laudoAterramento.titulo || 'Laudo de Aterramento') : 'Não encontrado'],
+        [`Descrição:`, laudoAterramento?.descricao || 'Não informado']
+      ]
+      renderTabelaPares(dadosArtEAterramento, true)
+      yPos += 8
+
+      // 6.8. LOCAL DE INSTALAÇÃO DA GRUA
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao68LocalY = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao68LocalY, 182, 8, 2, 2, 'F')
+
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('6.8. LOCAL DE INSTALAÇÃO DA GRUA', 18, secao68LocalY + 6)
+      yPos = secao68LocalY + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const dadosLocalInstalacao = [
+        [`Local de Instalação:`, relacaoGrua?.local_instalacao || obra.endereco || obra.location || 'Não informado'],
+        [`Endereço da Obra:`, obra.endereco || 'Não informado'],
+        [`Cidade/UF:`, `${obra.cidade || 'Não informado'} / ${obra.estado || 'Não informado'}`]
+      ]
+      renderTabelaPares(dadosLocalInstalacao, true)
+      yPos += 8
+
+      // 6.9. PLANO DE CARGAS E FICHA TÉCNICA
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao69Y = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao69Y, 182, 8, 2, 2, 'F')
+      
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('6.9. PLANO DE CARGAS E FICHA TÉCNICA', 18, secao69Y + 6)
+      yPos = secao69Y + 12
 
       doc.setTextColor(0, 0, 0)
       doc.setFontSize(9)
@@ -1665,13 +1704,40 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         doc.titulo?.toLowerCase().includes('anexo') && 
         (doc.descricao?.toLowerCase().includes('plano') || doc.descricao?.toLowerCase().includes('carga'))
       )
-      const dadosPlanoCargas = [
+      const dadosPlanoEFicha = [
         [`Plano de Cargas:`, planoCargas ? (planoCargas.titulo || 'Plano de Cargas') : 'Não encontrado'],
+        [`Ficha Técnica:`, fichaTecnica ? (fichaTecnica.titulo || 'Ficha Técnica do Equipamento') : 'Não encontrado'],
         [`Descrição:`, planoCargas?.descricao || 'Não informado'],
-        [`Anexos:`, anexosPlano.length > 0 ? anexosPlano.map((anexo: any, idx: number) => `${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`).join(' | ') : 'Não informado'],
-        [`Local de Instalação (referência):`, relacaoGrua?.local_instalacao || 'Não informado']
+        [`Anexos:`, anexosPlano.length > 0 ? anexosPlano.map((anexo: any, idx: number) => `${idx + 1}. ${anexo.titulo || `Anexo ${idx + 1}`}`).join(' | ') : 'Não informado']
       ]
-      renderTabelaPares(dadosPlanoCargas, true)
+      renderTabelaPares(dadosPlanoEFicha, true)
+      yPos += 8
+
+      // 6.10. MANUTENÇÕES (VIA FORMULÁRIOS)
+      if (yPos > MAX_Y - 20) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao610Y = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao610Y, 182, 8, 2, 2, 'F')
+
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('6.10. MANUTENÇÕES (VIA FORMULÁRIOS)', 18, secao610Y + 6)
+      yPos = secao610Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      const dadosManutencaoFormulario = [
+        [`Registro de Manutenções:`, 'Realizado via formulários no sistema'],
+        [`Responsável pela Manutenção:`, relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'Não informado'],
+        [`Observação:`, 'As manutenções devem ser registradas nas rotinas/formulários da obra']
+      ]
+      renderTabelaPares(dadosManutencaoFormulario, true)
       yPos += 8
 
       // 7. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
@@ -1697,7 +1763,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Raio de Operação:`, relacaoGrua?.raio_operacao || relacaoGrua?.raio || gruaSelecionada.alcance_maximo || 'N/A'],
         [`Altura de Operação:`, gruaSelecionada.altura_maxima || relacaoGrua?.altura || 'N/A'],
         [`Manual de Operação:`, relacaoGrua?.manual_operacao || 'Vinculado à obra'],
-        [`Manual de Montagem:`, manualMontagem ? 'Disponível (ver seção 6.6)' : 'Não informado'],
+        [`Documentação Técnica:`, fichaTecnica ? 'Disponível (ver seção 6.9)' : 'Não informado'],
         [`Procedimento de Montagem:`, relacaoGrua?.procedimento_montagem ? 'Disponível' : 'Não informado'],
         [`Procedimento de Operação:`, relacaoGrua?.procedimento_operacao ? 'Disponível' : 'Não informado'],
         [`Procedimento de Desmontagem:`, relacaoGrua?.procedimento_desmontagem ? 'Disponível' : 'Não informado'],
@@ -1797,26 +1863,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         gruposAnexos.set(topico, lista)
       }
 
-      // Garantir tópico 6.6 na seção de anexos:
-      // se não houver manual de montagem próprio, reutiliza a ficha técnica como fallback.
-      const TOPICO_MANUAL_MONTAGEM = '6.6. MANUAL DE MONTAGEM'
-      const TOPICO_FICHA_TECNICA = '6.5. DADOS TÉCNICOS DO EQUIPAMENTO'
-      let manualMontagemUsandoFallback = false
-
-      if (!gruposAnexos.has(TOPICO_MANUAL_MONTAGEM)) {
-        const fichaParaFallback = (gruposAnexos.get(TOPICO_FICHA_TECNICA) || [])[0]
-        if (fichaParaFallback) {
-          gruposAnexos.set(TOPICO_MANUAL_MONTAGEM, [fichaParaFallback])
-          manualMontagemUsandoFallback = true
-        }
-      }
-
       const errosAnexos: string[] = []
       const ordemTopicos = [
         '6.5. DADOS TÉCNICOS DO EQUIPAMENTO',
-        '6.6. MANUAL DE MONTAGEM',
-        '6.7. ENTREGA TÉCNICA',
-        '6.8. PLANO DE CARGAS',
+        '6.6. TERMO DE ENTREGA TÉCNICA',
+        '6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO',
+        '6.9. PLANO DE CARGAS E FICHA TÉCNICA',
         '6. DOCUMENTOS E CERTIFICAÇÕES - OUTROS ANEXOS'
       ]
       const topicosOrdenados = [
@@ -1842,12 +1894,6 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         separador.setFontSize(10)
         separador.text(`Quantidade de documentos: ${docsDoTopico.length}`, 14, separadorY)
         separadorY += 8
-
-        if (topico === TOPICO_MANUAL_MONTAGEM && manualMontagemUsandoFallback) {
-          separador.setFontSize(9)
-          separador.text('Observação: seção 6.6 usando fallback da ficha técnica (6.5).', 14, separadorY)
-          separadorY += 7
-        }
 
         docsDoTopico.forEach((docTopico: any, idx: number) => {
           if (separadorY > 275) {
@@ -3312,6 +3358,10 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <p className="text-xs text-gray-500">CNO da Obra</p>
+                  <p className="font-medium">{obra.cno || obra.cno_obra || 'Não informado'}</p>
+                </div>
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Ficha Técnica do Equipamento (PDF)</p>
                   {(() => {
@@ -3377,73 +3427,62 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
             </CardContent>
           </Card>
 
-          {/* 6.6. MANUAL DE MONTAGEM */}
+          {/* 6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
-                <BookOpen className="w-4 h-4" />
-                6.6. Manual de Montagem
+                <Shield className="w-4 h-4" />
+                6.7. ART de Instalação e Laudo de Aterramento
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="p-3 bg-gray-50 rounded-md">
+                  <p className="text-xs text-gray-500">ART de Instalação</p>
+                  <p className="font-medium">{obra.art_numero || obra.artNumero || 'Não informado'}</p>
+                </div>
                 <div>
-                  <p className="text-xs text-gray-500 mb-2">Manual de Montagem Disponível</p>
+                  <p className="text-xs text-gray-500 mb-2">Laudo de Aterramento (PDF)</p>
                   {(() => {
-                    const manualMontagemDoc = documentos.find((doc: any) => isManualMontagemDocumento(doc))
-                    const fichaTecnicaDoc = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
-                    const manualMontagem = manualMontagemDoc || relacaoGrua?.manual_montagem || fichaTecnicaDoc
-                    
-                    if (manualMontagem) {
+                    const laudoAterramento = documentos.find((doc: any) => {
+                      const texto = `${doc?.titulo || ''} ${doc?.descricao || ''}`.toLowerCase()
+                      return doc?.categoria === 'aterramento' || texto.includes('aterramento')
+                    })
+
+                    if (laudoAterramento) {
                       return (
-                        <div className="p-3 bg-gray-50 rounded-md">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="font-medium">{manualMontagem.titulo || 'Manual de Montagem'}</p>
-                              {manualMontagem.descricao && <p className="text-sm text-gray-600 mt-1">{manualMontagem.descricao}</p>}
-                            </div>
-                            <div className="flex items-center gap-2 print:hidden">
-                              {manualMontagem.arquivo_assinado || manualMontagem.caminho_arquivo || manualMontagem.arquivo_original ? (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => downloadDocumento(manualMontagem)}
-                                >
-                                  <Download className="w-4 h-4 mr-1" />
-                                  Baixar
-                                </Button>
-                              ) : null}
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => criarInputUpload('manual_tecnico', 'Manual de Montagem')}
-                              >
-                                <Upload className="w-4 h-4 mr-1" />
-                                Substituir PDF
+                        <div className="p-3 bg-gray-50 rounded-md flex items-center justify-between gap-3">
+                          <div className="flex-1">
+                            <p className="font-medium">{laudoAterramento.titulo || 'Laudo de Aterramento'}</p>
+                            {laudoAterramento.descricao && <p className="text-sm text-gray-600 mt-1">{laudoAterramento.descricao}</p>}
+                          </div>
+                          <div className="flex items-center gap-2 print:hidden">
+                            {(laudoAterramento.arquivo_assinado || laudoAterramento.caminho_arquivo || laudoAterramento.arquivo_original) && (
+                              <Button size="sm" variant="outline" onClick={() => downloadDocumento(laudoAterramento)}>
+                                <Download className="w-4 h-4 mr-1" />
+                                Baixar
                               </Button>
-                              {manualMontagemDoc ? (
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => removerDocumento(manualMontagemDoc)}
-                                >
-                                  Remover
-                                </Button>
-                              ) : null}
-                            </div>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => criarInputUpload('aterramento', 'Laudo de Aterramento')}>
+                              <Upload className="w-4 h-4 mr-1" />
+                              Substituir PDF
+                            </Button>
+                            <Button size="sm" variant="destructive" onClick={() => removerDocumento(laudoAterramento)}>
+                              Remover
+                            </Button>
                           </div>
                         </div>
                       )
                     }
+
                     return (
                       <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
-                        <p className="text-gray-500 text-sm mb-2">Nenhum manual de montagem cadastrado.</p>
-                        <p className="text-xs text-gray-400">Um arquivo em PDF estará disponível para consulta após o upload.</p>
+                        <p className="text-gray-500 text-sm mb-2">Laudo de aterramento não encontrado.</p>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="mt-3 print:hidden"
-                          onClick={() => criarInputUpload('manual_tecnico', 'Manual de Montagem')}
+                          className="mt-2 print:hidden"
+                          onClick={() => criarInputUpload('aterramento', 'Laudo de Aterramento')}
                         >
                           <Upload className="w-4 h-4 mr-2" />
                           Fazer Upload de PDF
@@ -3456,12 +3495,12 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
             </CardContent>
           </Card>
 
-          {/* 6.7. ENTREGA TÉCNICA */}
+          {/* 6.6. TERMO DE ENTREGA TÉCNICA */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileCheck className="w-4 h-4" />
-                6.7. Entrega Técnica
+                6.6. Termo de Entrega Técnica
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3553,12 +3592,38 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
             </CardContent>
           </Card>
 
-          {/* 6.8. PLANO DE CARGAS */}
+          {/* 6.8. LOCAL DE INSTALAÇÃO DA GRUA */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <MapPin className="w-4 h-4" />
+                6.8. Local de Instalação da Grua
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="md:col-span-2">
+                  <p className="text-xs text-gray-500">Local de Instalação</p>
+                  <p className="font-medium">{relacaoGrua?.local_instalacao || obra.endereco || obra.location || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Endereço da Obra</p>
+                  <p className="font-medium">{obra.endereco || 'Não informado'}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">Cidade/UF</p>
+                  <p className="font-medium">{`${obra.cidade || 'Não informado'} / ${obra.estado || 'Não informado'}`}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 6.9. PLANO DE CARGAS E FICHA TÉCNICA */}
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center gap-2">
                 <FileText className="w-4 h-4" />
-                6.8. Plano de Cargas
+                6.9. Plano de Cargas e Ficha Técnica
               </CardTitle>
             </CardHeader>
             <CardContent>
@@ -3570,10 +3635,31 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                     doc.titulo?.toLowerCase().includes('carga'))
                   )
                   
-                  if (planoCargas) {
+                  const fichaTecnica = documentos.find((doc: any) => isFichaTecnicaDocumento(doc))
+
+                  if (planoCargas || fichaTecnica) {
                     return (
                       <div>
-                        <div className="p-3 bg-gray-50 rounded-md mb-4">
+                        {fichaTecnica && (
+                          <div className="p-3 bg-gray-50 rounded-md mb-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex-1">
+                                <p className="font-medium">{fichaTecnica.titulo || 'Ficha Técnica do Equipamento'}</p>
+                                {fichaTecnica.descricao && <p className="text-sm text-gray-600 mt-1">{fichaTecnica.descricao}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 print:hidden">
+                                {(fichaTecnica.arquivo_assinado || fichaTecnica.caminho_arquivo || fichaTecnica.arquivo_original) && (
+                                  <Button size="sm" variant="outline" onClick={() => downloadDocumento(fichaTecnica)}>
+                                    <Download className="w-4 h-4 mr-1" />
+                                    Baixar
+                                  </Button>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {planoCargas && <div className="p-3 bg-gray-50 rounded-md mb-4">
                           <div className="flex items-center justify-between gap-3">
                             <div className="flex-1">
                               <p className="font-medium">{planoCargas.titulo || 'Plano de Cargas'}</p>
@@ -3607,7 +3693,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                               </Button>
                             </div>
                           </div>
-                        </div>
+                        </div>}
                         
                         {/* Anexos do plano de cargas */}
                         {documentos.filter((doc: any) => 
@@ -3648,17 +3734,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                   // Se não encontrar plano de cargas, mostrar informações do local de instalação
                   return (
                     <div className="p-3 bg-gray-50 rounded-md border-2 border-dashed border-gray-300">
-                      <p className="text-gray-500 text-sm mb-2">Plano de cargas não encontrado.</p>
-                      <p className="text-xs text-gray-500 mb-2">
-                        Nota: A maioria das vezes os dados do local de instalação da grua ficam no plano de carga.
-                      </p>
-                      <p className="text-xs text-gray-400 mb-3">Faça upload do PDF para disponibilizar o documento na obra.</p>
-                      {relacaoGrua?.local_instalacao && (
-                        <div className="mb-3">
-                          <p className="text-xs text-gray-500">Local de Instalação (referência):</p>
-                          <p className="font-medium">{relacaoGrua.local_instalacao}</p>
-                        </div>
-                      )}
+                      <p className="text-gray-500 text-sm mb-2">Plano de cargas e ficha técnica não encontrados.</p>
+                      <p className="text-xs text-gray-400 mb-3">Faça upload dos PDFs para disponibilizar os documentos na obra.</p>
                       <Button
                         size="sm"
                         variant="outline"
@@ -3671,6 +3748,22 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                     </div>
                   )
                 })()}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* 6.10. MANUTENÇÕES (VIA FORMULÁRIOS) */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Wrench className="w-4 h-4" />
+                6.10. Manutenções (via formulários)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="p-3 bg-gray-50 rounded-md">
+                <p className="text-xs text-gray-500">Registro de Manutenções</p>
+                <p className="font-medium">As manutenções são registradas via formulários no sistema.</p>
               </div>
             </CardContent>
           </Card>
@@ -3698,10 +3791,10 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                   <p className="font-medium">{relacaoGrua?.manual_operacao || 'Vinculado à obra'}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-500">Manual de Montagem</p>
+                  <p className="text-xs text-gray-500">Documentação Técnica</p>
                   <p className="font-medium">
-                    {documentos.find((doc: any) => doc.titulo?.toLowerCase().includes('manual') && doc.titulo?.toLowerCase().includes('montagem')) 
-                      ? 'Disponível (ver seção 6.6)' 
+                    {documentos.find((doc: any) => isFichaTecnicaDocumento(doc) || (doc.titulo?.toLowerCase().includes('plano') && doc.titulo?.toLowerCase().includes('carga'))) 
+                      ? 'Disponível (ver seção 6.9)' 
                       : 'Não informado'}
                   </p>
                 </div>
