@@ -7,6 +7,87 @@ import { emitirNotificacaoMultiplos } from '../server.js'
 
 const router = express.Router()
 
+function selecionarUsuarioPreferencial(usuarios = []) {
+  if (!Array.isArray(usuarios) || usuarios.length === 0) return null
+  const usuarioAtivo = usuarios.find(u => String(u.status || '').toLowerCase() === 'ativo')
+  return usuarioAtivo || usuarios[0]
+}
+
+async function resolverUsuarioPorDestinatarioFuncionario(destinatarioId) {
+  const idOriginal = String(destinatarioId || '').trim()
+  if (!idOriginal) return null
+
+  const idNumerico = Number(idOriginal)
+  const idsTentados = new Set()
+  const candidatos = []
+
+  const adicionarCandidatos = (usuarios = []) => {
+    for (const usuario of usuarios) {
+      if (!usuario?.id) continue
+      if (idsTentados.has(usuario.id)) continue
+      idsTentados.add(usuario.id)
+      candidatos.push(usuario)
+    }
+  }
+
+  // 1) Tentar mapeamento direto por funcionario_id (id string)
+  const { data: usuariosPorFuncionarioStr } = await supabaseAdmin
+    .from('usuarios')
+    .select('id, status')
+    .eq('funcionario_id', idOriginal)
+    .limit(10)
+  adicionarCandidatos(usuariosPorFuncionarioStr)
+
+  // 2) Repetir por funcionario_id numérico (quando aplicável)
+  if (!Number.isNaN(idNumerico)) {
+    const { data: usuariosPorFuncionarioNum } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, status')
+      .eq('funcionario_id', idNumerico)
+      .limit(10)
+    adicionarCandidatos(usuariosPorFuncionarioNum)
+  }
+
+  // 3) Fallback: permitir que o id seja o próprio usuario_id (string)
+  const { data: usuariosPorIdStr } = await supabaseAdmin
+    .from('usuarios')
+    .select('id, status')
+    .eq('id', idOriginal)
+    .limit(10)
+  adicionarCandidatos(usuariosPorIdStr)
+
+  // 4) Fallback: usuario_id numérico
+  if (!Number.isNaN(idNumerico)) {
+    const { data: usuariosPorIdNum } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, status')
+      .eq('id', idNumerico)
+      .limit(10)
+    adicionarCandidatos(usuariosPorIdNum)
+  }
+
+  // 5) Fallback robusto: buscar e-mail do funcionário e mapear para usuário
+  if (candidatos.length === 0) {
+    const filtroIdFuncionario = Number.isNaN(idNumerico) ? idOriginal : idNumerico
+    const { data: funcionario } = await supabaseAdmin
+      .from('funcionarios')
+      .select('email')
+      .eq('id', filtroIdFuncionario)
+      .single()
+
+    if (funcionario?.email) {
+      const { data: usuariosPorEmail } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, status')
+        .ilike('email', funcionario.email)
+        .limit(10)
+      adicionarCandidatos(usuariosPorEmail)
+    }
+  }
+
+  return selecionarUsuarioPreferencial(candidatos)
+}
+
 // Schema de validação para notificações
 const notificacaoSchema = Joi.object({
   titulo: Joi.string().min(1).max(255).required(),
@@ -831,37 +912,11 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
             destinatariosUsuarios.push(cliente.contato_usuario_id)
           }
         } else if (dest.tipo === 'funcionario' && dest.id) {
-          // Buscar usuario_id vinculado ao funcionario_id (com fallback robusto)
-          const funcionarioId = Number(dest.id)
-          if (Number.isNaN(funcionarioId)) {
-            console.warn(`[notificacoes] ⚠️ destinatário funcionario_id inválido: ${dest.id}`)
-            continue
-          }
-
-          const { data: usuariosFuncionario } = await supabaseAdmin
-            .from('usuarios')
-            .select('id, status')
-            .eq('funcionario_id', funcionarioId)
-            .limit(10)
-
-          if (usuariosFuncionario && usuariosFuncionario.length > 0) {
-            // Preferir usuário ativo, com fallback para qualquer vínculo existente.
-            const usuarioAtivo = usuariosFuncionario.find(u => String(u.status).toLowerCase() === 'ativo')
-            const usuarioSelecionado = usuarioAtivo || usuariosFuncionario[0]
-            destinatariosUsuarios.push(usuarioSelecionado.id)
+          const usuarioResolvido = await resolverUsuarioPorDestinatarioFuncionario(dest.id)
+          if (usuarioResolvido?.id) {
+            destinatariosUsuarios.push(usuarioResolvido.id)
           } else {
-            // Fallback: permitir que dest.id seja o próprio usuario_id
-            const { data: usuarioPorId } = await supabaseAdmin
-              .from('usuarios')
-              .select('id')
-              .eq('id', funcionarioId)
-              .single()
-
-            if (usuarioPorId?.id) {
-              destinatariosUsuarios.push(usuarioPorId.id)
-            } else {
-              console.warn(`[notificacoes] ⚠️ Nenhum usuário encontrado para funcionário ${funcionarioId}`)
-            }
+            console.warn(`[notificacoes] ⚠️ Nenhum usuário encontrado para funcionário ${dest.id}`)
           }
         } else if (dest.tipo === 'obra' && dest.id) {
           // Buscar usuários relacionados à obra (pode expandir essa lógica)

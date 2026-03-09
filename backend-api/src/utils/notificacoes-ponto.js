@@ -19,6 +19,17 @@ function formatarHoras(valor) {
   return Number(valor).toFixed(1);
 }
 
+function normalizarTelefoneWhatsapp(telefone) {
+  if (!telefone) return null;
+  let numero = String(telefone).replace(/\D/g, '');
+  if (!numero) return null;
+  if (!numero.startsWith('55')) {
+    if (numero.startsWith('0')) numero = numero.substring(1);
+    numero = `55${numero}`;
+  }
+  return numero;
+}
+
 // =========================================================
 // TEMPLATE EMAIL 1 — Notificação ao Responsável de Obra
 // =========================================================
@@ -340,9 +351,10 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
         }
 
         // 2) WhatsApp
-        if (resp.telefone) {
+        const telefoneResponsavel = normalizarTelefoneWhatsapp(resp.telefone);
+        if (telefoneResponsavel) {
           await enviarMensagemWebhook(
-            resp.telefone,
+            telefoneResponsavel,
             mensagemWhatsAppResponsavel({
               funcionarioNome: funcionario.nome || 'Funcionário',
               obraNome,
@@ -356,6 +368,8 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
             linkAssinar,
             { tipo: 'ponto_responsavel', destinatario_nome: resp.nome }
           ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp responsável:', e.message));
+        } else {
+          console.warn(`[notificacoes-ponto] Responsável ${resp.nome || resp.id} sem telefone válido para WhatsApp`);
         }
 
         // 3) Notificação in-app (precisa de usuario_id)
@@ -408,7 +422,7 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
       .single();
 
     const emailFunc = funcData?.email;
-    const telefoneFunc = funcData?.telefone_whatsapp || funcData?.telefone;
+    const telefoneFunc = normalizarTelefoneWhatsapp(funcData?.telefone_whatsapp || funcData?.telefone);
     const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(
       funcData?.id || funcionario.id || funcionario.funcionario_id || registro.funcionario_id
     );

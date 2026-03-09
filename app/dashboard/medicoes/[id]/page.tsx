@@ -13,6 +13,7 @@ import {
   ArrowLeft, 
   Download,
   Upload,
+  Trash2,
   Receipt,
   FileCheck,
   FileText,
@@ -44,9 +45,22 @@ export default function MedicaoDetalhesPage() {
   // Estados para upload de documentos
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
   const [tipoDocumentoUpload, setTipoDocumentoUpload] = useState<'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf' | null>(null)
+  const [uploadEhAnexoAdicional, setUploadEhAnexoAdicional] = useState(false)
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null)
-  const [numeroDocumentoUpload, setNumeroDocumentoUpload] = useState("")
   const [uploading, setUploading] = useState(false)
+
+  const tiposArquivoPermitidos = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif'
+  ]
+  const acceptArquivosMedicao = ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
   
   // Estados para envio
   const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
@@ -133,10 +147,44 @@ export default function MedicaoDetalhesPage() {
 
   const handleUploadDocumento = (tipo: 'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf') => {
     if (!medicao) return
+    setUploadEhAnexoAdicional(false)
     setTipoDocumentoUpload(tipo)
     setIsUploadDialogOpen(true)
     setArquivoUpload(null)
-    setNumeroDocumentoUpload("")
+  }
+
+  const handleUploadAnexoAdicional = () => {
+    if (!medicao) return
+    setUploadEhAnexoAdicional(true)
+    setTipoDocumentoUpload('medicao_pdf')
+    setIsUploadDialogOpen(true)
+    setArquivoUpload(null)
+  }
+
+  const handleRemoverDocumento = async (documentoId: number) => {
+    if (!medicao) return
+    const confirmou = window.confirm("Deseja realmente remover este arquivo?")
+    if (!confirmou) return
+
+    try {
+      setUploading(true)
+      const response = await medicoesMensaisApi.removerDocumento(medicao.id, documentoId)
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Arquivo removido com sucesso"
+        })
+        await carregarDocumentos(medicao.id)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.response?.data?.message || error.message || "Erro ao remover arquivo",
+        variant: "destructive"
+      })
+    } finally {
+      setUploading(false)
+    }
   }
 
   const handleConfirmarUpload = async () => {
@@ -155,7 +203,10 @@ export default function MedicaoDetalhesPage() {
         medicao.id,
         {
           tipo_documento: tipoDocumentoUpload,
-          numero_documento: numeroDocumentoUpload || null,
+          numero_documento: medicao.numero || null,
+          observacoes: uploadEhAnexoAdicional
+            ? `Anexo adicional da medição ${medicao.numero}: ${arquivoUpload.name}`
+            : undefined,
           status: 'pendente'
         },
         arquivoUpload
@@ -168,8 +219,8 @@ export default function MedicaoDetalhesPage() {
         })
         setIsUploadDialogOpen(false)
         setArquivoUpload(null)
-        setNumeroDocumentoUpload("")
         setTipoDocumentoUpload(null)
+        setUploadEhAnexoAdicional(false)
         
         // Recarregar documentos
         await carregarDocumentos(medicao.id)
@@ -277,6 +328,10 @@ export default function MedicaoDetalhesPage() {
   if (!medicao) {
     return null
   }
+
+  const documentosPdf = documentos.filter((d) => d.tipo_documento === 'medicao_pdf')
+  const documentoPrincipalPdf = documentosPdf.find((d) => !(d.observacoes || '').toLowerCase().includes('anexo adicional')) || documentosPdf[0]
+  const anexosAdicionais = documentosPdf.filter((d) => d.id !== documentoPrincipalPdf?.id)
 
   return (
     <div className="space-y-4 p-4">
@@ -474,7 +529,10 @@ export default function MedicaoDetalhesPage() {
               ) : (
                 <>
                   {['medicao_pdf', 'nf_servico', 'nf_produto', 'boleto'].map((tipo) => {
-                    const documento = documentos.find(d => d.tipo_documento === tipo)
+                    const documentosDoTipo = tipo === 'medicao_pdf'
+                      ? (documentoPrincipalPdf ? [documentoPrincipalPdf] : [])
+                      : documentos.filter(d => d.tipo_documento === tipo)
+                    const documento = documentosDoTipo[0]
                     const labels: Record<string, { label: string; icon: any; color: string }> = {
                       medicao_pdf: { label: 'PDF da Medição', icon: FileText, color: 'text-purple-600' },
                       nf_servico: { label: 'NF de Serviço', icon: Receipt, color: 'text-blue-600' },
@@ -495,6 +553,11 @@ export default function MedicaoDetalhesPage() {
                                 <>
                                   {documento.numero_documento && (
                                     <p className="text-xs text-gray-600">Nº {documento.numero_documento}</p>
+                                  )}
+                                  {tipo !== 'medicao_pdf' && documentosDoTipo.length > 1 && (
+                                    <p className="text-xs text-gray-500">
+                                      {documentosDoTipo.length - 1} anexo(s) adicional(is)
+                                    </p>
                                   )}
                                   <p className="text-xs text-gray-500">
                                     Status: {documento.status === 'gerado' ? 'Gerado' : documento.status === 'enviado' ? 'Enviado' : documento.status === 'pago' ? 'Pago' : 'Pendente'}
@@ -527,14 +590,116 @@ export default function MedicaoDetalhesPage() {
                             <Upload className="w-3 h-3 mr-1" />
                             {documento ? 'Substituir' : 'Enviar'}
                           </Button>
+                          {documento && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="h-8 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                              onClick={() => handleRemoverDocumento(documento.id)}
+                              disabled={uploading}
+                            >
+                              <Trash2 className="w-3 h-3 mr-1" />
+                              Remover
+                            </Button>
+                          )}
                         </div>
+                        {tipo !== 'medicao_pdf' && documentosDoTipo.length > 1 && (
+                          <div className="mt-2 space-y-1">
+                            {documentosDoTipo.slice(1).map((docExtra, index) => (
+                              <div key={docExtra.id} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
+                                <div className="min-w-0">
+                                  <p className="text-xs font-medium truncate">
+                                    Anexo {index + 1}: {docExtra.observacoes || docExtra.numero_documento || `Documento #${docExtra.id}`}
+                                  </p>
+                                </div>
+                                {docExtra.caminho_arquivo && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-7 text-xs"
+                                    onClick={() => window.open(docExtra.caminho_arquivo || '', '_blank')}
+                                  >
+                                    <Download className="w-3 h-3 mr-1" />
+                                    Abrir
+                                  </Button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )
                   })}
+                  <div className={`border rounded-lg p-3 ${anexosAdicionais.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <p className="font-semibold text-sm">Anexos Adicionais</p>
+                          {anexosAdicionais.length > 0 ? (
+                            <>
+                              <p className="text-xs text-gray-600">{anexosAdicionais.length} arquivo(s)</p>
+                              <p className="text-xs text-gray-500">Status: Pendente</p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-gray-500">Nenhum arquivo</p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={anexosAdicionais.length > 0 ? "outline" : "default"}
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={handleUploadAnexoAdicional}
+                      >
+                        <Upload className="w-3 h-3 mr-1" />
+                        {anexosAdicionais.length > 0 ? 'Adicionar' : 'Enviar'}
+                      </Button>
+                    </div>
+                    {anexosAdicionais.length > 0 && (
+                      <div className="mt-2 space-y-1">
+                        {anexosAdicionais.map((docExtra, index) => (
+                          <div key={docExtra.id} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
+                            <div className="min-w-0">
+                              <p className="text-xs font-medium truncate">
+                                Anexo {index + 1}: {docExtra.observacoes || docExtra.numero_documento || `Documento #${docExtra.id}`}
+                              </p>
+                            </div>
+                            {docExtra.caminho_arquivo && (
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs"
+                                  onClick={() => window.open(docExtra.caminho_arquivo || '', '_blank')}
+                                >
+                                  <Download className="w-3 h-3 mr-1" />
+                                  Abrir
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-7 text-xs text-red-600 hover:bg-red-50"
+                                  onClick={() => handleRemoverDocumento(docExtra.id)}
+                                  disabled={uploading}
+                                >
+                                  <Trash2 className="w-3 h-3 mr-1" />
+                                  Remover
+                                </Button>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </>
               )}
             </CardContent>
           </Card>
+
         </div>
       </div>
 
@@ -546,7 +711,7 @@ export default function MedicaoDetalhesPage() {
               {tipoDocumentoUpload === 'nf_servico' && 'Enviar Nota Fiscal de Serviço'}
               {tipoDocumentoUpload === 'nf_produto' && 'Enviar Nota Fiscal de Produto'}
               {tipoDocumentoUpload === 'boleto' && 'Enviar Boleto'}
-              {tipoDocumentoUpload === 'medicao_pdf' && 'Enviar PDF da Medição'}
+              {tipoDocumentoUpload === 'medicao_pdf' && (uploadEhAnexoAdicional ? 'Enviar Anexo Adicional' : 'Enviar PDF da Medição')}
             </DialogTitle>
             <DialogDescription>
               Faça upload do arquivo do documento
@@ -554,24 +719,22 @@ export default function MedicaoDetalhesPage() {
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div>
-              <Label htmlFor="numero_documento" className="text-xs">Número do Documento (opcional)</Label>
-              <Input
-                id="numero_documento"
-                value={numeroDocumentoUpload}
-                onChange={(e) => setNumeroDocumentoUpload(e.target.value)}
-                placeholder="Ex: 000123"
-                className="h-8 text-sm bg-white"
-              />
-            </div>
-            <div>
               <Label htmlFor="arquivo" className="text-xs">Arquivo *</Label>
               <Input
                 id="arquivo"
                 type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
+                accept={acceptArquivosMedicao}
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) {
+                    if (!tiposArquivoPermitidos.includes(file.type)) {
+                      toast({
+                        title: "Erro",
+                        description: "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG ou GIF.",
+                        variant: "destructive"
+                      })
+                      return
+                    }
                     if (file.size > 10 * 1024 * 1024) {
                       toast({
                         title: "Erro",
@@ -598,8 +761,8 @@ export default function MedicaoDetalhesPage() {
               onClick={() => {
                 setIsUploadDialogOpen(false)
                 setArquivoUpload(null)
-                setNumeroDocumentoUpload("")
                 setTipoDocumentoUpload(null)
+                setUploadEhAnexoAdicional(false)
               }}
               disabled={uploading}
             >

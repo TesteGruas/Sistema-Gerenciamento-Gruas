@@ -345,6 +345,14 @@ export const medicoesMensaisApi = {
   },
 
   /**
+   * Remover documento de uma medição
+   */
+  async removerDocumento(medicao_id: number, documento_id: number): Promise<{ success: boolean; message: string }> {
+    const response = await api.delete(`/medicoes-mensais/${medicao_id}/documentos/${documento_id}`);
+    return response.data;
+  },
+
+  /**
    * Listar obras ativas que não possuem medição para o período atual
    */
   async listarObrasSemMedicao(): Promise<{ 

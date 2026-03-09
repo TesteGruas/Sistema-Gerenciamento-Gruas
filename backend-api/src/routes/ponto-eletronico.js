@@ -5368,6 +5368,14 @@ router.post('/registros/:id/assinar', async (req, res) => {
 
     console.log(`[Assinatura] Registro encontrado:`, { id: registro.id, status: registro.status });
 
+    // Fluxo de dupla assinatura: bloquear endpoint legado para evitar assinatura fora de ordem
+    if (registro.status === 'Pendente Assinatura' || registro.status === 'Pendente Assinatura Funcionário') {
+      return res.status(400).json({
+        success: false,
+        message: 'Este registro usa dupla assinatura. Utilize os endpoints de responsável e funcionário na ordem correta.'
+      });
+    }
+
     // Salvar assinatura digital no storage
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const fileName = `assinatura_ponto_${id}_${timestamp}.png`;

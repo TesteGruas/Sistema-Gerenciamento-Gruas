@@ -35,7 +35,7 @@ const storage = multer.memoryStorage();
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB por arquivo
+    fileSize: 25 * 1024 * 1024, // 25MB por arquivo
   },
   fileFilter: (req, file, cb) => {
     const allowedTypes = [
@@ -1552,6 +1552,66 @@ router.put('/:id/documentos/:documento_id', authenticateToken, requirePermission
     });
   } catch (error) {
     console.error('Erro ao atualizar documento:', error);
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * DELETE /api/medicoes-mensais/:id/documentos/:documento_id
+ * Remover documento de uma medição
+ */
+router.delete('/:id/documentos/:documento_id', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const { id, documento_id } = req.params;
+
+    // Verificar se o documento pertence à medição
+    const { data: documentoExistente, error: checkError } = await supabaseAdmin
+      .from('medicao_documentos')
+      .select('id, caminho_arquivo')
+      .eq('id', documento_id)
+      .eq('medicao_id', id)
+      .single();
+
+    if (checkError || !documentoExistente) {
+      return res.status(404).json({
+        error: 'Documento não encontrado',
+        message: 'O documento especificado não existe ou não pertence a esta medição'
+      });
+    }
+
+    // Tentar remover arquivo do storage (best effort)
+    const caminhoArquivo = documentoExistente.caminho_arquivo || '';
+    const publicPrefix = '/storage/v1/object/public/arquivos-obras/';
+    const publicIndex = caminhoArquivo.indexOf(publicPrefix);
+    if (publicIndex !== -1) {
+      const filePath = decodeURIComponent(caminhoArquivo.substring(publicIndex + publicPrefix.length));
+      if (filePath) {
+        await supabaseAdmin.storage.from('arquivos-obras').remove([filePath]);
+      }
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('medicao_documentos')
+      .delete()
+      .eq('id', documento_id)
+      .eq('medicao_id', id);
+
+    if (deleteError) {
+      return res.status(500).json({
+        error: 'Erro ao remover documento',
+        message: deleteError.message
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Documento removido com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao remover documento:', error);
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

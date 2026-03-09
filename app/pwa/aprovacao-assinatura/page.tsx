@@ -88,6 +88,9 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   const isFuncionarioDoRegistro = aprovacaoSelecionada?.status === 'Pendente Assinatura Funcionário' && !isResponsavelObra;
   const isPendenteCorrecao = aprovacaoSelecionada?.status === 'Pendente Correção' && !isResponsavelObra;
+  const aguardandoAssinaturaResponsavel = aprovacaoSelecionada?.status === 'Pendente Assinatura' && !isResponsavelObra;
+  const canResponsavelAssinar = isResponsavelObra && aprovacaoSelecionada?.status === 'Pendente Assinatura';
+  const canAssinar = canResponsavelAssinar || isFuncionarioDoRegistro;
 
   useEffect(() => {
     const carregarAprovacao = async () => {
@@ -134,6 +137,11 @@ function PWAAprovacaoAssinaturaPageContent() {
   }, [registroId, router]);
 
   const handleAprovar = async () => {
+    if (!canAssinar) {
+      toast.error('Este registro ainda aguarda a assinatura do responsável da obra.');
+      return;
+    }
+
     if (!assinatura.trim()) {
       toast.error('Por favor, assine digitalmente antes de aprovar.');
       return;
@@ -157,10 +165,7 @@ function PWAAprovacaoAssinaturaPageContent() {
           { assinatura_digital: assinatura }
         );
       } else {
-        result = await apiRegistrosPonto.assinar(
-          aprovacaoSelecionada.id,
-          { assinatura_digital: assinatura }
-        );
+        throw new Error('Registro aguardando assinatura do responsável');
       }
 
       toast.success(result.message || 'Registro assinado com sucesso!');
@@ -465,7 +470,9 @@ function PWAAprovacaoAssinaturaPageContent() {
                     ? '📝 Assine como responsável para confirmar as horas do funcionário'
                     : isFuncionarioDoRegistro
                       ? '📝 O responsável já assinou. Assine para validar seu registro de ponto'
-                      : '📝 Assine digitalmente o registro de ponto'}
+                      : aguardandoAssinaturaResponsavel
+                        ? '⏳ Aguardando assinatura do responsável da obra. Você poderá assinar depois.'
+                        : '📝 Assine digitalmente o registro de ponto'}
                 </p>
               </div>
 
@@ -502,7 +509,7 @@ function PWAAprovacaoAssinaturaPageContent() {
             {/* Botão Assinar */}
             <Button
               onClick={handleAprovar}
-              disabled={!assinatura.trim() || isLoading}
+              disabled={!canAssinar || !assinatura.trim() || isLoading}
               className="w-full bg-green-600 hover:bg-green-700 h-14 text-lg font-semibold shadow-lg"
             >
               {isLoading ? (
@@ -513,7 +520,13 @@ function PWAAprovacaoAssinaturaPageContent() {
               ) : (
                 <div className="flex items-center gap-2">
                   <Check className="w-6 h-6" />
-                  {isResponsavelObra ? 'Assinar como Responsável' : isFuncionarioDoRegistro ? 'Assinar e Validar' : 'Assinar Registro'}
+                  {isResponsavelObra
+                    ? 'Assinar como Responsável'
+                    : isFuncionarioDoRegistro
+                      ? 'Assinar e Validar'
+                      : aguardandoAssinaturaResponsavel
+                        ? 'Aguardando Responsável'
+                        : 'Assinar Registro'}
                 </div>
               )}
             </Button>

@@ -141,6 +141,8 @@ const nextConfig = {
     },
     // Otimizar renderização
     // optimizeCss: true, // Desabilitado temporariamente para evitar erro com critters
+    // Permitir payloads maiores no proxy /api (uploads de documentos)
+    middlewareClientMaxBodySize: '25mb',
   },
 
   // ==================================

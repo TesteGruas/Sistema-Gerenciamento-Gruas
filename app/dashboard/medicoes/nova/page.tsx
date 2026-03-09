@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -16,6 +16,9 @@ import {
   ArrowLeft, 
   Plus, 
   Trash2,
+  Download,
+  Upload,
+  FileText,
   Calculator,
   Save,
   Check,
@@ -71,6 +74,21 @@ export default function NovaMedicaoPage() {
   const [obraSearchOpen, setObraSearchOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [arquivoPdfMedicao, setArquivoPdfMedicao] = useState<File | null>(null)
+  const [arquivosAdicionaisMedicao, setArquivosAdicionaisMedicao] = useState<File[]>([])
+  const anexosAdicionaisInputRef = useRef<HTMLInputElement | null>(null)
+
+  const tiposArquivoPermitidos = [
+    'application/pdf',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-excel',
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/gif'
+  ]
+  const acceptArquivosMedicao = ".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif"
   
   // Estados para itens de custos mensais
   const [itens, setItens] = useState<ItemCustoMensal[]>([])
@@ -92,8 +110,8 @@ export default function NovaMedicaoPage() {
     obra_id: "",
     grua_id: "",
     numero: "",
-    periodo: "",
-    data_medicao: new Date().toISOString().split('T')[0],
+    data_inicio_emissao: new Date().toISOString().split('T')[0],
+    data_fim_emissao: new Date().toISOString().split('T')[0],
     valor_mensal_bruto: 0,
     valor_aditivos: 0,
     valor_custos_extras: 0,
@@ -102,7 +120,26 @@ export default function NovaMedicaoPage() {
   })
   const obraSelecionada = obras.find((obra) => String(obra.id) === medicaoForm.obra_id)
   const clienteMedicao = obraSelecionada?.clientes?.nome || (obraSelecionada?.cliente_id ? `Cliente ID ${obraSelecionada.cliente_id}` : "")
-  const dataMedicaoAtual = new Date().toISOString().split('T')[0]
+
+  const calcularTotalDiasEmissao = (dataInicio: string, dataFim: string) => {
+    if (!dataInicio || !dataFim) return 0
+    const [anoInicio, mesInicio, diaInicio] = dataInicio.split('-').map(Number)
+    const [anoFim, mesFim, diaFim] = dataFim.split('-').map(Number)
+    const inicio = new Date(anoInicio, mesInicio - 1, diaInicio)
+    const fim = new Date(anoFim, mesFim - 1, diaFim)
+    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim < inicio) return 0
+    const diffMs = fim.getTime() - inicio.getTime()
+    return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1
+  }
+
+  const totalDiasEmissao = calcularTotalDiasEmissao(
+    medicaoForm.data_inicio_emissao,
+    medicaoForm.data_fim_emissao
+  )
+
+  const periodoMedicao = medicaoForm.data_fim_emissao
+    ? medicaoForm.data_fim_emissao.slice(0, 7)
+    : new Date().toISOString().slice(0, 7)
   
   // Lista de custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensalForm[]>([])
@@ -121,10 +158,6 @@ export default function NovaMedicaoPage() {
   useEffect(() => {
     carregarObras()
     carregarItens()
-    // Definir período padrão (mês atual)
-    const now = new Date()
-    const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
-    setMedicaoForm(prev => ({ ...prev, periodo }))
   }, [])
 
   useEffect(() => {
@@ -309,6 +342,37 @@ export default function NovaMedicaoPage() {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
 
+  const adicionarArquivosAdicionais = (files: File[]) => {
+    const arquivosInvalidos = files.filter((file) => !tiposArquivoPermitidos.includes(file.type))
+    if (arquivosInvalidos.length > 0) {
+      toast({
+        title: "Erro",
+        description: "Um ou mais arquivos têm tipo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG ou GIF.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setArquivosAdicionaisMedicao((prev) => {
+      const mapa = new Map<string, File>()
+      ;[...prev, ...files].forEach((file) => {
+        const chave = `${file.name}-${file.size}-${file.lastModified}`
+        mapa.set(chave, file)
+      })
+      return Array.from(mapa.values())
+    })
+  }
+
+  const removerArquivoAdicional = (index: number) => {
+    setArquivosAdicionaisMedicao((prev) => prev.filter((_, i) => i !== index))
+  }
+
+  const abrirArquivoAdicional = (file: File) => {
+    const url = URL.createObjectURL(file)
+    window.open(url, '_blank')
+    setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+
   const preencherDadosDebug = () => {
     const now = new Date()
     const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
@@ -318,8 +382,8 @@ export default function NovaMedicaoPage() {
     setMedicaoForm({
       ...medicaoForm,
       numero: numero,
-      periodo: periodo,
-      data_medicao: now.toISOString().split('T')[0],
+      data_inicio_emissao: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
+      data_fim_emissao: now.toISOString().split('T')[0],
       valor_mensal_bruto: 15000.00,
       valor_aditivos: 2500.00,
       valor_custos_extras: 1200.00,
@@ -429,18 +493,31 @@ export default function NovaMedicaoPage() {
       camposFaltando.push('Grua')
     }
 
-    if (!medicaoForm.periodo || !medicaoForm.periodo.trim()) {
-      camposFaltando.push('Período')
-    }
     if (!medicaoForm.numero || !medicaoForm.numero.trim()) {
       camposFaltando.push('Número da Medição')
     }
 
-    if (!dataMedicaoAtual || !dataMedicaoAtual.trim()) {
-      camposFaltando.push('Data da Medição')
+    if (!medicaoForm.data_inicio_emissao || !medicaoForm.data_inicio_emissao.trim()) {
+      camposFaltando.push('Data Início da Emissão')
+    }
+
+    if (!medicaoForm.data_fim_emissao || !medicaoForm.data_fim_emissao.trim()) {
+      camposFaltando.push('Data Fim da Emissão')
+    }
+
+    if (
+      medicaoForm.data_inicio_emissao &&
+      medicaoForm.data_fim_emissao &&
+      medicaoForm.data_fim_emissao < medicaoForm.data_inicio_emissao
+    ) {
+      camposFaltando.push('Faixa de Emissão válida (fim deve ser maior ou igual ao início)')
+    }
+
+    if (totalDiasEmissao <= 0) {
+      camposFaltando.push('Total de Dias da Emissão')
     }
     if (!arquivoPdfMedicao) {
-      camposFaltando.push('PDF da Medição')
+      camposFaltando.push('Documento da Medição')
     }
 
     if (camposFaltando.length > 0) {
@@ -478,8 +555,8 @@ export default function NovaMedicaoPage() {
     try {
       setSalvando(true)
 
-      // Extrair mês e ano do período
-      const [ano, mes] = medicaoForm.periodo.split('-')
+      // Extrair mês e ano com base na data final da emissão
+      const [ano, mes] = periodoMedicao.split('-')
       
       const numero = medicaoForm.numero.trim()
 
@@ -503,8 +580,8 @@ export default function NovaMedicaoPage() {
         obra_id: parseInt(medicaoForm.obra_id),
         grua_id: medicaoForm.grua_id as any,
         numero,
-        periodo: medicaoForm.periodo,
-        data_medicao: dataMedicaoAtual,
+        periodo: periodoMedicao,
+        data_medicao: medicaoForm.data_fim_emissao,
         mes_referencia: parseInt(mes),
         ano_referencia: parseInt(ano),
         valor_mensal_bruto: medicaoForm.valor_mensal_bruto,
@@ -519,30 +596,56 @@ export default function NovaMedicaoPage() {
       const response = await medicoesMensaisApi.criar(medicaoData)
       
       if (response.success && response.data?.id) {
-        let uploadPdfSucesso = true
+        let uploadPrincipalSucesso = true
+        let uploadAdicionaisSucesso = true
         try {
           await medicoesMensaisApi.criarDocumento(
             response.data.id,
             {
               tipo_documento: 'medicao_pdf',
               numero_documento: numero,
-              observacoes: `PDF da medição ${numero} (${clienteMedicao || 'cliente não informado'})`
+              observacoes: `Documento da medição ${numero} (${clienteMedicao || 'cliente não informado'})`
             },
             arquivoPdfMedicao || undefined
           )
         } catch (uploadError: any) {
           toast({
             title: "Atenção",
-            description: uploadError.response?.data?.message || "Medição criada, mas houve erro no upload do PDF.",
+            description: uploadError.response?.data?.message || "Medição criada, mas houve erro no upload do documento principal.",
             variant: "destructive"
           })
-          uploadPdfSucesso = false
+          uploadPrincipalSucesso = false
+        }
+
+        if (arquivosAdicionaisMedicao.length > 0) {
+          try {
+            await Promise.all(
+              arquivosAdicionaisMedicao.map((arquivo) =>
+                medicoesMensaisApi.criarDocumento(
+                  response.data.id,
+                  {
+                    tipo_documento: 'medicao_pdf',
+                    numero_documento: numero,
+                    observacoes: `Anexo adicional da medição ${numero}: ${arquivo.name}`
+                  },
+                  arquivo
+                )
+              )
+            )
+          } catch (uploadAdicionalError: any) {
+            toast({
+              title: "Atenção",
+              description: uploadAdicionalError.response?.data?.message || "Medição criada, mas houve erro no upload dos anexos adicionais.",
+              variant: "destructive"
+            })
+            uploadAdicionaisSucesso = false
+          }
         }
         toast({
           title: "Sucesso",
-          description: uploadPdfSucesso
-            ? "Medição criada com PDF enviado com sucesso"
-            : "Medição criada. O PDF pode ser enviado depois na tela de detalhes."
+          description: uploadPrincipalSucesso && uploadAdicionaisSucesso
+            ? "Medição criada com documentos enviados com sucesso"
+            : "Medição criada. Alguns arquivos podem ser enviados depois na tela de detalhes."
         })
         router.push('/dashboard/medicoes')
       }
@@ -570,6 +673,17 @@ export default function NovaMedicaoPage() {
 
   return (
     <div className="space-y-6">
+      {salvando && (
+        <div className="fixed inset-0 z-50 bg-black/30 backdrop-blur-[1px] flex items-center justify-center">
+          <div className="bg-white rounded-lg shadow-lg border px-6 py-4 flex items-center gap-3">
+            <Save className="w-5 h-5 animate-spin text-primary" />
+            <div>
+              <p className="text-sm font-semibold">Criando medição...</p>
+              <p className="text-xs text-gray-500">Aguarde enquanto os dados e arquivos são enviados.</p>
+            </div>
+          </div>
+        </div>
+      )}
       {/* Cabeçalho */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -699,7 +813,7 @@ export default function NovaMedicaoPage() {
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
               <div>
                 <Label htmlFor="numero" className="text-xs">Número da Medição *</Label>
                 <Input
@@ -711,22 +825,32 @@ export default function NovaMedicaoPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="periodo" className="text-xs">Medição Referente ao Mês (YYYY-MM) *</Label>
+                <Label htmlFor="data_inicio_emissao" className="text-xs">Data Início Emissão *</Label>
                 <Input
-                  id="periodo"
-                  type="month"
-                  value={medicaoForm.periodo}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, periodo: e.target.value })}
+                  id="data_inicio_emissao"
+                  type="date"
+                  value={medicaoForm.data_inicio_emissao}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, data_inicio_emissao: e.target.value })}
                   className="bg-white h-8 text-sm"
                 />
               </div>
               <div>
-                <Label htmlFor="data_medicao" className="text-xs">Data da Medição *</Label>
+                <Label htmlFor="data_fim_emissao" className="text-xs">Data Fim Emissão *</Label>
                 <Input
-                  id="data_medicao"
+                  id="data_fim_emissao"
                   type="date"
-                  value={dataMedicaoAtual}
-                  disabled
+                  value={medicaoForm.data_fim_emissao}
+                  min={medicaoForm.data_inicio_emissao || undefined}
+                  onChange={(e) => setMedicaoForm({ ...medicaoForm, data_fim_emissao: e.target.value })}
+                  className="bg-white h-8 text-sm"
+                />
+              </div>
+              <div>
+                <Label htmlFor="total_dias_emissao" className="text-xs">Total de Dias</Label>
+                <Input
+                  id="total_dias_emissao"
+                  value={totalDiasEmissao > 0 ? `${totalDiasEmissao} dia(s)` : ""}
+                  readOnly
                   className="bg-white h-8 text-sm"
                 />
               </div>
@@ -812,17 +936,17 @@ export default function NovaMedicaoPage() {
                 />
               </div>
               <div className="lg:col-span-2">
-                <Label htmlFor="pdf_medicao" className="text-xs">PDF da Medição *</Label>
+                <Label htmlFor="pdf_medicao" className="text-xs">Documento da Medição *</Label>
                 <Input
                   id="pdf_medicao"
                   type="file"
-                  accept=".pdf,application/pdf"
+                  accept={acceptArquivosMedicao}
                   onChange={(e) => {
                     const file = e.target.files?.[0] || null
-                    if (file && file.type !== 'application/pdf') {
+                    if (file && !tiposArquivoPermitidos.includes(file.type)) {
                       toast({
                         title: "Erro",
-                        description: "Apenas arquivos PDF são permitidos",
+                        description: "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG ou GIF.",
                         variant: "destructive"
                       })
                       setArquivoPdfMedicao(null)
@@ -833,6 +957,86 @@ export default function NovaMedicaoPage() {
                   className="bg-white text-sm"
                 />
               </div>
+            </div>
+            <div className={`border rounded-lg p-3 ${arquivosAdicionaisMedicao.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+              <div className="flex items-start justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-5 h-5 text-purple-600" />
+                  <div>
+                    <p className="font-semibold text-sm">Anexos Adicionais</p>
+                    {arquivosAdicionaisMedicao.length > 0 ? (
+                      <>
+                        <p className="text-xs text-gray-600">{arquivosAdicionaisMedicao.length} arquivo(s)</p>
+                        <p className="text-xs text-gray-500">Status: Pendente</p>
+                      </>
+                    ) : (
+                      <p className="text-xs text-gray-500">Nenhum arquivo</p>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant={arquivosAdicionaisMedicao.length > 0 ? "outline" : "default"}
+                  size="sm"
+                  className="flex-1 h-8 text-xs"
+                  onClick={() => anexosAdicionaisInputRef.current?.click()}
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  {arquivosAdicionaisMedicao.length > 0 ? 'Adicionar' : 'Enviar'}
+                </Button>
+              </div>
+              <Input
+                ref={anexosAdicionaisInputRef}
+                id="anexos_medicao"
+                type="file"
+                multiple
+                accept={acceptArquivosMedicao}
+                className="hidden"
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || [])
+                  if (files.length > 0) {
+                    adicionarArquivosAdicionais(files)
+                  }
+                  e.currentTarget.value = ''
+                }}
+              />
+              {arquivosAdicionaisMedicao.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {arquivosAdicionaisMedicao.map((arquivo, index) => (
+                    <div key={`${arquivo.name}-${arquivo.size}-${arquivo.lastModified}-${index}`} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium truncate">
+                          Anexo {index + 1}: {arquivo.name}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs"
+                          onClick={() => abrirArquivoAdicional(arquivo)}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Abrir
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs text-red-600 hover:bg-red-50"
+                          onClick={() => removerArquivoAdicional(index)}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Remover
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div>
               <Label htmlFor="observacoes" className="text-xs">Observações</Label>
