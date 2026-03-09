@@ -54,6 +54,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   const [gruaSelecionada, setGruaSelecionada] = useState<any>(cachedData?.gruaSelecionada || null)
   const [isEditingLivro, setIsEditingLivro] = useState(false)
   const [savingLivro, setSavingLivro] = useState(false)
+  const [exportandoPdf, setExportandoPdf] = useState(false)
   const [livroForm, setLivroForm] = useState<any>({})
 
   useEffect(() => {
@@ -891,7 +892,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   }
 
   const handleExportar = async () => {
+    if (exportandoPdf) return
+
     try {
+      setExportandoPdf(true)
+
       if (!obra || !gruaSelecionada) {
         toast({
           title: "Erro",
@@ -1044,24 +1049,15 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFont('helvetica', 'normal')
       
       const indiceItens = [
-        '1. Dados da Obra',
-        '2. Equipamento - Grua',
-        '3. Responsáveis e Equipe',
-        '3.1. Responsável Técnico da Empresa Locadora',
-        '3.2. Sinaleiros',
-        '4. Localização e Ambiente',
-        '5. Período de Locação',
-        '6. Documentos e Certificações',
-        '6.1. Dados da Montagem do(s) Equipamento(s)',
-        '6.2. Fornecedor/Locador do Equipamento / Proprietário do Equipamento',
-        '6.3. Responsável pela Manutenção da Grua',
-        '6.4. Responsável(is) pela Montagem e Operação da(s) Grua(s)',
-        '6.5. Dados Técnicos do Equipamento',
-        '6.6. Manual de Montagem',
-        '6.7. Entrega Técnica',
-        '6.8. Plano de Cargas',
-        '7. Configuração e Especificações Técnicas',
-        '8. Observações Gerais'
+        '1. IDENTIFICAÇÃO DA EMPRESA',
+        '2. DADOS DO EQUIPAMENTO',
+        '3. FORNECEDOR PROPRIETÁRIO EQUIPAMENTO',
+        '4. INFORMAÇÃO MONTAGEM E OPERAÇÃO',
+        '5. RESPONSAVEL MONTAGEM E OPERAÇÃO DADOS TECNICOS EQUIPAMENTO',
+        '6. ENTREGA TECNICA',
+        '7. ART INSTALAÇÃO, OPERAÇÃO, MANUTENÇÃO E DESMONTAGEM',
+        '8. LOCAL INSTALAÇÃO DA GRUA E PLANO DE CARGAS',
+        '9. MANUTENÇÕES'
       ]
 
       for (const item of indiceItens) {
@@ -1902,6 +1898,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         description: "Erro ao exportar PDF. Tente novamente.",
         variant: "destructive"
       })
+    } finally {
+      setExportandoPdf(false)
     }
   }
 
@@ -2344,10 +2342,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                   variant="outline" 
                   onClick={handleExportar} 
                   className="h-9 px-4 py-2"
-                  disabled={!obra || !gruaSelecionada}
+                  disabled={!obra || !gruaSelecionada || exportandoPdf}
                 >
-                  <Download className="w-4 h-4 mr-2" />
-                  Exportar PDF
+                  {exportandoPdf ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Gerando PDF...
+                    </>
+                  ) : (
+                    <>
+                      <Download className="w-4 h-4 mr-2" />
+                      Exportar PDF
+                    </>
+                  )}
                 </Button>
               </CardAction>
             </CardHeader>
