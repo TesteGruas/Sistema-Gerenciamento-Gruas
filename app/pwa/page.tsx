@@ -379,6 +379,7 @@ export default function PWAMainPage() {
 
     let isMounted = true
     let abortController: AbortController | null = null
+    let delayedStart: ReturnType<typeof setTimeout> | null = null
 
     const obterLocalizacao = async () => {
       if (!isMounted) return
@@ -455,10 +456,20 @@ export default function PWAMainPage() {
       }
     }
 
-    obterLocalizacao()
+    // No iOS/PWA, solicitar geolocalização imediatamente após o login pode travar
+    // a navegação inicial. Aplicamos um pequeno atraso para estabilizar a tela.
+    delayedStart = setTimeout(() => {
+      if (isMounted) {
+        addMapDebugLog('Iniciando geolocalizacao com atraso de seguranca')
+        obterLocalizacao()
+      }
+    }, 1200)
 
     return () => {
       isMounted = false
+      if (delayedStart) {
+        clearTimeout(delayedStart)
+      }
       if (abortController) {
         abortController.abort()
       }
