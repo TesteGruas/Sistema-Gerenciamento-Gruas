@@ -1349,7 +1349,6 @@ export default function ClientesPage() {
       </div>
     </ProtectedRoute>
   )
-}
 
 function ClienteForm({ 
   formData, 
@@ -2263,4 +2262,5 @@ function ClienteDetails({
 
     </div>
   )
+}
 }

@@ -5,6 +5,7 @@ import { translateError, getErrorStyle, type UserFriendlyError } from "@/lib/err
 import { Button } from "@/components/ui/button"
 import { RefreshCw, Mail, ExternalLink } from "lucide-react"
 import React from "react"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 interface EnhancedToastOptions {
   title?: string
@@ -100,7 +101,7 @@ export function useEnhancedToast() {
   }
 
   const showNetworkError = (retryCallback?: () => void, apiUrl?: string) => {
-    const apiUrlDisplay = apiUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const apiUrlDisplay = apiUrl || getApiBasePath()
     return toast({
       title: "Erro de conexão",
       description: `Não foi possível conectar ao servidor (${apiUrlDisplay}). Verifique se o backend está rodando e acessível.`,

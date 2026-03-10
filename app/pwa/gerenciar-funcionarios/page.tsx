@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 interface Funcionario {
   id: string | number
@@ -140,7 +141,7 @@ export default function GerenciarFuncionariosPage() {
   // Aprovar horas extras
   const aprovarHorasExtras = async (registroId: string | number, observacoes: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/api/ponto-eletronico/registros/${registroId}/aprovar`, {
+      const response = await fetch(`${getApiBasePath()}/ponto-eletronico/registros/${registroId}/aprovar`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,
@@ -166,7 +167,7 @@ export default function GerenciarFuncionariosPage() {
   // Rejeitar horas extras
   const rejeitarHorasExtras = async (registroId: string | number, motivo: string) => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}/api/ponto-eletronico/registros/${registroId}/rejeitar`, {
+      const response = await fetch(`${getApiBasePath()}/ponto-eletronico/registros/${registroId}/rejeitar`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('access_token')}`,

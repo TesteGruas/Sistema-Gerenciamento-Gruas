@@ -200,7 +200,7 @@ export function EditarSinaleiroDialog({
         window.open(certificado.arquivoUrl, '_blank')
       } else {
         // Se for um caminho, construir URL de download
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+        const apiUrl = getApiOrigin()
         const downloadUrl = `${apiUrl}/api/colaboradores/certificados/${certificado.id}/download`
         window.open(downloadUrl, '_blank')
       }

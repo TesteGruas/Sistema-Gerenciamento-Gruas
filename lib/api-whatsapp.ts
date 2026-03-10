@@ -3,9 +3,10 @@
  */
 
 // Normalizar a base URL removendo /api do final se existir para evitar duplicação
+import { getApiOrigin } from "./runtime-config"
+
 const getApiUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-  return baseUrl.replace(/\/api\/?$/, '')
+  return getApiOrigin().replace(/\/api\/?$/, '')
 }
 
 const API_URL = getApiUrl()

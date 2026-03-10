@@ -98,7 +98,7 @@ interface Alertas {
   vencendo: { quantidade: number; valor_total: number; contas: ContaPagar[] }
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = getApiOrigin()
 
 // Helper para obter o token correto
 const getAuthToken = () => {

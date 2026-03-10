@@ -175,7 +175,7 @@ export default function AssinaturaDocumentoPage() {
 
       // Fazer upload do arquivo assinado
       const uploadResponse = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras-documentos/${documento.id}/assinaturas/${assinaturaAtual.id}/upload-assinado`,
+        `${getApiOrigin()}/api/obras-documentos/${documento.id}/assinaturas/${assinaturaAtual.id}/upload-assinado`,
         {
           method: 'POST',
           headers: {

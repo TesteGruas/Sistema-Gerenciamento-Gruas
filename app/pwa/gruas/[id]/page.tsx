@@ -152,7 +152,7 @@ export default function PWAGruaDetalhesPage() {
             const enderecoCompleto = `${obra.endereco}, ${obra.cidade || ''}, ${obra.estado || ''}, Brasil`
             
             const response = await fetchWithAuth(
-              `http://localhost:3001/api/geocoding/endereco?q=${encodeURIComponent(enderecoCompleto)}`
+              `/api/geocoding/endereco?q=${encodeURIComponent(enderecoCompleto)}`
             )
             
             if (response.ok) {
@@ -187,7 +187,7 @@ export default function PWAGruaDetalhesPage() {
           console.log('[Grua] Endereço completo:', localizacaoCompleta)
           
           const response = await fetchWithAuth(
-            `http://localhost:3001/api/geocoding/endereco?q=${encodeURIComponent(localizacaoCompleta)}`
+            `/api/geocoding/endereco?q=${encodeURIComponent(localizacaoCompleta)}`
           )
           
           console.log('[Grua] Resposta status:', response.status, response.ok)

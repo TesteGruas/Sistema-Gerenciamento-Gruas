@@ -4,6 +4,7 @@ import React, { Component, ErrorInfo, ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle, RefreshCw, Home, Smartphone } from 'lucide-react'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 interface Props {
   children: ReactNode
@@ -44,7 +45,7 @@ export class PWAErrorBoundary extends Component<Props, State> {
         timestamp: new Date().toISOString(),
         userAgent: navigator.userAgent,
         url: window.location.href,
-        apiUrl: process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+        apiUrl: getApiBasePath()
       }
       
       // Salvar no localStorage para debugging

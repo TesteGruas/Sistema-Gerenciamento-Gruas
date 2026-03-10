@@ -13,7 +13,7 @@ export class AuthService {
       return `/api${cleanEndpoint}`
     }
     // Servidor: usar URL absoluta
-    const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+    const API_BASE_URL = getApiOrigin()
     // Remover /api do final se existir
     const baseUrl = API_BASE_URL.endsWith('/api') 
       ? API_BASE_URL.replace(/\/api$/, '') 

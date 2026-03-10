@@ -124,7 +124,7 @@ export default function ImpostosPage() {
 
   const loadContasBancarias = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
       const res = await fetch(`${API_URL}/api/contas-bancarias`, {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -141,7 +141,7 @@ export default function ImpostosPage() {
   const loadImpostos = async () => {
     setIsLoading(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       const response = await fetch(`${API_URL}/api/impostos-financeiros`, {
@@ -171,7 +171,7 @@ export default function ImpostosPage() {
 
   const loadTiposImpostos = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       const response = await fetch(`${API_URL}/api/tipos-impostos?ativo=true`, {
@@ -207,7 +207,7 @@ export default function ImpostosPage() {
 
   const confirmarPagamentoDireto = async (imposto: any) => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
       const hoje = new Date().toISOString().split('T')[0]
 
@@ -253,7 +253,7 @@ export default function ImpostosPage() {
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
       const hoje = new Date().toISOString().split('T')[0]
 
@@ -1003,7 +1003,7 @@ function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; ti
   useEffect(() => {
     const loadContas = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const API_URL = getApiOrigin()
         const token = getAuthToken()
         const res = await fetch(`${API_URL}/api/contas-bancarias`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -1033,7 +1033,7 @@ function EditImpostoForm({ imposto, tiposImpostos, onClose }: { imposto: any; ti
 
     setIsSubmitting(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       // Preparar dados do imposto
@@ -1413,7 +1413,7 @@ function TipoImpostoForm({ onClose }: { onClose: () => void }) {
 
     setIsSubmitting(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       const response = await fetch(`${API_URL}/api/tipos-impostos`, {
@@ -1505,7 +1505,7 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
   useEffect(() => {
     const loadContas = async () => {
       try {
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const API_URL = getApiOrigin()
         const token = getAuthToken()
         const res = await fetch(`${API_URL}/api/contas-bancarias`, {
           headers: { 'Authorization': `Bearer ${token}` }
@@ -1534,7 +1534,7 @@ function PagamentoForm({ onClose, tiposImpostos }: { onClose: () => void; tiposI
     }
 
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       // Extrair competência da data de vencimento (YYYY-MM)

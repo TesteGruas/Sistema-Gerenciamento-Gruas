@@ -149,7 +149,7 @@ export function OfflineSyncIndicator() {
   const syncAction = async (action: PendingAction) => {
     // Simular sincronização com API
     const token = localStorage.getItem('access_token')
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const apiUrl = getApiOrigin()
     
     switch (action.type) {
       case 'ponto':

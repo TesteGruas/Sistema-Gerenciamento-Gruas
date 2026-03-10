@@ -161,7 +161,7 @@ export default function GruaComplementosManager({
   // Função para carregar complementos do catálogo via API
   const loadComplementos = async () => {
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       if (!token) {

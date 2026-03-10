@@ -41,6 +41,7 @@ import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import { useVencimentosDocumentos, STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 import Image from "next/image"
+import { getApiBasePath } from "@/lib/runtime-config"
 import { ChatIa } from "@/components/chat-ia"
 
 interface PWALayoutProps {
@@ -271,9 +272,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                 // Token expirado, continuar para contar apenas notificações locais
               } else {
                 // Token válido, buscar notificações da API
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+                const apiUrl = getApiBasePath()
                 const response = await fetch(
-                  `${apiUrl}/api/notificacoes/count/nao-lidas`,
+                  `${apiUrl}/notificacoes/count/nao-lidas`,
                   {
                     headers: {
                       'Authorization': `Bearer ${token}`,

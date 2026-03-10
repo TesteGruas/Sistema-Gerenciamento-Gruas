@@ -1,4 +1,6 @@
 // Sistema de notificações PWA
+import { getApiOrigin } from "./runtime-config"
+
 export class PWANotifications {
   private static instance: PWANotifications
   private registration: ServiceWorkerRegistration | null = null
@@ -121,7 +123,7 @@ export class PWANotifications {
       const user = JSON.parse(userData)
 
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/documentos/funcionario/${user.id}?status=pendente`,
+        `${getApiOrigin()}/api/documentos/funcionario/${user.id}?status=pendente`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,

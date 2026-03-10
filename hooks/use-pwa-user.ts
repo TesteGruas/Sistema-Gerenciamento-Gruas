@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getFuncionarioId } from '@/lib/get-funcionario-id'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 interface PWAUserData {
   user: any | null
@@ -134,7 +135,7 @@ export function usePWAUser(): PWAUserData {
         // Carregar ponto de hoje (silenciosamente, sem quebrar a página)
         try {
           const hoje = new Date().toISOString().split('T')[0]
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+          const apiUrl = getApiBasePath()
           
           // Buscar ID numérico do funcionário usando função utilitária
           const funcionarioId = await getFuncionarioId(parsedUser, token)
@@ -142,7 +143,7 @@ export function usePWAUser(): PWAUserData {
           // Se encontrar ID numérico, carregar ponto
           if (funcionarioId) {
             const pontoResponse = await fetch(
-              `${apiUrl}/api/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${funcionarioId}`,
+              `${apiUrl}/ponto-eletronico/registros?data_inicio=${hoje}&data_fim=${hoje}&funcionario_id=${funcionarioId}`,
               {
                 headers: {
                   'Authorization': `Bearer ${token}`,
@@ -201,7 +202,9 @@ export function usePWAUser(): PWAUserData {
                       horasCalculadas = '0h 0min'
                     }
                   } catch (error) {
-                    console.error('Erro ao calcular horas com almoço:', error)
+                    if (process.env.NODE_ENV !== 'production') {
+                      console.error('Erro ao calcular horas com almoço:', error)
+                    }
                     horasCalculadas = '0h 0min'
                   }
                 } else if (ponto.entrada && ponto.saida) {
@@ -219,7 +222,9 @@ export function usePWAUser(): PWAUserData {
                       horasCalculadas = '0h 0min'
                     }
                   } catch (error) {
-                    console.error('Erro ao calcular horas sem almoço:', error)
+                    if (process.env.NODE_ENV !== 'production') {
+                      console.error('Erro ao calcular horas sem almoço:', error)
+                    }
                     horasCalculadas = '0h 0min'
                   }
                 } else if (ponto.entrada) {
@@ -238,7 +243,9 @@ export function usePWAUser(): PWAUserData {
                       horasCalculadas = '0h 0min'
                     }
                   } catch (error) {
-                    console.error('Erro ao calcular horas em andamento:', error)
+                    if (process.env.NODE_ENV !== 'production') {
+                      console.error('Erro ao calcular horas em andamento:', error)
+                    }
                     horasCalculadas = '0h 0min'
                   }
                 }
@@ -271,9 +278,9 @@ export function usePWAUser(): PWAUserData {
 
         // Carregar notificações não lidas (silenciosamente, sem quebrar a página)
         try {
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
+          const apiUrl = getApiBasePath()
           const notifResponse = await fetch(
-            `${apiUrl}/api/notificacoes/count/nao-lidas`,
+            `${apiUrl}/notificacoes/count/nao-lidas`,
             {
               headers: {
                 'Authorization': `Bearer ${token}`,

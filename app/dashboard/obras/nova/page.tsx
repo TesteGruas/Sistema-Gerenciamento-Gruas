@@ -1703,7 +1703,7 @@ export default function NovaObraPage() {
             console.debug('📤 Obra ID:', obraId)
             console.debug('📤 Quantidade de sinaleiros:', sinaleirosParaEnviar.length)
             console.debug('📤 Dados dos sinaleiros formatados:', JSON.stringify(sinaleirosParaEnviar, null, 2))
-            console.debug('📤 URL da API:', `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/obras/${obraId}/sinaleiros`)
+            console.debug('📤 URL da API:', `${getApiOrigin()}/api/obras/${obraId}/sinaleiros`)
             
             let response: any = null
             try {

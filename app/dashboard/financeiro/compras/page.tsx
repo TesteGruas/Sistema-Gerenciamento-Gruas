@@ -1307,7 +1307,7 @@ function FornecedorSelector({
   const carregarFornecedores = async () => {
     try {
       setLoading(true)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       const response = await fetch(`${API_URL}/api/fornecedores`, {

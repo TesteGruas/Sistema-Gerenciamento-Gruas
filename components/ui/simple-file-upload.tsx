@@ -116,7 +116,7 @@ export function SimpleFileUpload({
 
     try {
       // Usar a URL completa do backend
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const url = `${apiUrl}/arquivos/upload/${obraId}`
       const token = localStorage.getItem('token')
       
@@ -237,7 +237,7 @@ export function SimpleFileUpload({
   // Função para deletar arquivo
   const handleDeleteFile = async (fileId: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const response = await fetch(`${apiUrl}/api/arquivos/${fileId}`, {
         method: 'DELETE',
         headers: {
@@ -271,7 +271,7 @@ export function SimpleFileUpload({
   // Função para download de arquivo
   const handleDownloadFile = async (file: UploadedFile) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const response = await fetch(`${apiUrl}/api/arquivos/download/${file.id}`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`

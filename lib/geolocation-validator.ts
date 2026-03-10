@@ -96,13 +96,13 @@ export function obterLocalizacaoAtual(
         let mensagem = "Erro ao obter localização"
         switch (error.code) {
           case error.PERMISSION_DENIED:
-            mensagem = "Permissão de localização negada"
+            mensagem = "Permissão de localização negada. Ative a localização no navegador para registrar ponto."
             break
           case error.POSITION_UNAVAILABLE:
-            mensagem = "Localização indisponível"
+            mensagem = "Localização indisponível no momento. Verifique GPS/sinal e tente novamente."
             break
           case error.TIMEOUT:
-            mensagem = "Tempo esgotado ao obter localização"
+            mensagem = "Tempo esgotado ao obter localização. Tente novamente em área com melhor sinal."
             break
         }
         reject(new Error(mensagem))
@@ -151,7 +151,9 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
         // Filtrar apenas obras com coordenadas configuradas
         const temCoordenadas = obra.latitude != null && obra.longitude != null
         if (!temCoordenadas) {
-          console.warn(`⚠️ Obra "${obra.nome}" (ID: ${obra.id}) não possui coordenadas configuradas`)
+          if (process.env.NODE_ENV !== 'production') {
+            console.warn(`⚠️ Obra "${obra.nome}" (ID: ${obra.id}) não possui coordenadas configuradas`)
+          }
         }
         return temCoordenadas
       })

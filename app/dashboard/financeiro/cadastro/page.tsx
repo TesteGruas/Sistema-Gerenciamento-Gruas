@@ -68,7 +68,7 @@ export default function CadastroPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = getAuthToken()
 
       const headers = {

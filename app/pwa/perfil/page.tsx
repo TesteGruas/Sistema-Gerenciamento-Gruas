@@ -52,6 +52,7 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Função helper para calcular dias até vencimento
 function calcularDiasParaVencimento(dataValidade: string): number {
@@ -384,7 +385,7 @@ function PWAPerfilPageContent() {
 
     setAlterandoSenha(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       const response = await fetch(`${apiUrl}/auth/change-password`, {
@@ -527,7 +528,7 @@ function PWAPerfilPageContent() {
 
     setEnviandoDocumento(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       // Primeiro, fazer upload do arquivo
@@ -594,7 +595,7 @@ function PWAPerfilPageContent() {
 
     setEnviandoCertificado(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       // Primeiro, fazer upload do arquivo
@@ -713,7 +714,7 @@ function PWAPerfilPageContent() {
 
     if (documento.arquivo) {
       try {
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const apiUrl = getApiOrigin()
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         if (documento.arquivo.startsWith('http')) {
@@ -772,7 +773,7 @@ function PWAPerfilPageContent() {
 
   const handleDownload = async (arquivo: string, nome: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       let url = arquivo

@@ -2,6 +2,7 @@
  * Utilitário para buscar ID numérico do funcionário
  * Resolve o problema de UUID vs ID numérico
  */
+import { getApiOrigin } from './runtime-config'
 
 export interface UserData {
   id: string | number
@@ -36,10 +37,7 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   if (funcionarioIdFromTable && !isNaN(Number(funcionarioIdFromTable)) && Number(funcionarioIdFromTable) > 0) {
     // Verificar se o funcionário existe na API antes de retornar
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
-                     process.env.NEXT_PUBLIC_API_URL || 
-                     'http://localhost:3001'
-      const cleanApiUrl = apiUrl.replace(/\/api\/?$/, '')
+      const cleanApiUrl = getApiOrigin()
       
       const checkResponse = await fetch(
         `${cleanApiUrl}/api/funcionarios/${funcionarioIdFromTable}`,
@@ -80,10 +78,7 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   ) {
     // Verificar se o funcionário existe na API antes de retornar
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
-                     process.env.NEXT_PUBLIC_API_URL || 
-                     'http://localhost:3001'
-      const cleanApiUrl = apiUrl.replace(/\/api\/?$/, '')
+      const cleanApiUrl = getApiOrigin()
       
       const checkResponse = await fetch(
         `${cleanApiUrl}/api/funcionarios/${funcionarioIdFromMetadata}`,
@@ -126,12 +121,7 @@ export async function getFuncionarioId(user: UserData, token: string): Promise<n
   let nomeResponse: Response | null = null
   
   try {
-    let apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || 
-                 process.env.NEXT_PUBLIC_API_URL || 
-                 'http://localhost:3001'
-    
-    // Remover /api do final se existir para evitar duplicação
-    apiUrl = apiUrl.replace(/\/api\/?$/, '')
+    let apiUrl = getApiOrigin()
     
     // Tentar buscar por email primeiro (mais preciso)
     if (user.email) {

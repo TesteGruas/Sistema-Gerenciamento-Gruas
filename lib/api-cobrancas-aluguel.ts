@@ -1,11 +1,6 @@
 // API de Cobranças de Aluguel
-
-const getApiBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-  return baseUrl.replace(/\/api\/?$/, '')
-}
-
-const API_BASE_URL = getApiBaseUrl()
+import { getApiOrigin } from './runtime-config'
+const API_BASE_URL = getApiOrigin()
 
 function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {

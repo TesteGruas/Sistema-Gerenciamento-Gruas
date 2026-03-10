@@ -3,8 +3,6 @@
  * Baseado na documentação: docs/evolution-api-instance-creation.md
  */
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-
 function getAuthToken(): string | null {
   if (typeof window !== 'undefined') {
     return localStorage.getItem('access_token')

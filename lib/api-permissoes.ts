@@ -3,8 +3,9 @@
  */
 
 import { fetchWithAuth } from './api'
+import { getApiOrigin } from './runtime-config'
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = getApiOrigin();
 
 // Types
 export interface Perfil {

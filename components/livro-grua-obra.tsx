@@ -689,7 +689,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     }
 
     // Se for um caminho relativo, construir a URL completa
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const apiUrl = getApiOrigin()
     const token = localStorage.getItem('access_token') || localStorage.getItem('token')
     
     const url = arquivoUrl.startsWith('/') 

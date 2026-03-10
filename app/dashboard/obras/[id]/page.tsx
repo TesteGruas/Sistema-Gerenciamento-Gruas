@@ -286,7 +286,7 @@ function ObraDetailsPageContent() {
     
     setSaving(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       let artArquivoUrl = obra?.art_arquivo || ''
       let apoliceArquivoUrl = obra?.apolice_arquivo || ''
@@ -913,7 +913,7 @@ function ObraDetailsPageContent() {
         return
       }
 
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       
       // Usar fetchWithAuth que trata refresh de token automaticamente
       const response = await fetchWithAuth(
@@ -3311,7 +3311,7 @@ useEffect(() => {
 
   const abrirArquivoPorCaminho = async (caminho: string, nomeDocumento: string) => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(caminho)}`, {
         headers: {
@@ -3938,7 +3938,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 // Gerar URL assinada usando o endpoint do backend
@@ -4014,7 +4014,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 // Gerar URL assinada usando o endpoint do backend
@@ -4090,7 +4090,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 // Gerar URL assinada usando o endpoint do backend
@@ -4158,7 +4158,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.manual_tecnico.caminho)}`, {
@@ -4203,7 +4203,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.termo_entrega_tecnica.caminho)}`, {
@@ -4248,7 +4248,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.plano_carga.caminho)}`, {
@@ -4293,7 +4293,7 @@ useEffect(() => {
                             size="sm"
                             onClick={async () => {
                               try {
-                                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                const apiUrl = getApiOrigin()
                                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                 
                                 const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.aterramento.caminho)}`, {
@@ -4798,7 +4798,7 @@ useEffect(() => {
                           
                           setProcessandoDevolucao(true)
                           try {
-                            const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const API_URL = getApiOrigin()
                             const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                             
                             const response = await fetch(`${API_URL}/api/grua-componentes/devolver`, {

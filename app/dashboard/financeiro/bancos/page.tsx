@@ -46,7 +46,7 @@ import { useToast } from "@/hooks/use-toast"
 import apiContasBancarias from "@/lib/api-contas-bancarias"
 import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = getApiOrigin()
 
 // Helper para obter o token correto
 const getAuthToken = () => {

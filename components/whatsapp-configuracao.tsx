@@ -56,7 +56,7 @@ export function WhatsAppConfiguracao() {
       setTesting(true)
       setTestResult(null)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const response = await fetchWithAuth(`${apiUrl}/api/whatsapp/test`, {
         method: 'POST',
         headers: {
@@ -123,7 +123,7 @@ export function WhatsAppConfiguracao() {
       setTestingCompleto(true)
       setTestCompletoResult(null)
 
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const response = await fetchWithAuth(`${apiUrl}/api/whatsapp/test-completo`, {
         method: 'POST',
         headers: {

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import { io, Socket } from 'socket.io-client'
 import { Notificacao } from '@/lib/api-notificacoes'
 import { useAuth } from '@/hooks/use-auth'
+import { getWebSocketUrl } from '@/lib/runtime-config'
 
 interface UseWebSocketNotificationsReturn {
   socket: Socket | null
@@ -12,7 +13,7 @@ interface UseWebSocketNotificationsReturn {
   marcarTodasComoLidas: () => void
 }
 
-const SOCKET_URL = process.env.NEXT_PUBLIC_WEBSOCKET_URL || process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || 'http://localhost:3001'
+const SOCKET_URL = getWebSocketUrl()
 const maxReconnectAttempts = 5
 
 export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
@@ -27,6 +28,12 @@ export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
   // Conectar ao WebSocket
   const connect = useCallback(() => {
     if (!token || socketRef.current?.connected) {
+      return
+    }
+    if (!SOCKET_URL) {
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn('[WebSocket] URL não configurada, conexões em tempo real desativadas')
+      }
       return
     }
 

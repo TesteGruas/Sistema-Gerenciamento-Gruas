@@ -16,6 +16,7 @@ import {
   Database,
   Shield
 } from 'lucide-react'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 interface DiagnosticResult {
   name: string
@@ -150,8 +151,8 @@ export function PWADiagnostic() {
 
     // 5. Verificar API
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-      const response = await fetch(`${apiUrl}/api/health`, {
+      const apiUrl = getApiBasePath()
+      const response = await fetch(`${apiUrl}/health`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json'
@@ -178,7 +179,7 @@ export function PWADiagnostic() {
         name: 'API Backend',
         status: 'error',
         message: 'API não acessível',
-        details: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'} - ${process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}`
+          details: `Erro: ${error instanceof Error ? error.message : 'Erro desconhecido'} - ${getApiBasePath()}`
       })
     }
 

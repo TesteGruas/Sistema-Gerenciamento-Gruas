@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowLeft, Smartphone, Wifi, Server, Database } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 export default function PWADiagnosticoPage() {
   const router = useRouter()
@@ -92,7 +93,7 @@ export default function PWADiagnosticoPage() {
                 <div className="flex justify-between text-sm">
                   <span>API:</span>
                   <span className="text-gray-600">
-                    {process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'}
+                    {getApiBasePath()}
                   </span>
                 </div>
               </div>

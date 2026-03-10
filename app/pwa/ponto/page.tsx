@@ -35,6 +35,7 @@ import {
 } from "@/lib/geolocation-validator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SignaturePad } from "@/components/signature-pad"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 export default function PWAPontoPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -325,9 +326,9 @@ export default function PWAPontoPage() {
         'ID do funcionário não encontrado'
       )
       const hoje = new Date().toISOString().split('T')[0]
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiBasePath()
 
-      const response = await fetch(`${apiUrl}/api/ponto-eletronico/debug/disparar-notificacao-almoco`, {
+      const response = await fetch(`${apiUrl}/ponto-eletronico/debug/disparar-notificacao-almoco`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -822,7 +823,7 @@ export default function PWAPontoPage() {
 
       // Verificar se já existe registro para hoje
       const responseExistente = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros?funcionario_id=${funcionarioId}&data_inicio=${hoje}&data_fim=${hoje}`,
+        `${getApiBasePath()}/ponto-eletronico/registros?funcionario_id=${funcionarioId}&data_inicio=${hoje}&data_fim=${hoje}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -851,7 +852,7 @@ export default function PWAPontoPage() {
           // Atualizar registro existente
           const registroId = registroExistente.id
           response = await fetch(
-            `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'}/api/ponto-eletronico/registros/${registroId}`,
+            `${getApiBasePath()}/ponto-eletronico/registros/${registroId}`,
             {
               method: 'PUT',
               headers: {

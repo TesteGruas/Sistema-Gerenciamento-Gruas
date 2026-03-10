@@ -1,4 +1,6 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+import { getApiOrigin } from "./runtime-config"
+
+const API_BASE_URL = getApiOrigin()
 
 interface FuncionarioRH {
   id: number

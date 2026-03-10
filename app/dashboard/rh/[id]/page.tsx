@@ -262,7 +262,7 @@ export default function FuncionarioDetalhesPage() {
       let salariosData = salariosResponse.data || []
 
       // Carregar holerites
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       try {
@@ -788,7 +788,7 @@ export default function FuncionarioDetalhesPage() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       // Tentar obter URL assinada do arquivo
@@ -831,7 +831,7 @@ export default function FuncionarioDetalhesPage() {
     }
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       // Tentar obter URL assinada do arquivo
@@ -930,7 +930,7 @@ export default function FuncionarioDetalhesPage() {
           const formDataUpload = new FormData()
           formDataUpload.append('arquivo', documentoForm.arquivo)
           
-          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = getApiOrigin()
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
           const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
@@ -1196,7 +1196,7 @@ export default function FuncionarioDetalhesPage() {
 
     setSubmitting(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       const response = await fetch(`${apiUrl}/api/funcionarios/${funcionario.id}/reset-password`, {
@@ -1304,7 +1304,7 @@ export default function FuncionarioDetalhesPage() {
           const formDataUpload = new FormData()
           formDataUpload.append('arquivo', documentoForm.arquivo)
           
-          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = getApiOrigin()
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
           const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
@@ -1443,7 +1443,7 @@ export default function FuncionarioDetalhesPage() {
       const formData = new FormData()
       formData.append('arquivo', arquivoHolerite)
       
-      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
@@ -1527,7 +1527,7 @@ export default function FuncionarioDetalhesPage() {
           window.open(arquivoUrl, '_blank')
         } else {
           // Se for caminho relativo, construir URL completa
-          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = getApiOrigin()
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
           // Tentar obter URL assinada

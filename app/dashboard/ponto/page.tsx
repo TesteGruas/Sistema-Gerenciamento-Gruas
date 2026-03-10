@@ -1441,7 +1441,7 @@ export default function PontoPage() {
       // Se a URL é relativa, construir a URL completa
       let urlCompleta = url
       if (!url.startsWith('http://') && !url.startsWith('https://')) {
-        const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3001'
+        const API_BASE_URL = getApiOrigin()
         urlCompleta = `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`
       }
 

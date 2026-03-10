@@ -1,4 +1,6 @@
 // Sistema de sincronização offline
+import { getApiOrigin } from "./runtime-config"
+
 interface PendingAction {
   id: string
   type: 'ponto' | 'documento' | 'outro'
@@ -115,7 +117,7 @@ export class OfflineSync {
       return false
     }
 
-    const baseUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+    const baseUrl = getApiOrigin()
 
     try {
       const response = await fetch(`${baseUrl}${action.action}`, {
@@ -188,7 +190,7 @@ export class OfflineSync {
       // Tenta enviar diretamente
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/ponto`, {
+        const response = await fetch(`${getApiOrigin()}/api/ponto`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -222,7 +224,7 @@ export class OfflineSync {
     if (navigator.onLine) {
       try {
         const token = localStorage.getItem('access_token')
-        const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/documentos/${documentoId}/assinar`, {
+        const response = await fetch(`${getApiOrigin()}/api/documentos/${documentoId}/assinar`, {
           method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,

@@ -160,7 +160,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
           formDataUpload.append('arquivo', formData.arquivo)
           formDataUpload.append('categoria', 'certificados')
           
-          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = getApiOrigin()
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
           const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
@@ -335,7 +335,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
                               size="sm"
                               onClick={async () => {
                                 try {
-                                  const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const apiUrl = getApiOrigin()
                                   const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                   
                                   // Tentar obter URL assinada do arquivo

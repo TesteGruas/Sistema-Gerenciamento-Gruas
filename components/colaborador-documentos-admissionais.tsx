@@ -127,7 +127,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
           const formDataUpload = new FormData()
           formDataUpload.append('arquivo', formData.arquivo)
           
-          const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+          const apiUrl = getApiOrigin()
           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
           
           const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {

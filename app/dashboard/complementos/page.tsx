@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = getApiOrigin()
 
 // Helper para obter o token correto
 const getAuthToken = () => {

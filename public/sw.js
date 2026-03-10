@@ -27,7 +27,7 @@ const CONFIG = {
     api: 50,
     images: 100
   },
-  debug: true // Desativar em produção
+  debug: self.location.hostname === 'localhost' || self.location.hostname === '127.0.0.1'
 };
 
 // Assets estáticos para cache (cache-first)
@@ -48,9 +48,7 @@ const STATIC_ASSETS = [
 
 // Rotas da API (network-first)
 const API_ROUTES = [
-  '/api/',
-  'localhost:3001/api/',
-  '127.0.0.1:3001/api/'
+  '/api/'
 ];
 
 // ============================================

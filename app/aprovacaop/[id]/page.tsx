@@ -52,7 +52,7 @@ export default function AprovacaoPublicaPage({ params }: { params: Promise<{ id:
 
   const carregarAprovacao = async () => {
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const response = await fetch(`${apiUrl}/api/aprovacao/${resolvedParams.id}?token=${token}`, {
         method: 'GET',
         headers: {
@@ -90,7 +90,7 @@ export default function AprovacaoPublicaPage({ params }: { params: Promise<{ id:
     setAcao(tipo)
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const endpoint = tipo === 'aprovar' 
         ? `${apiUrl}/api/aprovacao/${resolvedParams.id}/aprovar?token=${token}`
         : `${apiUrl}/api/aprovacao/${resolvedParams.id}/rejeitar?token=${token}`

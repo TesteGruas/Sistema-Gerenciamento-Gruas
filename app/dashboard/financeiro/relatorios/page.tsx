@@ -147,7 +147,7 @@ export default function RelatoriosPage() {
       const dataFim = hoje.toISOString().split('T')[0]
 
       const token = localStorage.getItem('token') || localStorage.getItem('access_token')
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
 
       const response = await fetch(
         `${apiUrl}/api/relatorios/faturamento?data_inicio=${dataInicio}&data_fim=${dataFim}&agrupar_por=mes`,
@@ -1542,7 +1542,7 @@ export default function RelatoriosPage() {
                           const ano = hoje.getFullYear()
                           
                           const token = localStorage.getItem('token') || localStorage.getItem('access_token')
-                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const apiUrl = getApiOrigin()
                           
                           const response = await fetch(`${apiUrl}/api/impostos-financeiros/calcular-mes`, {
                             method: 'POST',
@@ -1762,7 +1762,7 @@ function RelatorioForm({ onClose }: { onClose: () => void }) {
 
     try {
       const { data_inicio, data_fim } = calcularDatas(formData.periodo)
-      const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const API_URL = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
       const endpoint = formData.formato === 'excel' 

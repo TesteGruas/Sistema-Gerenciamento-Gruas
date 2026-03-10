@@ -37,7 +37,7 @@ interface ColaboradorHoleritesProps {
 export function ColaboradorHolerites({ colaboradorId, readOnly = false, isCliente = false, isFuncionario = false }: ColaboradorHoleritesProps) {
   const { toast } = useToast()
   const getApiBase = () => {
-    return (process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001').replace(/\/+$/, '')
+    return (getApiOrigin()).replace(/\/+$/, '')
   }
   const buildApiEndpoint = (path: string) => {
     const base = getApiBase()

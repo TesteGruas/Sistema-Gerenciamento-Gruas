@@ -1,13 +1,7 @@
 import { fetchWithAuth } from './api'
+import { getApiOrigin } from './runtime-config'
 
-// Normalizar a base URL removendo /api do final se existir
-const getApiBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-  // Remover /api do final se existir para evitar duplicação
-  return baseUrl.replace(/\/api\/?$/, '')
-}
-
-const API_BASE_URL = getApiBaseUrl()
+const API_BASE_URL = getApiOrigin()
 
 export interface ChatMessage {
   role: 'user' | 'assistant'

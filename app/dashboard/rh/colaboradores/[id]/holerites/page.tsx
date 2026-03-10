@@ -132,7 +132,7 @@ export default function HoleritesPage() {
 
       // Método antigo (URL direta)
       if (holerite.arquivo) {
-        const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const apiUrl = getApiOrigin()
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         // Tentar obter URL assinada do arquivo

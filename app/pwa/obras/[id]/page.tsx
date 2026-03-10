@@ -45,6 +45,7 @@ import { LivroGruaObra } from "@/components/livro-grua-obra"
 import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
 import LivroGruaList from "@/components/livro-grua-list"
 import { livroGruaApi } from "@/lib/api-livro-grua"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 export default function PWAObraDetalhesPage() {
   const { toast } = useToast()
@@ -254,7 +255,7 @@ export default function PWAObraDetalhesPage() {
     setLoadingDocumentosAdicionais(true)
     
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       if (!token) {
@@ -503,7 +504,7 @@ export default function PWAObraDetalhesPage() {
 
     setSalvandoDocumentos(true)
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       let cnoArquivoUrl = obra.cno_arquivo || ''
@@ -915,7 +916,7 @@ export default function PWAObraDetalhesPage() {
                       size="sm"
                       onClick={async () => {
                         try {
-                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const apiUrl = getApiOrigin()
                           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                           
                           const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.cno_arquivo || '')}`, {
@@ -987,7 +988,7 @@ export default function PWAObraDetalhesPage() {
                       size="sm"
                       onClick={async () => {
                         try {
-                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const apiUrl = getApiOrigin()
                           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                           
                           const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.art_arquivo || '')}`, {
@@ -1059,7 +1060,7 @@ export default function PWAObraDetalhesPage() {
                       size="sm"
                       onClick={async () => {
                         try {
-                          const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                          const apiUrl = getApiOrigin()
                           const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                           
                           const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(obra?.apolice_arquivo || '')}`, {
@@ -1131,7 +1132,7 @@ export default function PWAObraDetalhesPage() {
                         size="sm"
                         onClick={async () => {
                           try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const apiUrl = getApiOrigin()
                             const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                             
                             const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.manual_tecnico.caminho)}`, {
@@ -1177,7 +1178,7 @@ export default function PWAObraDetalhesPage() {
                         size="sm"
                         onClick={async () => {
                           try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const apiUrl = getApiOrigin()
                             const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                             
                             const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.termo_entrega_tecnica.caminho)}`, {
@@ -1223,7 +1224,7 @@ export default function PWAObraDetalhesPage() {
                         size="sm"
                         onClick={async () => {
                           try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const apiUrl = getApiOrigin()
                             const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                             
                             const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.plano_carga.caminho)}`, {
@@ -1269,7 +1270,7 @@ export default function PWAObraDetalhesPage() {
                         size="sm"
                         onClick={async () => {
                           try {
-                            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                            const apiUrl = getApiOrigin()
                             const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                             
                             const urlResponse = await fetch(`${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documentosAdicionaisEquipamento.aterramento.caminho)}`, {
@@ -1378,7 +1379,7 @@ export default function PWAObraDetalhesPage() {
                               size="sm"
                               onClick={async () => {
                                 try {
-                                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const apiUrl = getApiOrigin()
                                   const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                   
                                   const urlResponse = await fetch(
@@ -1419,7 +1420,7 @@ export default function PWAObraDetalhesPage() {
                               size="sm"
                               onClick={async () => {
                                 try {
-                                  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                                  const apiUrl = getApiOrigin()
                                   const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                   
                                   const urlResponse = await fetch(

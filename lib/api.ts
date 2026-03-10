@@ -1,26 +1,16 @@
 import axios from 'axios'
 import { authInterceptor } from './auth-interceptor'
+import { getApiBasePath, getApiOrigin } from './runtime-config'
 
 // Configuração da API
 // Normalizar a base URL removendo /api do final se existir para evitar duplicação
-const getApiBaseUrl = () => {
-  const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
-  // Remover /api do final se existir para evitar duplicação
-  return baseUrl.replace(/\/api\/?$/, '')
-}
-
-const API_BASE_URL = getApiBaseUrl()
+const API_BASE_URL = getApiOrigin()
 
 // Criar instância do axios
 // IMPORTANTE: No cliente, usar URL relativa para aproveitar o rewrite do Next.js
 // No servidor (SSR), usar URL absoluta
 const getBaseURL = () => {
-  if (typeof window !== 'undefined') {
-    // Cliente: usar URL relativa para aproveitar o rewrite do Next.js
-    return '/api'
-  }
-  // Servidor: usar URL absoluta
-  return `${API_BASE_URL}/api`
+  return getApiBasePath()
 }
 
 const api = axios.create({
@@ -74,7 +64,7 @@ const refreshToken = async (): Promise<string | null> => {
       throw new Error('Refresh token não encontrado')
     }
 
-    const response = await axios.post(`${API_BASE_URL}/api/auth/refresh`, {}, {
+    const response = await axios.post(`${getApiBasePath()}/auth/refresh`, {}, {
       headers: {
         'Authorization': `Bearer ${refreshTokenValue}`
       }
@@ -138,7 +128,9 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}, retr
       const retryAfter = response.headers.get('Retry-After')
       const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.min(1000 * Math.pow(2, retryCount), 15000)
       
-      console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+      if (process.env.NODE_ENV !== 'production') {
+        console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+      }
       
       await new Promise(resolve => setTimeout(resolve, waitTime))
       
@@ -170,7 +162,9 @@ export const fetchWithAuth = async (url: string, options: RequestInit = {}, retr
           return newResponse
         }
       } catch (refreshError) {
-        console.error('Erro ao renovar token:', refreshError)
+        if (process.env.NODE_ENV !== 'production') {
+          console.error('Erro ao renovar token:', refreshError)
+        }
         // Se falhar o refresh, retornar a resposta original
       }
     }
@@ -204,7 +198,9 @@ api.interceptors.response.use(
         originalRequest._retry429 = true
         originalRequest._retry429Count = (originalRequest._retry429Count || 0) + 1
         
-        console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+        if (process.env.NODE_ENV !== 'production') {
+          console.warn(`⚠️ Rate limit atingido. Aguardando ${waitTime}ms antes de tentar novamente...`)
+        }
         
         await new Promise(resolve => setTimeout(resolve, waitTime))
         
@@ -295,12 +291,7 @@ export const buildApiUrl = (endpoint: string): string => {
   
   // Se estiver no cliente (browser), usar URL relativa para aproveitar o rewrite do Next.js
   // O rewrite em next.config.mjs redireciona /api/* para o backend correto (porta 3001)
-  if (typeof window !== 'undefined') {
-    return `/api/${cleanEndpoint}`
-  }
-  
-  // No servidor (SSR), usar URL absoluta
-  return `${API_BASE_URL}/api/${cleanEndpoint}`
+  return `${getApiBasePath()}/${cleanEndpoint}`
 }
 
 // Endpoints específicos

@@ -499,7 +499,7 @@ export default function ComponentesGruaPage() {
           return
         }
 
-        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+        const API_URL = getApiOrigin()
         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
         
         const devolucaoData = {
@@ -810,7 +810,7 @@ export default function ComponentesGruaPage() {
             variant="outline"
             onClick={async () => {
               try {
-                const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                const API_URL = getApiOrigin()
                 const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                 
                 if (!token) {
@@ -2300,7 +2300,7 @@ export default function ComponentesGruaPage() {
 
                       // Registrar no histórico diretamente na tabela (opcional, não crítico)
                       try {
-                        const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+                        const API_URL = getApiOrigin()
                         const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                         
                         const histResponse = await fetch(`${API_URL}/api/historico-componentes`, {

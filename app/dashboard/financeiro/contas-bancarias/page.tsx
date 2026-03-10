@@ -10,7 +10,7 @@ import { Building2, DollarSign, TrendingUp, Plus, Edit, Trash2 } from 'lucide-re
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001'
+const API_URL = getApiOrigin()
 
 // Helper para obter o token correto
 const getAuthToken = () => {

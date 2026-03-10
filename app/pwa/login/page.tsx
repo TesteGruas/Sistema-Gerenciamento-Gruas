@@ -27,6 +27,7 @@ import { useEmpresa } from "@/hooks/use-empresa"
 import { EmpresaProvider } from "@/hooks/use-empresa"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import Image from "next/image"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 function PWALoginPageContent(): JSX.Element {
   const [formData, setFormData] = useState({
@@ -354,11 +355,7 @@ function PWALoginPageContent(): JSX.Element {
         error.message?.includes('ERR_NETWORK_CHANGED')
       )) {
         // Usar URL do backend configurada (porta 3001)
-        const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://72.60.60.118:3001'
-        let apiUrl = backendUrl
-        if (apiUrl.endsWith('/api')) {
-          apiUrl = apiUrl.replace(/\/api$/, '')
-        }
+        const apiUrl = getApiBasePath()
         showNetworkError(() => {
           // Tentar novamente - criar um evento sintético
           const syntheticEvent = {
