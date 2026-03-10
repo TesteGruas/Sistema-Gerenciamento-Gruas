@@ -17,6 +17,11 @@ export function getApiOrigin(): string {
     process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL
   )
 
+  if (typeof window !== "undefined" && process.env.NODE_ENV === "production") {
+    // Em produção o frontend deve sempre usar same-origin + proxy /api.
+    return ""
+  }
+
   if (configured !== null) {
     return configured.replace(/\/api\/?$/, "")
   }

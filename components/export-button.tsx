@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 interface ExportButtonProps {
   dados: any[]
@@ -72,9 +73,9 @@ export function ExportButton({
       // Tentar usar API do backend primeiro
       const token = localStorage.getItem('access_token')
       
-      if (token && process.env.NEXT_PUBLIC_API_URL) {
+      if (token) {
         const response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/exportar/${tipo}`,
+          `${getApiBasePath()}/exportar/${tipo}`,
           {
             method: 'POST',
             headers: {

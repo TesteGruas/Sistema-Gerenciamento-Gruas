@@ -18,6 +18,7 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { FileText, Download, Mail, Loader2, User, Calendar, Clock, CheckCircle, AlertTriangle, XCircle, Search, X, RefreshCw } from 'lucide-react'
 import { funcionariosApi } from '@/lib/api-funcionarios'
+import { getApiBasePath } from '@/lib/runtime-config'
 
 interface Funcionario {
   id: number
@@ -172,7 +173,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       
       // Tentar primeiro o endpoint específico de espelho-ponto
       let response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
+        `${getApiBasePath()}/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`
@@ -183,7 +184,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       // Se o endpoint não existir (404), tentar usar o relatório mensal
       if (response.status === 404) {
         response = await fetch(
-          `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/relatorios/mensal?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
+          `${getApiBasePath()}/ponto-eletronico/relatorios/mensal?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}`,
           {
             headers: {
               'Authorization': `Bearer ${token}`
@@ -304,7 +305,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       }
       
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}&formato=pdf`,
+        `${getApiBasePath()}/ponto-eletronico/espelho-ponto?funcionario_id=${funcionarioSelecionado.id}&mes=${mes}&ano=${ano}&formato=pdf`,
         {
           method: 'POST',
           headers: {
@@ -470,7 +471,7 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
       }
       
       const response = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL}/api/ponto-eletronico/espelho-ponto/enviar-email`,
+        `${getApiBasePath()}/ponto-eletronico/espelho-ponto/enviar-email`,
         {
           method: 'POST',
           headers: {
