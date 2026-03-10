@@ -49,6 +49,8 @@ export default function PWAMainPage() {
   const [location, setLocation] = useState<{lat: number, lng: number, address?: string} | null>(null)
   const [locationError, setLocationError] = useState<string | null>(null)
   const [isGettingLocation, setIsGettingLocation] = useState(false)
+  const [mapDebugLogs, setMapDebugLogs] = useState<string[]>([])
+  const [showMapDebugLogs, setShowMapDebugLogs] = useState(false)
   const [showConfirmacaoDialog, setShowConfirmacaoDialog] = useState(false)
   const [showFeriadoDialog, setShowFeriadoDialog] = useState(false)
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
@@ -72,6 +74,19 @@ export default function PWAMainPage() {
   // Estado para verificar se funcionário tem obra ativa
   const [temObraAtiva, setTemObraAtiva] = useState<boolean | null>(null)
   const [loadingObra, setLoadingObra] = useState(true)
+
+  const addMapDebugLog = (step: string, details?: string) => {
+    const timestamp = new Date().toLocaleTimeString('pt-BR')
+    const message = `[${timestamp}] ${step}${details ? ` - ${details}` : ''}`
+    setMapDebugLogs(prev => {
+      const next = [...prev, message]
+      // Manter somente os logs mais recentes para evitar crescer indefinidamente
+      return next.slice(-25)
+    })
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('[PWA Map Debug]', message)
+    }
+  }
   
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -370,8 +385,13 @@ export default function PWAMainPage() {
       
       setIsGettingLocation(true)
       setLocationError(null)
+      addMapDebugLog(
+        'Inicio geolocalizacao',
+        `standalone=${typeof window !== 'undefined' ? (window.navigator as any).standalone === true : false}`
+      )
       
       try {
+        addMapDebugLog('Solicitando permissao de localizacao')
         const coordenadas = await obterLocalizacaoAtual({
           enableHighAccuracy: true,
           timeout: 10000,
@@ -384,9 +404,11 @@ export default function PWAMainPage() {
           lat: coordenadas.lat,
           lng: coordenadas.lng
         })
+        addMapDebugLog('Localizacao obtida', `${coordenadas.lat}, ${coordenadas.lng}`)
 
         // Tentar obter endereço via reverse geocoding (opcional)
         try {
+          addMapDebugLog('Iniciando reverse geocoding')
           abortController = new AbortController()
           const response = await fetch(
             `https://nominatim.openstreetmap.org/reverse?format=json&lat=${coordenadas.lat}&lon=${coordenadas.lng}&zoom=18&addressdetails=1`,
@@ -407,22 +429,28 @@ export default function PWAMainPage() {
                 ...prev,
                 address: data.display_name
               } : null)
+              addMapDebugLog('Endereco resolvido', data.display_name)
             }
+          } else {
+            addMapDebugLog('Reverse geocoding sem sucesso', `status=${response.status}`)
           }
         } catch (geocodeError: any) {
           // Ignorar erro de geocoding, não é crítico
           if (geocodeError.name !== 'AbortError' && isMounted) {
             console.warn('Erro ao obter endereço:', geocodeError)
+            addMapDebugLog('Erro reverse geocoding', geocodeError?.message || 'erro desconhecido')
           }
         }
       } catch (error: any) {
         if (isMounted) {
           console.error('Erro ao obter localização:', error)
           setLocationError(error.message || 'Não foi possível obter sua localização')
+          addMapDebugLog('Erro geolocalizacao', error?.message || 'erro desconhecido')
         }
       } finally {
         if (isMounted) {
           setIsGettingLocation(false)
+          addMapDebugLog('Fim geolocalizacao')
         }
       }
     }
@@ -1426,6 +1454,8 @@ export default function PWAMainPage() {
                 referrerPolicy="no-referrer-when-downgrade"
                 src={`https://www.google.com/maps?q=${location.lat},${location.lng}&z=15&output=embed`}
                 className="w-full h-full"
+                onLoad={() => addMapDebugLog('Iframe mapa carregado')}
+                onError={() => addMapDebugLog('Erro ao carregar iframe do mapa')}
               />
               {/* Overlay com informações */}
               <div className="absolute top-4 left-4 bg-white/95 backdrop-blur-sm rounded-lg p-3 shadow-lg border border-gray-200 max-w-xs">
@@ -1438,6 +1468,42 @@ export default function PWAMainPage() {
                 </div>
               </div>
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {(locationError || mapDebugLogs.length > 0) && (
+        <Card className="border-amber-200 bg-amber-50/60">
+          <CardContent className="p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-amber-900">Diagnostico do mapa (iPhone/PWA)</p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-7 text-xs"
+                onClick={() => setShowMapDebugLogs(prev => !prev)}
+              >
+                {showMapDebugLogs ? 'Ocultar logs' : 'Mostrar logs'}
+              </Button>
+            </div>
+            {locationError && (
+              <p className="text-xs text-red-700">Erro atual: {locationError}</p>
+            )}
+            {showMapDebugLogs && (
+              <div className="max-h-40 overflow-auto rounded-md border border-amber-200 bg-white p-2">
+                {mapDebugLogs.length === 0 ? (
+                  <p className="text-xs text-gray-500">Sem logs ainda</p>
+                ) : (
+                  <div className="space-y-1">
+                    {mapDebugLogs.map((log, index) => (
+                      <p key={`${log}-${index}`} className="text-[11px] text-gray-700 break-words">
+                        {log}
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       )}
