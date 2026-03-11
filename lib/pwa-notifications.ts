@@ -1,9 +1,13 @@
 // Sistema de notificações PWA
 import { getApiOrigin } from "./runtime-config"
+import { getFuncionarioId } from "./get-funcionario-id"
 
 export class PWANotifications {
   private static instance: PWANotifications
   private registration: ServiceWorkerRegistration | null = null
+  private reminderTimeouts: Record<string, number> = {}
+  private documentsIntervalId: number | null = null
+  private remindersStarted = false
 
   private constructor() {}
 
@@ -58,58 +62,141 @@ export class PWANotifications {
       await this.initialize()
     }
 
-    if (this.registration) {
-      const defaultOptions: NotificationOptions = {
-        icon: '/icon-192x192.png',
-        badge: '/icon-72x72.png',
-        vibrate: [200, 100, 200],
-        ...options
-      }
+    const defaultOptions: NotificationOptions = {
+      icon: '/icon-192x192.png',
+      badge: '/icon-72x72.png',
+      vibrate: [200, 100, 200],
+      ...options
+    }
 
+    if (this.registration) {
       await this.registration.showNotification(title, defaultOptions)
+      return
+    }
+
+    // Fallback para navegadores sem service worker pronto
+    new Notification(title, defaultOptions)
+  }
+
+  private getDailyStorageKey(tag: string): string {
+    const today = new Date().toISOString().slice(0, 10)
+    return `pwa_notif_${tag}_${today}`
+  }
+
+  private alreadyTriggeredToday(tag: string): boolean {
+    if (typeof window === 'undefined') return false
+    return localStorage.getItem(this.getDailyStorageKey(tag)) === '1'
+  }
+
+  private markTriggeredToday(tag: string): void {
+    if (typeof window === 'undefined') return
+    localStorage.setItem(this.getDailyStorageKey(tag), '1')
+  }
+
+  private scheduleDailyNotification(
+    key: string,
+    hour: number,
+    minute: number,
+    callback: () => Promise<void>
+  ): void {
+    if (typeof window === 'undefined') return
+
+    if (this.reminderTimeouts[key]) {
+      clearTimeout(this.reminderTimeouts[key])
+    }
+
+    const now = new Date()
+    const next = new Date()
+    next.setHours(hour, minute, 0, 0)
+
+    if (now >= next) {
+      next.setDate(next.getDate() + 1)
+    }
+
+    const timeoutMs = next.getTime() - now.getTime()
+
+    this.reminderTimeouts[key] = window.setTimeout(async () => {
+      try {
+        await callback()
+      } finally {
+        this.scheduleDailyNotification(key, hour, minute, callback)
+      }
+    }, timeoutMs)
+  }
+
+  async notifyLunchReminder(force = false): Promise<void> {
+    const tag = 'lunch-reminder-1130'
+    if (!force && this.alreadyTriggeredToday(tag)) return
+
+    await this.showNotification('Horário de Almoço', {
+      body: 'São 11:30! Não esqueça de registrar sua saída para o almoço.',
+      tag,
+      data: { url: '/pwa/ponto' },
+      actions: [
+        { action: 'open', title: 'Registrar Ponto' },
+        { action: 'close', title: 'Fechar' }
+      ]
+    })
+
+    if (!force) {
+      this.markTriggeredToday(tag)
     }
   }
 
   async scheduleLunchReminder(): Promise<void> {
-    const now = new Date()
-    const lunch = new Date()
-    lunch.setHours(12, 0, 0, 0)
+    if (this.getPermission() !== 'granted') return
+    this.scheduleDailyNotification('lunch-reminder-1130', 11, 30, async () => {
+      await this.notifyLunchReminder()
+    })
+  }
 
-    if (now < lunch) {
-      const timeout = lunch.getTime() - now.getTime()
-      setTimeout(() => {
-        this.showNotification('Horário de Almoço', {
-          body: 'Não esqueça de registrar sua saída para o almoço!',
-          tag: 'lunch-reminder',
-          data: { url: '/pwa/ponto' },
-          actions: [
-            { action: 'open', title: 'Registrar Ponto' },
-            { action: 'close', title: 'Fechar' }
-          ]
-        })
-      }, timeout)
+  async notifyEndOfDayReminder(force = false): Promise<void> {
+    const tag = 'end-of-day-reminder-1800'
+    if (!force && this.alreadyTriggeredToday(tag)) return
+
+    await this.showNotification('Fim do Expediente', {
+      body: 'Lembre-se de registrar sua saída!',
+      tag,
+      data: { url: '/pwa/ponto' },
+      actions: [
+        { action: 'open', title: 'Registrar Ponto' },
+        { action: 'close', title: 'Fechar' }
+      ]
+    })
+
+    if (!force) {
+      this.markTriggeredToday(tag)
     }
   }
 
   async scheduleEndOfDayReminder(): Promise<void> {
-    const now = new Date()
-    const endOfDay = new Date()
-    endOfDay.setHours(18, 0, 0, 0)
+    if (this.getPermission() !== 'granted') return
+    this.scheduleDailyNotification('end-of-day-reminder-1800', 18, 0, async () => {
+      await this.notifyEndOfDayReminder()
+    })
+  }
 
-    if (now < endOfDay) {
-      const timeout = endOfDay.getTime() - now.getTime()
-      setTimeout(() => {
-        this.showNotification('Fim do Expediente', {
-          body: 'Lembre-se de registrar sua saída!',
-          tag: 'end-of-day-reminder',
-          data: { url: '/pwa/ponto' },
-          actions: [
-            { action: 'open', title: 'Registrar Ponto' },
-            { action: 'close', title: 'Fechar' }
-          ]
-        })
-      }, timeout)
+  async startBackgroundReminders(): Promise<void> {
+    if (this.remindersStarted) return
+    if (this.getPermission() !== 'granted') return
+
+    await this.initialize()
+    await this.scheduleLunchReminder()
+    await this.scheduleEndOfDayReminder()
+
+    if (this.documentsIntervalId) {
+      clearInterval(this.documentsIntervalId)
     }
+
+    this.documentsIntervalId = window.setInterval(() => {
+      this.checkDocumentsPending()
+    }, 4 * 60 * 60 * 1000)
+
+    setTimeout(() => {
+      this.checkDocumentsPending()
+    }, 5000)
+
+    this.remindersStarted = true
   }
 
   async checkDocumentsPending(): Promise<void> {
@@ -121,9 +208,24 @@ export class PWANotifications {
       if (!userData) return
 
       const user = JSON.parse(userData)
+      let funcionarioId = Number(
+        user?.profile?.funcionario_id ||
+        user?.funcionario_id ||
+        user?.user_metadata?.funcionario_id ||
+        0
+      )
+
+      if (!funcionarioId || Number.isNaN(funcionarioId) || funcionarioId <= 0) {
+        const resolvedId = await getFuncionarioId(user, token)
+        funcionarioId = Number(resolvedId || 0)
+      }
+
+      if (!funcionarioId || Number.isNaN(funcionarioId) || funcionarioId <= 0) {
+        return
+      }
 
       const response = await fetch(
-        `${getApiOrigin()}/api/documentos/funcionario/${user.id}?status=pendente`,
+        `${getApiOrigin()}/api/funcionarios/documentos/funcionario/${funcionarioId}`,
         {
           headers: {
             'Authorization': `Bearer ${token}`,
@@ -134,11 +236,15 @@ export class PWANotifications {
 
       if (response.ok) {
         const data = await response.json()
-        const total = data.total || data.data?.length || 0
+        const documentos = Array.isArray(data?.data) ? data.data : []
+        const possuiCampoStatus = documentos.some((doc: any) => doc && typeof doc.status !== 'undefined')
+        const totalPendentes = possuiCampoStatus
+          ? documentos.filter((doc: any) => String(doc?.status || '').toLowerCase() === 'pendente').length
+          : documentos.length
 
-        if (total > 0) {
+        if (totalPendentes > 0) {
           this.showNotification('Documentos Pendentes', {
-            body: `Você tem ${total} documento(s) aguardando assinatura`,
+            body: `Você tem ${totalPendentes} documento(s) aguardando assinatura`,
             tag: 'documents-pending',
             data: { url: '/pwa/documentos' },
             actions: [
@@ -179,21 +285,37 @@ export class PWANotifications {
   }
 
   async scheduleAllReminders(): Promise<void> {
-    const permission = await this.requestPermission()
-    
-    if (permission === 'granted') {
-      await this.scheduleLunchReminder()
-      await this.scheduleEndOfDayReminder()
-      
-      // Verificar documentos pendentes a cada 4 horas
-      setInterval(() => {
-        this.checkDocumentsPending()
-      }, 4 * 60 * 60 * 1000)
-      
-      // Verificar imediatamente
-      setTimeout(() => {
-        this.checkDocumentsPending()
-      }, 5000)
+    await this.startBackgroundReminders()
+  }
+
+  async sendDebugTypeNotification(tipo: string): Promise<void> {
+    const config: Record<string, { title: string; body: string }> = {
+      info: { title: 'Info', body: 'Notificação informativa de teste.' },
+      warning: { title: 'Aviso', body: 'Notificação de aviso de teste.' },
+      error: { title: 'Erro', body: 'Notificação de erro de teste.' },
+      success: { title: 'Sucesso', body: 'Notificação de sucesso de teste.' },
+      grua: { title: 'Grua', body: 'Notificação de grua de teste.' },
+      obra: { title: 'Obra', body: 'Notificação de obra de teste.' },
+      financeiro: { title: 'Financeiro', body: 'Notificação financeira de teste.' },
+      rh: { title: 'RH', body: 'Notificação de RH de teste.' },
+      estoque: { title: 'Estoque', body: 'Notificação de estoque de teste.' }
+    }
+
+    const item = config[tipo] || config.info
+    await this.showNotification(`[DEBUG] ${item.title}`, {
+      body: item.body,
+      // Tag única para não suprimir alertas repetidos
+      tag: `debug-${tipo}-${Date.now()}`,
+      requireInteraction: true,
+      renotify: true,
+      data: { url: '/pwa/notificacoes' }
+    })
+  }
+
+  async sendAllDebugNotifications(): Promise<void> {
+    const tipos = ['info', 'warning', 'error', 'success', 'grua', 'obra', 'financeiro', 'rh', 'estoque']
+    for (const tipo of tipos) {
+      await this.sendDebugTypeNotification(tipo)
     }
   }
 

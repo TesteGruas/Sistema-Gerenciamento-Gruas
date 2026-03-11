@@ -1,16 +1,54 @@
 import axios from 'axios'
 import { authInterceptor } from './auth-interceptor'
-import { getApiBasePath, getApiOrigin } from './runtime-config'
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  return /^https?:\/\//i.test(value)
+}
+
+function sanitizeConfiguredApiUrl(raw?: string): string | null {
+  if (!raw) return null
+  const trimmed = raw.trim()
+  if (!trimmed) return null
+  if (trimmed === '/api') return ''
+  if (trimmed.startsWith('/')) return trimmed.replace(/\/+$/, '')
+  if (isAbsoluteHttpUrl(trimmed)) return trimmed.replace(/\/+$/, '')
+  return null
+}
+
+function getApiOriginLocal(): string {
+  const configured = sanitizeConfiguredApiUrl(
+    process.env.NEXT_PUBLIC_API_BASE_URL || process.env.NEXT_PUBLIC_API_URL
+  )
+
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'production') {
+    return ''
+  }
+
+  if (configured !== null) {
+    return configured.replace(/\/api\/?$/, '')
+  }
+
+  if (typeof window !== 'undefined') {
+    return window.location.origin
+  }
+
+  return ''
+}
+
+function getApiBasePathLocal(): string {
+  const origin = getApiOriginLocal()
+  return origin ? `${origin}/api` : '/api'
+}
 
 // Configuração da API
 // Normalizar a base URL removendo /api do final se existir para evitar duplicação
-const API_BASE_URL = getApiOrigin()
+const API_BASE_URL = getApiOriginLocal()
 
 // Criar instância do axios
 // IMPORTANTE: No cliente, usar URL relativa para aproveitar o rewrite do Next.js
 // No servidor (SSR), usar URL absoluta
 const getBaseURL = () => {
-  return getApiBasePath()
+  return getApiBasePathLocal()
 }
 
 const api = axios.create({
@@ -64,7 +102,7 @@ const refreshToken = async (): Promise<string | null> => {
       throw new Error('Refresh token não encontrado')
     }
 
-    const response = await axios.post(`${getApiBasePath()}/auth/refresh`, {}, {
+    const response = await axios.post(`${getApiBasePathLocal()}/auth/refresh`, {}, {
       headers: {
         'Authorization': `Bearer ${refreshTokenValue}`
       }
@@ -291,7 +329,7 @@ export const buildApiUrl = (endpoint: string): string => {
   
   // Se estiver no cliente (browser), usar URL relativa para aproveitar o rewrite do Next.js
   // O rewrite em next.config.mjs redireciona /api/* para o backend correto (porta 3001)
-  return `${getApiBasePath()}/${cleanEndpoint}`
+  return `${getApiBasePathLocal()}/${cleanEndpoint}`
 }
 
 // Endpoints específicos

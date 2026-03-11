@@ -1,5 +1,9 @@
 import api from './api';
-import { getApiBasePath } from './runtime-config';
+
+function getApiBaseUrlFromClient(): string {
+  const base = api.defaults.baseURL || '/api';
+  return base.replace(/\/+$/, '');
+}
 
 // ========================================
 // INTERFACES
@@ -431,7 +435,7 @@ export const apiJustificativas = {
     }
 
     const token = localStorage.getItem('access_token');
-    const response = await fetch(`${getApiBasePath()}/ponto-eletronico/justificativas`, {
+    const response = await fetch(`${getApiBaseUrlFromClient()}/ponto-eletronico/justificativas`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`

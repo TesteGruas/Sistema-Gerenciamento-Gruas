@@ -343,19 +343,21 @@ export default function PWAEspelhoPontoPage() {
             Período
           </CardTitle>
         </CardHeader>
-        <CardContent className="grid grid-cols-2 gap-4">
-          <div>
+        <CardContent className="grid grid-cols-2 gap-3">
+          <div className="min-w-0">
             <Label htmlFor="data-inicio">Data Início</Label>
             <Input
+              className="w-full text-sm"
               id="data-inicio"
               type="date"
               value={dataInicio}
               onChange={(e) => setDataInicio(e.target.value)}
             />
           </div>
-          <div>
+          <div className="min-w-0">
             <Label htmlFor="data-fim">Data Fim</Label>
             <Input
+              className="w-full text-sm"
               id="data-fim"
               type="date"
               value={dataFim}

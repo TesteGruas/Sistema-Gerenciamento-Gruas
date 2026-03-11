@@ -123,6 +123,34 @@ async function syncProfileWithFuncionario(profile) {
   }
 }
 
+function isUsuarioFuncionario(profile) {
+  return Boolean(profile?.eh_funcionario || profile?.funcionario_id)
+}
+
+async function garantirFlagFuncionario(profile) {
+  if (!profile?.id || !profile?.funcionario_id || profile?.eh_funcionario === true) {
+    return profile
+  }
+
+  const { error } = await supabaseAdmin
+    .from('usuarios')
+    .update({
+      eh_funcionario: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', profile.id)
+
+  if (error) {
+    console.warn(`⚠️  Não foi possível atualizar eh_funcionario para o usuário ${profile.id}:`, error.message)
+    return profile
+  }
+
+  return {
+    ...profile,
+    eh_funcionario: true
+  }
+}
+
 /**
  * @swagger
  * /api/auth/login:
@@ -295,7 +323,8 @@ router.post('/login', async (req, res) => {
       .eq('email', email)
       .single()
 
-    const profile = await syncProfileWithFuncionario(rawProfile)
+    let profile = await syncProfileWithFuncionario(rawProfile)
+    profile = await garantirFlagFuncionario(profile)
 
     if (profileError) {
       console.error('Erro ao buscar perfil:', profileError)
@@ -360,6 +389,8 @@ router.post('/login', async (req, res) => {
       }
     }
 
+    const ehFuncionario = isUsuarioFuncionario(profile)
+
     res.json({
       success: true,
       data: {
@@ -369,6 +400,7 @@ router.post('/login', async (req, res) => {
         perfil: perfilData,
         role: role, // Nome do role (v2.0)
         level: level, // Nível de acesso (v2.0)
+        eh_funcionario: ehFuncionario,
         permissoes: permissoes,
         access_token: authData.session.access_token,
         refresh_token: authData.session.refresh_token
@@ -602,9 +634,11 @@ router.get('/me', authenticateToken, async (req, res) => {
       }
 
       profile = await syncProfileWithFuncionario(novoProfile)
+      profile = await garantirFlagFuncionario(profile)
       console.log(`✅ Usuário criado com sucesso na tabela: ${req.user.email} (ID: ${profile.id})`)
     } else {
       profile = await syncProfileWithFuncionario(profile)
+      profile = await garantirFlagFuncionario(profile)
     }
 
     // Buscar perfil e permissões do usuário
@@ -698,6 +732,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       id: profile?.id || req.user.id,
       role: role || req.user.role,
       level: level,
+      eh_funcionario: isUsuarioFuncionario(profile),
       permissions: permissoes.map(p => p.nome),
       obras_responsavel: obrasResponsavel,
       is_responsavel_obra: obrasResponsavel.length > 0
@@ -711,6 +746,7 @@ router.get('/me', authenticateToken, async (req, res) => {
         perfil: perfilData,
         role: role,
         level: level,
+        eh_funcionario: isUsuarioFuncionario(profile),
         permissoes: permissoes,
         obras_responsavel: obrasResponsavel
       }

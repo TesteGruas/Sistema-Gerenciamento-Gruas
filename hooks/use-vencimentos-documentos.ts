@@ -28,6 +28,24 @@ export function useVencimentosDocumentos() {
   const ultimaVerificacaoRef = useRef<number>(0)
   const tokenRef = useRef<string | null>(null)
 
+  const podeCriarNotificacaoRemota = (): boolean => {
+    if (typeof window === 'undefined') return false
+
+    try {
+      const permissoesRaw = localStorage.getItem('user_permissoes')
+      if (!permissoesRaw) return false
+
+      const permissoes = JSON.parse(permissoesRaw)
+      if (!Array.isArray(permissoes)) return false
+
+      return permissoes.includes('*') ||
+        permissoes.includes('notificacoes:*') ||
+        permissoes.includes('notificacoes:criar')
+    } catch {
+      return false
+    }
+  }
+
   useEffect(() => {
     // Não executar no servidor
     if (typeof window === 'undefined') {
@@ -182,6 +200,7 @@ export function useVencimentosDocumentos() {
           localStorage.getItem(notificacoesHojeKey) || '[]'
         )
 
+        const podeCriarNaApi = podeCriarNotificacaoRemota()
         let notificacoesCriadas = 0
         for (const doc of documentosVencendo) {
           const notificacaoKey = `${doc.tipo}_${doc.id}`
@@ -226,7 +245,7 @@ export function useVencimentosDocumentos() {
           const cacheFalhasKey = 'notificacoes_api_falha_403'
           const apiFalha403 = localStorage.getItem(cacheFalhasKey) === 'true'
           
-          if (!apiFalha403) {
+          if (!apiFalha403 && podeCriarNaApi) {
             // Tentar criar na API primeiro
             try {
               // Obter dados do usuário para criar notificação para ele mesmo

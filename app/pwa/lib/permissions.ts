@@ -93,6 +93,13 @@ export const PWA_MENU_ITEMS: PWAMenuItem[] = [
     description: 'Visualize suas notificações'
   },
   {
+    label: 'Debug Notificações',
+    path: '/pwa/notificacoes-debug',
+    icon: Bell,
+    permission: '*',
+    description: 'Validar envio e agendamentos de notificação'
+  },
+  {
     label: 'Holerites',
     path: '/pwa/holerites',
     icon: Receipt,

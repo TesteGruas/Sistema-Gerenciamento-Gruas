@@ -43,6 +43,8 @@ import { useVencimentosDocumentos, STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hoo
 import Image from "next/image"
 import { getApiBasePath } from "@/lib/runtime-config"
 import { ChatIa } from "@/components/chat-ia"
+import { pwaNotifications } from "@/lib/pwa-notifications"
+import { ensurePushSubscription } from "@/lib/pwa-push-subscription"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -97,39 +99,115 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     }
   }, [])
 
+  // Inicializar lembretes locais de notificação (ex: almoço 11:30)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    if ('Notification' in window && Notification.permission === 'granted') {
+      ensurePushSubscription().catch((error) => {
+        console.warn('[PWA][Push] Falha ao registrar subscription:', error)
+      })
+
+      pwaNotifications.startBackgroundReminders().catch((error) => {
+        console.error('[PWA][Notifications] Erro ao iniciar lembretes:', error)
+      })
+    }
+  }, [])
+
   // Verificar se funcionário tem obra ativa
   useEffect(() => {
     const verificarObraAtiva = async () => {
       if (typeof window === 'undefined') return
       
       try {
-        // Verificar se é funcionário (não cliente)
-        const userDataStr = localStorage.getItem('user_data')
-        if (!userDataStr) {
-          setLoadingObra(false)
+        const token = localStorage.getItem('access_token')
+        let funcionarioId: number | null = null
+        let isResponsavelObra = false
+        let obrasResponsavelCount = 0
+
+        // 1) Tentar buscar vínculo mais confiável pelo /auth/me
+        if (token) {
+          try {
+            const apiUrl = getApiBasePath()
+            const response = await fetch(`${apiUrl}/auth/me`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json'
+              }
+            })
+
+            if (response.ok) {
+              const mePayload = await response.json()
+              const meData = mePayload?.data || {}
+
+              funcionarioId = Number(
+                meData?.profile?.funcionario_id ||
+                meData?.user?.funcionario_id ||
+                0
+              ) || null
+
+              const obrasResponsavel = meData?.obras_responsavel || meData?.user?.obras_responsavel || []
+              obrasResponsavelCount = Array.isArray(obrasResponsavel) ? obrasResponsavel.length : 0
+              isResponsavelObra = Boolean(meData?.user?.is_responsavel_obra) || obrasResponsavelCount > 0
+            }
+          } catch (apiError) {
+            console.warn('[PWA][ObraCheck] Falha ao consultar /auth/me, usando fallback localStorage', apiError)
+          }
+        }
+
+        // 2) Fallback localStorage (caso auth/me falhe)
+        if (!funcionarioId && !isResponsavelObra) {
+          const userDataStr = localStorage.getItem('user_data')
+          if (userDataStr) {
+            const userData = JSON.parse(userDataStr)
+            funcionarioId = Number(
+              userData?.user_metadata?.funcionario_id ||
+              userData?.profile?.funcionario_id ||
+              userData?.funcionario_id ||
+              0
+            ) || null
+
+            const obrasResponsavel = userData?.obras_responsavel || []
+            obrasResponsavelCount = Array.isArray(obrasResponsavel) ? obrasResponsavel.length : 0
+            isResponsavelObra =
+              userData?.user_metadata?.tipo === 'responsavel_obra' ||
+              Boolean(userData?.is_responsavel_obra) ||
+              obrasResponsavelCount > 0
+          }
+        }
+
+        // 3) Se for responsável de obra, validar por vínculo de obras
+        if (isResponsavelObra) {
+          const temObraResponsavel = obrasResponsavelCount > 0
+          console.log('[PWA][ObraCheck][Responsavel]', {
+            isResponsavelObra,
+            obrasResponsavelCount,
+            temObraResponsavel
+          })
+          setTemObraAtiva(temObraResponsavel)
           return
         }
 
-        const userData = JSON.parse(userDataStr)
-        const funcionarioId = userData?.user_metadata?.funcionario_id || 
-                              userData?.profile?.funcionario_id || 
-                              userData?.funcionario_id
+        // 4) Se for funcionário, validar alocações ativas
+        if (funcionarioId) {
+          const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
+          const totalAlocacoes = alocacoes?.data?.length || 0
+          const possuiObraAtiva = Boolean(alocacoes.success && totalAlocacoes > 0)
 
-        // Se não é funcionário (é cliente), não precisa verificar obra
-        if (!funcionarioId) {
-          setTemObraAtiva(true) // Clientes sempre podem ver
-          setLoadingObra(false)
+          console.log('[PWA][ObraCheck][Funcionario]', {
+            funcionarioId,
+            success: alocacoes.success,
+            totalAlocacoes,
+            possuiObraAtiva
+          })
+
+          setTemObraAtiva(possuiObraAtiva)
           return
         }
 
-        // Buscar alocações ativas do funcionário
-        const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
-        
-        if (alocacoes.success && alocacoes.data && alocacoes.data.length > 0) {
-          setTemObraAtiva(true)
-        } else {
-          setTemObraAtiva(false)
-        }
+        // 5) Sem vínculo de funcionário ou responsável
+        console.log('[PWA][ObraCheck] Usuário sem vínculo com obra (funcionário/responsável)')
+        setTemObraAtiva(false)
       } catch (error) {
         console.error('Erro ao verificar obra ativa:', error)
         setTemObraAtiva(false) // Em caso de erro, considerar sem obra
@@ -533,6 +611,9 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   // Responsável de obra SEMPRE entra no branch de supervisor (independente do hook de role)
   const isSupervisorOrResponsavel = isSupervisorUser || isResponsavelObraUser
+  // Só libera Ponto/Espelho quando confirmação explícita de obra ativa.
+  // Evita "flash" inicial enquanto a checagem ainda está em andamento (temObraAtiva === null).
+  const mostrarPontoFuncionario = temObraAtiva === true
   
   // Se for cliente, usar Documentos, Medições, Home e Perfil
   const essentialNavItems = isClientUser ? [
@@ -598,15 +679,16 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     // Perfil aparece apenas para supervisor (não para responsável de obra)
     ...(isResponsavelObraUser ? [] : [perfilItem])
   ] : [
-    // Ponto - sempre exibir para funcionários (mesmo sem obra ativa)
-    allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-      name: 'Ponto',
-      href: '/pwa/ponto',
-      icon: Clock,
-      label: 'Ponto',
-      description: 'Registrar ponto'
-    },
-    // Espelho - sempre exibir para funcionários (mesmo sem obra ativa)
+    ...(mostrarPontoFuncionario ? [
+      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+        name: 'Ponto',
+        href: '/pwa/ponto',
+        icon: Clock,
+        label: 'Ponto',
+        description: 'Registrar ponto'
+      }
+    ] : []),
+    // Espelho deve estar sempre visível para funcionário, com ou sem obra ativa
     allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
       name: 'Espelho',
       href: '/pwa/espelho-ponto',
@@ -633,6 +715,17 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     // Perfil - SEMPRE presente
     perfilItem
   ].filter(Boolean) // Remove itens undefined
+
+  if (typeof window !== 'undefined') {
+    console.log('[PWA][Menu][Ponto]', {
+      userRole,
+      isClientUser,
+      isSupervisorOrResponsavel,
+      isResponsavelObraUser,
+      temObraAtiva,
+      mostrarPontoFuncionario
+    })
+  }
 
   // Usar apenas os itens essenciais na navegação inferior
   const filteredNavigationItems = essentialNavItems.slice(0, 5)

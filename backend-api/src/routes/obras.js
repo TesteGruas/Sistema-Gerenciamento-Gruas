@@ -384,15 +384,21 @@ const obraUpdateSchema = Joi.object({
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const user = req.user
-    const userRole = user.role || user.perfil?.nome
+    const userRole = user.role || user.perfil?.nome || ''
+    const userRoleNormalized = userRole
+      .toString()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .trim()
     const page = parseInt(req.query.page) || 1
     const limit = parseInt(req.query.limit) || 10
     const offset = (page - 1) * limit
     const { status, cliente_id } = req.query
 
     // Verificar se usuário tem permissão total ou apenas para suas obras
-    const hasFullAccess = ['Admin', 'Gestores'].includes(userRole)
-    const isOperador = userRole === 'Operários'
+    const hasFullAccess = ['admin', 'gestores', 'gestor'].includes(userRoleNormalized)
+    const isOperador = ['operador', 'operarios'].includes(userRoleNormalized)
 
     // Verificar se funcionário tem acesso global através do cargo
     let temAcessoGlobal = false
@@ -408,7 +414,7 @@ router.get('/', authenticateToken, async (req, res) => {
       }
     }
 
-    console.log(`🔍 [OBRAS] Listagem - Usuário: ${user.id}, Role: ${userRole}, Full Access: ${hasFullAccess}, Acesso Global: ${temAcessoGlobal}`)
+    console.log(`🔍 [OBRAS] Listagem - Usuário: ${user.id}, Role: ${userRole} (${userRoleNormalized}), Full Access: ${hasFullAccess}, Acesso Global: ${temAcessoGlobal}`)
 
     let query = supabaseAdmin
       .from('obras')
@@ -596,6 +602,10 @@ router.get('/', authenticateToken, async (req, res) => {
         
         filteredData = filteredData.filter(obra => obrasIds.includes(obra.id))
         filteredCount = filteredData.length
+      } else if (obrasError) {
+        console.error(`❌ [OBRAS] Erro ao buscar alocações do funcionário ${user.funcionario_id}:`, obrasError)
+        filteredData = []
+        filteredCount = 0
       }
     } else if (isOperador && temAcessoGlobal) {
       console.log(`✅ [OBRAS] Funcionário tem acesso global - mostrando todas as obras`)

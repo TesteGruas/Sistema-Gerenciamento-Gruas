@@ -104,6 +104,7 @@ import tiposImpostosRoutes from './routes/tipos-impostos.js'
 import gruasMensaisRoutes from './routes/gruas-mensais.js'
 import checklistDevolucaoRoutes from './routes/checklist-devolucao.js'
 import notificacoesRoutes from './routes/notificacoes.js'
+import pushNotificationsRoutes from './routes/push-notifications.js'
 import emailConfigRoutes from './routes/email-config.js'
 import contasReceberRoutes from './routes/contas-receber.js'
 import contasPagarRoutes from './routes/contas-pagar.js'
@@ -638,6 +639,7 @@ app.use('/api/tipos-impostos', tiposImpostosRoutes)
 app.use('/api/gruas-mensais', gruasMensaisRoutes)
 app.use('/api/checklist-devolucao', checklistDevolucaoRoutes)
 app.use('/api/notificacoes', notificacoesRoutes)
+app.use('/api/push', pushNotificationsRoutes)
 app.use('/api/email-config', emailConfigRoutes)
 app.use('/api/configuracoes', configuracoesRoutes)
 app.use('/api/contas-receber', contasReceberRoutes)

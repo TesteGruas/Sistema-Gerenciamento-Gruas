@@ -811,11 +811,9 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
       });
     }
 
-    // Buscar documentos de obras onde o funcionário é assinante
-    // O user_id na tabela obras_documento_assinaturas é VARCHAR(255) e pode ser:
-    // - UUID (string) para usuários do Supabase Auth
-    // - ID numérico (string) para funcionários (ex: "123")
-    // - UUID formatado para funcionários (ex: "00000000-0000-0000-0000-000000000123")
+    // Buscar documentos de obras onde o funcionário é assinante.
+    // Observação: em alguns ambientes, obras_documento_assinaturas.user_id pode ser INTEGER;
+    // em outros, pode ser texto/UUID. Portanto, precisamos tolerar ambos os formatos.
     const funcionarioIdString = funcionarioId.toString();
     const funcionarioIdUuid = `00000000-0000-0000-0000-${funcionarioIdString.padStart(12, '0')}`;
     
@@ -826,6 +824,10 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
     // Primeiro tentar buscar pelo ID numérico como string
     let assinaturas = [];
     let assinaturasError = null;
+    const isErroDeTipoIncompativel = (error) => {
+      const message = (error?.message || '').toLowerCase();
+      return message.includes('invalid input syntax for type integer');
+    };
     
     // Tentar buscar pelo formato string primeiro (mais comum)
     const { data: assinaturasString, error: errorString } = await supabaseAdmin
@@ -849,8 +851,13 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
         .order('created_at', { ascending: false });
       
       if (errorUuid) {
-        console.error(`[DEBUG] Erro ao buscar com UUID "${funcionarioIdUuid}":`, errorUuid);
-        assinaturasError = errorUuid;
+        if (isErroDeTipoIncompativel(errorUuid)) {
+          // Ambiente com coluna INTEGER: ignorar tentativa com UUID formatado.
+          console.log(`[DEBUG] Ignorando busca UUID para user_id INTEGER: "${funcionarioIdUuid}"`);
+        } else {
+          console.error(`[DEBUG] Erro ao buscar com UUID "${funcionarioIdUuid}":`, errorUuid);
+          assinaturasError = errorUuid;
+        }
       } else {
         assinaturas = assinaturasUuid || [];
         console.log(`[DEBUG] Encontradas ${assinaturas.length} assinaturas com formato UUID`);
@@ -1412,6 +1419,7 @@ router.post('/', async (req, res) => {
           data_admissao: value.data_admissao || null,
           salario: value.salario || null,
           status: value.status,
+          eh_funcionario: true,
           funcionario_id: novoFuncionario.id,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()

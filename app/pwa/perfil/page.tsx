@@ -238,6 +238,32 @@ function PWAPerfilPageContent() {
   const [tipoCertificado, setTipoCertificado] = useState('')
   const [dataValidadeCertificado, setDataValidadeCertificado] = useState('')
   const [enviandoCertificado, setEnviandoCertificado] = useState(false)
+
+  const resolverFuncionarioIdUpload = (): number | null => {
+    if (funcionarioId && Number(funcionarioId) > 0) {
+      return Number(funcionarioId)
+    }
+
+    try {
+      const userDataRaw = localStorage.getItem('user_data')
+      const userProfileRaw = localStorage.getItem('user_profile')
+      const userData = userDataRaw ? JSON.parse(userDataRaw) : null
+      const userProfile = userProfileRaw ? JSON.parse(userProfileRaw) : null
+
+      const fallbackId = Number(
+        userData?.profile?.funcionario_id ||
+        userProfile?.funcionario_id ||
+        userData?.funcionario_id ||
+        userData?.user_metadata?.funcionario_id ||
+        0
+      )
+
+      return fallbackId > 0 ? fallbackId : null
+    } catch (error) {
+      console.error('[PERFIL] Erro ao resolver funcionarioId para upload:', error)
+      return null
+    }
+  }
   
   // Estados para modal de alterar senha
   const [isModalAlterarSenhaOpen, setIsModalAlterarSenhaOpen] = useState(false)
@@ -490,30 +516,54 @@ function PWAPerfilPageContent() {
   }
 
   const carregarCertificados = async () => {
-    if (!funcionarioId) return
+    const funcionarioIdParaBusca = resolverFuncionarioIdUpload()
+    if (!funcionarioIdParaBusca) {
+      setCertificados([])
+      return
+    }
+
+    if (funcionarioId !== funcionarioIdParaBusca) {
+      setFuncionarioId(funcionarioIdParaBusca)
+    }
+
     setLoadingCertificados(true)
     try {
-      const response = await colaboradoresDocumentosApi.certificados.listar(funcionarioId)
+      const response = await colaboradoresDocumentosApi.certificados.listar(funcionarioIdParaBusca)
       if (response.success && response.data) {
         setCertificados(response.data)
+      } else {
+        setCertificados([])
       }
     } catch (error) {
       console.error('Erro ao carregar certificados:', error)
+      setCertificados([])
     } finally {
       setLoadingCertificados(false)
     }
   }
 
   const carregarDocumentosAdmissionais = async () => {
-    if (!funcionarioId) return
+    const funcionarioIdParaBusca = resolverFuncionarioIdUpload()
+    if (!funcionarioIdParaBusca) {
+      setDocumentosAdmissionais([])
+      return
+    }
+
+    if (funcionarioId !== funcionarioIdParaBusca) {
+      setFuncionarioId(funcionarioIdParaBusca)
+    }
+
     setLoadingDocumentosAdmissionais(true)
     try {
-      const response = await colaboradoresDocumentosApi.documentosAdmissionais.listar(funcionarioId)
+      const response = await colaboradoresDocumentosApi.documentosAdmissionais.listar(funcionarioIdParaBusca)
       if (response.success && response.data) {
         setDocumentosAdmissionais(response.data)
+      } else {
+        setDocumentosAdmissionais([])
       }
     } catch (error) {
       console.error('Erro ao carregar documentos admissionais:', error)
+      setDocumentosAdmissionais([])
     } finally {
       setLoadingDocumentosAdmissionais(false)
     }
@@ -522,7 +572,15 @@ function PWAPerfilPageContent() {
   // Função para fazer upload do arquivo e criar documento admissional
   const handleUploadDocumento = async () => {
     if (!funcionarioId || !arquivoSelecionado || !tipoDocumento) {
-      
+      let descricao = 'Preencha todos os campos obrigatórios.'
+      if (!funcionarioId) {
+        descricao = 'Funcionário não identificado. Recarregue a página e tente novamente.'
+      }
+      toast({
+        title: 'Não foi possível enviar',
+        description: descricao,
+        variant: 'destructive'
+      })
       return
     }
 
@@ -567,6 +625,11 @@ function PWAPerfilPageContent() {
       const response = await colaboradoresDocumentosApi.documentosAdmissionais.criar(funcionarioId, documentoData)
 
       if (response.success) {
+        toast({
+          title: 'Documento enviado',
+          description: 'Documento admissional enviado com sucesso.',
+          variant: 'default'
+        })
 
         // Limpar formulário
         setArquivoSelecionado(null)
@@ -579,8 +642,13 @@ function PWAPerfilPageContent() {
       } else {
         throw new Error('Erro ao criar documento admissional')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar documento:', error)
+      toast({
+        title: 'Erro ao enviar documento',
+        description: error?.message || 'Não foi possível enviar o documento admissional.',
+        variant: 'destructive'
+      })
     } finally {
       setEnviandoDocumento(false)
     }
@@ -588,8 +656,18 @@ function PWAPerfilPageContent() {
 
   // Função para fazer upload do arquivo e criar certificado
   const handleUploadCertificado = async () => {
-    if (!funcionarioId || !arquivoCertificadoSelecionado || !nomeCertificado || !tipoCertificado) {
-      
+    const funcionarioIdParaUpload = resolverFuncionarioIdUpload()
+
+    if (!funcionarioIdParaUpload || !arquivoCertificadoSelecionado || !nomeCertificado || !tipoCertificado) {
+      let descricao = 'Preencha todos os campos obrigatórios.'
+      if (!funcionarioIdParaUpload) {
+        descricao = 'Funcionário não identificado. Recarregue a página e tente novamente.'
+      }
+      toast({
+        title: 'Não foi possível enviar',
+        description: descricao,
+        variant: 'destructive'
+      })
       return
     }
 
@@ -630,9 +708,14 @@ function PWAPerfilPageContent() {
         arquivo: arquivoCaminho
       }
 
-      const response = await colaboradoresDocumentosApi.certificados.criar(funcionarioId, certificadoData)
+      const response = await colaboradoresDocumentosApi.certificados.criar(funcionarioIdParaUpload, certificadoData)
 
       if (response.success) {
+        toast({
+          title: 'Certificado enviado',
+          description: 'Certificado enviado com sucesso.',
+          variant: 'default'
+        })
 
         // Limpar formulário
         setArquivoCertificadoSelecionado(null)
@@ -646,8 +729,13 @@ function PWAPerfilPageContent() {
       } else {
         throw new Error('Erro ao criar certificado')
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Erro ao enviar certificado:', error)
+      toast({
+        title: 'Erro ao enviar certificado',
+        description: error?.message || 'Não foi possível enviar o certificado.',
+        variant: 'destructive'
+      })
     } finally {
       setEnviandoCertificado(false)
     }
@@ -676,28 +764,26 @@ function PWAPerfilPageContent() {
 
   // Carregar dados quando a tab for ativada
   useEffect(() => {
-    // Se não tiver funcionarioId, apenas limpar estados e não carregar nada
-    if (!funcionarioId) {
-      if (activeTab === 'salarios') {
-        setSalarios([])
-        setLoadingSalarios(false)
-      } else if (activeTab === 'beneficios') {
-        setBeneficios([])
-        setLoadingBeneficios(false)
-      } else if (activeTab === 'certificados') {
-        setCertificados([])
-        setLoadingCertificados(false)
-      } else if (activeTab === 'documentos-admissionais') {
-        setDocumentosAdmissionais([])
-        setLoadingDocumentosAdmissionais(false)
-      }
-      return
+    const funcionarioIdDisponivel = funcionarioId || resolverFuncionarioIdUpload()
+
+    if (funcionarioIdDisponivel && !funcionarioId) {
+      setFuncionarioId(funcionarioIdDisponivel)
     }
     
     if (activeTab === 'salarios') {
-      carregarSalarios()
+      if (funcionarioIdDisponivel) {
+        carregarSalarios()
+      } else {
+        setSalarios([])
+        setLoadingSalarios(false)
+      }
     } else if (activeTab === 'beneficios') {
-      carregarBeneficios()
+      if (funcionarioIdDisponivel) {
+        carregarBeneficios()
+      } else {
+        setBeneficios([])
+        setLoadingBeneficios(false)
+      }
     } else if (activeTab === 'certificados') {
       carregarCertificados()
     } else if (activeTab === 'documentos-admissionais') {
@@ -854,7 +940,7 @@ function PWAPerfilPageContent() {
   return (
     <div className="space-y-4 pb-24">
       {/* Header */}
-      <div className="bg-[#75180a] rounded-xl p-4 -mx-4 -mt-4 mb-4">
+      <div className="bg-[#75180a] p-4 -mx-4 -mt-4 mb-4">
         <h1 className="text-2xl font-bold text-white">Meu Perfil</h1>
         <p className="text-gray-200">Gerencie suas informações pessoais</p>
       </div>
