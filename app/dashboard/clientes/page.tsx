@@ -421,7 +421,7 @@ export default function ClientesPage() {
   }
 
   // Função para fazer upload de arquivos após criar/atualizar cliente
-  const uploadClienteFiles = async (clienteId: number) => {
+  const uploadClienteFiles = async (clienteId: number, clienteNome?: string) => {
     if (selectedFiles.length === 0) {
       console.log('⚠️ Nenhum arquivo selecionado para upload')
       return
@@ -437,7 +437,7 @@ export default function ClientesPage() {
             console.log(`📤 Fazendo upload do arquivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
             const result = await apiArquivos.upload(file, {
               nome: file.name,
-              descricao: `Arquivo do cliente: ${clienteFormData.nome}`,
+              descricao: `Arquivo do cliente: ${clienteNome || clienteFormData.nome || ''}`,
               modulo: 'clientes',
               entidade_id: clienteId,
               entidade_tipo: 'cliente',
@@ -533,24 +533,25 @@ export default function ClientesPage() {
     return <File className="h-4 w-4 text-gray-500" />
   }
 
-  const handleCreateCliente = async (e: React.FormEvent) => {
+  const handleCreateCliente = async (e: React.FormEvent, formDataOverride?: ClienteFormData) => {
     e.preventDefault()
+    const dadosForm = formDataOverride || clienteFormData
     
     // Validação de campos obrigatórios
     const camposFaltando: string[] = []
     
-    if (!clienteFormData.nome || !clienteFormData.nome.trim()) {
+    if (!dadosForm.nome || !dadosForm.nome.trim()) {
       camposFaltando.push('Nome da Empresa')
     }
     
-    if (!clienteFormData.cnpj || !clienteFormData.cnpj.trim()) {
+    if (!dadosForm.cnpj || !dadosForm.cnpj.trim()) {
       camposFaltando.push('CNPJ')
     }
     
-    if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
+    if (!dadosForm.contato || !dadosForm.contato.trim()) {
       camposFaltando.push('Nome do Representante')
     }
-    if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
+    if (!dadosForm.contato_email || !dadosForm.contato_email.trim()) {
       camposFaltando.push('Email do Contato')
     }
     if (camposFaltando.length > 0) {
@@ -567,13 +568,13 @@ export default function ClientesPage() {
       
       // Remover máscaras antes de enviar
       const dadosFormatados = {
-        ...clienteFormData,
-        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
-        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
-        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
-        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
-        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
-        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        ...dadosForm,
+        cnpj: dadosForm.cnpj.replace(/\D/g, ''),
+        telefone: dadosForm.telefone ? dadosForm.telefone.replace(/\D/g, '') : '',
+        cep: dadosForm.cep ? dadosForm.cep.replace(/\D/g, '') : '',
+        cep_obra: dadosForm.cep_obra ? dadosForm.cep_obra.replace(/\D/g, '') : '',
+        contato_cpf: dadosForm.contato_cpf ? dadosForm.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: dadosForm.contato_telefone ? dadosForm.contato_telefone.replace(/\D/g, '') : '',
         // Incluir campos de usuário se estiver criando
         criar_usuario: clienteFormData.criar_usuario || false,
         // Backend gera senha automaticamente quando criar_usuario é true
@@ -591,7 +592,7 @@ export default function ClientesPage() {
         const clienteId = response.data?.id
         if (clienteId) {
           console.log('📤 Iniciando upload de arquivos para cliente ID:', clienteId)
-          await uploadClienteFiles(clienteId)
+          await uploadClienteFiles(clienteId, dadosForm.nome)
         } else {
           console.error('❌ ID do cliente não encontrado na resposta:', response)
           toast({
@@ -656,26 +657,27 @@ export default function ClientesPage() {
     }
   }
 
-  const handleUpdateCliente = async (e: React.FormEvent) => {
+  const handleUpdateCliente = async (e: React.FormEvent, formDataOverride?: ClienteFormData) => {
     e.preventDefault()
+    const dadosForm = formDataOverride || clienteFormData
     
     if (!selectedCliente) return
     
     // Validação de campos obrigatórios
     const camposFaltando: string[] = []
     
-    if (!clienteFormData.nome || !clienteFormData.nome.trim()) {
+    if (!dadosForm.nome || !dadosForm.nome.trim()) {
       camposFaltando.push('Nome da Empresa')
     }
     
-    if (!clienteFormData.cnpj || !clienteFormData.cnpj.trim()) {
+    if (!dadosForm.cnpj || !dadosForm.cnpj.trim()) {
       camposFaltando.push('CNPJ')
     }
     
-    if (!clienteFormData.contato || !clienteFormData.contato.trim()) {
+    if (!dadosForm.contato || !dadosForm.contato.trim()) {
       camposFaltando.push('Nome do Representante')
     }
-    if (!clienteFormData.contato_email || !clienteFormData.contato_email.trim()) {
+    if (!dadosForm.contato_email || !dadosForm.contato_email.trim()) {
       camposFaltando.push('Email do Contato')
     }
     if (camposFaltando.length > 0) {
@@ -692,13 +694,13 @@ export default function ClientesPage() {
       
       // Remover máscaras antes de enviar
       const dadosFormatados = {
-        ...clienteFormData,
-        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
-        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
-        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
-        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
-        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
-        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        ...dadosForm,
+        cnpj: dadosForm.cnpj.replace(/\D/g, ''),
+        telefone: dadosForm.telefone ? dadosForm.telefone.replace(/\D/g, '') : '',
+        cep: dadosForm.cep ? dadosForm.cep.replace(/\D/g, '') : '',
+        cep_obra: dadosForm.cep_obra ? dadosForm.cep_obra.replace(/\D/g, '') : '',
+        contato_cpf: dadosForm.contato_cpf ? dadosForm.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: dadosForm.contato_telefone ? dadosForm.contato_telefone.replace(/\D/g, '') : '',
         // Remover campos de usuário na edição (não devem ser enviados)
         criar_usuario: undefined,
         usuario_senha: undefined
@@ -708,7 +710,7 @@ export default function ClientesPage() {
       
       // Fazer upload dos arquivos se houver
       if (selectedFiles.length > 0) {
-        await uploadClienteFiles(selectedCliente.id)
+        await uploadClienteFiles(selectedCliente.id, dadosForm.nome)
       }
       
       // Recarregar lista de clientes
@@ -1239,7 +1241,6 @@ export default function ClientesPage() {
           </DialogHeader>
           <ClienteForm 
             formData={clienteFormData}
-            setFormData={setClienteFormData}
             onSubmit={handleCreateCliente}
             onClose={() => setIsCreateDialogOpen(false)}
             isEdit={false}
@@ -1266,7 +1267,6 @@ export default function ClientesPage() {
           </DialogHeader>
           <ClienteForm 
             formData={clienteFormData}
-            setFormData={setClienteFormData}
             onSubmit={handleUpdateCliente}
             onClose={() => {
               setIsEditDialogOpen(false)
@@ -1352,7 +1352,6 @@ export default function ClientesPage() {
 
 function ClienteForm({ 
   formData, 
-  setFormData, 
   onSubmit, 
   onClose, 
   isEdit, 
@@ -1369,8 +1368,7 @@ function ClienteForm({
   onRemoverArquivo
 }: { 
   formData: ClienteFormData; 
-  setFormData: React.Dispatch<React.SetStateAction<ClienteFormData>>; 
-  onSubmit: (e: React.FormEvent) => void; 
+  onSubmit: (e: React.FormEvent, formData: ClienteFormData) => void; 
   onClose: () => void;
   isEdit: boolean;
   isSubmitting: boolean;
@@ -1385,10 +1383,15 @@ function ClienteForm({
   loadingArquivos?: boolean;
   onRemoverArquivo?: (arquivoId: number) => void;
 }) {
+  const [localFormData, setLocalFormData] = useState<ClienteFormData>(formData)
   const [buscandoCepCliente, setBuscandoCepCliente] = useState(false)
   const [buscandoCepObra, setBuscandoCepObra] = useState(false)
   const [erroCepCliente, setErroCepCliente] = useState('')
   const [erroCepObra, setErroCepObra] = useState('')
+
+  useEffect(() => {
+    setLocalFormData(formData)
+  }, [formData])
 
   const formatarCep = (rawValue: string) => {
     const numeric = rawValue.replace(/\D/g, '').slice(0, 8)
@@ -1412,7 +1415,7 @@ function ClienteForm({
       const data = await buscarViaCep(cepNumerico)
 
       if (tipo === 'cliente') {
-        setFormData((prev) => ({
+        setLocalFormData((prev) => ({
           ...prev,
           endereco: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco,
           cidade: data.localidade || prev.cidade,
@@ -1423,7 +1426,7 @@ function ClienteForm({
         return
       }
 
-      setFormData((prev) => ({
+      setLocalFormData((prev) => ({
         ...prev,
         endereco_obra: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco_obra,
         cidade_obra: data.localidade || prev.cidade_obra,
@@ -1436,10 +1439,10 @@ function ClienteForm({
       if (tipo === 'cliente') {
         setErroCepCliente('CEP não encontrado. Verifique o número informado.')
       } else {
-        const cepClienteNumerico = (formData.cep || '').replace(/\D/g, '')
+        const cepClienteNumerico = (localFormData.cep || '').replace(/\D/g, '')
         // Fallback: se CEP da obra for igual ao da empresa, reaproveita os dados já preenchidos da empresa
-        if (cepClienteNumerico === cepNumerico && (formData.endereco || formData.cidade || formData.estado)) {
-          setFormData((prev) => ({
+        if (cepClienteNumerico === cepNumerico && (localFormData.endereco || localFormData.cidade || localFormData.estado)) {
+          setLocalFormData((prev) => ({
             ...prev,
             endereco_obra: prev.endereco || prev.endereco_obra,
             cidade_obra: prev.cidade || prev.cidade_obra,
@@ -1461,7 +1464,7 @@ function ClienteForm({
   }
 
   const preencherDadosDebug = () => {
-    setFormData({
+    setLocalFormData({
       nome: 'Construtora ABC Ltda',
       cnpj: '12.345.678/0001-90',
       inscricao_estadual: '110.042.490.114',
@@ -1489,7 +1492,7 @@ function ClienteForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-2">
+    <form onSubmit={(e) => onSubmit(e, localFormData)} className="space-y-2">
       <div className="flex justify-end mb-4">
         <Button
           type="button"
@@ -1511,8 +1514,8 @@ function ClienteForm({
             <Label htmlFor="nome">Nome da Empresa *</Label>
             <Input
               id="nome"
-              value={formData.nome}
-              onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+              value={localFormData.nome}
+              onChange={(e) => setLocalFormData({ ...localFormData, nome: e.target.value })}
               placeholder="Ex: Construtora ABC Ltda"
               required
             />
@@ -1521,7 +1524,7 @@ function ClienteForm({
             <Label htmlFor="cnpj">CNPJ *</Label>
             <Input
               id="cnpj"
-              value={formData.cnpj}
+              value={localFormData.cnpj}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '')
                 if (value.length >= 2) {
@@ -1536,7 +1539,7 @@ function ClienteForm({
                 if (value.length >= 15) {
                   value = value.substring(0, 15) + '-' + value.substring(15, 17)
                 }
-                setFormData({ ...formData, cnpj: value })
+                setLocalFormData({ ...localFormData, cnpj: value })
               }}
               placeholder="00.000.000/0000-00"
               maxLength={18}
@@ -1550,8 +1553,8 @@ function ClienteForm({
             <Label htmlFor="inscricao_estadual">Inscrição Estadual</Label>
             <Input
               id="inscricao_estadual"
-              value={formData.inscricao_estadual || ''}
-              onChange={(e) => setFormData({ ...formData, inscricao_estadual: e.target.value })}
+              value={localFormData.inscricao_estadual || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, inscricao_estadual: e.target.value })}
               placeholder="Opcional"
             />
           </div>
@@ -1559,16 +1562,16 @@ function ClienteForm({
             <Label htmlFor="inscricao_municipal">Inscrição Municipal</Label>
             <Input
               id="inscricao_municipal"
-              value={formData.inscricao_municipal || ''}
-              onChange={(e) => setFormData({ ...formData, inscricao_municipal: e.target.value })}
+              value={localFormData.inscricao_municipal || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, inscricao_municipal: e.target.value })}
               placeholder="Opcional"
             />
           </div>
           <div>
             <Label htmlFor="status">Status *</Label>
             <Select
-              value={formData.status || 'ativo'}
-              onValueChange={(value) => setFormData({ ...formData, status: value })}
+              value={localFormData.status || 'ativo'}
+              onValueChange={(value) => setLocalFormData({ ...localFormData, status: value })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o status" />
@@ -1593,18 +1596,18 @@ function ClienteForm({
             <Label htmlFor="cep">CEP</Label>
             <Input
               id="cep"
-              value={formData.cep || ''}
+              value={localFormData.cep || ''}
               onChange={(e) => {
                 const value = formatarCep(e.target.value)
-                setFormData({ ...formData, cep: value })
+                setLocalFormData({ ...localFormData, cep: value })
                 setErroCepCliente('')
                 if (value.length === 9) {
                   aplicarEnderecoPorCep(value, 'cliente')
                 }
               }}
               onBlur={() => {
-                if ((formData.cep || '').length === 9) {
-                  aplicarEnderecoPorCep(formData.cep || '', 'cliente')
+                if ((localFormData.cep || '').length === 9) {
+                  aplicarEnderecoPorCep(localFormData.cep || '', 'cliente')
                 }
               }}
               placeholder="01234-567"
@@ -1620,8 +1623,8 @@ function ClienteForm({
             <Label htmlFor="endereco">Endereço</Label>
             <Input
               id="endereco"
-              value={formData.endereco || ''}
-              onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+              value={localFormData.endereco || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, endereco: e.target.value })}
               placeholder="Rua, número e bairro"
             />
           </div>
@@ -1629,8 +1632,8 @@ function ClienteForm({
             <Label htmlFor="endereco_complemento">Complemento</Label>
             <Input
               id="endereco_complemento"
-              value={formData.endereco_complemento || ''}
-              onChange={(e) => setFormData({ ...formData, endereco_complemento: e.target.value })}
+              value={localFormData.endereco_complemento || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, endereco_complemento: e.target.value })}
               placeholder="Sala, bloco, andar (opcional)"
             />
           </div>
@@ -1641,16 +1644,16 @@ function ClienteForm({
             <Label htmlFor="cidade">Cidade</Label>
             <Input
               id="cidade"
-              value={formData.cidade || ''}
-              onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+              value={localFormData.cidade || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, cidade: e.target.value })}
               placeholder="São Paulo"
             />
           </div>
           <div>
             <Label htmlFor="estado">Estado</Label>
             <Select
-              value={formData.estado || undefined}
-              onValueChange={(value) => setFormData({ ...formData, estado: value })}
+              value={localFormData.estado || undefined}
+              onValueChange={(value) => setLocalFormData({ ...localFormData, estado: value })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o estado" />
@@ -1675,8 +1678,8 @@ function ClienteForm({
             <Label htmlFor="contato">Nome do Contato *</Label>
             <Input
               id="contato"
-              value={formData.contato || ''}
-              onChange={(e) => setFormData({ ...formData, contato: e.target.value })}
+              value={localFormData.contato || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, contato: e.target.value })}
               placeholder="João Silva"
               required
             />
@@ -1685,8 +1688,8 @@ function ClienteForm({
             <Label htmlFor="contato_cargo">Cargo do Contato</Label>
             <Input
               id="contato_cargo"
-              value={formData.contato_cargo || ''}
-              onChange={(e) => setFormData({ ...formData, contato_cargo: e.target.value })}
+              value={localFormData.contato_cargo || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, contato_cargo: e.target.value })}
               placeholder="Ex: Engenheiro, Comprador, Administrador"
             />
           </div>
@@ -1698,8 +1701,8 @@ function ClienteForm({
             <Input
               id="contato_email"
               type="email"
-              value={formData.contato_email || ''}
-              onChange={(e) => setFormData({ ...formData, contato_email: e.target.value })}
+              value={localFormData.contato_email || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, contato_email: e.target.value })}
               placeholder="joao.silva@empresa.com"
               required
             />
@@ -1708,7 +1711,7 @@ function ClienteForm({
             <Label htmlFor="contato_telefone">Telefone do Contato</Label>
             <Input
               id="contato_telefone"
-              value={formData.contato_telefone || ''}
+              value={localFormData.contato_telefone || ''}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '')
                 if (value.length >= 2) {
@@ -1717,7 +1720,7 @@ function ClienteForm({
                 if (value.length >= 10) {
                   value = value.substring(0, 10) + '-' + value.substring(10, 14)
                 }
-                setFormData({ ...formData, contato_telefone: value })
+                setLocalFormData({ ...localFormData, contato_telefone: value })
               }}
               placeholder="(11) 99999-9999"
               maxLength={15}
@@ -1734,18 +1737,18 @@ function ClienteForm({
             <Label htmlFor="cep_obra">CEP</Label>
             <Input
               id="cep_obra"
-              value={formData.cep_obra || ''}
+              value={localFormData.cep_obra || ''}
               onChange={(e) => {
                 const value = formatarCep(e.target.value)
-                setFormData({ ...formData, cep_obra: value })
+                setLocalFormData({ ...localFormData, cep_obra: value })
                 setErroCepObra('')
                 if (value.length === 9) {
                   aplicarEnderecoPorCep(value, 'obra')
                 }
               }}
               onBlur={() => {
-                if ((formData.cep_obra || '').length === 9) {
-                  aplicarEnderecoPorCep(formData.cep_obra || '', 'obra')
+                if ((localFormData.cep_obra || '').length === 9) {
+                  aplicarEnderecoPorCep(localFormData.cep_obra || '', 'obra')
                 }
               }}
               placeholder="01234-567"
@@ -1761,8 +1764,8 @@ function ClienteForm({
             <Label htmlFor="endereco_obra">Endereço</Label>
             <Input
               id="endereco_obra"
-              value={formData.endereco_obra || ''}
-              onChange={(e) => setFormData({ ...formData, endereco_obra: e.target.value })}
+              value={localFormData.endereco_obra || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, endereco_obra: e.target.value })}
               placeholder="Rua, número e bairro"
             />
           </div>
@@ -1770,8 +1773,8 @@ function ClienteForm({
             <Label htmlFor="endereco_obra_complemento">Complemento</Label>
             <Input
               id="endereco_obra_complemento"
-              value={formData.endereco_obra_complemento || ''}
-              onChange={(e) => setFormData({ ...formData, endereco_obra_complemento: e.target.value })}
+              value={localFormData.endereco_obra_complemento || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, endereco_obra_complemento: e.target.value })}
               placeholder="Sala, bloco, andar (opcional)"
             />
           </div>
@@ -1782,16 +1785,16 @@ function ClienteForm({
             <Label htmlFor="cidade_obra">Cidade</Label>
             <Input
               id="cidade_obra"
-              value={formData.cidade_obra || ''}
-              onChange={(e) => setFormData({ ...formData, cidade_obra: e.target.value })}
+              value={localFormData.cidade_obra || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, cidade_obra: e.target.value })}
               placeholder="São Paulo"
             />
           </div>
           <div>
             <Label htmlFor="estado_obra">Estado</Label>
             <Select
-              value={formData.estado_obra || undefined}
-              onValueChange={(value) => setFormData({ ...formData, estado_obra: value })}
+              value={localFormData.estado_obra || undefined}
+              onValueChange={(value) => setLocalFormData({ ...localFormData, estado_obra: value })}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o estado" />
@@ -1814,20 +1817,20 @@ function ClienteForm({
           <input
             type="checkbox"
             id="criar_usuario"
-            checked={formData.criar_usuario || false}
-            onChange={(e) => setFormData({ ...formData, criar_usuario: e.target.checked })}
-            disabled={isEdit && formData.criar_usuario}
+            checked={localFormData.criar_usuario || false}
+            onChange={(e) => setLocalFormData({ ...localFormData, criar_usuario: e.target.checked })}
+            disabled={isEdit && localFormData.criar_usuario}
             className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && formData.criar_usuario ? 'text-gray-500' : ''}`}>
-            {isEdit && formData.criar_usuario 
+          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && localFormData.criar_usuario ? 'text-gray-500' : ''}`}>
+            {isEdit && localFormData.criar_usuario 
               ? 'Usuário já criado para o representante' 
               : 'Criar usuário para o representante'
             }
           </Label>
         </div>
 
-        {formData.criar_usuario && (
+        {localFormData.criar_usuario && (
           <div className={`border rounded-lg p-4 ${isEdit ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">

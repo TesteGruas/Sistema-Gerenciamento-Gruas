@@ -190,6 +190,182 @@ const parseDecimal = (value: string) => {
   return parseFloat(cleanValue) || 0
 }
 
+const UFS = ["AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA", "MT", "MS", "MG", "PA", "PB", "PR", "PE", "PI", "RJ", "RN", "RS", "RO", "RR", "SC", "SP", "SE", "TO"]
+
+const getInitialClienteFormData = () => ({
+  nome: '',
+  email: '',
+  telefone: '',
+  cnpj: '',
+  inscricao_estadual: '',
+  inscricao_municipal: '',
+  endereco: '',
+  endereco_complemento: '',
+  endereco_obra: '',
+  endereco_obra_complemento: '',
+  cidade_obra: '',
+  estado_obra: '',
+  cep_obra: '',
+  cidade: '',
+  estado: '',
+  cep: '',
+  contato: '',
+  contato_cargo: '',
+  contato_email: '',
+  contato_cpf: '',
+  contato_telefone: '',
+  status: 'ativo',
+  criar_usuario: false,
+  usuario_senha: ''
+})
+
+function NovoClienteDialog({
+  open,
+  onOpenChange,
+  onClienteCriado
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onClienteCriado: (cliente: any) => void
+}) {
+  const { toast } = useToast()
+  const [isCreatingCliente, setIsCreatingCliente] = useState(false)
+  const [clienteFormData, setClienteFormData] = useState(getInitialClienteFormData())
+
+  useEffect(() => {
+    if (!open) setClienteFormData(getInitialClienteFormData())
+  }, [open])
+
+  const preencherDadosClienteDebug = () => {
+    setClienteFormData({
+      nome: 'Construtora ABC Ltda',
+      cnpj: '12.345.678/0001-90',
+      inscricao_estadual: '110.042.490.114',
+      inscricao_municipal: '1234567',
+      email: 'contato@construtoraabc.com.br',
+      telefone: '(11) 98765-4321',
+      endereco: 'Rua das Construções, 123',
+      endereco_complemento: 'Sala 402',
+      endereco_obra: 'Av. Paulista, 1500 - Bela Vista',
+      endereco_obra_complemento: 'Torre B',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '01310-100',
+      cidade_obra: 'São Paulo',
+      estado_obra: 'SP',
+      cep_obra: '01311-000',
+      contato: 'João Silva',
+      contato_cargo: 'Engenheiro Responsável',
+      contato_email: 'joao.silva@construtoraabc.com.br',
+      contato_cpf: '',
+      contato_telefone: '(11) 91234-5678',
+      status: 'ativo',
+      criar_usuario: true,
+      usuario_senha: ''
+    })
+  }
+
+  const handleCreateCliente = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      setIsCreatingCliente(true)
+      const dadosFormatados = {
+        ...clienteFormData,
+        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
+        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
+        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
+        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
+        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
+        criar_usuario: clienteFormData.criar_usuario || false,
+        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
+      }
+      const response = await clientesApi.criarCliente(dadosFormatados)
+      if (response.success && response.data) {
+        onClienteCriado(converterClienteBackendParaFrontend(response.data))
+        onOpenChange(false)
+        toast({ title: "Sucesso", description: "Cliente criado e selecionado com sucesso!" })
+      }
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.response?.data?.message || "Erro ao criar cliente. Tente novamente.", variant: "destructive" })
+    } finally {
+      setIsCreatingCliente(false)
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Building2 className="w-5 h-5" />
+            Novo Cliente
+          </DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleCreateCliente} className="space-y-2">
+          <div className="flex justify-end mb-4">
+            <Button type="button" variant="outline" onClick={preencherDadosClienteDebug} disabled={isCreatingCliente} className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300" title="Preencher todos os campos com dados de exemplo">
+              <Zap className="w-4 h-4 mr-2" />
+              Preencher Todos os Dados
+            </Button>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Informações Básicas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="nome">Nome da Empresa *</Label><Input id="nome" value={clienteFormData.nome} onChange={(e) => setClienteFormData({ ...clienteFormData, nome: e.target.value })} placeholder="Ex: Construtora ABC Ltda" required /></div>
+              <div><Label htmlFor="cnpj">CNPJ *</Label><Input id="cnpj" value={clienteFormData.cnpj} onChange={(e) => setClienteFormData({ ...clienteFormData, cnpj: formatCNPJ(e.target.value) })} placeholder="00.000.000/0000-00" maxLength={18} required /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div><Label htmlFor="inscricao_estadual">Inscrição Estadual</Label><Input id="inscricao_estadual" value={clienteFormData.inscricao_estadual || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_estadual: e.target.value })} placeholder="Opcional" /></div>
+              <div><Label htmlFor="inscricao_municipal">Inscrição Municipal</Label><Input id="inscricao_municipal" value={clienteFormData.inscricao_municipal || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_municipal: e.target.value })} placeholder="Opcional" /></div>
+              <div><Label htmlFor="status">Status *</Label><Select value={clienteFormData.status || 'ativo'} onValueChange={(value) => setClienteFormData({ ...clienteFormData, status: value })}><SelectTrigger><SelectValue placeholder="Selecione o status" /></SelectTrigger><SelectContent><SelectItem value="ativo">Ativo</SelectItem><SelectItem value="inativo">Inativo</SelectItem><SelectItem value="bloqueado">Bloqueado</SelectItem><SelectItem value="pendente">Pendente</SelectItem></SelectContent></Select></div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Endereço da Empresa</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><Label htmlFor="cep">CEP</Label><Input id="cep" value={clienteFormData.cep || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, cep: formatCEP(e.target.value) })} placeholder="01234-567" maxLength={9} /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="endereco">Endereço</Label><Input id="endereco" value={clienteFormData.endereco || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, endereco: e.target.value })} placeholder="Rua, número e bairro" /></div>
+              <div><Label htmlFor="endereco_complemento">Complemento</Label><Input id="endereco_complemento" value={clienteFormData.endereco_complemento || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_complemento: e.target.value })} placeholder="Sala, bloco, andar (opcional)" /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="cidade">Cidade</Label><Input id="cidade" value={clienteFormData.cidade || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, cidade: e.target.value })} placeholder="São Paulo" /></div>
+              <div><Label htmlFor="estado">Estado</Label><Select value={clienteFormData.estado || undefined} onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado: value })}><SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger><SelectContent>{UFS.map((uf) => <SelectItem key={uf} value={uf}>{uf}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Informações de Contato</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="contato">Nome do Contato *</Label><Input id="contato" value={clienteFormData.contato || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, contato: e.target.value })} placeholder="João Silva" required /></div>
+              <div><Label htmlFor="contato_cargo">Cargo do Contato</Label><Input id="contato_cargo" value={clienteFormData.contato_cargo || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, contato_cargo: e.target.value })} placeholder="Ex: Engenheiro, Comprador, Administrador" /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="contato_email">Email do Contato *</Label><Input id="contato_email" type="email" value={clienteFormData.contato_email || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, contato_email: e.target.value })} placeholder="joao.silva@empresa.com" required /></div>
+              <div><Label htmlFor="contato_telefone">Telefone do Contato</Label><Input id="contato_telefone" value={clienteFormData.contato_telefone || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, contato_telefone: formatPhone(e.target.value) })} placeholder="(11) 99999-9999" maxLength={15} /></div>
+            </div>
+          </div>
+          <div className="space-y-4">
+            <h3 className="text-lg font-medium">Endereço da Obra</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div><Label htmlFor="cep_obra">CEP</Label><Input id="cep_obra" value={clienteFormData.cep_obra || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, cep_obra: formatCEP(e.target.value) })} placeholder="01234-567" maxLength={9} /></div></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="endereco_obra">Endereço</Label><Input id="endereco_obra" value={clienteFormData.endereco_obra || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra: e.target.value })} placeholder="Rua, número e bairro" /></div>
+              <div><Label htmlFor="endereco_obra_complemento">Complemento</Label><Input id="endereco_obra_complemento" value={clienteFormData.endereco_obra_complemento || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra_complemento: e.target.value })} placeholder="Sala, bloco, andar (opcional)" /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div><Label htmlFor="cidade_obra">Cidade</Label><Input id="cidade_obra" value={clienteFormData.cidade_obra || ''} onChange={(e) => setClienteFormData({ ...clienteFormData, cidade_obra: e.target.value })} placeholder="São Paulo" /></div>
+              <div><Label htmlFor="estado_obra">Estado</Label><Select value={clienteFormData.estado_obra || undefined} onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado_obra: value })}><SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger><SelectContent>{UFS.map((uf) => <SelectItem key={`obra-${uf}`} value={uf}>{uf}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isCreatingCliente}>Cancelar</Button>
+            <Button type="submit" disabled={isCreatingCliente}>{isCreatingCliente ? (<><Loader2 className="w-4 h-4 mr-2 animate-spin" />Criando...</>) : (<><Plus className="w-4 h-4 mr-2" />Criar Cliente</>)}</Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 export default function NovaObraPage() {
   const router = useRouter()
   const { toast } = useToast()
@@ -325,33 +501,6 @@ export default function NovaObraPage() {
   
   // Estados para modal de criação de cliente
   const [isClienteModalOpen, setIsClienteModalOpen] = useState(false)
-  const [isCreatingCliente, setIsCreatingCliente] = useState(false)
-  const [clienteFormData, setClienteFormData] = useState({
-    nome: '',
-    email: '',
-    telefone: '',
-    cnpj: '',
-    inscricao_estadual: '',
-    inscricao_municipal: '',
-    endereco: '',
-    endereco_complemento: '',
-    endereco_obra: '',
-    endereco_obra_complemento: '',
-    cidade_obra: '',
-    estado_obra: '',
-    cep_obra: '',
-    cidade: '',
-    estado: '',
-    cep: '',
-    contato: '',
-    contato_cargo: '',
-    contato_email: '',
-    contato_cpf: '',
-    contato_telefone: '',
-    status: 'ativo',
-    criar_usuario: false,
-    usuario_senha: ''
-  })
   
   // Estados para valores
   const [custosMensais, setCustosMensais] = useState<CustoMensal[]>([])
@@ -425,81 +574,6 @@ export default function NovaObraPage() {
     setCustosMensais([...custosMensais, ...custosDuplicados])
   }
 
-  // Função para lidar com seleção de cliente
-  const handleCreateCliente = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    try {
-      setIsCreatingCliente(true)
-      
-      // Remover máscaras antes de enviar
-      const dadosFormatados = {
-        ...clienteFormData,
-        cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
-        telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
-        cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
-        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
-        contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
-        contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
-        criar_usuario: clienteFormData.criar_usuario || false,
-        usuario_senha: clienteFormData.criar_usuario ? clienteFormData.usuario_senha : undefined
-      }
-      
-      const response = await clientesApi.criarCliente(dadosFormatados)
-      
-      if (response.success && response.data) {
-        // Converter o cliente criado para o formato esperado
-        const novoCliente = converterClienteBackendParaFrontend(response.data)
-        
-        // Selecionar automaticamente o cliente criado
-        handleClienteSelect(novoCliente)
-        
-        // Resetar formulário e fechar modal
-        setClienteFormData({
-          nome: '',
-          email: '',
-          telefone: '',
-          cnpj: '',
-          inscricao_estadual: '',
-          inscricao_municipal: '',
-          endereco: '',
-          endereco_complemento: '',
-          endereco_obra: '',
-          endereco_obra_complemento: '',
-          cidade_obra: '',
-          estado_obra: '',
-          cep_obra: '',
-          cidade: '',
-          estado: '',
-          cep: '',
-          contato: '',
-          contato_cargo: '',
-          contato_email: '',
-          contato_cpf: '',
-          contato_telefone: '',
-          status: 'ativo',
-          criar_usuario: false,
-          usuario_senha: ''
-        })
-        setIsClienteModalOpen(false)
-        
-        toast({
-          title: "Sucesso",
-          description: "Cliente criado e selecionado com sucesso!",
-        })
-      }
-    } catch (err: any) {
-      console.error('Erro ao criar cliente:', err)
-      toast({
-        title: "Erro",
-        description: err.response?.data?.message || "Erro ao criar cliente. Tente novamente.",
-        variant: "destructive"
-      })
-    } finally {
-      setIsCreatingCliente(false)
-    }
-  }
-
   const handleClienteSelect = async (cliente: any) => {
     setClienteSelecionado(cliente)
     if (cliente) {
@@ -569,35 +643,6 @@ export default function NovaObraPage() {
         setLoadingOrcamento(false)
       }
     }
-  }
-
-  const preencherDadosClienteDebug = () => {
-    setClienteFormData({
-      nome: 'Construtora ABC Ltda',
-      cnpj: '12.345.678/0001-90',
-      inscricao_estadual: '110.042.490.114',
-      inscricao_municipal: '1234567',
-      email: 'contato@construtoraabc.com.br',
-      telefone: '(11) 98765-4321',
-      endereco: 'Rua das Construções, 123',
-      endereco_complemento: 'Sala 402',
-      endereco_obra: 'Av. Paulista, 1500 - Bela Vista',
-      endereco_obra_complemento: 'Torre B',
-      cidade: 'São Paulo',
-      estado: 'SP',
-      cep: '01310-100',
-      cidade_obra: 'São Paulo',
-      estado_obra: 'SP',
-      cep_obra: '01311-000',
-      contato: 'João Silva',
-      contato_cargo: 'Engenheiro Responsável',
-      contato_email: 'joao.silva@construtoraabc.com.br',
-      contato_cpf: '',
-      contato_telefone: '(11) 91234-5678',
-      status: 'ativo',
-      criar_usuario: true,
-      usuario_senha: ''
-    })
   }
 
   // Função para lidar com seleção de grua
@@ -4067,441 +4112,11 @@ startxref
         </div>
       </form>
 
-      {/* Modal de Criação de Cliente */}
-      <Dialog open={isClienteModalOpen} onOpenChange={setIsClienteModalOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Building2 className="w-5 h-5" />
-              Novo Cliente
-            </DialogTitle>
-          </DialogHeader>
-          <form onSubmit={handleCreateCliente} className="space-y-2">
-            <div className="flex justify-end mb-4">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={preencherDadosClienteDebug}
-                disabled={isCreatingCliente}
-                className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-                title="Preencher todos os campos com dados de exemplo"
-              >
-                <Zap className="w-4 h-4 mr-2" />
-                Preencher Todos os Dados
-              </Button>
-            </div>
-            {/* Informações Básicas */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Informações Básicas</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="nome">Nome da Empresa *</Label>
-                  <Input
-                    id="nome"
-                    value={clienteFormData.nome}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, nome: e.target.value })}
-                    placeholder="Ex: Construtora ABC Ltda"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="cnpj">CNPJ *</Label>
-                  <Input
-                    id="cnpj"
-                    value={clienteFormData.cnpj}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 2) {
-                        value = value.substring(0, 2) + '.' + value.substring(2)
-                      }
-                      if (value.length >= 6) {
-                        value = value.substring(0, 6) + '.' + value.substring(6)
-                      }
-                      if (value.length >= 10) {
-                        value = value.substring(0, 10) + '/' + value.substring(10)
-                      }
-                      if (value.length >= 15) {
-                        value = value.substring(0, 15) + '-' + value.substring(15, 17)
-                      }
-                      setClienteFormData({ ...clienteFormData, cnpj: value })
-                    }}
-                    placeholder="00.000.000/0000-00"
-                    maxLength={18}
-                    required
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label htmlFor="inscricao_estadual">Inscrição Estadual</Label>
-                  <Input
-                    id="inscricao_estadual"
-                    value={clienteFormData.inscricao_estadual || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_estadual: e.target.value })}
-                    placeholder="Opcional"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="inscricao_municipal">Inscrição Municipal</Label>
-                  <Input
-                    id="inscricao_municipal"
-                    value={clienteFormData.inscricao_municipal || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_municipal: e.target.value })}
-                    placeholder="Opcional"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="status">Status *</Label>
-                  <Select
-                    value={clienteFormData.status || 'ativo'}
-                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, status: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ativo">Ativo</SelectItem>
-                      <SelectItem value="inativo">Inativo</SelectItem>
-                      <SelectItem value="bloqueado">Bloqueado</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Endereço da Empresa */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Endereço da Empresa</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="cep">CEP</Label>
-                  <Input
-                    id="cep"
-                    value={clienteFormData.cep || ''}
-                    onChange={(e) => {
-                      const value = formatCEP(e.target.value)
-                      setClienteFormData({ ...clienteFormData, cep: value })
-                    }}
-                    placeholder="01234-567"
-                    maxLength={9}
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="endereco">Endereço</Label>
-                  <Input
-                    id="endereco"
-                    value={clienteFormData.endereco || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco: e.target.value })}
-                    placeholder="Rua, número e bairro"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="endereco_complemento">Complemento</Label>
-                  <Input
-                    id="endereco_complemento"
-                    value={clienteFormData.endereco_complemento || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_complemento: e.target.value })}
-                    placeholder="Sala, bloco, andar (opcional)"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="cidade">Cidade</Label>
-                  <Input
-                    id="cidade"
-                    value={clienteFormData.cidade || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, cidade: e.target.value })}
-                    placeholder="São Paulo"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="estado">Estado</Label>
-                  <Select
-                    value={clienteFormData.estado || undefined}
-                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AC">AC</SelectItem>
-                      <SelectItem value="AL">AL</SelectItem>
-                      <SelectItem value="AP">AP</SelectItem>
-                      <SelectItem value="AM">AM</SelectItem>
-                      <SelectItem value="BA">BA</SelectItem>
-                      <SelectItem value="CE">CE</SelectItem>
-                      <SelectItem value="DF">DF</SelectItem>
-                      <SelectItem value="ES">ES</SelectItem>
-                      <SelectItem value="GO">GO</SelectItem>
-                      <SelectItem value="MA">MA</SelectItem>
-                      <SelectItem value="MT">MT</SelectItem>
-                      <SelectItem value="MS">MS</SelectItem>
-                      <SelectItem value="MG">MG</SelectItem>
-                      <SelectItem value="PA">PA</SelectItem>
-                      <SelectItem value="PB">PB</SelectItem>
-                      <SelectItem value="PR">PR</SelectItem>
-                      <SelectItem value="PE">PE</SelectItem>
-                      <SelectItem value="PI">PI</SelectItem>
-                      <SelectItem value="RJ">RJ</SelectItem>
-                      <SelectItem value="RN">RN</SelectItem>
-                      <SelectItem value="RS">RS</SelectItem>
-                      <SelectItem value="RO">RO</SelectItem>
-                      <SelectItem value="RR">RR</SelectItem>
-                      <SelectItem value="SC">SC</SelectItem>
-                      <SelectItem value="SP">SP</SelectItem>
-                      <SelectItem value="SE">SE</SelectItem>
-                      <SelectItem value="TO">TO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Informações de Contato */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Informações de Contato</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="contato">Nome do Contato *</Label>
-                  <Input
-                    id="contato"
-                    value={clienteFormData.contato || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato: e.target.value })}
-                    placeholder="João Silva"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="contato_cargo">Cargo do Contato</Label>
-                  <Input
-                    id="contato_cargo"
-                    value={clienteFormData.contato_cargo || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato_cargo: e.target.value })}
-                    placeholder="Ex: Engenheiro, Comprador, Administrador"
-                  />
-                </div>
-              </div>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="contato_email">Email do Contato *</Label>
-                  <Input
-                    id="contato_email"
-                    type="email"
-                    value={clienteFormData.contato_email || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato_email: e.target.value })}
-                    placeholder="joao.silva@empresa.com"
-                    required
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="contato_telefone">Telefone do Contato</Label>
-                  <Input
-                    id="contato_telefone"
-                    value={clienteFormData.contato_telefone || ''}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 2) {
-                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
-                      }
-                      if (value.length >= 10) {
-                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
-                      }
-                      setClienteFormData({ ...clienteFormData, contato_telefone: value })
-                    }}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Endereço da Obra */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Endereço da Obra</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="cep_obra">CEP</Label>
-                  <Input
-                    id="cep_obra"
-                    value={clienteFormData.cep_obra || ''}
-                    onChange={(e) => {
-                      const value = formatCEP(e.target.value)
-                      setClienteFormData({ ...clienteFormData, cep_obra: value })
-                    }}
-                    placeholder="01234-567"
-                    maxLength={9}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="endereco_obra">Endereço</Label>
-                  <Input
-                    id="endereco_obra"
-                    value={clienteFormData.endereco_obra || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra: e.target.value })}
-                    placeholder="Rua, número e bairro"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="endereco_obra_complemento">Complemento</Label>
-                  <Input
-                    id="endereco_obra_complemento"
-                    value={clienteFormData.endereco_obra_complemento || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra_complemento: e.target.value })}
-                    placeholder="Sala, bloco, andar (opcional)"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="cidade_obra">Cidade</Label>
-                  <Input
-                    id="cidade_obra"
-                    value={clienteFormData.cidade_obra || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, cidade_obra: e.target.value })}
-                    placeholder="São Paulo"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="estado_obra">Estado</Label>
-                  <Select
-                    value={clienteFormData.estado_obra || undefined}
-                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado_obra: value })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o estado" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="AC">AC</SelectItem>
-                      <SelectItem value="AL">AL</SelectItem>
-                      <SelectItem value="AP">AP</SelectItem>
-                      <SelectItem value="AM">AM</SelectItem>
-                      <SelectItem value="BA">BA</SelectItem>
-                      <SelectItem value="CE">CE</SelectItem>
-                      <SelectItem value="DF">DF</SelectItem>
-                      <SelectItem value="ES">ES</SelectItem>
-                      <SelectItem value="GO">GO</SelectItem>
-                      <SelectItem value="MA">MA</SelectItem>
-                      <SelectItem value="MT">MT</SelectItem>
-                      <SelectItem value="MS">MS</SelectItem>
-                      <SelectItem value="MG">MG</SelectItem>
-                      <SelectItem value="PA">PA</SelectItem>
-                      <SelectItem value="PB">PB</SelectItem>
-                      <SelectItem value="PR">PR</SelectItem>
-                      <SelectItem value="PE">PE</SelectItem>
-                      <SelectItem value="PI">PI</SelectItem>
-                      <SelectItem value="RJ">RJ</SelectItem>
-                      <SelectItem value="RN">RN</SelectItem>
-                      <SelectItem value="RS">RS</SelectItem>
-                      <SelectItem value="RO">RO</SelectItem>
-                      <SelectItem value="RR">RR</SelectItem>
-                      <SelectItem value="SC">SC</SelectItem>
-                      <SelectItem value="SP">SP</SelectItem>
-                      <SelectItem value="SE">SE</SelectItem>
-                      <SelectItem value="TO">TO</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-            </div>
-
-            {/* Configuração de Usuário */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Configuração de Usuário</h3>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="criar_usuario"
-                  checked={clienteFormData.criar_usuario || false}
-                  onChange={(e) => setClienteFormData({ ...clienteFormData, criar_usuario: e.target.checked })}
-                  className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <Label htmlFor="criar_usuario" className="text-sm font-medium">
-                  Criar usuário para o representante
-                </Label>
-              </div>
-              {clienteFormData.criar_usuario && (
-                <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-shrink-0">
-                      <User className="w-5 h-5 mt-0.5 text-blue-600" />
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-medium mb-1 text-blue-900">Criação de Usuário</h4>
-                      <p className="text-sm mb-3 text-blue-700">
-                        Será criado um usuário para o representante com acesso limitado ao sistema.
-                      </p>
-                      <div className="space-y-3">
-                        <p className="text-xs text-gray-500">
-                          Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp ao representante.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-4 pt-4 border-t">
-              <div>
-                <Label className="text-base font-medium">Arquivos do Cliente</Label>
-                <p className="text-sm text-gray-500 mb-3">
-                  Você pode fazer upload de múltiplos arquivos relacionados ao cliente (documentos, contratos, etc.)
-                </p>
-                <div className="space-y-3">
-                  <div>
-                    <Input
-                      type="file"
-                      multiple
-                      className="cursor-pointer"
-                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
-                      disabled={isCreatingCliente}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Formatos aceitos: PDF, Word, Excel, Imagens, TXT. Tamanho máximo: 10MB por arquivo.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button 
-                type="button" 
-                variant="outline" 
-                onClick={() => setIsClienteModalOpen(false)} 
-                disabled={isCreatingCliente}
-              >
-                Cancelar
-              </Button>
-              <Button type="submit" disabled={isCreatingCliente}>
-                {isCreatingCliente ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Criando...
-                  </>
-                ) : (
-                  <>
-                    <Plus className="w-4 h-4 mr-2" />
-                    Criar Cliente
-                  </>
-                )}
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <NovoClienteDialog
+        open={isClienteModalOpen}
+        onOpenChange={setIsClienteModalOpen}
+        onClienteCriado={handleClienteSelect}
+      />
     </div>
   )
 }
