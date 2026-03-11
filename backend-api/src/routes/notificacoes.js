@@ -274,8 +274,8 @@ router.get('/', authenticateToken, async (req, res) => {
       // Admin vê todas as notificações - buscar todas sem filtro de usuario_id
       console.log(`[notificacoes] 🔓 Buscando TODAS as notificações (Admin)`)
       const queryAdmin = query
-        .range(offset, offset + limit - 1)
         .order('data', { ascending: false })
+        .limit(5000)
 
       const { data: dataAdmin, error: errorAdmin, count: countAdmin } = await queryAdmin
 
@@ -293,8 +293,8 @@ router.get('/', authenticateToken, async (req, res) => {
       // Se não é cliente e não é admin, buscar por usuario_id normalmente
       console.log(`[notificacoes] 🔍 Buscando notificações por usuario_id: ${userId} (NÃO é cliente)`)
       const queryUsuario = query
-        .range(offset, offset + limit - 1)
         .order('data', { ascending: false })
+        .limit(5000)
 
       const { data: dataUsuario, error: errorUsuario, count: countUsuario } = await queryUsuario
 
