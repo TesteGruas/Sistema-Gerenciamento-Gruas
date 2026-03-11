@@ -38,6 +38,14 @@ import { SignaturePad } from "@/components/signature-pad"
 import { getApiBasePath } from "@/lib/runtime-config"
 
 export default function PWAPontoPage() {
+  const obterDataLocalISO = () => {
+    const now = new Date()
+    const ano = now.getFullYear()
+    const mes = String(now.getMonth() + 1).padStart(2, '0')
+    const dia = String(now.getDate()).padStart(2, '0')
+    return `${ano}-${mes}-${dia}`
+  }
+
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const [registrosHoje, setRegistrosHoje] = useState({
@@ -246,7 +254,7 @@ export default function PWAPontoPage() {
         return
       }
 
-      const hoje = new Date().toISOString().split('T')[0]
+      const hoje = obterDataLocalISO()
       const token = localStorage.getItem('access_token')
       if (!token) {
         setIsLoadingRegistros(false)
@@ -325,7 +333,7 @@ export default function PWAPontoPage() {
         token,
         'ID do funcionário não encontrado'
       )
-      const hoje = new Date().toISOString().split('T')[0]
+      const hoje = obterDataLocalISO()
       const apiUrl = getApiBasePath()
 
       const response = await fetch(`${apiUrl}/ponto-eletronico/debug/disparar-notificacao-almoco`, {
@@ -414,7 +422,7 @@ export default function PWAPontoPage() {
         'ID do funcionário não encontrado'
       )
 
-      const hoje = new Date().toISOString().split('T')[0]
+      const hoje = obterDataLocalISO()
       const registrosExistentes = await pontoApi.getRegistros({
         funcionario_id: funcionarioId,
         data_inicio: hoje,
@@ -557,7 +565,7 @@ export default function PWAPontoPage() {
       )
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
-      const hoje = agora.toISOString().split('T')[0]
+      const hoje = obterDataLocalISO()
       
       // VALIDAÇÃO: Verificar se já existe um registro completo (entrada + saída) para hoje
       if (isOnline) {
@@ -801,7 +809,7 @@ export default function PWAPontoPage() {
 
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
-      const hoje = agora.toISOString().split('T')[0]
+      const hoje = obterDataLocalISO()
       
       // Buscar ID numérico do funcionário usando função utilitária
       const funcionarioId = await getFuncionarioIdWithFallback(
