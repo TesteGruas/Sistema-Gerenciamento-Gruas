@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { sendEmail } from '../services/email.service.js';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
+import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -298,7 +299,7 @@ Acesse o app para corrigir as horas: ${link}`;
  * Envia: email + WhatsApp + notificação in-app
  */
 export async function notificarResponsaveisObraPontoConcluido(registro, funcionario) {
-  const obraId = registro.obra_id || funcionario.obra_atual_id;
+  const obraId = await resolverObraIdParaNotificacao(registro, funcionario);
   if (!obraId) {
     console.warn('[notificacoes-ponto] Sem obra_id, não é possível notificar responsáveis');
     return;
@@ -392,6 +393,16 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
           if (notif) {
             try { emitirNotificacao(usuarioId, notif); } catch (e) { /* websocket offline */ }
           }
+
+          // 4) Push Notification (PWA)
+          await enviarPushParaUsuario(usuarioId, {
+            title: 'Ponto pendente de assinatura',
+            body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
+            icon: '/icon-192x192.png',
+            badge: '/icon-72x72.png',
+            data: { url: `/pwa/aprovacao-assinatura?id=${registro.id}` },
+            tag: `ponto-pendente-${registro.id}`
+          });
         }
       } catch (e) {
         console.error(`[notificacoes-ponto] Erro ao notificar responsável ${resp.nome}:`, e.message);
@@ -401,6 +412,115 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
     console.log(`[notificacoes-ponto] Notificações enviadas para ${responsaveis.length} responsável(is) da obra ${obraNome}`);
   } catch (e) {
     console.error('[notificacoes-ponto] Erro geral ao notificar responsáveis:', e);
+  }
+}
+
+/**
+ * Notificação genérica de pendência de aprovação para responsáveis da obra.
+ * Não depende de registro/funcionário específico.
+ */
+export async function notificarResponsaveisObraPontosPendentes(obraId) {
+  if (!obraId) return { success: false, motivo: 'obra_id_ausente' };
+
+  try {
+    const { data: responsaveis, error } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id, nome, email, telefone, usuario')
+      .eq('obra_id', obraId)
+      .eq('ativo', true);
+
+    if (error || !responsaveis || responsaveis.length === 0) {
+      console.log('[notificacoes-ponto] Nenhum responsável ativo encontrado para obra', obraId);
+      return { success: false, motivo: 'sem_responsaveis', obra_id: obraId };
+    }
+
+    const { data: obra } = await supabaseAdmin
+      .from('obras')
+      .select('nome')
+      .eq('id', obraId)
+      .single();
+
+    const obraNome = obra?.nome || `Obra #${obraId}`;
+    const baseUrl = FRONTEND_URL();
+    const linkAprovacoes = `${baseUrl}/pwa/aprovacoes`;
+
+    const diagnostico = [];
+
+    for (const resp of responsaveis) {
+      try {
+        if (resp.email) {
+          await sendEmail({
+            to: resp.email,
+            subject: `Existem pontos pendentes de aprovação — ${obraNome}`,
+            html: `<p>Olá ${resp.nome || 'responsável'},</p>
+                   <p>Existem registros de ponto pendentes de aprovação na obra <strong>${obraNome}</strong>.</p>
+                   <p><a href="${linkAprovacoes}">Acessar aprovações</a></p>`,
+            tipo: 'notificacao_ponto_pendente_generica'
+          }).catch(e => console.error('[notificacoes-ponto] Erro email pendência genérica:', e.message));
+        }
+
+        const telefoneResponsavel = normalizarTelefoneWhatsapp(resp.telefone);
+        if (telefoneResponsavel) {
+          await enviarMensagemWebhook(
+            telefoneResponsavel,
+            `📋 *Pontos pendentes de aprovação*\n\nHá registros aguardando sua assinatura na obra *${obraNome}*.\nAcesse: ${linkAprovacoes}`,
+            linkAprovacoes,
+            { tipo: 'ponto_pendente_generico', destinatario_nome: resp.nome }
+          ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp pendência genérica:', e.message));
+        }
+
+        const usuarioId = await resolverUsuarioId(resp);
+        let pushResultado = null;
+        if (usuarioId) {
+          const { data: notif } = await supabaseAdmin
+            .from('notificacoes')
+            .insert({
+              usuario_id: usuarioId,
+              tipo: 'info',
+              titulo: 'Pontos pendentes de aprovação',
+              mensagem: `Existem registros aguardando sua assinatura em ${obraNome}.`,
+              link: '/pwa/aprovacoes',
+              lida: false,
+              created_at: new Date().toISOString()
+            })
+            .select()
+            .single();
+
+          if (notif) {
+            try { emitirNotificacao(usuarioId, notif); } catch (e) { /* websocket offline */ }
+          }
+
+          pushResultado = await enviarPushParaUsuario(usuarioId, {
+            title: 'Pontos pendentes de aprovação',
+            body: `Existem registros aguardando sua assinatura em ${obraNome}.`,
+            icon: '/icon-192x192.png',
+            badge: '/icon-72x72.png',
+            data: { url: '/pwa/aprovacoes' },
+            tag: `ponto-pendente-generico-${obraId}`
+          });
+        }
+
+        diagnostico.push({
+          responsavel_id: resp.id,
+          responsavel_nome: resp.nome,
+          email: resp.email,
+          telefone: resp.telefone,
+          usuario_id_resolvido: usuarioId || null,
+          push: pushResultado || { configurado: false, subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 }
+        });
+      } catch (e) {
+        console.error(`[notificacoes-ponto] Erro ao notificar responsável ${resp.nome}:`, e.message);
+        diagnostico.push({
+          responsavel_id: resp.id,
+          responsavel_nome: resp.nome,
+          erro: e.message
+        });
+      }
+    }
+    return { success: true, obra_id: obraId, diagnostico };
+  } catch (e) {
+    console.error('[notificacoes-ponto] Erro geral ao notificar pendência genérica:', e);
+    return { success: false, motivo: 'erro_geral', erro: e.message };
   }
 }
 
@@ -597,5 +717,76 @@ async function resolverUsuarioIdPorFuncionario(funcionarioId) {
     return usuario?.id || null;
   } catch {
     return null;
+  }
+}
+
+async function resolverObraIdParaNotificacao(registro, funcionario) {
+  const obraIdDireto = registro?.obra_id || funcionario?.obra_atual_id || funcionario?.obraAtualId;
+  if (obraIdDireto) return obraIdDireto;
+
+  const funcionarioId = registro?.funcionario_id || funcionario?.id || funcionario?.funcionario_id;
+  if (!funcionarioId) return null;
+
+  try {
+    const { data: funcData } = await supabaseAdmin
+      .from('funcionarios')
+      .select('obra_atual_id')
+      .eq('id', funcionarioId)
+      .single();
+
+    return funcData?.obra_atual_id || null;
+  } catch {
+    return null;
+  }
+}
+
+async function enviarPushParaUsuario(usuarioId, payload) {
+  if (!usuarioId) return { configurado: isWebPushConfigured(), subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
+  if (!isWebPushConfigured()) return { configurado: false, subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
+
+  try {
+    const { data: subscriptions } = await supabaseAdmin
+      .from('pwa_push_subscriptions')
+      .select('id, subscription')
+      .eq('user_id', String(usuarioId))
+      .eq('is_active', true);
+
+    if (!subscriptions || subscriptions.length === 0) {
+      return { configurado: true, subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
+    }
+
+    let enviados = 0;
+    let falhas = 0;
+    let desativados = 0;
+
+    for (const item of subscriptions) {
+      try {
+        await sendWebPush(item.subscription, payload);
+        enviados++;
+      } catch (pushError) {
+        falhas++;
+        const statusCode = pushError?.statusCode;
+        if (statusCode === 404 || statusCode === 410) {
+          await supabaseAdmin
+            .from('pwa_push_subscriptions')
+            .update({
+              is_active: false,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', item.id);
+          desativados++;
+        }
+      }
+    }
+    return {
+      configurado: true,
+      subscriptions_ativas: subscriptions.length,
+      enviados,
+      falhas,
+      desativados
+    };
+  } catch (error) {
+    console.error('[notificacoes-ponto] Erro ao enviar push:', error.message);
+    return { configurado: true, subscriptions_ativas: 0, enviados: 0, falhas: 1, desativados: 0, erro: error.message };
   }
 }

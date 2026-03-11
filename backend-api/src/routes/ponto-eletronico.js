@@ -22,7 +22,7 @@ import {
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
-import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado } from '../utils/notificacoes-ponto.js';
+import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado, notificarResponsaveisObraPontosPendentes } from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 import { enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
@@ -7475,10 +7475,12 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
     const funcionarioIdValidoNoCorpo = !Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0;
 
     let funcionarioIdAlvo = null;
+    let funcionarioIdOriginal = null;
     let funcionarioUsuario = null;
 
     if (funcionarioIdValidoNoCorpo) {
       funcionarioIdAlvo = funcionarioIdCorpo;
+      funcionarioIdOriginal = funcionarioIdCorpo;
     } else {
       // Fallback: usar funcionário vinculado ao usuário autenticado
       const { data: funcionarioVinculado, error: funcionarioUsuarioError } = await supabaseAdmin
@@ -7498,7 +7500,7 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
       funcionarioIdAlvo = funcionarioVinculado.id;
     }
 
-    const { data: registro, error: registroError } = await supabaseAdmin
+    let { data: registro, error: registroError } = await supabaseAdmin
       .from('registros_ponto')
       .select(`
         id,
@@ -7593,6 +7595,252 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
     return res.status(500).json({
       success: false,
       message: 'Erro interno ao disparar notificação de almoço',
+      error: error.message
+    });
+  }
+});
+
+/**
+ * @swagger
+ * /api/ponto-eletronico/debug/disparar-notificacao-responsavel-assinatura:
+ *   post:
+ *     summary: Dispara notificação de ponto pendente para responsável (debug)
+ *     tags: [Ponto Eletrônico]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               funcionario_id:
+ *                 type: integer
+ *                 description: ID do funcionário alvo (opcional)
+ *               data:
+ *                 type: string
+ *                 format: date
+ *                 description: Data no formato YYYY-MM-DD (opcional, padrão hoje)
+ *     responses:
+ *       200:
+ *         description: Disparo realizado com sucesso
+ *       400:
+ *         description: Registro não elegível para disparo
+ *       404:
+ *         description: Funcionário ou registro não encontrado
+ */
+router.post('/debug/disparar-notificacao-responsavel-assinatura', async (req, res) => {
+  try {
+    const usuarioId = req.user?.id || req.user?.userId;
+    if (!usuarioId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Usuário não autenticado'
+      });
+    }
+
+    const dataAlvo = req.body?.data || new Date().toISOString().split('T')[0];
+    const funcionarioIdCorpo = Number(req.body?.funcionario_id);
+    const funcionarioIdValidoNoCorpo = !Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0;
+
+    let funcionarioIdAlvo = null;
+    let funcionarioIdOriginal = null;
+
+    if (funcionarioIdValidoNoCorpo) {
+      funcionarioIdAlvo = funcionarioIdCorpo;
+      funcionarioIdOriginal = funcionarioIdCorpo;
+    } else {
+      const { data: funcionarioVinculado, error: funcionarioUsuarioError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id')
+        .eq('usuario_id', usuarioId)
+        .single();
+
+      if (funcionarioUsuarioError || !funcionarioVinculado) {
+        return res.status(404).json({
+          success: false,
+          message: 'Funcionário vinculado ao usuário não encontrado. Envie funcionario_id no corpo.'
+        });
+      }
+
+      funcionarioIdAlvo = funcionarioVinculado.id;
+      funcionarioIdOriginal = funcionarioVinculado.id;
+    }
+
+    // Se vier ID de usuário por engano no body, resolver para funcionario_id vinculado.
+    const { data: funcionarioExistente } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id')
+      .eq('id', funcionarioIdAlvo)
+      .maybeSingle();
+
+    if (!funcionarioExistente) {
+      const { data: usuarioVinculado } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, funcionario_id')
+        .eq('id', funcionarioIdAlvo)
+        .is('deleted_at', null)
+        .maybeSingle();
+
+      if (usuarioVinculado?.funcionario_id) {
+        funcionarioIdAlvo = usuarioVinculado.funcionario_id;
+      }
+    }
+
+    let { data: registro, error: registroError } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(`
+        id,
+        funcionario_id,
+        obra_id,
+        data,
+        entrada,
+        saida_almoco,
+        volta_almoco,
+        saida,
+        horas_trabalhadas,
+        horas_extras,
+        status,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(
+          id,
+          nome,
+          cargo,
+          obra_atual_id
+        )
+      `)
+      .eq('funcionario_id', funcionarioIdAlvo)
+      .eq('data', dataAlvo)
+      .single();
+
+    // Fallback para debug: se não encontrou na data solicitada,
+    // tenta o último registro encerrado (entrada + saída) do funcionário.
+    if (registroError || !registro) {
+      const { data: ultimoRegistro, error: ultimoRegistroError } = await supabaseAdmin
+        .from('registros_ponto')
+        .select(`
+          id,
+          funcionario_id,
+          obra_id,
+          data,
+          entrada,
+          saida_almoco,
+          volta_almoco,
+          saida,
+          horas_trabalhadas,
+          horas_extras,
+          status,
+          funcionario:funcionarios!fk_registros_ponto_funcionario(
+            id,
+            nome,
+            cargo,
+            obra_atual_id
+          )
+        `)
+        .eq('funcionario_id', funcionarioIdAlvo)
+        .not('entrada', 'is', null)
+        .not('saida', 'is', null)
+        .order('data', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (ultimoRegistroError || !ultimoRegistro) {
+        // Modo provisório: sem registro fechado, dispara aviso genérico por obra.
+        const { data: funcionarioInfo } = await supabaseAdmin
+          .from('funcionarios')
+          .select('id, nome, obra_atual_id')
+          .eq('id', funcionarioIdAlvo)
+          .maybeSingle();
+
+        const obraIdFallback = funcionarioInfo?.obra_atual_id || null;
+        if (!obraIdFallback) {
+          return res.status(404).json({
+            success: false,
+            message: 'Nenhum registro de ponto encerrado encontrado para este funcionário e não foi possível identificar a obra.',
+            debug: {
+              funcionario_id_recebido: funcionarioIdOriginal,
+              funcionario_id_resolvido: funcionarioIdAlvo,
+              data_solicitada: dataAlvo
+            }
+          });
+        }
+
+        const resultadoNotificacao = await notificarResponsaveisObraPontosPendentes(obraIdFallback);
+
+        return res.json({
+          success: true,
+          message: 'Notificação genérica de pontos pendentes disparada para responsáveis da obra.',
+          data: {
+            modo_generico: true,
+            funcionario_id_resolvido: funcionarioIdAlvo,
+            obra_id: obraIdFallback,
+            data_solicitada: dataAlvo,
+            diagnostico_envio: resultadoNotificacao
+          }
+        });
+      }
+
+      registro = ultimoRegistro;
+    }
+
+    if (!registro.entrada || !registro.saida) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registro não elegível. É necessário ter entrada e saída (dia encerrado).'
+      });
+    }
+
+    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    if (!obraId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registro sem obra vinculada para notificar responsável.'
+      });
+    }
+
+    const { data: responsaveisAtivos, error: responsaveisError } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id, nome, email, telefone')
+      .eq('obra_id', obraId)
+      .eq('ativo', true);
+
+    if (responsaveisError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar responsáveis da obra.',
+        error: responsaveisError.message
+      });
+    }
+
+    if (!responsaveisAtivos || responsaveisAtivos.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `Nenhum responsável ativo encontrado para a obra ${obraId}.`
+      });
+    }
+
+    await notificarResponsaveisObraPontoConcluido(
+      registro,
+      registro.funcionario || { id: registro.funcionario_id, nome: 'Funcionário', obra_atual_id: obraId }
+    );
+
+    return res.json({
+      success: true,
+      message: 'Notificação para responsáveis disparada com sucesso (debug).',
+      data: {
+        registro_ponto_id: registro.id,
+        funcionario_id: registro.funcionario_id,
+        funcionario_nome: registro.funcionario?.nome || null,
+        obra_id: obraId,
+        total_responsaveis_notificados: responsaveisAtivos.length,
+        responsaveis: responsaveisAtivos
+      }
+    });
+  } catch (error) {
+    console.error('[debug-responsavel-assinatura] ❌ Erro ao disparar notificação manual:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno ao disparar notificação para responsável',
       error: error.message
     });
   }

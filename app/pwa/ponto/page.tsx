@@ -74,6 +74,7 @@ export default function PWAPontoPage() {
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const [isDisparandoDebugAlmoco, setIsDisparandoDebugAlmoco] = useState(false)
+  const [isDisparandoDebugResponsavel, setIsDisparandoDebugResponsavel] = useState(false)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -367,6 +368,54 @@ export default function PWAPontoPage() {
       })
     } finally {
       setIsDisparandoDebugAlmoco(false)
+    }
+  }
+
+  const dispararNotificacaoResponsavelDebug = async () => {
+    setIsDisparandoDebugResponsavel(true)
+    try {
+      const token = localStorage.getItem('access_token')
+      if (!token) throw new Error('Token não encontrado')
+
+      const funcionarioId = await getFuncionarioIdWithFallback(
+        user,
+        token,
+        'ID do funcionário não encontrado'
+      )
+      const hoje = obterDataLocalISO()
+      const apiUrl = getApiBasePath()
+
+      const response = await fetch(`${apiUrl}/ponto-eletronico/debug/disparar-notificacao-responsavel-assinatura`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          funcionario_id: funcionarioId,
+          data: hoje
+        })
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(data.message || 'Falha ao disparar notificação do responsável')
+      }
+
+      const totalResponsaveis = data?.data?.total_responsaveis_notificados ?? 0
+      toast({
+        title: "Debug executado",
+        description: `Notificação de assinatura disparada para ${totalResponsaveis} responsável(eis).`,
+        variant: "default"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro no debug do responsável",
+        description: error.message || "Não foi possível disparar a notificação.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsDisparandoDebugResponsavel(false)
     }
   }
 
@@ -1247,6 +1296,35 @@ export default function PWAPontoPage() {
               disabled={isDisparandoDebugAlmoco}
             >
               {isDisparandoDebugAlmoco ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Disparando...
+                </>
+              ) : (
+                'Disparar agora'
+              )}
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Debug - Disparo manual da notificação para responsável assinar */}
+      <Card className="bg-slate-50 border-slate-200">
+        <CardContent className="p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-sm">Debug de assinatura do responsável</p>
+              <p className="text-xs text-muted-foreground">
+                Dispara agora WhatsApp + push para responsável da obra assinar o ponto
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={dispararNotificacaoResponsavelDebug}
+              disabled={isDisparandoDebugResponsavel}
+            >
+              {isDisparandoDebugResponsavel ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
                   Disparando...
