@@ -54,7 +54,6 @@ import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { clientesApi, converterClienteBackendParaFrontend } from "@/lib/api-clientes"
-import { Checkbox } from "@/components/ui/checkbox"
 import { useDebugMode } from "@/hooks/use-debug-mode"
 import { DebugButton } from "@/components/debug-button"
 import { responsaveisObraApi, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
@@ -332,11 +331,20 @@ export default function NovaObraPage() {
     email: '',
     telefone: '',
     cnpj: '',
+    inscricao_estadual: '',
+    inscricao_municipal: '',
     endereco: '',
+    endereco_complemento: '',
+    endereco_obra: '',
+    endereco_obra_complemento: '',
+    cidade_obra: '',
+    estado_obra: '',
+    cep_obra: '',
     cidade: '',
     estado: '',
     cep: '',
     contato: '',
+    contato_cargo: '',
     contato_email: '',
     contato_cpf: '',
     contato_telefone: '',
@@ -430,6 +438,7 @@ export default function NovaObraPage() {
         cnpj: clienteFormData.cnpj.replace(/\D/g, ''),
         telefone: clienteFormData.telefone ? clienteFormData.telefone.replace(/\D/g, '') : '',
         cep: clienteFormData.cep ? clienteFormData.cep.replace(/\D/g, '') : '',
+        cep_obra: clienteFormData.cep_obra ? clienteFormData.cep_obra.replace(/\D/g, '') : '',
         contato_cpf: clienteFormData.contato_cpf ? clienteFormData.contato_cpf.replace(/\D/g, '') : '',
         contato_telefone: clienteFormData.contato_telefone ? clienteFormData.contato_telefone.replace(/\D/g, '') : '',
         criar_usuario: clienteFormData.criar_usuario || false,
@@ -451,11 +460,20 @@ export default function NovaObraPage() {
           email: '',
           telefone: '',
           cnpj: '',
+          inscricao_estadual: '',
+          inscricao_municipal: '',
           endereco: '',
+          endereco_complemento: '',
+          endereco_obra: '',
+          endereco_obra_complemento: '',
+          cidade_obra: '',
+          estado_obra: '',
+          cep_obra: '',
           cidade: '',
           estado: '',
           cep: '',
           contato: '',
+          contato_cargo: '',
           contato_email: '',
           contato_cpf: '',
           contato_telefone: '',
@@ -551,6 +569,35 @@ export default function NovaObraPage() {
         setLoadingOrcamento(false)
       }
     }
+  }
+
+  const preencherDadosClienteDebug = () => {
+    setClienteFormData({
+      nome: 'Construtora ABC Ltda',
+      cnpj: '12.345.678/0001-90',
+      inscricao_estadual: '110.042.490.114',
+      inscricao_municipal: '1234567',
+      email: 'contato@construtoraabc.com.br',
+      telefone: '(11) 98765-4321',
+      endereco: 'Rua das Construções, 123',
+      endereco_complemento: 'Sala 402',
+      endereco_obra: 'Av. Paulista, 1500 - Bela Vista',
+      endereco_obra_complemento: 'Torre B',
+      cidade: 'São Paulo',
+      estado: 'SP',
+      cep: '01310-100',
+      cidade_obra: 'São Paulo',
+      estado_obra: 'SP',
+      cep_obra: '01311-000',
+      contato: 'João Silva',
+      contato_cargo: 'Engenheiro Responsável',
+      contato_email: 'joao.silva@construtoraabc.com.br',
+      contato_cpf: '',
+      contato_telefone: '(11) 91234-5678',
+      status: 'ativo',
+      criar_usuario: true,
+      usuario_senha: ''
+    })
   }
 
   // Função para lidar com seleção de grua
@@ -3281,14 +3328,13 @@ startxref
                                 <Button
                                   type="button"
                                   variant="outline"
-                                  size="sm"
                                   onClick={() => preencherTodosDadosGrua(grua.id)}
                                   disabled={creating}
-                                  className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-                                  title="Preencher todos os campos desta grua com dados de teste"
+                                  className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                                  title="Preencher todos os campos com dados de exemplo"
                                 >
-                                  <Zap className="w-3 h-3 mr-1" />
-                                  Preencher Todos os Dados desta Grua
+                                  <Zap className="w-4 h-4 mr-2" />
+                                  Preencher Todos os Dados
                                 </Button>
                               </div>
                               
@@ -4030,7 +4076,20 @@ startxref
               Novo Cliente
             </DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleCreateCliente} className="space-y-6">
+          <form onSubmit={handleCreateCliente} className="space-y-2">
+            <div className="flex justify-end mb-4">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={preencherDadosClienteDebug}
+                disabled={isCreatingCliente}
+                className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                title="Preencher todos os campos com dados de exemplo"
+              >
+                <Zap className="w-4 h-4 mr-2" />
+                Preencher Todos os Dados
+              </Button>
+            </div>
             {/* Informações Básicas */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Informações Básicas</h3>
@@ -4073,15 +4132,33 @@ startxref
                 </div>
               </div>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="inscricao_estadual">Inscrição Estadual</Label>
+                  <Input
+                    id="inscricao_estadual"
+                    value={clienteFormData.inscricao_estadual || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_estadual: e.target.value })}
+                    placeholder="Opcional"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="inscricao_municipal">Inscrição Municipal</Label>
+                  <Input
+                    id="inscricao_municipal"
+                    value={clienteFormData.inscricao_municipal || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, inscricao_municipal: e.target.value })}
+                    placeholder="Opcional"
+                  />
+                </div>
                 <div>
                   <Label htmlFor="status">Status *</Label>
                   <Select
-                    value={clienteFormData.status}
+                    value={clienteFormData.status || 'ativo'}
                     onValueChange={(value) => setClienteFormData({ ...clienteFormData, status: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue placeholder="Selecione o status" />
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="ativo">Ativo</SelectItem>
@@ -4092,43 +4169,27 @@ startxref
                   </Select>
                 </div>
               </div>
+            </div>
 
+            {/* Endereço da Empresa */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Endereço da Empresa</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="email">Email</Label>
+                  <Label htmlFor="cep">CEP</Label>
                   <Input
-                    id="email"
-                    type="email"
-                    value={clienteFormData.email || ''}
-                    onChange={(e) => setClienteFormData({ ...clienteFormData, email: e.target.value })}
-                    placeholder="contato@empresa.com"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="telefone">Telefone</Label>
-                  <Input
-                    id="telefone"
-                    value={clienteFormData.telefone || ''}
+                    id="cep"
+                    value={clienteFormData.cep || ''}
                     onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 2) {
-                        value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
-                      }
-                      if (value.length >= 10) {
-                        value = value.substring(0, 10) + '-' + value.substring(10, 14)
-                      }
-                      setClienteFormData({ ...clienteFormData, telefone: value })
+                      const value = formatCEP(e.target.value)
+                      setClienteFormData({ ...clienteFormData, cep: value })
                     }}
-                    placeholder="(11) 99999-9999"
-                    maxLength={15}
+                    placeholder="01234-567"
+                    maxLength={9}
                   />
                 </div>
               </div>
-            </div>
-
-            {/* Endereço */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Endereço</h3>
+              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <Label htmlFor="endereco">Endereço</Label>
@@ -4136,23 +4197,16 @@ startxref
                     id="endereco"
                     value={clienteFormData.endereco || ''}
                     onChange={(e) => setClienteFormData({ ...clienteFormData, endereco: e.target.value })}
-                    placeholder="Rua, número, bairro"
+                    placeholder="Rua, número e bairro"
                   />
                 </div>
                 <div>
-                  <Label htmlFor="cep">CEP</Label>
+                  <Label htmlFor="endereco_complemento">Complemento</Label>
                   <Input
-                    id="cep"
-                    value={clienteFormData.cep || ''}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 5) {
-                        value = value.substring(0, 5) + '-' + value.substring(5, 8)
-                      }
-                      setClienteFormData({ ...clienteFormData, cep: value })
-                    }}
-                    placeholder="01234-567"
-                    maxLength={9}
+                    id="endereco_complemento"
+                    value={clienteFormData.endereco_complemento || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_complemento: e.target.value })}
+                    placeholder="Sala, bloco, andar (opcional)"
                   />
                 </div>
               </div>
@@ -4177,45 +4231,45 @@ startxref
                       <SelectValue placeholder="Selecione o estado" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="AC">Acre (AC)</SelectItem>
-                      <SelectItem value="AL">Alagoas (AL)</SelectItem>
-                      <SelectItem value="AP">Amapá (AP)</SelectItem>
-                      <SelectItem value="AM">Amazonas (AM)</SelectItem>
-                      <SelectItem value="BA">Bahia (BA)</SelectItem>
-                      <SelectItem value="CE">Ceará (CE)</SelectItem>
-                      <SelectItem value="DF">Distrito Federal (DF)</SelectItem>
-                      <SelectItem value="ES">Espírito Santo (ES)</SelectItem>
-                      <SelectItem value="GO">Goiás (GO)</SelectItem>
-                      <SelectItem value="MA">Maranhão (MA)</SelectItem>
-                      <SelectItem value="MT">Mato Grosso (MT)</SelectItem>
-                      <SelectItem value="MS">Mato Grosso do Sul (MS)</SelectItem>
-                      <SelectItem value="MG">Minas Gerais (MG)</SelectItem>
-                      <SelectItem value="PA">Pará (PA)</SelectItem>
-                      <SelectItem value="PB">Paraíba (PB)</SelectItem>
-                      <SelectItem value="PR">Paraná (PR)</SelectItem>
-                      <SelectItem value="PE">Pernambuco (PE)</SelectItem>
-                      <SelectItem value="PI">Piauí (PI)</SelectItem>
-                      <SelectItem value="RJ">Rio de Janeiro (RJ)</SelectItem>
-                      <SelectItem value="RN">Rio Grande do Norte (RN)</SelectItem>
-                      <SelectItem value="RS">Rio Grande do Sul (RS)</SelectItem>
-                      <SelectItem value="RO">Rondônia (RO)</SelectItem>
-                      <SelectItem value="RR">Roraima (RR)</SelectItem>
-                      <SelectItem value="SC">Santa Catarina (SC)</SelectItem>
-                      <SelectItem value="SP">São Paulo (SP)</SelectItem>
-                      <SelectItem value="SE">Sergipe (SE)</SelectItem>
-                      <SelectItem value="TO">Tocantins (TO)</SelectItem>
+                      <SelectItem value="AC">AC</SelectItem>
+                      <SelectItem value="AL">AL</SelectItem>
+                      <SelectItem value="AP">AP</SelectItem>
+                      <SelectItem value="AM">AM</SelectItem>
+                      <SelectItem value="BA">BA</SelectItem>
+                      <SelectItem value="CE">CE</SelectItem>
+                      <SelectItem value="DF">DF</SelectItem>
+                      <SelectItem value="ES">ES</SelectItem>
+                      <SelectItem value="GO">GO</SelectItem>
+                      <SelectItem value="MA">MA</SelectItem>
+                      <SelectItem value="MT">MT</SelectItem>
+                      <SelectItem value="MS">MS</SelectItem>
+                      <SelectItem value="MG">MG</SelectItem>
+                      <SelectItem value="PA">PA</SelectItem>
+                      <SelectItem value="PB">PB</SelectItem>
+                      <SelectItem value="PR">PR</SelectItem>
+                      <SelectItem value="PE">PE</SelectItem>
+                      <SelectItem value="PI">PI</SelectItem>
+                      <SelectItem value="RJ">RJ</SelectItem>
+                      <SelectItem value="RN">RN</SelectItem>
+                      <SelectItem value="RS">RS</SelectItem>
+                      <SelectItem value="RO">RO</SelectItem>
+                      <SelectItem value="RR">RR</SelectItem>
+                      <SelectItem value="SC">SC</SelectItem>
+                      <SelectItem value="SP">SP</SelectItem>
+                      <SelectItem value="SE">SE</SelectItem>
+                      <SelectItem value="TO">TO</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
 
-            {/* Pessoa de Contato */}
+            {/* Informações de Contato */}
             <div className="space-y-4">
-              <h3 className="text-lg font-medium">Pessoa de Contato (Representante)</h3>
+              <h3 className="text-lg font-medium">Informações de Contato</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="contato">Nome do Representante *</Label>
+                  <Label htmlFor="contato">Nome do Contato *</Label>
                   <Input
                     id="contato"
                     value={clienteFormData.contato || ''}
@@ -4225,42 +4279,30 @@ startxref
                   />
                 </div>
                 <div>
-                  <Label htmlFor="contato_cpf">CPF do Representante</Label>
+                  <Label htmlFor="contato_cargo">Cargo do Contato</Label>
                   <Input
-                    id="contato_cpf"
-                    value={clienteFormData.contato_cpf || ''}
-                    onChange={(e) => {
-                      let value = e.target.value.replace(/\D/g, '')
-                      if (value.length >= 3) {
-                        value = value.substring(0, 3) + '.' + value.substring(3)
-                      }
-                      if (value.length >= 7) {
-                        value = value.substring(0, 7) + '.' + value.substring(7)
-                      }
-                      if (value.length >= 11) {
-                        value = value.substring(0, 11) + '-' + value.substring(11, 13)
-                      }
-                      setClienteFormData({ ...clienteFormData, contato_cpf: value })
-                    }}
-                    placeholder="000.000.000-00"
-                    maxLength={14}
+                    id="contato_cargo"
+                    value={clienteFormData.contato_cargo || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, contato_cargo: e.target.value })}
+                    placeholder="Ex: Engenheiro, Comprador, Administrador"
                   />
                 </div>
               </div>
               
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="contato_email">Email do Representante</Label>
+                  <Label htmlFor="contato_email">Email do Contato *</Label>
                   <Input
                     id="contato_email"
                     type="email"
                     value={clienteFormData.contato_email || ''}
                     onChange={(e) => setClienteFormData({ ...clienteFormData, contato_email: e.target.value })}
                     placeholder="joao.silva@empresa.com"
+                    required
                   />
                 </div>
                 <div>
-                  <Label htmlFor="contato_telefone">Telefone do Representante</Label>
+                  <Label htmlFor="contato_telefone">Telefone do Contato</Label>
                   <Input
                     id="contato_telefone"
                     value={clienteFormData.contato_telefone || ''}
@@ -4281,16 +4323,111 @@ startxref
               </div>
             </div>
 
+            {/* Endereço da Obra */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-medium">Endereço da Obra</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cep_obra">CEP</Label>
+                  <Input
+                    id="cep_obra"
+                    value={clienteFormData.cep_obra || ''}
+                    onChange={(e) => {
+                      const value = formatCEP(e.target.value)
+                      setClienteFormData({ ...clienteFormData, cep_obra: value })
+                    }}
+                    placeholder="01234-567"
+                    maxLength={9}
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="endereco_obra">Endereço</Label>
+                  <Input
+                    id="endereco_obra"
+                    value={clienteFormData.endereco_obra || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra: e.target.value })}
+                    placeholder="Rua, número e bairro"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="endereco_obra_complemento">Complemento</Label>
+                  <Input
+                    id="endereco_obra_complemento"
+                    value={clienteFormData.endereco_obra_complemento || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, endereco_obra_complemento: e.target.value })}
+                    placeholder="Sala, bloco, andar (opcional)"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="cidade_obra">Cidade</Label>
+                  <Input
+                    id="cidade_obra"
+                    value={clienteFormData.cidade_obra || ''}
+                    onChange={(e) => setClienteFormData({ ...clienteFormData, cidade_obra: e.target.value })}
+                    placeholder="São Paulo"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="estado_obra">Estado</Label>
+                  <Select
+                    value={clienteFormData.estado_obra || undefined}
+                    onValueChange={(value) => setClienteFormData({ ...clienteFormData, estado_obra: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Selecione o estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="AC">AC</SelectItem>
+                      <SelectItem value="AL">AL</SelectItem>
+                      <SelectItem value="AP">AP</SelectItem>
+                      <SelectItem value="AM">AM</SelectItem>
+                      <SelectItem value="BA">BA</SelectItem>
+                      <SelectItem value="CE">CE</SelectItem>
+                      <SelectItem value="DF">DF</SelectItem>
+                      <SelectItem value="ES">ES</SelectItem>
+                      <SelectItem value="GO">GO</SelectItem>
+                      <SelectItem value="MA">MA</SelectItem>
+                      <SelectItem value="MT">MT</SelectItem>
+                      <SelectItem value="MS">MS</SelectItem>
+                      <SelectItem value="MG">MG</SelectItem>
+                      <SelectItem value="PA">PA</SelectItem>
+                      <SelectItem value="PB">PB</SelectItem>
+                      <SelectItem value="PR">PR</SelectItem>
+                      <SelectItem value="PE">PE</SelectItem>
+                      <SelectItem value="PI">PI</SelectItem>
+                      <SelectItem value="RJ">RJ</SelectItem>
+                      <SelectItem value="RN">RN</SelectItem>
+                      <SelectItem value="RS">RS</SelectItem>
+                      <SelectItem value="RO">RO</SelectItem>
+                      <SelectItem value="RR">RR</SelectItem>
+                      <SelectItem value="SC">SC</SelectItem>
+                      <SelectItem value="SP">SP</SelectItem>
+                      <SelectItem value="SE">SE</SelectItem>
+                      <SelectItem value="TO">TO</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
             {/* Configuração de Usuário */}
             <div className="space-y-4">
               <h3 className="text-lg font-medium">Configuração de Usuário</h3>
               <div className="flex items-center space-x-2">
-                <Checkbox
+                <input
+                  type="checkbox"
                   id="criar_usuario"
-                  checked={clienteFormData.criar_usuario}
-                  onCheckedChange={(checked) => setClienteFormData({ ...clienteFormData, criar_usuario: checked === true })}
+                  checked={clienteFormData.criar_usuario || false}
+                  onChange={(e) => setClienteFormData({ ...clienteFormData, criar_usuario: e.target.checked })}
+                  className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
-                <Label htmlFor="criar_usuario" className="cursor-pointer">
+                <Label htmlFor="criar_usuario" className="text-sm font-medium">
                   Criar usuário para o representante
                 </Label>
               </div>
@@ -4305,16 +4442,41 @@ startxref
                       <p className="text-sm mb-3 text-blue-700">
                         Será criado um usuário para o representante com acesso limitado ao sistema.
                       </p>
-                      <p className="text-xs text-gray-500">
-                        Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp ao representante.
-                      </p>
+                      <div className="space-y-3">
+                        <p className="text-xs text-gray-500">
+                          Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp ao representante.
+                        </p>
+                      </div>
                     </div>
                   </div>
                 </div>
               )}
             </div>
 
-            <div className="flex justify-end gap-2 pt-4">
+            <div className="space-y-4 pt-4 border-t">
+              <div>
+                <Label className="text-base font-medium">Arquivos do Cliente</Label>
+                <p className="text-sm text-gray-500 mb-3">
+                  Você pode fazer upload de múltiplos arquivos relacionados ao cliente (documentos, contratos, etc.)
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <Input
+                      type="file"
+                      multiple
+                      className="cursor-pointer"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.jpg,.jpeg,.png,.gif,.txt"
+                      disabled={isCreatingCliente}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Formatos aceitos: PDF, Word, Excel, Imagens, TXT. Tamanho máximo: 10MB por arquivo.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2">
               <Button 
                 type="button" 
                 variant="outline" 
