@@ -43,6 +43,7 @@ import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
 import { clientesApi, type ClienteBackend } from '@/lib/api-clientes'
 import { funcionariosApi, type FuncionarioBackend } from '@/lib/api-funcionarios'
+import { triggerApiPushBroadcast } from '@/lib/pwa-push-subscription'
 
 // Lazy load de componentes pesados para melhorar performance inicial
 const NovaNotificacaoDialog = dynamic(
@@ -154,6 +155,7 @@ export default function NotificacoesPage() {
   const [debugDestinatarioId, setDebugDestinatarioId] = useState<string>('')
   const [debugTitulo, setDebugTitulo] = useState<string>('🔔 Push de teste')
   const [debugMensagem, setDebugMensagem] = useState<string>('Esta é uma notificação de teste enviada pelo painel administrativo.')
+  const [debugUsarOrigemApi, setDebugUsarOrigemApi] = useState(true)
   const [debugEnviando, setDebugEnviando] = useState(false)
   const [clientesDebug, setClientesDebug] = useState<Array<Pick<ClienteBackend, 'id' | 'nome' | 'cnpj'>>>([])
   const [funcionariosDebug, setFuncionariosDebug] = useState<Array<Pick<FuncionarioBackend, 'id' | 'nome' | 'cargo'>>>([])
@@ -460,6 +462,30 @@ export default function NotificacoesPage() {
 
     setDebugEnviando(true)
     try {
+      const titulo = debugTitulo.trim()
+      const mensagem = debugMensagem.trim()
+
+      if (debugModo === 'geral' && debugUsarOrigemApi) {
+        const result = await triggerApiPushBroadcast({
+          titulo,
+          mensagem,
+          tipo: 'info',
+          link: '/pwa/notificacoes'
+        })
+
+        if (!result.success) {
+          throw new Error(result.message)
+        }
+
+        toast({
+          title: 'Push API enviado',
+          description: 'Broadcast disparado com origem na API para usuários inscritos no app.',
+        })
+
+        await carregarNotificacoes()
+        return
+      }
+
       const clienteSelecionado = clientesDebug.find(c => String(c.id) === debugDestinatarioId)
       const funcionarioSelecionado = funcionariosDebug.find(f => String(f.id) === debugDestinatarioId)
       const destinatarios = debugModo === 'geral'
@@ -479,8 +505,8 @@ export default function NotificacoesPage() {
           }]
 
       await NotificacoesAPI.criar({
-        titulo: debugTitulo.trim(),
-        mensagem: debugMensagem.trim(),
+        titulo,
+        mensagem,
         tipo: 'info',
         link: '/pwa/notificacoes',
         icone: '🔔',
@@ -665,6 +691,17 @@ export default function NotificacoesPage() {
                 />
               </div>
             </div>
+
+            {debugModo === 'geral' && (
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={debugUsarOrigemApi}
+                  onChange={(e) => setDebugUsarOrigemApi(e.target.checked)}
+                />
+                Usar origem da API (broadcast push real no app)
+              </label>
+            )}
 
             <div className="flex justify-end">
               <Button
