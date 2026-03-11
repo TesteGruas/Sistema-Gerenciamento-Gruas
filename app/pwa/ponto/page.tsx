@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -75,6 +75,8 @@ export default function PWAPontoPage() {
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const [isDisparandoDebugAlmoco, setIsDisparandoDebugAlmoco] = useState(false)
   const [isDisparandoDebugResponsavel, setIsDisparandoDebugResponsavel] = useState(false)
+  const ultimaTentativaObraRef = useRef(0)
+  const resolvendoObraRef = useRef(false)
   const { toast } = useToast()
 
   // Atualizar relógio
@@ -141,9 +143,13 @@ export default function PWAPontoPage() {
               })
               setLocation(coordenadas)
               
-              // Validar proximidade com a obra
-              const validacao = validarProximidadeObra(coordenadas, obraSelecionada)
-              setValidacaoLocalizacao(validacao)
+              // Validar proximidade com a obra quando houver coordenadas
+              if (obraSelecionada.coordenadas) {
+                const validacao = validarProximidadeObra(coordenadas, obraSelecionada)
+                setValidacaoLocalizacao(validacao)
+              } else {
+                setValidacaoLocalizacao(null)
+              }
             } catch (error) {
               console.warn('Não foi possível obter localização automaticamente:', error)
             }
@@ -204,6 +210,39 @@ export default function PWAPontoPage() {
     }
   }
 
+  const garantirObraComCoordenadas = async () => {
+    let obraAtual = obra
+
+    // Se não houver obra em memória, tenta carregar.
+    if (!obraAtual && user?.id) {
+      const obras = await buscarObrasFuncionario(user.id)
+      if (obras.length > 0) {
+        obraAtual = obras[0]
+        setObra(obraAtual)
+      }
+    }
+
+    // Se obra existir, mas ainda sem coordenadas, força novo carregamento
+    // para reaplicar geocoding automático por endereço.
+    if (obraAtual && !obraAtual.coordenadas && user?.id) {
+      const agora = Date.now()
+      if (!resolvendoObraRef.current && (agora - ultimaTentativaObraRef.current) > 60000) {
+        resolvendoObraRef.current = true
+        ultimaTentativaObraRef.current = agora
+        try {
+          const obrasAtualizadas = await buscarObrasFuncionario(user.id)
+          const obraAtualizada = obrasAtualizadas.find((item) => item.id === obraAtual?.id) || obraAtual
+          obraAtual = obraAtualizada
+          setObra(obraAtualizada)
+        } finally {
+          resolvendoObraRef.current = false
+        }
+      }
+    }
+
+    return obraAtual
+  }
+
   // Obter localização atual
   // Obter localização atual e validar proximidade com a obra
   const obterLocalizacao = async () => {
@@ -215,9 +254,11 @@ export default function PWAPontoPage() {
       const coordenadas = await obterLocalizacaoAtual()
       setLocation(coordenadas)
 
+      const obraResolvida = await garantirObraComCoordenadas()
+
       // Validar proximidade com a obra
-      if (obra) {
-        const validacao = validarProximidadeObra(coordenadas, obra)
+      if (obraResolvida?.coordenadas) {
+        const validacao = validarProximidadeObra(coordenadas, obraResolvida)
         setValidacaoLocalizacao(validacao)
 
         // Validação realizada
@@ -577,27 +618,39 @@ export default function PWAPontoPage() {
     setIsLoading(true)
     const tipo = tipoRegistroConfirmacao
     
-    // Obter localização atual antes de registrar (se ainda não tiver)
-    if (!location) {
-      try {
-        const coordenadas = await obterLocalizacaoAtual({
-          enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 0
-        })
-        setLocation(coordenadas)
-        
-        // Validar proximidade com a obra se disponível
-        if (obra) {
-          const validacao = validarProximidadeObra(coordenadas, obra)
-          setValidacaoLocalizacao(validacao)
-          
-          // Se estiver fora do range, o backend vai bloquear
-        }
-      } catch (error: any) {
-        console.warn('Não foi possível obter localização:', error)
-        // Continuar mesmo sem localização (não bloqueia)
+    // Reativado: localização é obrigatória para bater ponto.
+    try {
+      const coordenadas = await obterLocalizacaoAtual({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      })
+      setLocation(coordenadas)
+
+      const obraResolvida = await garantirObraComCoordenadas()
+
+      if (!obraResolvida) {
+        throw new Error('Nenhuma obra ativa vinculada para validar localização do ponto.')
       }
+
+      if (!obraResolvida.coordenadas) {
+        throw new Error('A obra atual não possui coordenadas (latitude/longitude) configuradas.')
+      }
+
+      const validacao = validarProximidadeObra(coordenadas, obraResolvida)
+      setValidacaoLocalizacao(validacao)
+
+      if (!validacao.valido) {
+        throw new Error(`Você está fora do raio permitido (${raioPermitidoFormatado}) da obra. Distância atual: ${formatarDistancia(validacao.distancia)}.`)
+      }
+    } catch (error: any) {
+      setIsLoading(false)
+      toast({
+        title: "Localização obrigatória",
+        description: error.message || "Não foi possível validar sua localização para registrar o ponto.",
+        variant: "destructive"
+      })
+      return
     }
     
     try {
@@ -682,9 +735,14 @@ export default function PWAPontoPage() {
         }
       }
       
-      // Validar localização ANTES de enviar (se tiver validação disponível)
+      // Validação defensiva antes de enviar.
       if (validacaoLocalizacao && !validacaoLocalizacao.valido) {
         setIsLoading(false)
+        toast({
+          title: "Fora do perímetro",
+          description: `Você precisa estar em até ${raioPermitidoFormatado} da obra para registrar ponto. Distância atual: ${formatarDistancia(validacaoLocalizacao.distancia)}.`,
+          variant: "destructive"
+        })
         return
       }
 
@@ -856,6 +914,30 @@ export default function PWAPontoPage() {
       const token = localStorage.getItem('access_token')
       if (!token) return
 
+      // Também exige localização válida no fluxo com assinatura.
+      const coordenadas = await obterLocalizacaoAtual({
+        enableHighAccuracy: true,
+        timeout: 10000,
+        maximumAge: 0
+      })
+      setLocation(coordenadas)
+
+      const obraResolvida = await garantirObraComCoordenadas()
+
+      if (!obraResolvida) {
+        throw new Error('Nenhuma obra ativa vinculada para validar localização do ponto.')
+      }
+
+      if (!obraResolvida.coordenadas) {
+        throw new Error('A obra atual não possui coordenadas (latitude/longitude) configuradas.')
+      }
+
+      const validacao = validarProximidadeObra(coordenadas, obraResolvida)
+      setValidacaoLocalizacao(validacao)
+      if (!validacao.valido) {
+        throw new Error(`Você está fora do raio permitido (${raioPermitidoFormatado}) da obra. Distância atual: ${formatarDistancia(validacao.distancia)}.`)
+      }
+
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = obterDataLocalISO()
@@ -1018,6 +1100,8 @@ export default function PWAPontoPage() {
 
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
+  const raioPermitidoAtual = obra?.raio_permitido ?? 5000
+  const raioPermitidoFormatado = formatarDistancia(raioPermitidoAtual)
 
   // Mostrar loading enquanto carrega os registros
   if (isLoadingRegistros) {
@@ -1333,6 +1417,100 @@ export default function PWAPontoPage() {
                 'Disparar agora'
               )}
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Debug - Localização da obra x localização atual do usuário */}
+      <Card className="bg-slate-50 border-slate-200">
+        <CardContent className="p-4 space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="font-medium text-sm">Debug de localização</p>
+              <p className="text-xs text-muted-foreground">
+                Mostra obra atual, localização do usuário e distância para validação de ponto
+              </p>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={obterLocalizacao}
+              disabled={isGettingLocation}
+            >
+              {isGettingLocation ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Atualizando...
+                </>
+              ) : (
+                'Atualizar local'
+              )}
+            </Button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+            <div className="rounded-md border bg-white p-3 space-y-1">
+              <p className="font-semibold text-slate-700">Obra atual</p>
+              {obra ? (
+                <>
+                  <p><span className="text-muted-foreground">Nome:</span> {obra.nome}</p>
+                  <p><span className="text-muted-foreground">Endereço:</span> {obra.endereco || 'N/A'}</p>
+                  <p><span className="text-muted-foreground">Cidade/UF:</span> {[obra.cidade, obra.estado].filter(Boolean).join('/') || 'N/A'}</p>
+                  {obra.coordenadas ? (
+                    <>
+                      <p><span className="text-muted-foreground">Latitude:</span> {obra.coordenadas.lat}</p>
+                      <p><span className="text-muted-foreground">Longitude:</span> {obra.coordenadas.lng}</p>
+                    </>
+                  ) : (
+                    <p className="text-amber-700">Obra carregada, mas sem latitude/longitude configuradas.</p>
+                  )}
+                  {obra.geocoding_status && (
+                    <p className="text-muted-foreground">{obra.geocoding_status}</p>
+                  )}
+                  <p><span className="text-muted-foreground">Raio configurado:</span> {raioPermitidoFormatado} ({raioPermitidoAtual}m)</p>
+                </>
+              ) : (
+                <p className="text-amber-700">Nenhuma obra ativa carregada.</p>
+              )}
+            </div>
+
+            <div className="rounded-md border bg-white p-3 space-y-1">
+              <p className="font-semibold text-slate-700">Usuário (GPS atual)</p>
+              {location ? (
+                <>
+                  <p><span className="text-muted-foreground">Latitude:</span> {location.lat}</p>
+                  <p><span className="text-muted-foreground">Longitude:</span> {location.lng}</p>
+                </>
+              ) : (
+                <p className="text-amber-700">Localização ainda não capturada.</p>
+              )}
+
+              {locationError && (
+                <p className="text-red-600">{locationError}</p>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-md border bg-white p-3 text-xs space-y-1">
+            <p className="font-semibold text-slate-700">Resultado da validação</p>
+            {validacaoLocalizacao ? (
+              <>
+                <p>
+                  <span className="text-muted-foreground">Distância:</span> {formatarDistancia(validacaoLocalizacao.distancia)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Status:</span>{' '}
+                  <span className={validacaoLocalizacao.valido ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>
+                    {validacaoLocalizacao.valido
+                      ? `Dentro do raio (${raioPermitidoFormatado})`
+                      : `Fora do raio (${raioPermitidoFormatado})`}
+                  </span>
+                </p>
+                <p className="text-muted-foreground">{validacaoLocalizacao.mensagem}</p>
+              </>
+            ) : (
+              <p className="text-muted-foreground">Clique em "Atualizar local" para executar a validação.</p>
+            )}
           </div>
         </CardContent>
       </Card>

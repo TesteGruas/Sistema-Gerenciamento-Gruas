@@ -91,6 +91,7 @@ import { apiComponentes, ComponenteGrua } from "@/lib/api-componentes"
 import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
 import { responsaveisObraApi, type ResponsavelObra, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 function ObraDetailsPageContent() {
 

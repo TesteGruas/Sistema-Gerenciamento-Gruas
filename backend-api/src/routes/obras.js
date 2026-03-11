@@ -18,6 +18,102 @@ function generateSecurePassword(length = 12) {
   return password
 }
 
+function coordenadaValida(valor) {
+  return typeof valor === 'number' && Number.isFinite(valor)
+}
+
+function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
+  const partesBase = [endereco, cidade, estado, 'Brasil']
+    .map((item) => (item || '').toString().trim())
+    .filter(Boolean)
+
+  const consultas = [
+    partesBase.join(', '),
+    [endereco, cidade, 'Brasil'].filter(Boolean).join(', '),
+    [endereco, estado, 'Brasil'].filter(Boolean).join(', '),
+    [endereco, 'Brasil'].filter(Boolean).join(', ')
+  ].filter((consulta) => consulta && consulta.length > 5)
+
+  if (cep) {
+    const cepLimpo = String(cep).replace(/\D/g, '')
+    if (cepLimpo.length >= 8) {
+      consultas.push(`CEP ${cepLimpo}, Brasil`)
+    }
+  }
+
+  // Remover consultas duplicadas
+  return [...new Set(consultas)]
+}
+
+async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
+  const consultas = montarConsultasEndereco({ endereco, cidade, estado, cep })
+  if (consultas.length === 0) {
+    return null
+  }
+
+  for (const consulta of consultas) {
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(consulta)}&limit=1&addressdetails=1`,
+        {
+          headers: {
+            'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
+            'Accept-Language': 'pt-BR,pt,en'
+          }
+        }
+      )
+
+      if (!response.ok) continue
+      const data = await response.json()
+      if (Array.isArray(data) && data.length > 0) {
+        const lat = parseFloat(data[0].lat)
+        const lng = parseFloat(data[0].lon)
+        if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          return {
+            latitude: lat,
+            longitude: lng,
+            endereco_usado_geocoding: consulta,
+            endereco_encontrado: data[0].display_name || null
+          }
+        }
+      }
+    } catch (error) {
+      console.warn('[obras] Falha ao geocodificar consulta:', consulta, error?.message || error)
+    }
+  }
+
+  return null
+}
+
+async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitude, longitude }) {
+  const jaTemCoordenadas = coordenadaValida(latitude) && coordenadaValida(longitude)
+  if (jaTemCoordenadas) {
+    return {
+      latitude,
+      longitude,
+      geocodingAplicado: false,
+      geocodingInfo: null
+    }
+  }
+
+  const coords = await buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep })
+  if (!coords) {
+    return {
+      latitude: coordenadaValida(latitude) ? latitude : null,
+      longitude: coordenadaValida(longitude) ? longitude : null,
+      geocodingAplicado: false,
+      geocodingInfo: null
+    }
+  }
+
+  return {
+    latitude: coords.latitude,
+    longitude: coords.longitude,
+    geocodingAplicado: true,
+    geocodingInfo: coords
+  }
+}
+
 const router = express.Router()
 
 // Schema de validação para obras
@@ -1030,6 +1126,88 @@ router.get('/:id', authenticateToken, async (req, res) => {
   }
 })
 
+router.post('/:id/resolver-coordenadas', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params
+    const obraId = parseInt(id, 10)
+
+    if (Number.isNaN(obraId)) {
+      return res.status(400).json({
+        success: false,
+        error: 'ID da obra inválido'
+      })
+    }
+
+    const { data: obra, error: obraError } = await supabaseAdmin
+      .from('obras')
+      .select('id, nome, endereco, cidade, estado, cep, latitude, longitude')
+      .eq('id', obraId)
+      .single()
+
+    if (obraError || !obra) {
+      return res.status(404).json({
+        success: false,
+        error: 'Obra não encontrada'
+      })
+    }
+
+    const coordenadasResolvidas = await resolverCoordenadasDaObra({
+      endereco: obra.endereco,
+      cidade: obra.cidade,
+      estado: obra.estado,
+      cep: obra.cep,
+      latitude: obra.latitude,
+      longitude: obra.longitude
+    })
+
+    if (!coordenadasResolvidas.latitude || !coordenadasResolvidas.longitude) {
+      return res.status(404).json({
+        success: false,
+        error: 'Não foi possível resolver coordenadas para a obra',
+        data: {
+          obra_id: obra.id,
+          obra_nome: obra.nome,
+          geocoding: coordenadasResolvidas.geocodingInfo
+        }
+      })
+    }
+
+    if (coordenadasResolvidas.geocodingAplicado) {
+      await supabaseAdmin
+        .from('obras')
+        .update({
+          latitude: coordenadasResolvidas.latitude,
+          longitude: coordenadasResolvidas.longitude,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', obra.id)
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        obra_id: obra.id,
+        obra_nome: obra.nome,
+        coordenadas: {
+          lat: coordenadasResolvidas.latitude,
+          lng: coordenadasResolvidas.longitude
+        },
+        mensagem: coordenadasResolvidas.geocodingAplicado
+          ? 'Coordenadas geradas e salvas automaticamente.'
+          : 'Coordenadas já estavam cadastradas na obra.',
+        geocoding: coordenadasResolvidas.geocodingInfo
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao resolver coordenadas da obra:', error)
+    return res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 /**
  * @swagger
  * /api/obras:
@@ -1328,6 +1506,21 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       console.log('✅ Cliente encontrado:', cliente.nome)
     }
 
+    const coordenadasResolvidas = await resolverCoordenadasDaObra({
+      endereco: value.endereco,
+      cidade: value.cidade,
+      estado: value.estado,
+      cep: value.cep,
+      latitude: value.latitude,
+      longitude: value.longitude
+    })
+
+    if (coordenadasResolvidas.geocodingAplicado) {
+      console.log('📍 Coordenadas geradas automaticamente para a obra:', coordenadasResolvidas.geocodingInfo)
+    } else if (!coordenadaValida(value.latitude) || !coordenadaValida(value.longitude)) {
+      console.warn('⚠️ Não foi possível gerar coordenadas automaticamente para a obra.')
+    }
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const obraData = {
       nome: value.nome,
@@ -1351,8 +1544,8 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
       // Campos de geolocalização
-      latitude: value.latitude,
-      longitude: value.longitude,
+      latitude: coordenadasResolvidas.latitude,
+      longitude: coordenadasResolvidas.longitude,
       raio_permitido: value.raio_permitido || 500,
       // Campos obrigatórios (CNO, ART, Apólice)
       cno: value.cno,
@@ -2122,6 +2315,39 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       })
     }
 
+    const { data: obraAtualExistente, error: obraAtualError } = await supabaseAdmin
+      .from('obras')
+      .select('id, endereco, cidade, estado, cep, latitude, longitude')
+      .eq('id', id)
+      .single()
+
+    if (obraAtualError || !obraAtualExistente) {
+      return res.status(404).json({
+        error: 'Obra não encontrada',
+        message: 'A obra com o ID especificado não existe'
+      })
+    }
+
+    const enderecoParaGeocoding = value.endereco ?? obraAtualExistente.endereco
+    const cidadeParaGeocoding = value.cidade ?? obraAtualExistente.cidade
+    const estadoParaGeocoding = value.estado ?? obraAtualExistente.estado
+    const cepParaGeocoding = value.cep ?? obraAtualExistente.cep
+    const latitudeAtual = value.latitude !== undefined ? value.latitude : obraAtualExistente.latitude
+    const longitudeAtual = value.longitude !== undefined ? value.longitude : obraAtualExistente.longitude
+
+    const coordenadasResolvidas = await resolverCoordenadasDaObra({
+      endereco: enderecoParaGeocoding,
+      cidade: cidadeParaGeocoding,
+      estado: estadoParaGeocoding,
+      cep: cepParaGeocoding,
+      latitude: latitudeAtual,
+      longitude: longitudeAtual
+    })
+
+    if (coordenadasResolvidas.geocodingAplicado) {
+      console.log('📍 Coordenadas geradas automaticamente na atualização da obra:', coordenadasResolvidas.geocodingInfo)
+    }
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const updateData = {
       nome: value.nome,
@@ -2145,8 +2371,8 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
       // Campos de geolocalização
-      latitude: value.latitude !== undefined ? value.latitude : undefined,
-      longitude: value.longitude !== undefined ? value.longitude : undefined,
+      latitude: coordenadasResolvidas.latitude ?? undefined,
+      longitude: coordenadasResolvidas.longitude ?? undefined,
       raio_permitido: value.raio_permitido !== undefined ? value.raio_permitido : undefined,
       // Campos obrigatórios (CNO, ART, Apólice)
       cno: value.cno !== undefined ? value.cno : undefined,

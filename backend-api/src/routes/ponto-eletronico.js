@@ -1637,7 +1637,7 @@ router.post('/registros', async (req, res) => {
         } else {
           let coordenadasAlvo = null;
           let nomeAlvo = null;
-          let raioPermitido = 4000; // Padrão: 4000m (4km)
+          let raioPermitido = 5000; // Regra de negócio: 5km
           let tipoAlvo = null;
 
           // PRIORIDADE 1: Buscar grua ativa do funcionário
@@ -1683,7 +1683,7 @@ router.post('/registros', async (req, res) => {
                 lng: parseFloat(gruaFuncionario.obra.longitude)
               };
               nomeAlvo = `${grua.name || grua.id} - ${gruaFuncionario.obra.nome}`;
-              raioPermitido = gruaFuncionario.obra.raio_permitido || 4000;
+              raioPermitido = 5000;
             } 
             // Se não tem obra com coordenadas, tentar geocodificar a localização da grua
             else if (grua.localizacao) {
@@ -1728,7 +1728,7 @@ router.post('/registros', async (req, res) => {
                 lng: parseFloat(obra.longitude)
               };
               nomeAlvo = obra.nome;
-              raioPermitido = obra.raio_permitido || 4000;
+              raioPermitido = 5000;
               tipoAlvo = 'obra';
             }
           }
