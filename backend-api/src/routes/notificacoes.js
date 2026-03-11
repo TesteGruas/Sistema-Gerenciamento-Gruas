@@ -4,6 +4,7 @@ import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js'
 import { emitirNotificacaoMultiplos } from '../server.js'
+import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js'
 
 const router = express.Router()
 
@@ -998,6 +999,57 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
       }
     }
 
+    // Enviar Web Push para dispositivos inscritos dos usuários destinatários
+    let pushEnviados = 0
+    let pushErros = 0
+    let pushDesativados = 0
+    try {
+      if (isWebPushConfigured() && usuariosUnicos.length > 0) {
+        const userIdsAsString = usuariosUnicos.map(id => String(id))
+        const { data: subscriptions, error: subscriptionsError } = await supabaseAdmin
+          .from('pwa_push_subscriptions')
+          .select('id, user_id, endpoint, subscription')
+          .eq('is_active', true)
+          .in('user_id', userIdsAsString)
+
+        if (subscriptionsError) {
+          console.error(`[notificacoes] ❌ Erro ao buscar subscriptions push:`, subscriptionsError.message)
+        } else {
+          const pushPayloadBase = {
+            title: value.titulo,
+            body: value.mensagem,
+            icon: value.icone || '/icon-192x192.png',
+            badge: '/icon-72x72.png',
+            data: { url: value.link || '/pwa/notificacoes' },
+            tag: `notificacao-api-${Date.now()}`,
+            renotify: true
+          }
+
+          for (const sub of subscriptions || []) {
+            try {
+              await sendWebPush(sub.subscription, pushPayloadBase)
+              pushEnviados++
+            } catch (pushError) {
+              pushErros++
+              const statusCode = pushError?.statusCode
+              if (statusCode === 404 || statusCode === 410) {
+                pushDesativados++
+                await supabaseAdmin
+                  .from('pwa_push_subscriptions')
+                  .update({
+                    is_active: false,
+                    updated_at: new Date().toISOString()
+                  })
+                  .eq('id', sub.id)
+              }
+            }
+          }
+        }
+      }
+    } catch (pushErrorGeral) {
+      console.error(`[notificacoes] ❌ Erro geral no envio Web Push:`, pushErrorGeral.message)
+    }
+
     // Inicializar variáveis de WhatsApp ANTES de qualquer processamento
     let whatsappEnviados = 0
     let whatsappErros = 0
@@ -1083,6 +1135,12 @@ _Enviado por: ${value.remetente || 'Sistema'}_`
       success: true,
       data: data,
       message: mensagemResposta,
+      push: {
+        configurado: isWebPushConfigured(),
+        enviados: pushEnviados,
+        erros: pushErros,
+        desativados: pushDesativados
+      },
       whatsapp: {
         enviados: 0, // Será atualizado assincronamente
         erros: 0,
