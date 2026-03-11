@@ -320,10 +320,12 @@ export class PWANotifications {
   }
 
   getPermission(): NotificationPermission {
+    if (typeof window === 'undefined') return 'denied'
     return 'Notification' in window ? Notification.permission : 'denied'
   }
 
   isSupported(): boolean {
+    if (typeof window === 'undefined') return false
     return 'Notification' in window && 'serviceWorker' in navigator
   }
 }
