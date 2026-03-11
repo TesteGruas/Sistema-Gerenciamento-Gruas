@@ -16,11 +16,13 @@ import {
   User,
   Wrench,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  Shuffle
 } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { livroGruaApi } from "@/lib/api-livro-grua"
+import { getFuncionarioId } from "@/lib/get-funcionario-id"
 import FuncionarioSearch from "@/components/funcionario-search"
 
 interface Manutencao {
@@ -161,6 +163,72 @@ export function LivroGruaManutencao({
     }
   }, [manutencao])
 
+  // Nova manutenção: preencher automaticamente com funcionário logado no app
+  useEffect(() => {
+    const preencherFuncionarioLogado = async () => {
+      if (manutencao || funcionarioSelecionado || formData.realizado_por_id) return
+      if (typeof window === "undefined") return
+
+      const userDataStr = localStorage.getItem("user_data")
+      if (!userDataStr) return
+
+      let parsedUser: any
+      try {
+        parsedUser = JSON.parse(userDataStr)
+      } catch {
+        return
+      }
+
+      const token = localStorage.getItem("access_token") || ""
+      let funcionarioId: number | null =
+        Number(parsedUser?.profile?.funcionario_id) ||
+        Number(parsedUser?.funcionario_id) ||
+        Number(parsedUser?.user_metadata?.funcionario_id) ||
+        null
+
+      if (token) {
+        try {
+          const resolved = await getFuncionarioId(parsedUser, token)
+          if (resolved && resolved > 0) funcionarioId = resolved
+        } catch {
+          // fallback para IDs já presentes no user_data
+        }
+      }
+
+      if (!funcionarioId || Number.isNaN(Number(funcionarioId)) || Number(funcionarioId) <= 0) return
+
+      const nome =
+        parsedUser?.nome ||
+        parsedUser?.name ||
+        parsedUser?.user_metadata?.nome ||
+        parsedUser?.user?.nome ||
+        ""
+      const cargo =
+        parsedUser?.cargo ||
+        parsedUser?.role ||
+        parsedUser?.user_metadata?.cargo ||
+        parsedUser?.user_metadata?.role ||
+        ""
+
+      const funcionarioLogado = {
+        id: Number(funcionarioId),
+        name: nome || `Funcionário #${funcionarioId}`,
+        role: cargo || ""
+      }
+
+      setFuncionarioSelecionado(funcionarioLogado)
+      setFormData((prev) => ({
+        ...prev,
+        realizado_por_id: Number(funcionarioId),
+        realizado_por_nome: funcionarioLogado.name,
+        cargo: prev.cargo || funcionarioLogado.role || ""
+      }))
+      setError(null)
+    }
+
+    preencherFuncionarioLogado()
+  }, [manutencao, funcionarioSelecionado, formData.realizado_por_id])
+
   const handleFuncionarioSelect = (funcionario: any) => {
     setFuncionarioSelecionado(funcionario)
     setFormData({
@@ -180,6 +248,31 @@ export function LivroGruaManutencao({
     setFormData({
       ...formData,
       checklist: newChecklist
+    })
+  }
+
+  const preencherDadosAleatorios = () => {
+    const checklistAleatorio = checklistItems.reduce((acc, item) => {
+      acc[item.key] = Math.random() < 0.5 ? 'ok' : 'manutencao'
+      return acc
+    }, {} as Record<string, 'ok' | 'manutencao' | null>)
+
+    const timestamp = new Date().toLocaleString('pt-BR')
+    const descricaoAuto = `Manutenção preenchida automaticamente em ${timestamp}.`
+    const observacoesAuto = 'Preenchimento automático para teste do fluxo.'
+
+    setChecklist(checklistAleatorio)
+    setFormData((prev) => ({
+      ...prev,
+      descricao: prev.descricao?.trim() ? prev.descricao : descricaoAuto,
+      observacoes: prev.observacoes?.trim() ? prev.observacoes : observacoesAuto,
+      checklist: checklistAleatorio
+    }))
+    setError(null)
+
+    toast({
+      title: "Preenchimento automático concluído",
+      description: "Checklist marcado aleatoriamente e campos de texto preenchidos."
     })
   }
 
@@ -210,14 +303,15 @@ export function LivroGruaManutencao({
       setLoading(true)
       setError(null)
 
-      // Preparar dados para a API
+      // Preparar dados para a API (schema backend exige data_entrada)
       const manutencaoData = {
-        ...formData,
+        grua_id: formData.grua_id,
+        funcionario_id: formData.realizado_por_id,
+        data_entrada: formData.data,
         tipo_entrada: 'manutencao' as const,
         status_entrada: 'ok' as const,
-        funcionario_id: formData.realizado_por_id,
         descricao: formData.descricao || `Manutenção realizada em ${formData.data}`,
-        checklist: checklist
+        observacoes: formData.observacoes || ''
       }
 
       if (modoEdicao && formData.id) {
@@ -330,9 +424,21 @@ export function LivroGruaManutencao({
       {/* Checklist de Manutenção */}
       <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4" />
-            Checklist de Manutenção
+          <CardTitle className="text-base flex items-center justify-between gap-2">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4" />
+              Checklist de Manutenção
+            </span>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={preencherDadosAleatorios}
+              className="h-8 text-xs"
+            >
+              <Shuffle className="w-3.5 h-3.5 mr-1" />
+              Preencher teste
+            </Button>
           </CardTitle>
           <CardDescription className="text-xs">
             Marque os itens que foram verificados durante a manutenção

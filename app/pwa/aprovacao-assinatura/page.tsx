@@ -86,11 +86,64 @@ function PWAAprovacaoAssinaturaPageContent() {
     return false;
   })();
 
-  const isFuncionarioDoRegistro = aprovacaoSelecionada?.status === 'Pendente Assinatura Funcionário' && !isResponsavelObra;
-  const isPendenteCorrecao = aprovacaoSelecionada?.status === 'Pendente Correção' && !isResponsavelObra;
-  const aguardandoAssinaturaResponsavel = aprovacaoSelecionada?.status === 'Pendente Assinatura' && !isResponsavelObra;
-  const canResponsavelAssinar = isResponsavelObra && aprovacaoSelecionada?.status === 'Pendente Assinatura';
+  const statusAtual = (aprovacaoSelecionada?.status || '').trim();
+  const statusNormalizado = statusAtual
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  const isStatusPendenteCorrecao = statusNormalizado === 'pendente correcao';
+  const isStatusAprovado = statusNormalizado === 'aprovado';
+  const responsavelJaAssinou = Boolean(aprovacaoSelecionada?.assinatura_responsavel_path);
+  const funcionarioJaAssinou = Boolean(aprovacaoSelecionada?.assinatura_funcionario_path);
+  const aguardandoAssinaturaFuncionario = responsavelJaAssinou && !funcionarioJaAssinou;
+  const registroFinalizado = isStatusAprovado || (responsavelJaAssinou && funcionarioJaAssinou);
+
+  const isFuncionarioDoRegistro = !isResponsavelObra && aguardandoAssinaturaFuncionario && !registroFinalizado;
+  const isPendenteCorrecao = isStatusPendenteCorrecao && !isResponsavelObra;
+  const aguardandoAssinaturaResponsavel = !isResponsavelObra && !responsavelJaAssinou && !registroFinalizado;
+  const canResponsavelAssinar = isResponsavelObra && !responsavelJaAssinou && !registroFinalizado;
   const canAssinar = canResponsavelAssinar || isFuncionarioDoRegistro;
+
+  useEffect(() => {
+    const disabledAssinar = !canAssinar || !assinatura.trim() || isLoading;
+    console.log('[PWA Assinatura][DEBUG][estado-botao]', {
+      registroId,
+      userId: user?.id,
+      isResponsavelObra,
+      statusAtual,
+      statusNormalizado,
+      isStatusPendenteCorrecao,
+      isStatusAprovado,
+      responsavelJaAssinou,
+      funcionarioJaAssinou,
+      aguardandoAssinaturaFuncionario,
+      registroFinalizado,
+      isFuncionarioDoRegistro,
+      canResponsavelAssinar,
+      canAssinar,
+      assinaturaPreenchida: Boolean(assinatura.trim()),
+      isLoading,
+      disabledAssinar
+    });
+  }, [
+    assinatura,
+    canAssinar,
+    canResponsavelAssinar,
+    isFuncionarioDoRegistro,
+    isLoading,
+    isResponsavelObra,
+    isStatusPendenteCorrecao,
+    isStatusAprovado,
+    responsavelJaAssinou,
+    funcionarioJaAssinou,
+    aguardandoAssinaturaFuncionario,
+    registroFinalizado,
+    registroId,
+    statusAtual,
+    statusNormalizado,
+    user?.id
+  ]);
 
   useEffect(() => {
     const carregarAprovacao = async () => {
@@ -117,6 +170,13 @@ function PWAAprovacaoAssinaturaPageContent() {
         }
 
         setAprovacaoSelecionada(registro);
+        console.log('[PWA Assinatura][DEBUG][registro-carregado]', {
+          registroId: registro.id,
+          status: registro.status,
+          funcionarioId: registro.funcionario_id,
+          assinatura_responsavel_path: registro.assinatura_responsavel_path,
+          assinatura_funcionario_path: registro.assinatura_funcionario_path
+        });
 
         // Pré-popular a modal de edição com os dados atuais
         setHorasEditadas({
@@ -137,6 +197,17 @@ function PWAAprovacaoAssinaturaPageContent() {
   }, [registroId, router]);
 
   const handleAprovar = async () => {
+    console.log('[PWA Assinatura][DEBUG][clicou-assinar]', {
+      registroId: aprovacaoSelecionada?.id,
+      statusAtual,
+      statusNormalizado,
+      isResponsavelObra,
+      isFuncionarioDoRegistro,
+      canResponsavelAssinar,
+      canAssinar,
+      assinaturaPreenchida: Boolean(assinatura.trim())
+    });
+
     if (!canAssinar) {
       toast.error('Este registro ainda aguarda a assinatura do responsável da obra.');
       return;
@@ -361,23 +432,23 @@ function PWAAprovacaoAssinaturaPageContent() {
             <div className={`rounded-lg p-2 ${
               isPendenteCorrecao
                 ? 'bg-red-50 border border-red-200'
-                : aprovacaoSelecionada.status === 'Pendente Assinatura Funcionário'
+                : aguardandoAssinaturaFuncionario
                   ? 'bg-green-50 border border-green-200'
                   : 'bg-blue-50 border border-blue-200'
             }`}>
               <div className="flex items-center gap-1">
                 {isPendenteCorrecao 
                   ? <XCircle className="w-3 h-3 text-red-600" />
-                  : <Clock className={`w-3 h-3 ${aprovacaoSelecionada.status === 'Pendente Assinatura Funcionário' ? 'text-green-600' : 'text-blue-600'}`} />
+                  : <Clock className={`w-3 h-3 ${aguardandoAssinaturaFuncionario ? 'text-green-600' : 'text-blue-600'}`} />
                 }
                 <span className={`text-xs font-medium ${
                   isPendenteCorrecao
                     ? 'text-red-800'
-                    : aprovacaoSelecionada.status === 'Pendente Assinatura Funcionário' ? 'text-green-800' : 'text-blue-800'
+                    : aguardandoAssinaturaFuncionario ? 'text-green-800' : 'text-blue-800'
                 }`}>
                   {isPendenteCorrecao
                     ? 'Não aprovado — corrija as horas abaixo'
-                    : aprovacaoSelecionada.status === 'Pendente Assinatura Funcionário'
+                    : aguardandoAssinaturaFuncionario
                       ? 'Responsável já assinou — aguardando sua assinatura'
                       : isResponsavelObra
                         ? 'Aguardando sua assinatura como responsável'
