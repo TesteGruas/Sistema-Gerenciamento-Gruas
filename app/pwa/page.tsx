@@ -28,7 +28,8 @@ import {
   FileCheck,
   MapPin,
   Loader2,
-  Calculator
+  Calculator,
+  Wrench
 } from "lucide-react"
 // Importações atualizadas - Play removido
 import { usePWAUser } from "@/hooks/use-pwa-user"
@@ -38,8 +39,18 @@ import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
+import { medicoesMensaisApi, type MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { obterLocalizacaoAtual } from "@/lib/geolocation-validator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+
+interface MedicaoResumoHome {
+  id: number
+  obra_id?: number | null
+  obra_nome: string
+  periodo: string
+  status: string
+  valor_total: number
+}
 
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
@@ -57,6 +68,9 @@ export default function PWAMainPage() {
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const [registrosPendentesAssinatura, setRegistrosPendentesAssinatura] = useState<number>(0)
+  const [medicoesResumo, setMedicoesResumo] = useState<MedicaoResumoHome[]>([])
+  const [loadingMedicoesResumo, setLoadingMedicoesResumo] = useState(false)
+  const [obraAtalhoId, setObraAtalhoId] = useState<number | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const { toast } = useToast()
@@ -343,6 +357,153 @@ export default function PWAMainPage() {
     verificarPendentesAssinatura()
   }, [isResponsavelObra])
 
+  // Resolver obra para atalhos de checklist/manutenção
+  useEffect(() => {
+    const resolverObraAtalho = async () => {
+      if (typeof window === 'undefined') return
+
+      try {
+        const userDataStr = localStorage.getItem('user_data')
+        const userData = userDataStr ? JSON.parse(userDataStr) : null
+
+        // Responsável de obra: usar primeira obra vinculada
+        const obrasResponsavel = userData?.obras_responsavel || userData?.user?.obras_responsavel || []
+        if (Array.isArray(obrasResponsavel) && obrasResponsavel.length > 0) {
+          const obraIdResponsavel = Number(obrasResponsavel[0]?.obra_id)
+          if (!Number.isNaN(obraIdResponsavel) && obraIdResponsavel > 0) {
+            setObraAtalhoId(obraIdResponsavel)
+            return
+          }
+        }
+
+        // Funcionário com obra_atual
+        const obraAtualId = Number(
+          userData?.obra_atual_id ||
+          userData?.user?.obra_atual_id ||
+          pwaUserData.user?.obra_atual?.id
+        )
+        if (!Number.isNaN(obraAtualId) && obraAtualId > 0) {
+          setObraAtalhoId(obraAtualId)
+          return
+        }
+
+        // Funcionário com alocações em memória
+        const alocacoesLocais =
+          pwaUserData.user?.funcionarios_obras ||
+          pwaUserData.user?.historico_obras ||
+          []
+        if (Array.isArray(alocacoesLocais) && alocacoesLocais.length > 0) {
+          const alocacaoAtiva = alocacoesLocais.find((a: any) => a?.status === 'ativo' && a?.obra_id)
+          if (alocacaoAtiva?.obra_id) {
+            setObraAtalhoId(Number(alocacaoAtiva.obra_id))
+            return
+          }
+        }
+
+        // Fallback API de alocações
+        const funcionarioId = await getFuncionarioIdWithFallback()
+        if (funcionarioId) {
+          const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
+          if (alocacoes.success && Array.isArray(alocacoes.data) && alocacoes.data.length > 0) {
+            const primeira = alocacoes.data.find((a) => a?.obra_id) || alocacoes.data[0]
+            if (primeira?.obra_id) {
+              setObraAtalhoId(Number(primeira.obra_id))
+              return
+            }
+          }
+        }
+
+        setObraAtalhoId(null)
+      } catch {
+        setObraAtalhoId(null)
+      }
+    }
+
+    resolverObraAtalho()
+  }, [pwaUserData.user, isResponsavelObra])
+
+  // Carregar cards de medições para funcionário/responsável vinculados à obra
+  useEffect(() => {
+    const carregarMedicoesResumo = async () => {
+      if (typeof window === 'undefined') return
+      if (loadingObra) return
+      if (temObraAtiva !== true) {
+        setMedicoesResumo([])
+        return
+      }
+
+      try {
+        setLoadingMedicoesResumo(true)
+
+        const obraIds = new Set<number>()
+        const userDataStr = localStorage.getItem('user_data')
+        const userData = userDataStr ? JSON.parse(userDataStr) : null
+
+        if (isResponsavelObra) {
+          const obrasResponsavel = userData?.obras_responsavel || userData?.user?.obras_responsavel || []
+          for (const item of obrasResponsavel) {
+            const obraId = Number(item?.obra_id)
+            if (!Number.isNaN(obraId) && obraId > 0) obraIds.add(obraId)
+          }
+        } else {
+          const funcionarioId = await getFuncionarioIdWithFallback()
+          if (funcionarioId) {
+            const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
+            if (alocacoes.success && Array.isArray(alocacoes.data)) {
+              for (const alocacao of alocacoes.data) {
+                const obraId = Number(alocacao?.obra_id)
+                if (!Number.isNaN(obraId) && obraId > 0) obraIds.add(obraId)
+              }
+            }
+          }
+        }
+
+        if (obraIds.size === 0) {
+          setMedicoesResumo([])
+          return
+        }
+
+        const medicoesPorObra = await Promise.all(
+          Array.from(obraIds).map(async (obraId) => {
+            try {
+              const resp = await medicoesMensaisApi.listar({ obra_id: obraId, limit: 5 })
+              return resp.success && Array.isArray(resp.data) ? resp.data : []
+            } catch {
+              return []
+            }
+          })
+        )
+
+        const todasMedicoes = medicoesPorObra
+          .flat()
+          .filter((m): m is MedicaoMensal => Boolean(m?.id))
+          .sort((a, b) => {
+            const dataA = new Date(a.data_medicao || a.created_at || 0).getTime()
+            const dataB = new Date(b.data_medicao || b.created_at || 0).getTime()
+            return dataB - dataA
+          })
+
+        const resumo = todasMedicoes.slice(0, 4).map((m) => ({
+          id: m.id,
+          obra_id: m.obra_id ?? null,
+          obra_nome: m.obras?.nome || 'Obra',
+          periodo: m.periodo || '-',
+          status: m.status || 'pendente',
+          valor_total: Number(m.valor_total || 0)
+        }))
+
+        setMedicoesResumo(resumo)
+      } catch (error) {
+        console.warn('[PWA] Erro ao carregar cards de medições:', error)
+        setMedicoesResumo([])
+      } finally {
+        setLoadingMedicoesResumo(false)
+      }
+    }
+
+    carregarMedicoesResumo()
+  }, [temObraAtiva, loadingObra, isResponsavelObra])
+
   // Autenticação é gerenciada pelo PWAAuthGuard no layout
 
   // Atualizar relógio
@@ -593,6 +754,26 @@ export default function PWAMainPage() {
       bgColor: "bg-blue-50",
       borderColor: "border-blue-100",
       requiresObra: true // Requer obra ativa
+    },
+    {
+      title: "Checklist",
+      description: "Checklist diário da obra",
+      icon: CheckCircle,
+      href: obraAtalhoId ? `/pwa/obras/${obraAtalhoId}/checklist` : "/pwa/obras",
+      color: "text-emerald-600",
+      bgColor: "bg-emerald-50",
+      borderColor: "border-emerald-100",
+      requiresObra: true
+    },
+    {
+      title: "Manutenções",
+      description: "Manutenções da obra",
+      icon: Wrench,
+      href: obraAtalhoId ? `/pwa/obras/${obraAtalhoId}/manutencoes` : "/pwa/obras",
+      color: "text-amber-600",
+      bgColor: "bg-amber-50",
+      borderColor: "border-amber-100",
+      requiresObra: true
     },
     {
       title: "Aprovações de horas",
@@ -1201,6 +1382,25 @@ export default function PWAMainPage() {
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
+              const userData = (() => {
+                try {
+                  const userDataStr = localStorage.getItem('user_data')
+                  return userDataStr ? JSON.parse(userDataStr) : null
+                } catch {
+                  return null
+                }
+              })()
+
+              const tipoUsuario = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo || ''
+              const funcionarioId = userData?.profile?.funcionario_id ||
+                userData?.funcionario_id ||
+                userData?.user?.funcionario_id ||
+                pwaUserData.user?.funcionario_id
+              const isFuncionario = Boolean(funcionarioId) || Boolean(userData?.eh_funcionario) || tipoUsuario === 'funcionario'
+              const isResponsavel = isResponsavelObra || tipoUsuario === 'responsavel_obra' ||
+                Boolean(userData?.is_responsavel_obra) ||
+                (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
+
               // Verificar se é cliente (múltiplas fontes)
               const isClient = (() => {
                 // 1. Verificar pelo hook
@@ -1225,6 +1425,21 @@ export default function PWAMainPage() {
                 
                 return false
               })()
+
+              // Card de Medições: mostrar apenas para funcionário ou responsável
+              // quando houver vínculo de obra ativa
+              if (action.title === "Medições") {
+                if (!(isFuncionario || isResponsavel)) return false
+                if (loadingObra) return false
+                return temObraAtiva === true
+              }
+
+              // Cards de checklist/manutenções: funcionário ou responsável com obra vinculada
+              if (action.title === "Checklist" || action.title === "Manutenções") {
+                if (!(isFuncionario || isResponsavel)) return false
+                if (loadingObra) return false
+                return temObraAtiva === true
+              }
               
               // Filtrar ações que devem ser ocultadas para clientes
               if (action.hideForClient && isClient) {
@@ -1450,6 +1665,48 @@ export default function PWAMainPage() {
             })}
         </div>
       </div>
+
+      {/* Cards de medições das obras vinculadas */}
+      {(loadingMedicoesResumo || medicoesResumo.length > 0) && (
+        <Card className="border-blue-200 bg-blue-50/50">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              <Calculator className="w-4 h-4 text-blue-600" />
+              Medições das obras
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Últimas medições vinculadas ao seu acesso
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pt-0 space-y-2">
+            {loadingMedicoesResumo ? (
+              <p className="text-xs text-gray-600">Carregando medições...</p>
+            ) : (
+              medicoesResumo.map((medicao) => (
+                <div
+                  key={medicao.id}
+                  className="bg-white rounded-xl border border-blue-100 p-3 cursor-pointer hover:shadow-sm transition-shadow"
+                  onClick={() => handleNavigation('/pwa/cliente/medicoes')}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-semibold text-gray-900 truncate">{medicao.obra_nome}</p>
+                    <Badge variant="outline" className="text-[10px] capitalize">{medicao.status}</Badge>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-xs text-gray-600">
+                    <span>Período: {medicao.periodo}</span>
+                    <span>
+                      {medicao.valor_total.toLocaleString('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL'
+                      })}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Mapa com Localização Atual */}
       {location && (

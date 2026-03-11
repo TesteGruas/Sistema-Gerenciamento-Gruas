@@ -998,31 +998,87 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Buscar cliente pelo ID numérico do usuário
+    // Buscar cliente pelo ID numérico do usuário (vínculo direto)
     const { data: cliente, error } = await supabaseAdmin
       .from('clientes')
       .select('*')
       .eq('contato_usuario_id', usuarioIdNumerico)
       .single()
 
-    if (error || !cliente) {
-      // Se não encontrou, verificar se o erro é porque não existe registro
-      if (error?.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Cliente não encontrado',
-          message: 'Nenhum cliente encontrado para este usuário. Verifique se o cliente está vinculado ao usuário.'
-        })
-      }
-      
-      return res.status(404).json({
-        error: 'Cliente não encontrado',
-        message: 'Nenhum cliente encontrado para este usuário'
+    if (cliente && !error) {
+      return res.json({
+        success: true,
+        data: cliente
       })
     }
 
-    res.json({
-      success: true,
-      data: cliente
+    // Fallback: quando o usuário for funcionário sem vínculo direto em contato_usuario_id,
+    // buscar o cliente pela obra ativa do funcionário.
+    const isClienteRole = userRole.includes('cliente') || req.user?.level === 1
+    if (!isClienteRole) {
+      const { data: usuarioComFuncionario, error: usuarioComFuncionarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, funcionario_id')
+        .eq('id', usuarioIdNumerico)
+        .single()
+
+      if (!usuarioComFuncionarioError && usuarioComFuncionario?.funcionario_id) {
+        const { data: alocacoesAtivas, error: alocacoesError } = await supabaseAdmin
+          .from('funcionarios_obras')
+          .select(`
+            obra_id,
+            status,
+            data_inicio,
+            data_fim,
+            obras:obra_id (
+              id,
+              nome,
+              status,
+              cliente_id
+            )
+          `)
+          .eq('funcionario_id', usuarioComFuncionario.funcionario_id)
+          .eq('status', 'ativo')
+          .order('data_inicio', { ascending: false })
+
+        if (!alocacoesError && Array.isArray(alocacoesAtivas) && alocacoesAtivas.length > 0) {
+          const hojeIso = new Date().toISOString().split('T')[0]
+          const alocacaoValida = alocacoesAtivas.find((a) => {
+            const semDataFimOuAtiva = !a.data_fim || a.data_fim >= hojeIso
+            const temCliente = Boolean(a.obras?.cliente_id)
+            return semDataFimOuAtiva && temCliente
+          })
+
+          if (alocacaoValida?.obras?.cliente_id) {
+            const { data: clienteDaObra, error: clienteDaObraError } = await supabaseAdmin
+              .from('clientes')
+              .select('*')
+              .eq('id', alocacaoValida.obras.cliente_id)
+              .single()
+
+            if (!clienteDaObraError && clienteDaObra) {
+              return res.json({
+                success: true,
+                data: clienteDaObra,
+                origem: 'obra_funcionario'
+              })
+            }
+          }
+        }
+      }
+    }
+
+    // Se não encontrou, manter erro amigável
+    if (error?.code === 'PGRST116') {
+      return res.status(404).json({
+        error: 'Cliente não encontrado',
+        message: 'Nenhum cliente encontrado para este usuário. Verifique se o cliente está vinculado ao usuário.'
+      })
+    }
+
+    return res.status(404).json({
+      error: 'Cliente não encontrado',
+      message: 'Nenhum cliente encontrado para este usuário'
     })
   } catch (error) {
     console.error('Erro ao buscar cliente por usuario_id:', error)

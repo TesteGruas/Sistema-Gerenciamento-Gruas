@@ -6,13 +6,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   Pagination,
   PaginationContent,
@@ -30,9 +28,7 @@ import {
   Calendar,
   DollarSign,
   Building2,
-  Filter,
   RefreshCw,
-  FileText,
   Download,
   CheckCircle,
   XCircle,
@@ -43,16 +39,11 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { gruasApi } from "@/lib/api-gruas"
-import { receitasApi } from "@/lib/api-receitas"
-import { custosApi } from "@/lib/api-custos"
 import { obrasApi } from "@/lib/api-obras"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
 
-// Tipos importados das APIs
-import type { Receita, ReceitaCreate } from "@/lib/api-receitas"
-import type { Custo, CustoCreate } from "@/lib/api-custos"
 
 interface Grua {
   id: string | number
@@ -75,8 +66,6 @@ interface Obra {
 export default function MedicoesPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const [activeTab, setActiveTab] = useState('medicoes')
-  
   // Estados para medições
   const [medicoes, setMedicoes] = useState<MedicaoMensal[]>([])
   const [gruas, setGruas] = useState<Grua[]>([])
@@ -98,14 +87,6 @@ export default function MedicoesPage() {
   const [totalItems, setTotalItems] = useState(0)
   const itemsPerPage = 100
   
-  // Estados para receitas
-  const [receitas, setReceitas] = useState<Receita[]>([])
-  const [isCreateReceitaDialogOpen, setIsCreateReceitaDialogOpen] = useState(false)
-  
-  // Estados para custos
-  const [custos, setCustos] = useState<Custo[]>([])
-  const [isCreateCustoDialogOpen, setIsCreateCustoDialogOpen] = useState(false)
-  
   // Estados de diálogos
   const [selectedMedicao, setSelectedMedicao] = useState<MedicaoMensal | null>(null)
   const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
@@ -113,24 +94,6 @@ export default function MedicoesPage() {
   const [telefoneEnvio, setTelefoneEnvio] = useState("")
   const [enviando, setEnviando] = useState(false)
 
-  const [receitaForm, setReceitaForm] = useState({
-    obra_id: '',
-    tipo: 'locacao' as 'locacao' | 'servico' | 'venda',
-    descricao: '',
-    valor: 0,
-    data_receita: new Date().toISOString().split('T')[0],
-    observacoes: ''
-  })
-
-  const [custoForm, setCustoForm] = useState({
-    obra_id: '',
-    tipo: 'salario' as 'salario' | 'material' | 'servico' | 'manutencao',
-    descricao: '',
-    valor: 0,
-    data_custo: new Date().toISOString().split('T')[0],
-    funcionario_id: '',
-    observacoes: ''
-  })
 
   useEffect(() => {
     carregarGruas()
@@ -225,13 +188,6 @@ export default function MedicoesPage() {
     try {
       await carregarMedicoes()
       
-      // Carregar receitas
-      const receitasData = await receitasApi.list({ limit: 100 })
-      setReceitas(receitasData.receitas || [])
-      
-      // Carregar custos
-      const custosData = await custosApi.list({ limit: 100 })
-      setCustos(custosData.custos || [])
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       toast({
@@ -276,6 +232,36 @@ export default function MedicoesPage() {
 
     return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [obras])
+
+  const resumoFinanceiro = useMemo(() => {
+    const base = filteredMedicoes
+    const aFaturar = base
+      .filter((m) => ['pendente'].includes(String(m.status || '').toLowerCase()))
+      .reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
+
+    const jaFaturado = base
+      .filter((m) => ['finalizada', 'enviada'].includes(String(m.status || '').toLowerCase()))
+      .reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
+
+    const totalMensal = base.reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
+    const totaisPorA = base.reduce((acc, m) => acc + (Number(m.valor_aditivos) || 0), 0)
+
+    const mapaClientes = new Map<string, number>()
+    for (const medicao of base) {
+      const nomeCliente =
+        medicao.obras?.clientes?.nome ||
+        medicao.orcamentos?.clientes?.nome ||
+        'Sem cliente'
+      mapaClientes.set(nomeCliente, (mapaClientes.get(nomeCliente) || 0) + (Number(medicao.valor_total) || 0))
+    }
+
+    const totaisPorCliente = Array.from(mapaClientes.entries())
+      .map(([nome, total]) => ({ nome, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 4)
+
+    return { aFaturar, jaFaturado, totalMensal, totaisPorA, totaisPorCliente }
+  }, [filteredMedicoes])
 
   const handleEditar = (medicao: MedicaoMensal) => {
     router.push(`/dashboard/medicoes/${medicao.id}/editar`)
@@ -331,111 +317,6 @@ export default function MedicoesPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
-  const getAprovacaoBadge = (statusAprovacao?: string | null) => {
-    if (!statusAprovacao) return null
-    const aprovacaoMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" }> = {
-      pendente: { label: "Aguardando Aprovação", variant: "secondary" },
-      aprovada: { label: "Aprovada", variant: "default" },
-      rejeitada: { label: "Rejeitada", variant: "destructive" }
-    }
-    const aprovacaoInfo = aprovacaoMap[statusAprovacao] || aprovacaoMap.pendente
-    return <Badge variant={aprovacaoInfo.variant}>{aprovacaoInfo.label}</Badge>
-  }
-
-  const getStatusColor = (status: string) => {
-    const statusMap: Record<string, string> = {
-      pendente: "bg-yellow-500",
-      finalizada: "bg-green-500",
-      enviada: "bg-blue-500",
-      cancelada: "bg-red-500"
-    }
-    return statusMap[status] || "bg-gray-500"
-  }
-
-  const handleCreateReceita = async () => {
-    try {
-      const receitaData: ReceitaCreate = {
-        obra_id: parseInt(receitaForm.obra_id),
-        tipo: receitaForm.tipo,
-        descricao: receitaForm.descricao,
-        valor: receitaForm.valor,
-        data_receita: receitaForm.data_receita,
-        observacoes: receitaForm.observacoes || undefined
-      }
-
-      const novaReceita = await receitasApi.create(receitaData)
-      setReceitas([novaReceita, ...receitas])
-      setIsCreateReceitaDialogOpen(false)
-      resetReceitaForm()
-
-      toast({
-        title: "Sucesso",
-        description: "Receita criada com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao criar receita:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao criar receita",
-        variant: "destructive"
-      })
-    }
-  }
-
-  const handleCreateCusto = async () => {
-    try {
-      const custoData: CustoCreate = {
-        obra_id: parseInt(custoForm.obra_id),
-        tipo: custoForm.tipo,
-        descricao: custoForm.descricao,
-        valor: custoForm.valor,
-        data_custo: custoForm.data_custo,
-        funcionario_id: custoForm.funcionario_id ? parseInt(custoForm.funcionario_id) : undefined,
-        observacoes: custoForm.observacoes || undefined
-      }
-
-      const novoCusto = await custosApi.create(custoData)
-      setCustos([novoCusto, ...custos])
-      setIsCreateCustoDialogOpen(false)
-      resetCustoForm()
-
-      toast({
-        title: "Sucesso",
-        description: "Custo criado com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao criar custo:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao criar custo",
-        variant: "destructive"
-      })
-    }
-  }
-
-
-  const resetReceitaForm = () => {
-    setReceitaForm({
-      obra_id: '',
-      tipo: 'locacao',
-      descricao: '',
-      valor: 0,
-      data_receita: new Date().toISOString().split('T')[0],
-      observacoes: ''
-    })
-  }
-
-  const resetCustoForm = () => {
-    setCustoForm({
-      obra_id: '',
-      tipo: 'salario',
-      descricao: '',
-      valor: 0,
-      data_custo: new Date().toISOString().split('T')[0],
-      funcionario_id: '',
-      observacoes: ''
-    })
-  }
 
 
   if (isLoading) {
@@ -452,8 +333,8 @@ export default function MedicoesPage() {
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Medições e Financeiro</h1>
-          <p className="text-gray-600">Gestão de medições, receitas e custos</p>
+          <h1 className="text-3xl font-bold text-gray-900">Medições</h1>
+          <p className="text-gray-600">Gestão de locações, medições e área financeira</p>
         </div>
         <div className="flex gap-2">
           <Button onClick={() => router.push('/dashboard/medicoes/nova')}>
@@ -463,54 +344,95 @@ export default function MedicoesPage() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-1">
-          <TabsTrigger value="medicoes">Medições</TabsTrigger>
-        </TabsList>
-
-        {/* Aba de Medições */}
-        <TabsContent value="medicoes" className="space-y-4">
-          {/* Filtros */}
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Filter className="w-5 h-5" />
-                Filtros
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-3">
-                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-                  <div className="xl:col-span-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Buscar por número, período, obra ou grua..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
+      {/* Resumo Financeiro */}
+      <div className="grid grid-cols-1 xl:grid-cols-6 gap-4">
+        <Card className="xl:col-span-1">
+          <CardContent className="p-4">
+            <p className="text-sm text-gray-500">A Faturar</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.aFaturar)}</p>
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-1">
+          <CardContent className="p-4">
+            <p className="text-sm text-gray-500">Já Faturado</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.jaFaturado)}</p>
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-1">
+          <CardContent className="p-4">
+            <p className="text-sm text-gray-500">Total Mensal</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.totalMensal)}</p>
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-1">
+          <CardContent className="p-4">
+            <p className="text-sm text-gray-500">Totais por A</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.totaisPorA)}</p>
+          </CardContent>
+        </Card>
+        <Card className="xl:col-span-2">
+          <CardContent className="p-4 flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <p className="text-sm text-gray-500">Totais por Cliente</p>
+              {resumoFinanceiro.totaisPorCliente.length === 0 ? (
+                <p className="text-sm text-gray-400">Sem dados</p>
+              ) : (
+                resumoFinanceiro.totaisPorCliente.map((item, idx) => {
+                  const cores = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-400', 'bg-indigo-500']
+                  const percentual = resumoFinanceiro.totalMensal > 0
+                    ? ((item.total / resumoFinanceiro.totalMensal) * 100).toFixed(1)
+                    : '0.0'
+                  return (
+                    <div key={`${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2.5 h-2.5 rounded-full ${cores[idx % cores.length]}`} />
+                        <span className="text-gray-700">{item.nome}</span>
+                      </div>
+                      <span className="font-medium text-gray-600">{percentual}%</span>
                     </div>
-                  </div>
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os Status</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="finalizada">Finalizada</SelectItem>
-                      <SelectItem value="enviada">Enviada</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  )
+                })
+              )}
+            </div>
+            {resumoFinanceiro.totaisPorCliente.length > 0 && (
+              <div
+                className="w-28 h-28 rounded-full"
+                style={{
+                  background: (() => {
+                    const cores = ['#3b82f6', '#10b981', '#f59e0b', '#6366f1']
+                    let inicio = 0
+                    const fatias = resumoFinanceiro.totaisPorCliente.map((item, idx) => {
+                      const pct = resumoFinanceiro.totalMensal > 0 ? (item.total / resumoFinanceiro.totalMensal) * 100 : 0
+                      const fim = inicio + pct
+                      const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
+                      inicio = fim
+                      return trecho
+                    })
+                    return `conic-gradient(${fatias.join(', ')})`
+                  })()
+                }}
+              >
+                <div className="w-full h-full flex items-center justify-center">
+                  <div className="w-14 h-14 rounded-full bg-white" />
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <div className="space-y-4">
+          {/* Filtros */}
+          <Card className="rounded-xl border bg-muted/20">
+            <CardContent className="p-3 md:p-4">
+              <div className="space-y-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                   <Select value={clienteFilter} onValueChange={setClienteFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9 bg-white">
                       <SelectValue placeholder="Cliente" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todos os Clientes</SelectItem>
+                      <SelectItem value="all">Cliente</SelectItem>
                       {clientesOptions.map((cliente) => (
                         <SelectItem key={cliente.id} value={cliente.id}>
                           {cliente.nome}
@@ -519,11 +441,11 @@ export default function MedicoesPage() {
                     </SelectContent>
                   </Select>
                   <Select value={gruaFilter} onValueChange={setGruaFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9 bg-white">
                       <SelectValue placeholder="Grua" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas as Gruas</SelectItem>
+                      <SelectItem value="all">Grua</SelectItem>
                       {gruas.map((grua) => (
                         <SelectItem key={grua.id} value={String(grua.id)}>
                           {grua.name}
@@ -532,11 +454,11 @@ export default function MedicoesPage() {
                     </SelectContent>
                   </Select>
                   <Select value={obraFilter} onValueChange={setObraFilter}>
-                    <SelectTrigger>
+                    <SelectTrigger className="h-9 bg-white">
                       <SelectValue placeholder="Obra" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="all">Todas as Obras</SelectItem>
+                      <SelectItem value="all">Obra</SelectItem>
                       {obras.map((obra) => (
                         <SelectItem key={obra.id} value={String(obra.id)}>
                           {obra.nome}
@@ -546,32 +468,83 @@ export default function MedicoesPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-3 items-end">
-                  <div className="xl:col-span-2">
-                    <Label className="font-medium peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-xs">Mês (YYYY-MM)</Label>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
+                  <div className="md:col-span-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                      <Input
+                        placeholder="Filtrar / Cliente"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-9 pl-10 bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="md:col-span-2">
+                    <Select value={obraFilter} onValueChange={setObraFilter}>
+                      <SelectTrigger className="h-9 bg-white">
+                        <SelectValue placeholder="Selecionar Obra" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Selecionar Obra</SelectItem>
+                        {obras.map((obra) => (
+                          <SelectItem key={obra.id} value={String(obra.id)}>
+                            {obra.nome}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2">
                     <Input
                       type="month"
                       value={filterPeriodo}
                       onChange={(e) => setFilterPeriodo(e.target.value)}
+                      className="h-9 bg-white"
                     />
                   </div>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      setSearchTerm("")
-                      setFilterStatus("all")
-                      setGruaFilter("all")
-                      setClienteFilter("all")
-                      setObraFilter("all")
-                      setFilterPeriodo("")
-                    }}
-                  >
-                    Limpar
-                  </Button>
-                  <Button variant="outline" onClick={carregarMedicoes}>
-                    <RefreshCw className="w-4 h-4 mr-2" />
-                    Atualizar
-                  </Button>
+                  <div className="md:col-span-2">
+                  <Select value={filterStatus} onValueChange={setFilterStatus}>
+                    <SelectTrigger className="h-9 bg-white">
+                      <SelectValue placeholder="Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                      <SelectItem value="finalizada">Finalizada</SelectItem>
+                      <SelectItem value="enviada">Enviada</SelectItem>
+                      <SelectItem value="cancelada">Cancelada</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  </div>
+                  <div className="md:col-span-3 flex flex-wrap md:flex-nowrap items-center justify-end gap-2">
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setSearchTerm("")
+                        setFilterStatus("all")
+                        setGruaFilter("all")
+                        setClienteFilter("all")
+                        setObraFilter("all")
+                        setFilterPeriodo("")
+                      }}
+                      className="h-9 px-3"
+                    >
+                      Limpar
+                    </Button>
+                    <Button variant="outline" onClick={carregarMedicoes} className="h-9 px-3">
+                      Filtrar
+                    </Button>
+                    <Button variant="outline" onClick={carregarMedicoes} className="h-9 w-9 p-0">
+                      <RefreshCw className="w-4 h-4" />
+                    </Button>
+                    <Button variant="outline" className="h-9 w-9 p-0">
+                      <Download className="w-4 h-4" />
+                    </Button>
+                    <Button onClick={() => router.push('/dashboard/medicoes/nova')} className="h-9 px-3">
+                      Nova Medição
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
@@ -593,44 +566,36 @@ export default function MedicoesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
                         <TableHead>Período</TableHead>
-                        <TableHead>Grua</TableHead>
+                        <TableHead>Cliente</TableHead>
                         <TableHead>Obra</TableHead>
                         <TableHead>Valor Total</TableHead>
+                        <TableHead>Valor Locação</TableHead>
+                        <TableHead>Valor Serviço</TableHead>
                         <TableHead>Status</TableHead>
-                        <TableHead>Aprovação</TableHead>
+                        <TableHead>NF</TableHead>
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredMedicoes.map((medicao) => (
                         <TableRow key={medicao.id}>
-                          <TableCell className="font-medium">{medicao.numero}</TableCell>
                           <TableCell>{medicao.periodo}</TableCell>
                           <TableCell>
-                            {medicao.gruas ? (
-                              <div className="flex items-center gap-2">
-                                <Forklift className="w-4 h-4" />
-                                <span>{medicao.gruas.name || medicao.gruas.nome}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
+                            {medicao.obras?.clientes?.nome || medicao.orcamentos?.clientes?.nome || '-'}
                           </TableCell>
                           <TableCell>
-                            {medicao.obras ? (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4" />
-                                <span>{medicao.obras.nome}</span>
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">-</span>
-                            )}
+                            {medicao.obras?.nome || '-'}
                           </TableCell>
                           <TableCell className="font-semibold">{formatCurrency(medicao.valor_total || 0)}</TableCell>
+                          <TableCell>{formatCurrency(medicao.valor_mensal_bruto || 0)}</TableCell>
+                          <TableCell>{formatCurrency(Math.max(0, (medicao.valor_total || 0) - (medicao.valor_mensal_bruto || 0)))}</TableCell>
                           <TableCell>{getStatusBadge(medicao.status)}</TableCell>
-                          <TableCell>{getAprovacaoBadge(medicao.status_aprovacao)}</TableCell>
+                          <TableCell>
+                            {medicao.numero ? (
+                              <span className="text-blue-700 font-medium">NF-{String(medicao.numero).padStart(4, '0')}</span>
+                            ) : '-'}
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Button
@@ -702,144 +667,7 @@ export default function MedicoesPage() {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        {/* Aba de Receitas */}
-        <TabsContent value="receitas" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Receitas ({receitas.length})</CardTitle>
-              <CardDescription>Lista de todas as receitas registradas</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {receitas.length === 0 ? (
-                <div className="text-center py-8">
-                  <DollarSign className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-500">Nenhuma receita encontrada</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {receitas.map((receita) => (
-                      <TableRow key={receita.id}>
-                        <TableCell>
-                          <Badge variant="outline">{receita.tipo}</Badge>
-                        </TableCell>
-                        <TableCell>{receita.descricao}</TableCell>
-                        <TableCell>{receita.obras?.nome || 'N/A'}</TableCell>
-                        <TableCell>
-                          {new Date(receita.data_receita).toLocaleDateString('pt-BR')}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-green-600" />
-                            R$ {receita.valor.toLocaleString('pt-BR')}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(receita.status)}>
-                            {receita.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Aba de Custos */}
-        <TabsContent value="custos" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Custos ({custos.length})</CardTitle>
-              <CardDescription>Lista de todos os custos registrados</CardDescription>
-            </CardHeader>
-            <CardContent>
-              {custos.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                  <p className="text-gray-500">Nenhum custo encontrado</p>
-                </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Ações</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {custos.map((custo) => (
-                      <TableRow key={custo.id}>
-                        <TableCell>
-                          <Badge variant="outline">{custo.tipo}</Badge>
-                        </TableCell>
-                        <TableCell>{custo.descricao}</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>-</TableCell>
-                        <TableCell>
-                          {new Date(custo.data_custo).toLocaleDateString('pt-BR')}
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <DollarSign className="w-4 h-4 text-red-600" />
-                            R$ {custo.valor.toLocaleString('pt-BR')}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={getStatusColor(custo.status)}>
-                            {custo.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex gap-2">
-                            <Button size="sm" variant="outline">
-                              <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button size="sm" variant="outline">
-                              <Edit className="w-4 h-4" />
-                            </Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      </div>
 
       {/* Dialog de Envio */}
       <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
@@ -882,244 +710,6 @@ export default function MedicoesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog de Criação de Receita */}
-      <Dialog open={isCreateReceitaDialogOpen} onOpenChange={setIsCreateReceitaDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Nova Receita</DialogTitle>
-            <DialogDescription>
-              Registre uma nova receita no sistema
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={(e) => { e.preventDefault(); handleCreateReceita(); }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="receita_obra_id">Obra *</Label>
-                <Select 
-                  value={receitaForm.obra_id} 
-                  onValueChange={(value) => setReceitaForm({ ...receitaForm, obra_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {obras.length === 0 ? (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Nenhuma obra disponível
-                      </div>
-                    ) : (
-                      obras.map(obra => (
-                        <SelectItem key={obra.id} value={obra.id.toString()}>
-                          {obra.nome}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="receita_tipo">Tipo *</Label>
-                <Select 
-                  value={receitaForm.tipo} 
-                  onValueChange={(value) => setReceitaForm({ ...receitaForm, tipo: value as any })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="locacao">Locação</SelectItem>
-                    <SelectItem value="servico">Serviço</SelectItem>
-                    <SelectItem value="venda">Venda</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="receita_descricao">Descrição *</Label>
-              <Input
-                id="receita_descricao"
-                value={receitaForm.descricao}
-                onChange={(e) => setReceitaForm({ ...receitaForm, descricao: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="receita_valor">Valor (R$) *</Label>
-                <Input
-                  id="receita_valor"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={receitaForm.valor}
-                  onChange={(e) => setReceitaForm({ ...receitaForm, valor: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="receita_data">Data da Receita *</Label>
-                <Input
-                  id="receita_data"
-                  type="date"
-                  value={receitaForm.data_receita}
-                  onChange={(e) => setReceitaForm({ ...receitaForm, data_receita: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="receita_observacoes">Observações</Label>
-              <Textarea
-                id="receita_observacoes"
-                value={receitaForm.observacoes}
-                onChange={(e) => setReceitaForm({ ...receitaForm, observacoes: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateReceitaDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Criar Receita
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Criação de Custo */}
-      <Dialog open={isCreateCustoDialogOpen} onOpenChange={setIsCreateCustoDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Novo Custo</DialogTitle>
-            <DialogDescription>
-              Registre um novo custo no sistema
-            </DialogDescription>
-          </DialogHeader>
-          
-          <form onSubmit={(e) => { e.preventDefault(); handleCreateCusto(); }} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="custo_obra_id">Obra *</Label>
-                <Select 
-                  value={custoForm.obra_id} 
-                  onValueChange={(value) => setCustoForm({ ...custoForm, obra_id: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione a obra" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {obras.length === 0 ? (
-                      <div className="p-2 text-sm text-gray-500 text-center">
-                        Nenhuma obra disponível
-                      </div>
-                    ) : (
-                      obras.map(obra => (
-                        <SelectItem key={obra.id} value={obra.id.toString()}>
-                          {obra.nome}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div>
-                <Label htmlFor="custo_tipo">Tipo *</Label>
-                <Select 
-                  value={custoForm.tipo} 
-                  onValueChange={(value) => setCustoForm({ ...custoForm, tipo: value as any })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="salario">Salário</SelectItem>
-                    <SelectItem value="material">Material</SelectItem>
-                    <SelectItem value="servico">Serviço</SelectItem>
-                    <SelectItem value="manutencao">Manutenção</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="custo_descricao">Descrição *</Label>
-              <Input
-                id="custo_descricao"
-                value={custoForm.descricao}
-                onChange={(e) => setCustoForm({ ...custoForm, descricao: e.target.value })}
-                required
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="custo_valor">Valor (R$) *</Label>
-                <Input
-                  id="custo_valor"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={custoForm.valor}
-                  onChange={(e) => setCustoForm({ ...custoForm, valor: parseFloat(e.target.value) || 0 })}
-                  required
-                />
-              </div>
-              <div>
-                <Label htmlFor="custo_data">Data do Custo *</Label>
-                <Input
-                  id="custo_data"
-                  type="date"
-                  value={custoForm.data_custo}
-                  onChange={(e) => setCustoForm({ ...custoForm, data_custo: e.target.value })}
-                  required
-                />
-              </div>
-            </div>
-
-            <div>
-              <Label htmlFor="custo_funcionario">Funcionário (opcional)</Label>
-              <Select 
-                value={custoForm.funcionario_id} 
-                onValueChange={(value) => setCustoForm({ ...custoForm, funcionario_id: value })}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o funcionário" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="1">João Silva</SelectItem>
-                  <SelectItem value="2">Maria Santos</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div>
-              <Label htmlFor="custo_observacoes">Observações</Label>
-              <Textarea
-                id="custo_observacoes"
-                value={custoForm.observacoes}
-                onChange={(e) => setCustoForm({ ...custoForm, observacoes: e.target.value })}
-                rows={3}
-              />
-            </div>
-
-            <div className="flex justify-end gap-2">
-              <Button type="button" variant="outline" onClick={() => setIsCreateCustoDialogOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit">
-                Criar Custo
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

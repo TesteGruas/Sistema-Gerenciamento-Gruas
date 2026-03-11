@@ -1473,6 +1473,18 @@ export default function PWAObraDetalhesPage() {
         </Card>
       )}
 
+      {/* Atalhos para páginas dedicadas */}
+      <div className="grid grid-cols-2 gap-3">
+        <Button variant="outline" onClick={() => router.push(`/pwa/obras/${obraId}/checklist`)}>
+          <CheckCircle2 className="w-4 h-4 mr-2" />
+          Checklist
+        </Button>
+        <Button variant="outline" onClick={() => router.push(`/pwa/obras/${obraId}/manutencoes`)}>
+          <Wrench className="w-4 h-4 mr-2" />
+          Manutenções
+        </Button>
+      </div>
+
       {/* Tabs para Livro Gruas, Checklist, Manutenções, Funcionários e Documentos */}
       <Tabs defaultValue="livro-grua" className="w-full">
         <TabsList className="grid w-full grid-cols-4">

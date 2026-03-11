@@ -2273,7 +2273,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       {gruaSelecionada ? (
         <>
-          <Card className="print:hidden">
+          <Card className="hidden print:hidden">
             <CardHeader className="pb-3">
               <CardTitle className="text-base flex items-center justify-between">
                 <span>Edição Rápida do Livro da Grua</span>
