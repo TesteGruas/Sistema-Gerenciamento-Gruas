@@ -67,6 +67,63 @@ const changePasswordSchema = Joi.object({
 })
 
 /**
+ * Sincroniza dados de perfil com a tabela funcionarios quando houver vínculo.
+ * Evita inconsistências de nome/cargo entre usuarios e funcionarios.
+ */
+async function syncProfileWithFuncionario(profile) {
+  if (!profile?.funcionario_id) {
+    return profile
+  }
+
+  const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+    .from('funcionarios')
+    .select(`
+      id,
+      nome,
+      email,
+      cpf,
+      telefone,
+      data_nascimento,
+      endereco,
+      cidade,
+      estado,
+      cep,
+      status,
+      cargo,
+      data_admissao,
+      salario
+    `)
+    .eq('id', profile.funcionario_id)
+    .maybeSingle()
+
+  if (funcionarioError) {
+    console.warn(`⚠️  Erro ao sincronizar funcionário ${profile.funcionario_id}:`, funcionarioError.message)
+    return profile
+  }
+
+  if (!funcionario) {
+    return profile
+  }
+
+  return {
+    ...profile,
+    nome: funcionario.nome || profile.nome,
+    email: funcionario.email || profile.email,
+    cpf: funcionario.cpf || profile.cpf,
+    telefone: funcionario.telefone || profile.telefone,
+    data_nascimento: funcionario.data_nascimento || profile.data_nascimento,
+    endereco: funcionario.endereco || profile.endereco,
+    cidade: funcionario.cidade || profile.cidade,
+    estado: funcionario.estado || profile.estado,
+    cep: funcionario.cep || profile.cep,
+    status: funcionario.status || profile.status,
+    cargo: funcionario.cargo || profile.cargo,
+    data_admissao: funcionario.data_admissao || profile.data_admissao,
+    salario: funcionario.salario ?? profile.salario
+  }
+}
+
+/**
  * @swagger
  * /api/auth/login:
  *   post:
@@ -232,11 +289,13 @@ router.post('/login', async (req, res) => {
     }
 
     // Buscar perfil do usuário
-    const { data: profile, error: profileError } = await supabase
+    const { data: rawProfile, error: profileError } = await supabaseAdmin
       .from('usuarios')
       .select('*')
       .eq('email', email)
       .single()
+
+    const profile = await syncProfileWithFuncionario(rawProfile)
 
     if (profileError) {
       console.error('Erro ao buscar perfil:', profileError)
@@ -250,7 +309,7 @@ router.post('/login', async (req, res) => {
 
     if (profile) {
       // Buscar o perfil do usuário
-      const { data: perfilUsuario, error: perfilError } = await supabase
+      const { data: perfilUsuario, error: perfilError } = await supabaseAdmin
         .from('usuario_perfis')
         .select(`
           perfil_id,
@@ -542,8 +601,10 @@ router.get('/me', authenticateToken, async (req, res) => {
         })
       }
 
-      profile = novoProfile
+      profile = await syncProfileWithFuncionario(novoProfile)
       console.log(`✅ Usuário criado com sucesso na tabela: ${req.user.email} (ID: ${profile.id})`)
+    } else {
+      profile = await syncProfileWithFuncionario(profile)
     }
 
     // Buscar perfil e permissões do usuário

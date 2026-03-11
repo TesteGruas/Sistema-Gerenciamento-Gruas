@@ -23,9 +23,11 @@ interface ChatIaProps {
   floating?: boolean
   /** Classe CSS adicional */
   className?: string
+  /** Distância do botão flutuante a partir da base da tela */
+  floatingBottom?: string
 }
 
-export function ChatIa({ floating = true, className }: ChatIaProps) {
+export function ChatIa({ floating = true, className, floatingBottom = "1.5rem" }: ChatIaProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [inputMessage, setInputMessage] = useState("")
@@ -197,7 +199,7 @@ export function ChatIa({ floating = true, className }: ChatIaProps) {
             aria-label="Abrir chat de IA"
             style={{ 
               position: 'fixed',
-              bottom: '1.5rem',
+              bottom: floatingBottom,
               right: '1.5rem',
               zIndex: 100
             }}

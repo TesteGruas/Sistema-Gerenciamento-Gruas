@@ -1019,7 +1019,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
             )}
 
             {/* Chat de IA - Botão Flutuante */}
-            <ChatIa floating={true} />
+            <ChatIa floating={true} floatingBottom="5.5rem" />
           </div>
         ) : (
           <div className="min-h-screen">
