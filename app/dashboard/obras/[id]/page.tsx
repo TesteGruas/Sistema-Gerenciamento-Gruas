@@ -6546,6 +6546,116 @@ useEffect(() => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Modais de Checklist Diário */}
+      <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Novo Checklist Diário</DialogTitle>
+            <DialogDescription>
+              Preencha os itens verificados para registrar o checklist diário da grua.
+            </DialogDescription>
+          </DialogHeader>
+          {gruaSelecionadaChecklist && (
+            <LivroGruaChecklistDiario
+              gruaId={gruaSelecionadaChecklist}
+              onSave={handleSucessoChecklist}
+              onCancel={() => setIsNovoChecklistOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditarChecklistOpen} onOpenChange={setIsEditarChecklistOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Checklist Diário</DialogTitle>
+            <DialogDescription>
+              Atualize os dados do checklist selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          {gruaSelecionadaChecklist && checklistSelecionado && (
+            <LivroGruaChecklistDiario
+              gruaId={gruaSelecionadaChecklist}
+              checklist={checklistSelecionado}
+              modoEdicao
+              onSave={handleSucessoChecklist}
+              onCancel={() => setIsEditarChecklistOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isVisualizarChecklistOpen} onOpenChange={setIsVisualizarChecklistOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualizar Checklist Diário</DialogTitle>
+          </DialogHeader>
+          {checklistSelecionado && (
+            <LivroGruaChecklistDiario
+              gruaId={checklistSelecionado.grua_id?.toString() || gruaSelecionadaChecklist}
+              checklist={checklistSelecionado}
+              modoVisualizacao
+              onCancel={() => setIsVisualizarChecklistOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Modais de Manutenção */}
+      <Dialog open={isNovaManutencaoOpen} onOpenChange={setIsNovaManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Nova Manutenção</DialogTitle>
+            <DialogDescription>
+              Registre a manutenção realizada para a grua selecionada.
+            </DialogDescription>
+          </DialogHeader>
+          {gruaSelecionadaManutencao && (
+            <LivroGruaManutencao
+              gruaId={gruaSelecionadaManutencao}
+              onSave={handleSucessoManutencao}
+              onCancel={() => setIsNovaManutencaoOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEditarManutencaoOpen} onOpenChange={setIsEditarManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar Manutenção</DialogTitle>
+            <DialogDescription>
+              Atualize os dados da manutenção selecionada.
+            </DialogDescription>
+          </DialogHeader>
+          {gruaSelecionadaManutencao && manutencaoSelecionada && (
+            <LivroGruaManutencao
+              gruaId={gruaSelecionadaManutencao}
+              manutencao={manutencaoSelecionada}
+              modoEdicao
+              onSave={handleSucessoManutencao}
+              onCancel={() => setIsEditarManutencaoOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isVisualizarManutencaoOpen} onOpenChange={setIsVisualizarManutencaoOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Visualizar Manutenção</DialogTitle>
+          </DialogHeader>
+          {manutencaoSelecionada && (
+            <LivroGruaManutencao
+              gruaId={manutencaoSelecionada.grua_id?.toString() || gruaSelecionadaManutencao}
+              manutencao={manutencaoSelecionada}
+              modoVisualizacao
+              onCancel={() => setIsVisualizarManutencaoOpen(false)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

@@ -145,6 +145,7 @@ export function LivroGruaManutencaoList({
             )}
             {onNovaManutencao && (
               <Button 
+                type="button"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -211,6 +212,7 @@ export function LivroGruaManutencaoList({
             <p>Nenhuma manutenção encontrada</p>
             {onNovaManutencao && (
               <Button 
+                type="button"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -269,6 +271,7 @@ export function LivroGruaManutencaoList({
                         <div className="flex justify-end gap-2">
                           {onVisualizarManutencao && (
                             <Button
+                              type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => onVisualizarManutencao(manutencao)}
@@ -278,6 +281,7 @@ export function LivroGruaManutencaoList({
                           )}
                           {onEditarManutencao && (
                             <Button
+                              type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => onEditarManutencao(manutencao)}
@@ -287,6 +291,7 @@ export function LivroGruaManutencaoList({
                           )}
                           {onExcluirManutencao && (
                             <Button
+                              type="button"
                               variant="ghost"
                               size="sm"
                               onClick={() => {
@@ -351,6 +356,7 @@ export function LivroGruaManutencaoList({
                       <div className="flex gap-2 pt-2 border-t">
                         {onVisualizarManutencao && (
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => onVisualizarManutencao(manutencao)}
@@ -362,6 +368,7 @@ export function LivroGruaManutencaoList({
                         )}
                         {onEditarManutencao && (
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => onEditarManutencao(manutencao)}
@@ -373,6 +380,7 @@ export function LivroGruaManutencaoList({
                         )}
                         {onExcluirManutencao && (
                           <Button
+                            type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => {

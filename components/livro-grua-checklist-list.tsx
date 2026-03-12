@@ -197,6 +197,7 @@ export function LivroGruaChecklistList({
             )}
             {onNovoChecklist && (
               <Button 
+                type="button"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -252,6 +253,7 @@ export function LivroGruaChecklistList({
             <p>Nenhum checklist encontrado</p>
             {onNovoChecklist && (
               <Button 
+                type="button"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -320,6 +322,7 @@ export function LivroGruaChecklistList({
                           <div className="flex justify-end gap-2">
                             {onVisualizarChecklist && (
                               <Button
+                                type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => onVisualizarChecklist(checklist)}
@@ -329,6 +332,7 @@ export function LivroGruaChecklistList({
                             )}
                             {onEditarChecklist && (
                               <Button
+                                type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => onEditarChecklist(checklist)}
@@ -338,6 +342,7 @@ export function LivroGruaChecklistList({
                             )}
                             {onExcluirChecklist && (
                               <Button
+                                type="button"
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
@@ -407,6 +412,7 @@ export function LivroGruaChecklistList({
                         <div className="flex gap-2 pt-2 border-t">
                           {onVisualizarChecklist && (
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
                               onClick={() => onVisualizarChecklist(checklist)}
@@ -418,6 +424,7 @@ export function LivroGruaChecklistList({
                           )}
                           {onEditarChecklist && (
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
                               onClick={() => onEditarChecklist(checklist)}
@@ -429,6 +436,7 @@ export function LivroGruaChecklistList({
                           )}
                           {onExcluirChecklist && (
                             <Button
+                              type="button"
                               variant="outline"
                               size="sm"
                               onClick={() => {

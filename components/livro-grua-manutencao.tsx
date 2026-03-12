@@ -50,6 +50,7 @@ interface LivroGruaManutencaoProps {
   onSave?: (manutencao: Manutencao) => void
   onCancel?: () => void
   modoEdicao?: boolean
+  modoVisualizacao?: boolean
 }
 
 export function LivroGruaManutencao({
@@ -57,8 +58,46 @@ export function LivroGruaManutencao({
   manutencao,
   onSave,
   onCancel,
-  modoEdicao = false
+  modoEdicao = false,
+  modoVisualizacao = false
 }: LivroGruaManutencaoProps) {
+  const CHECKLIST_META_PREFIX = "__CHECKLIST_MANUTENCAO_JSON__:"
+
+  const extrairChecklistDasObservacoes = (observacoes?: string) => {
+    if (!observacoes) return null
+    const idx = observacoes.indexOf(CHECKLIST_META_PREFIX)
+    if (idx === -1) return null
+
+    const jsonRaw = observacoes.slice(idx + CHECKLIST_META_PREFIX.length).trim()
+    if (!jsonRaw) return null
+
+    try {
+      const parsed = JSON.parse(jsonRaw)
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, 'ok' | 'manutencao' | null>
+      }
+    } catch {
+      // ignorar metadata inválida
+    }
+    return null
+  }
+
+  const limparChecklistDasObservacoes = (observacoes?: string) => {
+    if (!observacoes) return ""
+    const idx = observacoes.indexOf(CHECKLIST_META_PREFIX)
+    if (idx === -1) return observacoes
+    return observacoes.slice(0, idx).trim()
+  }
+
+  const montarObservacoesComChecklist = (
+    observacoesTexto: string,
+    checklistDetalhado: Record<string, 'ok' | 'manutencao' | null>
+  ) => {
+    const textoLimpo = limparChecklistDasObservacoes(observacoesTexto)
+    const checklistJson = JSON.stringify(checklistDetalhado)
+    return `${textoLimpo}\n\n${CHECKLIST_META_PREFIX}${checklistJson}`.trim()
+  }
+
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -134,6 +173,15 @@ export function LivroGruaManutencao({
   // Carregar dados da manutenção se estiver editando
   useEffect(() => {
     if (manutencao) {
+      const checklistObservacoes = extrairChecklistDasObservacoes(manutencao.observacoes)
+      const checklistConvertido = manutencao.checklist
+        ? (Object.entries(manutencao.checklist).reduce((acc, [key, value]) => {
+            acc[key] = value ? 'ok' : null
+            return acc
+          }, {} as Record<string, 'ok' | 'manutencao' | null>))
+        : {}
+      const checklistInicial = checklistObservacoes || checklistConvertido
+
       setFormData({
         id: manutencao.id,
         grua_id: manutencao.grua_id,
@@ -142,14 +190,14 @@ export function LivroGruaManutencao({
         realizado_por_nome: manutencao.realizado_por_nome,
         cargo: manutencao.cargo || '',
         descricao: manutencao.descricao || '',
-        observacoes: manutencao.observacoes || '',
+        observacoes: limparChecklistDasObservacoes(manutencao.observacoes || ''),
         created_at: manutencao.created_at,
-        checklist: manutencao.checklist || {}
+        checklist: checklistInicial
       })
 
       // Carregar checklist se existir
-      if (manutencao.checklist) {
-        setChecklist(manutencao.checklist)
+      if (Object.keys(checklistInicial).length > 0) {
+        setChecklist(checklistInicial)
       }
 
       // Se houver funcionário na manutenção, selecionar
@@ -252,6 +300,8 @@ export function LivroGruaManutencao({
   }
 
   const preencherDadosAleatorios = () => {
+    if (modoVisualizacao) return
+
     const checklistAleatorio = checklistItems.reduce((acc, item) => {
       acc[item.key] = Math.random() < 0.5 ? 'ok' : 'manutencao'
       return acc
@@ -278,6 +328,7 @@ export function LivroGruaManutencao({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (modoVisualizacao) return
     
     if (!formData.data) {
       setError('Data é obrigatória')
@@ -304,6 +355,7 @@ export function LivroGruaManutencao({
       setError(null)
 
       // Preparar dados para a API (schema backend exige data_entrada)
+      const observacoesComChecklist = montarObservacoesComChecklist(formData.observacoes || '', checklist)
       const manutencaoData = {
         grua_id: formData.grua_id,
         funcionario_id: formData.realizado_por_id,
@@ -311,7 +363,16 @@ export function LivroGruaManutencao({
         tipo_entrada: 'manutencao' as const,
         status_entrada: 'ok' as const,
         descricao: formData.descricao || `Manutenção realizada em ${formData.data}`,
-        observacoes: formData.observacoes || ''
+        observacoes: observacoesComChecklist,
+        // Campos aceitos pelo backend para checklist diário, usados aqui como resumo
+        cabos: checklist.cabos === 'ok',
+        polias: checklist.polias === 'ok',
+        estrutura: checklist.estrutura === 'ok',
+        movimentos: checklist.movimentos === 'ok',
+        freios: checklist.freios === 'ok',
+        limitadores: checklist.limitadores === 'ok',
+        indicadores: checklist.indicadores === 'ok',
+        aterramento: checklist.aterramento === 'ok'
       }
 
       if (modoEdicao && formData.id) {
@@ -369,7 +430,8 @@ export function LivroGruaManutencao({
                 value={formData.data}
                 onChange={(e) => setFormData({ ...formData, data: e.target.value })}
                 required
-                className="mt-1"
+                disabled={modoVisualizacao}
+                className={`mt-1 ${modoVisualizacao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
               />
               <p className="text-xs text-gray-500 mt-1">
                 A data pode ser qualquer dia
@@ -381,12 +443,22 @@ export function LivroGruaManutencao({
               <Label htmlFor="funcionario" className="text-xs text-gray-500">
                 Funcionário <span className="text-red-500">*</span>
               </Label>
-              <FuncionarioSearch
-                onFuncionarioSelect={handleFuncionarioSelect}
-                selectedFuncionario={funcionarioSelecionado}
-                placeholder="Buscar funcionário..."
-                className="mt-1"
-              />
+              {modoVisualizacao ? (
+                <Input
+                  id="funcionario"
+                  value={formData.realizado_por_nome || funcionarioSelecionado?.name || 'N/A'}
+                  className="mt-1 bg-gray-50 cursor-not-allowed"
+                  disabled
+                />
+              ) : (
+                <FuncionarioSearch
+                  onFuncionarioSelect={handleFuncionarioSelect}
+                  selectedFuncionario={funcionarioSelecionado}
+                  placeholder="Buscar funcionário..."
+                  className="mt-1"
+                  disabled={modoVisualizacao}
+                />
+              )}
             </div>
 
             {/* Cargo */}
@@ -400,13 +472,13 @@ export function LivroGruaManutencao({
                 onChange={(e) => setFormData({ ...formData, cargo: e.target.value })}
                 placeholder="Cargo do funcionário"
                 className="mt-1"
-                disabled={!funcionarioSelecionado}
+                disabled={modoVisualizacao || !funcionarioSelecionado}
               />
             </div>
           </div>
 
           {/* Preview do Funcionário Selecionado */}
-          {funcionarioSelecionado && (
+          {funcionarioSelecionado && !modoVisualizacao && (
             <div className="p-2 bg-blue-50 border border-blue-200 rounded-md">
               <div className="flex items-center gap-2">
                 <User className="w-4 h-4 text-blue-600" />
@@ -429,16 +501,18 @@ export function LivroGruaManutencao({
               <CheckCircle2 className="w-4 h-4" />
               Checklist de Manutenção
             </span>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={preencherDadosAleatorios}
-              className="h-8 text-xs"
-            >
-              <Shuffle className="w-3.5 h-3.5 mr-1" />
-              Preencher teste
-            </Button>
+            {!modoVisualizacao && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={preencherDadosAleatorios}
+                className="h-8 text-xs"
+              >
+                <Shuffle className="w-3.5 h-3.5 mr-1" />
+                Preencher teste
+              </Button>
+            )}
           </CardTitle>
           <CardDescription className="text-xs">
             Marque os itens que foram verificados durante a manutenção
@@ -471,6 +545,7 @@ export function LivroGruaManutencao({
                             variant={statusAtual === 'ok' ? 'default' : 'outline'}
                             size="sm"
                             onClick={() => toggleChecklistItem(item.key, 'ok')}
+                            disabled={modoVisualizacao}
                             className={statusAtual === 'ok' ? 'bg-green-600 hover:bg-green-700' : ''}
                           >
                             OK
@@ -480,6 +555,7 @@ export function LivroGruaManutencao({
                             variant={statusAtual === 'manutencao' ? 'default' : 'outline'}
                             size="sm"
                             onClick={() => toggleChecklistItem(item.key, 'manutencao')}
+                            disabled={modoVisualizacao}
                             className={statusAtual === 'manutencao' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
                           >
                             MANUTENÇÃO
@@ -512,6 +588,7 @@ export function LivroGruaManutencao({
               id="descricao"
               value={formData.descricao || ''}
               onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+              disabled={modoVisualizacao}
               rows={3}
               placeholder="Descreva o que foi feito na manutenção..."
               className="mt-1"
@@ -534,6 +611,7 @@ export function LivroGruaManutencao({
               id="observacoes"
               value={formData.observacoes || ''}
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              disabled={modoVisualizacao}
               rows={2}
               placeholder="Adicione observações sobre a manutenção (opcional)..."
               className="mt-1"
@@ -560,22 +638,24 @@ export function LivroGruaManutencao({
             disabled={loading}
           >
             <X className="w-4 h-4 mr-2" />
-            Cancelar
+            {modoVisualizacao ? 'Fechar' : 'Cancelar'}
           </Button>
         )}
-        <Button
-          type="submit"
-          disabled={loading}
-        >
-          {loading ? (
-            <ButtonLoader text="Salvando..." />
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              {modoEdicao ? 'Atualizar' : 'Salvar'} Manutenção
-            </>
-          )}
-        </Button>
+        {!modoVisualizacao && (
+          <Button
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? (
+              <ButtonLoader text="Salvando..." />
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                {modoEdicao ? 'Atualizar' : 'Salvar'} Manutenção
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </form>
   )

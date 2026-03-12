@@ -25,6 +25,8 @@ interface ChecklistDiario {
   id?: number
   grua_id: string
   funcionario_id: number
+  funcionario_nome?: string
+  cargo?: string
   data: string
   cabos: boolean
   polias: boolean
@@ -44,6 +46,7 @@ interface LivroGruaChecklistDiarioProps {
   onSave?: (checklist: ChecklistDiario) => void
   onCancel?: () => void
   modoEdicao?: boolean
+  modoVisualizacao?: boolean
 }
 
 export function LivroGruaChecklistDiario({
@@ -51,7 +54,8 @@ export function LivroGruaChecklistDiario({
   checklist,
   onSave,
   onCancel,
-  modoEdicao = false
+  modoEdicao = false,
+  modoVisualizacao = false
 }: LivroGruaChecklistDiarioProps) {
   const { toast } = useToast()
   const { user, loading: userLoading } = useCurrentUser()
@@ -107,6 +111,7 @@ export function LivroGruaChecklistDiario({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (modoVisualizacao) return
     
     if (!formData.funcionario_id || formData.funcionario_id === 0) {
       setError('Funcionário não identificado. Verifique se você está logado corretamente.')
@@ -213,7 +218,7 @@ export function LivroGruaChecklistDiario({
                 <div>
                   <Label className="text-xs text-gray-500">Funcionário</Label>
                   <Input
-                    value={user.nome || ''}
+                    value={checklist?.funcionario_nome || user.nome || ''}
                     disabled
                     className="bg-gray-50 mt-1"
                   />
@@ -225,7 +230,7 @@ export function LivroGruaChecklistDiario({
                 <div>
                   <Label className="text-xs text-gray-500">Cargo</Label>
                   <Input
-                    value={user.cargo || ''}
+                    value={checklist?.cargo || user.cargo || ''}
                     disabled
                     className="bg-gray-50 mt-1"
                   />
@@ -243,8 +248,8 @@ export function LivroGruaChecklistDiario({
                   value={formData.data}
                   onChange={(e) => setFormData({ ...formData, data: e.target.value })}
                   required
-                  disabled={!modoEdicao}
-                  className={`mt-1 ${!modoEdicao ? 'bg-gray-50 cursor-not-allowed' : ''}`}
+                  disabled={modoVisualizacao || !modoEdicao}
+                  className={`mt-1 ${(!modoEdicao || modoVisualizacao) ? 'bg-gray-50 cursor-not-allowed' : ''}`}
                 />
                 {!modoEdicao && (
                   <p className="text-xs text-gray-500 mt-1">
@@ -284,11 +289,12 @@ export function LivroGruaChecklistDiario({
                 <Checkbox
                   id={item.key}
                   checked={formData[item.key as keyof ChecklistDiario] as boolean}
-                  onCheckedChange={() => toggleCheckbox(item.key as keyof ChecklistDiario)}
+                  disabled={modoVisualizacao}
+                  onCheckedChange={modoVisualizacao ? undefined : () => toggleCheckbox(item.key as keyof ChecklistDiario)}
                 />
                 <Label
                   htmlFor={item.key}
-                  className="text-sm font-medium leading-none cursor-pointer flex-1"
+                  className={`text-sm font-medium leading-none flex-1 ${modoVisualizacao ? '' : 'cursor-pointer'}`}
                 >
                   {item.label}
                 </Label>
@@ -312,6 +318,7 @@ export function LivroGruaChecklistDiario({
               id="observacoes"
               value={formData.observacoes || ''}
               onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+              disabled={modoVisualizacao}
               rows={3}
               placeholder="Adicione observações sobre o checklist (opcional)..."
               className="mt-1"
@@ -338,22 +345,24 @@ export function LivroGruaChecklistDiario({
             disabled={loading}
           >
             <X className="w-4 h-4 mr-2" />
-            Cancelar
+            {modoVisualizacao ? 'Fechar' : 'Cancelar'}
           </Button>
         )}
-        <Button
-          type="submit"
-          disabled={loading}
-        >
-          {loading ? (
-            <ButtonLoader text="Salvando..." />
-          ) : (
-            <>
-              <Save className="w-4 h-4 mr-2" />
-              {modoEdicao ? 'Atualizar' : 'Salvar'} Checklist
-            </>
-          )}
-        </Button>
+        {!modoVisualizacao && (
+          <Button
+            type="submit"
+            disabled={loading}
+          >
+            {loading ? (
+              <ButtonLoader text="Salvando..." />
+            ) : (
+              <>
+                <Save className="w-4 h-4 mr-2" />
+                {modoEdicao ? 'Atualizar' : 'Salvar'} Checklist
+              </>
+            )}
+          </Button>
+        )}
       </div>
     </form>
   )

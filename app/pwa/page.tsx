@@ -64,6 +64,8 @@ export default function PWAMainPage() {
   const [showMapDebugLogs, setShowMapDebugLogs] = useState(false)
   const [showConfirmacaoDialog, setShowConfirmacaoDialog] = useState(false)
   const [showFeriadoDialog, setShowFeriadoDialog] = useState(false)
+  const [showPermissaoLocalizacaoDialog, setShowPermissaoLocalizacaoDialog] = useState(false)
+  const [permitiuLocalizacaoNoLogin, setPermitiuLocalizacaoNoLogin] = useState<boolean | null>(null)
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
@@ -198,6 +200,36 @@ export default function PWAMainPage() {
   useEffect(() => {
     setIsClient(true)
   }, [])
+
+  // Perguntar uso de localização a cada login (identificado por access_token)
+  useEffect(() => {
+    if (!isClient || pwaUserData.loading || !pwaUserData.user) return
+
+    try {
+      const accessToken = localStorage.getItem('access_token')
+      if (!accessToken) return
+
+      const tokenKey = 'pwa_location_prompt_login_token'
+      const choiceKey = 'pwa_location_prompt_login_choice'
+      const tokenJaPerguntado = sessionStorage.getItem(tokenKey)
+      const escolhaAnterior = sessionStorage.getItem(choiceKey)
+
+      if (tokenJaPerguntado === accessToken) {
+        if (escolhaAnterior === 'allow') {
+          setPermitiuLocalizacaoNoLogin(true)
+        } else if (escolhaAnterior === 'deny') {
+          setPermitiuLocalizacaoNoLogin(false)
+        }
+        return
+      }
+
+      // Novo login/token: perguntar novamente
+      setPermitiuLocalizacaoNoLogin(null)
+      setShowPermissaoLocalizacaoDialog(true)
+    } catch (error) {
+      console.warn('[PWA] Erro ao validar prompt de localização no login:', error)
+    }
+  }, [isClient, pwaUserData.loading, pwaUserData.user])
 
   // Verificar se funcionário tem obra ativa
   useEffect(() => {
@@ -536,7 +568,7 @@ export default function PWAMainPage() {
 
   // Obter localização atual ao carregar a página
   useEffect(() => {
-    if (!isClient) return
+    if (!isClient || permitiuLocalizacaoNoLogin !== true) return
 
     let isMounted = true
     let abortController: AbortController | null = null
@@ -635,7 +667,32 @@ export default function PWAMainPage() {
         abortController.abort()
       }
     }
-  }, [isClient])
+  }, [isClient, permitiuLocalizacaoNoLogin])
+
+  const handlePermissaoLocalizacaoNoLogin = (permitir: boolean) => {
+    try {
+      const accessToken = localStorage.getItem('access_token')
+      if (accessToken) {
+        sessionStorage.setItem('pwa_location_prompt_login_token', accessToken)
+        sessionStorage.setItem('pwa_location_prompt_login_choice', permitir ? 'allow' : 'deny')
+      }
+    } catch (error) {
+      console.warn('[PWA] Erro ao salvar escolha de localização no login:', error)
+    }
+
+    setPermitiuLocalizacaoNoLogin(permitir)
+    setShowPermissaoLocalizacaoDialog(false)
+
+    if (!permitir) {
+      setLocation(null)
+      setLocationError('Permissão de localização não concedida neste login.')
+      addMapDebugLog('Permissao localizacao negada no login')
+      return
+    }
+
+    setLocationError(null)
+    addMapDebugLog('Permissao localizacao aceita no login')
+  }
 
   // Função para converter CEP em coordenadas usando o backend
   // Sistema de notificações de ponto
@@ -1391,12 +1448,34 @@ export default function PWAMainPage() {
                 }
               })()
 
-              const tipoUsuario = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo || ''
+              const tipoUsuario = String(userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo || '').toLowerCase()
               const funcionarioId = userData?.profile?.funcionario_id ||
                 userData?.funcionario_id ||
                 userData?.user?.funcionario_id ||
                 pwaUserData.user?.funcionario_id
-              const isFuncionario = Boolean(funcionarioId) || Boolean(userData?.eh_funcionario) || tipoUsuario === 'funcionario'
+              const funcionarioIdDoPayloadFuncionario =
+                Boolean(userData?.usuario_existe) && Number(userData?.id) > 0
+                  ? Number(userData.id)
+                  : null
+              const temIndicadoresFuncionarioNoUserData =
+                Number(userData?.obra_atual_id) > 0 ||
+                Number(userData?.obra_atual?.id) > 0 ||
+                (Array.isArray(userData?.funcionarios_obras) && userData.funcionarios_obras.length > 0) ||
+                (Array.isArray(userData?.obras_vinculadas) && userData.obras_vinculadas.length > 0) ||
+                (Array.isArray(userData?.historico_obras) && userData.historico_obras.length > 0)
+              const temIndicadoresFuncionarioNoHook =
+                Number(pwaUserData.user?.obra_atual_id) > 0 ||
+                Number(pwaUserData.user?.obra_atual?.id) > 0 ||
+                (Array.isArray(pwaUserData.user?.funcionarios_obras) && pwaUserData.user.funcionarios_obras.length > 0) ||
+                (Array.isArray(pwaUserData.user?.historico_obras) && pwaUserData.user.historico_obras.length > 0)
+              const isFuncionario = tipoUsuario !== 'cliente' && (
+                Boolean(funcionarioId) ||
+                Boolean(funcionarioIdDoPayloadFuncionario) ||
+                Boolean(userData?.eh_funcionario) ||
+                tipoUsuario === 'funcionario' ||
+                temIndicadoresFuncionarioNoUserData ||
+                temIndicadoresFuncionarioNoHook
+              )
               const isResponsavel = isResponsavelObra || tipoUsuario === 'responsavel_obra' ||
                 Boolean(userData?.is_responsavel_obra) ||
                 (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
@@ -1436,9 +1515,10 @@ export default function PWAMainPage() {
 
               // Cards de checklist/manutenções: funcionário ou responsável com obra vinculada
               if (action.title === "Checklist" || action.title === "Manutenções") {
-                if (!(isFuncionario || isResponsavel)) return false
                 if (loadingObra) return false
-                return temObraAtiva === true
+                // Exibir sempre que houver vínculo de obra resolvido, mesmo quando
+                // o formato do user_data não permite classificar corretamente o tipo de usuário.
+                return Boolean(obraAtalhoId) || temObraAtiva === true
               }
               
               // Filtrar ações que devem ser ocultadas para clientes
@@ -1800,6 +1880,37 @@ export default function PWAMainPage() {
           </div>
         </div>
       )}
+
+      {/* Diálogo de Pergunta sobre Feriado */}
+      <Dialog open={showPermissaoLocalizacaoDialog} onOpenChange={setShowPermissaoLocalizacaoDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <MapPin className="w-5 h-5" />
+              Permissão de Localização
+            </DialogTitle>
+            <DialogDescription>
+              Podemos usar sua localização neste login para recursos como registro de ponto e validações?
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              onClick={() => handlePermissaoLocalizacaoNoLogin(false)}
+              variant="outline"
+              className="flex-1"
+            >
+              Não permitir
+            </Button>
+            <Button
+              onClick={() => handlePermissaoLocalizacaoNoLogin(true)}
+              className="flex-1 bg-blue-600 hover:bg-blue-700"
+            >
+              Permitir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Pergunta sobre Feriado */}
       <Dialog open={showFeriadoDialog} onOpenChange={setShowFeriadoDialog}>
