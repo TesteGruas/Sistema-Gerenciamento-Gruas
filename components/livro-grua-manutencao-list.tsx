@@ -121,7 +121,7 @@ export function LivroGruaManutencaoList({
   return (
     <Card className="border-0 shadow-none checklist-card-no-gap">
       <CardHeader className="px-0">
-        <div className="flex flex-row items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <Wrench className="w-5 h-5" />
@@ -131,7 +131,7 @@ export function LivroGruaManutencaoList({
               Histórico de manutenções realizadas nesta grua
             </CardDescription>
           </div>
-          <div className="flex flex-row gap-2">
+          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
             {manutencoesFiltradas.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -146,6 +146,7 @@ export function LivroGruaManutencaoList({
             {onNovaManutencao && (
               <Button 
                 type="button"
+                className="w-full sm:w-auto"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -161,7 +162,7 @@ export function LivroGruaManutencaoList({
       </CardHeader>
       <CardContent className="px-0">
         {/* Filtros */}
-        <div className="flex gap-2 mb-4 items-end">
+        <div className="flex flex-col sm:flex-row gap-2 mb-4 items-stretch sm:items-end">
           <div className="flex-1">
             <Label htmlFor="filtroDataInicio">Data Início</Label>
             <Input
@@ -188,7 +189,7 @@ export function LivroGruaManutencaoList({
               setFiltroDataInicio("")
               setFiltroDataFim("")
             }}
-            className="h-9"
+            className="h-9 w-full sm:w-auto"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>

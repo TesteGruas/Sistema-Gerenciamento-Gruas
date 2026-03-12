@@ -173,7 +173,7 @@ export function LivroGruaChecklistList({
   return (
     <Card className="border-0 shadow-none checklist-card-no-gap">
       <CardHeader className="px-0">
-        <div className="flex flex-row items-center justify-between gap-4">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div>
             <CardTitle className="flex items-center gap-2">
               <CheckCircle2 className="w-5 h-5" />
@@ -183,7 +183,7 @@ export function LivroGruaChecklistList({
               Lista de checklists diários realizados nesta grua
             </CardDescription>
           </div>
-          <div className="flex flex-row gap-2">
+          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
             {checklistsFiltrados.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -198,6 +198,7 @@ export function LivroGruaChecklistList({
             {onNovoChecklist && (
               <Button 
                 type="button"
+                className="w-full sm:w-auto"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
@@ -213,7 +214,7 @@ export function LivroGruaChecklistList({
       </CardHeader>
       <CardContent className="px-0">
         {/* Filtros */}
-        <div className="flex gap-2 mb-4 items-end">
+        <div className="flex flex-col sm:flex-row gap-2 mb-4 items-stretch sm:items-end">
           <div className="flex-1">
             <Label htmlFor="filtroData">Filtrar por Data</Label>
             <Input
@@ -229,7 +230,7 @@ export function LivroGruaChecklistList({
             onClick={() => {
               setFiltroData("")
             }}
-            className="h-9"
+            className="h-9 w-full sm:w-auto"
           >
             <RefreshCw className="w-4 h-4" />
           </Button>

@@ -85,7 +85,10 @@ export default function PWAObraDetalhesPage() {
   const [isVisualizarManutencaoOpen, setIsVisualizarManutencaoOpen] = useState(false)
   const [manutencaoSelecionada, setManutencaoSelecionada] = useState<any>(null)
   const [gruaSelecionadaManutencao, setGruaSelecionadaManutencao] = useState<string>("")
-  const [isInformacoesObraExpanded, setIsInformacoesObraExpanded] = useState(true)
+  const [isInformacoesObraExpanded, setIsInformacoesObraExpanded] = useState(false)
+  const [isDocumentosObrigatoriosExpanded, setIsDocumentosObrigatoriosExpanded] = useState(false)
+  const [isDocumentosEquipamentoExpanded, setIsDocumentosEquipamentoExpanded] = useState(false)
+  const [isDocumentosObraExpanded, setIsDocumentosObraExpanded] = useState(false)
   const [livroGruaObraData, setLivroGruaObraData] = useState<any>(null)
   
   // Estados para edição de documentos obrigatórios
@@ -829,58 +832,73 @@ export default function PWAObraDetalhesPage() {
                 <FileText className="w-4 h-4" />
                 Documentos Obrigatórios da Obra
               </CardTitle>
-              {isClient() && (
-                <div className="flex gap-2">
-                  {(isEditingCNO || isEditingART || isEditingApolice) ? (
-                    <>
+              <div className="flex items-center gap-2">
+                {isClient() && isDocumentosObrigatoriosExpanded && (
+                  <div className="flex gap-2">
+                    {(isEditingCNO || isEditingART || isEditingApolice) ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setIsEditingCNO(false)
+                            setIsEditingART(false)
+                            setIsEditingApolice(false)
+                            setCnoArquivo(null)
+                            setArtArquivo(null)
+                            setApoliceArquivo(null)
+                            setCnoNumero(obra.cno || '')
+                            setArtNumero(obra.art_numero || '')
+                            setApoliceNumero(obra.apolice_numero || '')
+                          }}
+                          disabled={salvandoDocumentos}
+                        >
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={handleSalvarDocumentos}
+                          disabled={salvandoDocumentos || !isOnline}
+                        >
+                          {salvandoDocumentos ? 'Salvando...' : 'Salvar'}
+                        </Button>
+                      </>
+                    ) : (
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={() => {
-                          setIsEditingCNO(false)
-                          setIsEditingART(false)
-                          setIsEditingApolice(false)
-                          setCnoArquivo(null)
-                          setArtArquivo(null)
-                          setApoliceArquivo(null)
+                          setIsEditingCNO(true)
+                          setIsEditingART(true)
+                          setIsEditingApolice(true)
                           setCnoNumero(obra.cno || '')
                           setArtNumero(obra.art_numero || '')
                           setApoliceNumero(obra.apolice_numero || '')
                         }}
-                        disabled={salvandoDocumentos}
+                        disabled={!isOnline}
                       >
-                        Cancelar
+                        <Edit className="w-3 h-3 mr-1" />
+                        Editar Documentos
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={handleSalvarDocumentos}
-                        disabled={salvandoDocumentos || !isOnline}
-                      >
-                        {salvandoDocumentos ? 'Salvando...' : 'Salvar'}
-                      </Button>
-                    </>
+                    )}
+                  </div>
+                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsDocumentosObrigatoriosExpanded(!isDocumentosObrigatoriosExpanded)}
+                  className="h-8 w-8 p-0"
+                >
+                  {isDocumentosObrigatoriosExpanded ? (
+                    <ChevronUp className="w-4 h-4" />
                   ) : (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setIsEditingCNO(true)
-                        setIsEditingART(true)
-                        setIsEditingApolice(true)
-                        setCnoNumero(obra.cno || '')
-                        setArtNumero(obra.art_numero || '')
-                        setApoliceNumero(obra.apolice_numero || '')
-                      }}
-                      disabled={!isOnline}
-                    >
-                      <Edit className="w-3 h-3 mr-1" />
-                      Editar Documentos
-                    </Button>
+                    <ChevronDown className="w-4 h-4" />
                   )}
-                </div>
-              )}
+                </Button>
+              </div>
             </div>
           </CardHeader>
+          {isDocumentosObrigatoriosExpanded && (
           <CardContent className="space-y-4">
             {/* CNO */}
             <div className="space-y-1 border-b pb-3">
@@ -1098,6 +1116,7 @@ export default function PWAObraDetalhesPage() {
               )}
             </div>
           </CardContent>
+          )}
         </Card>
       )}
 
@@ -1105,14 +1124,31 @@ export default function PWAObraDetalhesPage() {
       {obra && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4" />
-              Documentos Adicionais do Equipamento
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Documentos técnicos e de entrega do equipamento
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Documentos Adicionais do Equipamento
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Documentos técnicos e de entrega do equipamento
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsDocumentosEquipamentoExpanded(!isDocumentosEquipamentoExpanded)}
+                className="h-8 w-8 p-0"
+              >
+                {isDocumentosEquipamentoExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </CardHeader>
+          {isDocumentosEquipamentoExpanded && (
           <CardContent className="space-y-4">
             {loadingDocumentosAdicionais ? (
               <div className="flex items-center justify-center py-4">
@@ -1307,6 +1343,7 @@ export default function PWAObraDetalhesPage() {
               </div>
             )}
           </CardContent>
+          )}
         </Card>
       )}
 
@@ -1314,14 +1351,31 @@ export default function PWAObraDetalhesPage() {
       {obra && (
         <Card>
           <CardHeader>
-            <CardTitle className="text-sm flex items-center gap-2">
-              <FileText className="w-4 h-4 text-blue-600" />
-              Documentos Adicionais da Obra
-            </CardTitle>
-            <CardDescription className="text-xs">
-              Documentos adicionais relacionados à obra (contratos, anexos, etc.)
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-blue-600" />
+                  Documentos Adicionais da Obra
+                </CardTitle>
+                <CardDescription className="text-xs">
+                  Documentos adicionais relacionados à obra (contratos, anexos, etc.)
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setIsDocumentosObraExpanded(!isDocumentosObraExpanded)}
+                className="h-8 w-8 p-0"
+              >
+                {isDocumentosObraExpanded ? (
+                  <ChevronUp className="w-4 h-4" />
+                ) : (
+                  <ChevronDown className="w-4 h-4" />
+                )}
+              </Button>
+            </div>
           </CardHeader>
+          {isDocumentosObraExpanded && (
           <CardContent className="space-y-4">
             {documentos.length === 0 ? (
               <div className="text-center py-8">
@@ -1470,6 +1524,7 @@ export default function PWAObraDetalhesPage() {
               </div>
             )}
           </CardContent>
+          )}
         </Card>
       )}
 
@@ -1485,13 +1540,9 @@ export default function PWAObraDetalhesPage() {
         </Button>
       </div>
 
-      {/* Tabs para Livro Gruas, Checklist, Manutenções, Funcionários e Documentos */}
-      <Tabs defaultValue="livro-grua" className="w-full">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="livro-grua" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
-            <BookOpen className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Livro Grua</span>
-          </TabsTrigger>
+      {/* Tabs para Checklist e Manutenções */}
+      <Tabs defaultValue="checklist" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="checklist" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Checklist</span>
@@ -1500,161 +1551,7 @@ export default function PWAObraDetalhesPage() {
             <Wrench className="w-4 h-4 shrink-0" />
             <span className="hidden sm:inline">Manutenções</span>
           </TabsTrigger>
-          <TabsTrigger value="funcionarios" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
-            <Users className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Funcionários</span>
-          </TabsTrigger>
-          {isClient() && (
-            <TabsTrigger value="documentos" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
-              <FileText className="w-4 h-4 shrink-0" />
-              <span className="hidden sm:inline">Documentos</span>
-            </TabsTrigger>
-          )}
         </TabsList>
-
-        {/* Aba: Livro da Grua (completo) */}
-        <TabsContent value="livro-grua" className="space-y-4">
-          {obraId ? (
-            <LivroGruaObra 
-              obraId={obraId.toString()} 
-              cachedData={livroGruaObraData}
-              onDataLoaded={setLivroGruaObraData}
-            />
-          ) : (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <BookOpen className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Obra não encontrada</h3>
-                <p className="text-gray-600">Não foi possível carregar o livro da grua.</p>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Aba: Gruas (lista simples) */}
-        <TabsContent value="gruas" className="space-y-4">
-          {gruas.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Truck className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua encontrada</h3>
-                <p className="text-gray-600">Esta obra não possui gruas vinculadas.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-6">
-              {gruas.map((grua) => {
-                const entradas = livrosGruas[grua.id] || []
-                const isLoading = loadingLivros[grua.id] || false
-                const gruaName = grua.name || `Grua ${grua.id}`
-
-                return (
-                  <Card key={grua.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-base">{gruaName}</CardTitle>
-                          <CardDescription>
-                            {grua.modelo || 'Modelo não informado'} • {grua.fabricante || 'Fabricante não informado'}
-                          </CardDescription>
-                        </div>
-                        <div className="flex gap-2">
-                          <Button
-                            onClick={() => router.push(`/pwa/gruas/${grua.id}`)}
-                            variant="outline"
-                            size="sm"
-                          >
-                            <Eye className="w-4 h-4 mr-2" />
-                            Visualizar
-                          </Button>
-                          <Button
-                            onClick={() => exportarLivroGruaPDF(grua.id, gruaName)}
-                            variant="outline"
-                            size="sm"
-                            disabled={isLoading || entradas.length === 0}
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Exportar PDF
-                          </Button>
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        {/* Informações da grua */}
-                        <div className="grid grid-cols-2 gap-3 text-sm">
-                          {grua.data_inicio_locacao && (
-                            <div className="flex items-center gap-2 text-gray-700">
-                              <Clock className="w-4 h-4 text-gray-500" />
-                              <span className="font-medium">Início:</span>
-                              <span>{formatarData(grua.data_inicio_locacao)}</span>
-                            </div>
-                          )}
-                          {grua.data_fim_locacao && (
-                            <div className="flex items-center gap-2 text-gray-700">
-                              <Clock className="w-4 h-4 text-gray-500" />
-                              <span className="font-medium">Fim:</span>
-                              <span>{formatarData(grua.data_fim_locacao)}</span>
-                            </div>
-                          )}
-                          {grua.valor_locacao_mensal && (
-                            <div className="flex items-center gap-2 text-gray-700">
-                              <span className="font-medium">Valor Mensal:</span>
-                              <span>R$ {grua.valor_locacao_mensal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                            </div>
-                          )}
-                          {grua.status && (
-                            <div className="flex items-center gap-2">
-                              <Badge className={
-                                grua.status === 'Ativa' ? 'bg-green-100 text-green-800' :
-                                grua.status === 'Concluída' ? 'bg-gray-100 text-gray-800' :
-                                grua.status === 'Suspensa' ? 'bg-yellow-100 text-yellow-800' :
-                                'bg-red-100 text-red-800'
-                              }>
-                                {grua.status}
-                              </Badge>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Livro da grua */}
-                        <div className="border-t pt-4">
-                          <h4 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                            <BookOpen className="w-4 h-4" />
-                            Livro da Grua
-                            {entradas.length > 0 && (
-                              <Badge variant="outline" className="ml-2">
-                                {entradas.length} {entradas.length === 1 ? 'entrada' : 'entradas'}
-                              </Badge>
-                            )}
-                          </h4>
-                          
-                          {isLoading ? (
-                            <div className="flex items-center justify-center py-8">
-                              <div className="text-center">
-                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto mb-2"></div>
-                                <p className="text-sm text-gray-600">Carregando livro da grua...</p>
-                              </div>
-                            </div>
-                          ) : entradas.length === 0 ? (
-                            <div className="text-center py-4 text-sm text-gray-500">
-                              Nenhuma entrada encontrada no livro desta grua.
-                            </div>
-                          ) : (
-                            <LivroGruaList
-                              gruaId={grua.id}
-                              modoCompacto={true}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          )}
-        </TabsContent>
 
         {/* Aba: Checklist */}
         <TabsContent value="checklist" className="space-y-4">
@@ -1720,138 +1617,6 @@ export default function PWAObraDetalhesPage() {
           )}
         </TabsContent>
 
-        {/* Aba: Funcionários */}
-        <TabsContent value="funcionarios" className="space-y-4">
-          {funcionarios.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum funcionário encontrado</h3>
-                <p className="text-gray-600">Esta obra não possui funcionários vinculados.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <Card className="border">
-              <CardContent className="p-4">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="border-b">
-                      <TableHead className="h-10 px-3 text-sm font-semibold">Nome</TableHead>
-                      <TableHead className="h-10 px-3 text-sm font-semibold">Cargo</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {funcionarios.map((funcionario) => {
-                      const nome = funcionario.name || funcionario.funcionario?.nome || funcionario.funcionarios?.nome || 'Funcionário'
-                      const cargo = funcionario.role || funcionario.funcionario?.cargo || funcionario.funcionarios?.cargo || 'Cargo não informado'
-                      const id = funcionario.id || funcionario.funcionarioId || funcionario.funcionario_id
-
-                      return (
-                        <TableRow key={id} className="border-b hover:bg-gray-50">
-                          <TableCell 
-                            className="px-3 py-2.5 font-medium text-sm cursor-pointer hover:text-blue-600 transition-colors"
-                            onClick={() => {
-                              setFuncionarioModal(funcionario)
-                              setIsModalOpen(true)
-                            }}
-                          >
-                            <span className="truncate block max-w-[200px]">{nome}</span>
-                          </TableCell>
-                          <TableCell className="px-3 py-2.5 text-sm text-gray-600">
-                            <span className="truncate block max-w-[150px]">{cargo}</span>
-                          </TableCell>
-                        </TableRow>
-                      )
-                    })}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
-          )}
-        </TabsContent>
-
-        {/* Aba: Documentos (apenas cliente) */}
-        {isClient() && (
-          <TabsContent value="documentos" className="space-y-4">
-            {documentos.length === 0 ? (
-              <Card>
-                <CardContent className="p-8 text-center">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum documento encontrado</h3>
-                  <p className="text-gray-600">Esta obra não possui documentos.</p>
-                </CardContent>
-              </Card>
-            ) : (
-              <div className="grid gap-4">
-                {documentos.map((documento) => (
-                  <Card key={documento.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader className="pb-3">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-base">{documento.titulo}</CardTitle>
-                          {documento.descricao && (
-                            <CardDescription className="mt-1">{documento.descricao}</CardDescription>
-                          )}
-                        </div>
-                        <Badge className={
-                          documento.status === 'assinado' ? 'bg-green-100 text-green-800' :
-                          documento.status === 'aguardando_assinatura' ? 'bg-yellow-100 text-yellow-800' :
-                          documento.status === 'em_assinatura' ? 'bg-blue-100 text-blue-800' :
-                          documento.status === 'rejeitado' ? 'bg-red-100 text-red-800' :
-                          'bg-gray-100 text-gray-800'
-                        }>
-                          {documento.status}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2 text-sm">
-                        <div className="flex items-center gap-2 text-gray-700">
-                          <Clock className="w-4 h-4 text-gray-500" />
-                          <span className="font-medium">Criado em:</span>
-                          <span>{formatarData(documento.created_at)}</span>
-                        </div>
-                        {documento.progresso_percentual !== undefined && (
-                          <div className="space-y-1">
-                            <div className="flex items-center justify-between text-xs">
-                              <span className="text-gray-600">Progresso de assinaturas</span>
-                              <span className="font-medium">{documento.progresso_percentual}%</span>
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                              <div 
-                                className="bg-blue-600 h-2 rounded-full transition-all"
-                                style={{ width: `${documento.progresso_percentual}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
-                        {documento.assinaturas && documento.assinaturas.length > 0 && (
-                          <div className="pt-2 border-t border-gray-100">
-                            <p className="text-xs text-gray-600 mb-1">Assinaturas:</p>
-                            <div className="space-y-1">
-                              {documento.assinaturas.map((assinatura, idx) => (
-                                <div key={idx} className="flex items-center gap-2 text-xs">
-                                  {assinatura.status === 'assinado' ? (
-                                    <CheckCircle2 className="w-3 h-3 text-green-600" />
-                                  ) : (
-                                    <Clock className="w-3 h-3 text-gray-400" />
-                                  )}
-                                  <span className={assinatura.status === 'assinado' ? 'text-green-700' : 'text-gray-600'}>
-                                    {assinatura.user_nome || assinatura.user_email || 'Usuário'} - {assinatura.status}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </TabsContent>
-        )}
       </Tabs>
 
       {/* Modal Novo Checklist */}
@@ -1934,7 +1699,7 @@ export default function PWAObraDetalhesPage() {
 
       {/* Modal Nova Manutenção */}
       <Dialog open={isNovaManutencaoOpen} onOpenChange={setIsNovaManutencaoOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Nova Manutenção</DialogTitle>
           </DialogHeader>
@@ -1950,7 +1715,7 @@ export default function PWAObraDetalhesPage() {
 
       {/* Modal Editar Manutenção */}
       <Dialog open={isEditarManutencaoOpen} onOpenChange={setIsEditarManutencaoOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Editar Manutenção</DialogTitle>
           </DialogHeader>
@@ -1968,13 +1733,13 @@ export default function PWAObraDetalhesPage() {
 
       {/* Modal Visualizar Manutenção */}
       <Dialog open={isVisualizarManutencaoOpen} onOpenChange={setIsVisualizarManutencaoOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Visualizar Manutenção</DialogTitle>
           </DialogHeader>
           {manutencaoSelecionada && (
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Data</label>
                   <p className="text-sm font-medium mt-1">
@@ -1997,13 +1762,15 @@ export default function PWAObraDetalhesPage() {
               {manutencaoSelecionada.descricao && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Descrição</label>
-                  <p className="text-sm mt-1">{manutencaoSelecionada.descricao}</p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap break-words">{manutencaoSelecionada.descricao}</p>
                 </div>
               )}
               {manutencaoSelecionada.observacoes && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Observações</label>
-                  <p className="text-sm mt-1">{manutencaoSelecionada.observacoes}</p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap break-all max-h-56 overflow-auto rounded-md bg-gray-50 p-2">
+                    {manutencaoSelecionada.observacoes}
+                  </p>
                 </div>
               )}
             </div>

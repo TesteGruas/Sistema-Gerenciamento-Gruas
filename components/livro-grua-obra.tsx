@@ -915,6 +915,163 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         return
       }
 
+      const idsCandidatosGrua = Array.from(
+        new Set(
+          [
+            gruaSelecionada?.id,
+            gruaSelecionada?.grua_id,
+            gruaSelecionada?.codigo,
+            gruaSelecionada?.relacao?.grua_id,
+            gruaSelecionada?.relacao?.id_grua
+          ]
+            .map((v) => String(v || '').trim())
+            .filter(Boolean)
+        )
+      )
+
+      let checklistsLivroGrua: any[] = []
+      let manutencoesLivroGrua: any[] = []
+      try {
+        const LIMIT_API = 100
+        const buscarEntradasPorTipo = async (gruaId: string, tipoEntrada: 'checklist' | 'manutencao') => {
+          const acumulado: any[] = []
+          let pageAtual = 1
+          let totalPaginas = 1
+
+          do {
+            const resposta = await api.get('/livro-grua', {
+              params: {
+                grua_id: gruaId,
+                tipo_entrada: tipoEntrada,
+                page: pageAtual,
+                limit: LIMIT_API
+              }
+            })
+
+            const entradasPagina = resposta?.data?.data || []
+            const paginasResposta = Number(resposta?.data?.pagination?.pages || 1)
+
+            acumulado.push(...entradasPagina)
+            totalPaginas = Number.isFinite(paginasResposta) && paginasResposta > 0 ? paginasResposta : 1
+            pageAtual += 1
+          } while (pageAtual <= totalPaginas)
+
+          return acumulado
+        }
+
+        const checklistsMap = new Map<number, any>()
+        const manutencoesMap = new Map<number, any>()
+
+        for (const gruaId of idsCandidatosGrua) {
+          const [checklistsPorId, manutencoesPorId] = await Promise.all([
+            buscarEntradasPorTipo(gruaId, 'checklist'),
+            buscarEntradasPorTipo(gruaId, 'manutencao')
+          ])
+
+          for (const entrada of checklistsPorId) {
+            if (entrada?.tipo_entrada === 'checklist' && !checklistsMap.has(entrada.id)) {
+              checklistsMap.set(entrada.id, entrada)
+            }
+          }
+
+          for (const entrada of manutencoesPorId) {
+            if (entrada?.tipo_entrada === 'manutencao' && !manutencoesMap.has(entrada.id)) {
+              manutencoesMap.set(entrada.id, entrada)
+            }
+          }
+        }
+
+        checklistsLivroGrua = Array.from(checklistsMap.values()).sort((a: any, b: any) => {
+          const dataA = new Date(a?.data_entrada || a?.created_at || 0).getTime()
+          const dataB = new Date(b?.data_entrada || b?.created_at || 0).getTime()
+          return dataB - dataA
+        })
+
+        manutencoesLivroGrua = Array.from(manutencoesMap.values()).sort((a: any, b: any) => {
+          const dataA = new Date(a?.data_entrada || a?.created_at || 0).getTime()
+          const dataB = new Date(b?.data_entrada || b?.created_at || 0).getTime()
+          return dataB - dataA
+        })
+
+        // Fallback local: em alguns cenários o proxy /api pode não retornar dados,
+        // então consultamos diretamente o backend localhost:3001 com o mesmo token.
+        if (checklistsLivroGrua.length === 0 && manutencoesLivroGrua.length === 0 && typeof window !== 'undefined') {
+          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+
+          if (token) {
+            const backendBaseDireto = `${window.location.protocol}//localhost:3001`
+            const checklistsMapDireto = new Map<number, any>()
+            const manutencoesMapDireto = new Map<number, any>()
+
+            const buscarDiretoPorTipo = async (gruaId: string, tipoEntrada: 'checklist' | 'manutencao') => {
+              const acumulado: any[] = []
+              let pageAtual = 1
+              let totalPaginas = 1
+
+              do {
+                const params = new URLSearchParams({
+                  grua_id: gruaId,
+                  tipo_entrada: tipoEntrada,
+                  page: String(pageAtual),
+                  limit: '100'
+                })
+                const resposta = await fetch(`${backendBaseDireto}/api/livro-grua?${params.toString()}`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`
+                  }
+                })
+
+                if (!resposta.ok) {
+                  throw new Error(`Falha ao buscar livro-grua direto: ${resposta.status}`)
+                }
+
+                const payload = await resposta.json()
+                const entradasPagina = payload?.data || []
+                const paginasResposta = Number(payload?.pagination?.pages || 1)
+                acumulado.push(...entradasPagina)
+                totalPaginas = Number.isFinite(paginasResposta) && paginasResposta > 0 ? paginasResposta : 1
+                pageAtual += 1
+              } while (pageAtual <= totalPaginas)
+
+              return acumulado
+            }
+
+            for (const gruaId of idsCandidatosGrua) {
+              const [checklistsDireto, manutencoesDireto] = await Promise.all([
+                buscarDiretoPorTipo(gruaId, 'checklist'),
+                buscarDiretoPorTipo(gruaId, 'manutencao')
+              ])
+
+              for (const entrada of checklistsDireto) {
+                if (entrada?.tipo_entrada === 'checklist' && !checklistsMapDireto.has(entrada.id)) {
+                  checklistsMapDireto.set(entrada.id, entrada)
+                }
+              }
+
+              for (const entrada of manutencoesDireto) {
+                if (entrada?.tipo_entrada === 'manutencao' && !manutencoesMapDireto.has(entrada.id)) {
+                  manutencoesMapDireto.set(entrada.id, entrada)
+                }
+              }
+            }
+
+            checklistsLivroGrua = Array.from(checklistsMapDireto.values()).sort((a: any, b: any) => {
+              const dataA = new Date(a?.data_entrada || a?.created_at || 0).getTime()
+              const dataB = new Date(b?.data_entrada || b?.created_at || 0).getTime()
+              return dataB - dataA
+            })
+
+            manutencoesLivroGrua = Array.from(manutencoesMapDireto.values()).sort((a: any, b: any) => {
+              const dataA = new Date(a?.data_entrada || a?.created_at || 0).getTime()
+              const dataB = new Date(b?.data_entrada || b?.created_at || 0).getTime()
+              return dataB - dataA
+            })
+          }
+        }
+      } catch (error) {
+        console.error('Erro ao buscar checklists/manutenções para exportação:', error)
+      }
+
       const { jsPDF } = await import('jspdf')
       const autoTable = (await import('jspdf-autotable')).default
 
@@ -1066,7 +1223,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         '6. ENTREGA TECNICA',
         '7. ART INSTALAÇÃO, OPERAÇÃO, MANUTENÇÃO E DESMONTAGEM',
         '8. LOCAL INSTALAÇÃO DA GRUA E PLANO DE CARGAS',
-        '9. MANUTENÇÕES'
+        '9. CHECKLISTS DIÁRIOS',
+        '10. MANUTENÇÕES'
       ]
 
       for (const item of indiceItens) {
@@ -1734,6 +1892,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       const dadosManutencaoFormulario = [
         [`Registro de Manutenções:`, 'Realizado via formulários no sistema'],
+        [`Total de Registros:`, String(manutencoesLivroGrua.length)],
         [`Responsável pela Manutenção:`, relacaoGrua?.empresa_manutencao_responsavel_tecnico || 'Não informado'],
         [`Observação:`, 'As manutenções devem ser registradas nas rotinas/formulários da obra']
       ]
@@ -1832,6 +1991,144 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
             yPos += 5
           }
         }
+      }
+
+      // 9. CHECKLISTS DIÁRIOS REALIZADOS
+      if (yPos > MAX_Y - 24) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao9Y = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao9Y, 182, 8, 2, 2, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('9. CHECKLISTS DIÁRIOS REALIZADOS', 18, secao9Y + 6)
+      yPos = secao9Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      if (checklistsLivroGrua.length > 0) {
+        const linhasChecklists = checklistsLivroGrua.map((checklist: any) => {
+          const itens = [
+            checklist?.cabos,
+            checklist?.polias,
+            checklist?.estrutura,
+            checklist?.movimentos,
+            checklist?.freios,
+            checklist?.limitadores,
+            checklist?.indicadores,
+            checklist?.aterramento
+          ]
+          const totalMarcados = itens.filter(Boolean).length
+          const dataChecklist = checklist?.data_entrada || checklist?.created_at
+          const responsavel = checklist?.funcionario_nome || checklist?.funcionarioName || checklist?.realizado_por_nome || 'Não informado'
+
+          return [
+            dataChecklist ? formatarData(dataChecklist) : 'Não informado',
+            responsavel,
+            `${totalMarcados}/8`,
+            checklist?.status_resolucao || checklist?.status_entrada || 'N/A'
+          ]
+        })
+
+        autoTable(doc, {
+          head: [['Data', 'Funcionário', 'Itens Verificados', 'Status']],
+          body: linhasChecklists,
+          startY: yPos,
+          margin: { left: 14, right: 14 },
+          styles: {
+            fontSize: 8,
+            cellPadding: 2.2,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1,
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fillColor: COR_BASE,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          alternateRowStyles: { fillColor: [250, 250, 250] },
+          columnStyles: {
+            0: { cellWidth: 30 },
+            1: { cellWidth: 72 },
+            2: { cellWidth: 40, halign: 'center' },
+            3: { cellWidth: 40, halign: 'center' }
+          }
+        })
+
+        const lastAutoTable = (doc as any).lastAutoTable
+        yPos = (lastAutoTable?.finalY || yPos) + 10
+      } else {
+        doc.text('Nenhum checklist diário encontrado para esta grua.', 18, yPos)
+        yPos += 8
+      }
+
+      // 10. MANUTENÇÕES REALIZADAS
+      if (yPos > MAX_Y - 24) {
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      const secao10Y = yPos
+      doc.setFillColor(...COR_BASE)
+      doc.roundedRect(14, secao10Y, 182, 8, 2, 2, 'F')
+      doc.setTextColor(255, 255, 255)
+      doc.setFontSize(12)
+      doc.setFont('helvetica', 'bold')
+      doc.text('10. MANUTENÇÕES REALIZADAS', 18, secao10Y + 6)
+      yPos = secao10Y + 12
+
+      doc.setTextColor(0, 0, 0)
+      doc.setFontSize(9)
+      doc.setFont('helvetica', 'normal')
+
+      if (manutencoesLivroGrua.length > 0) {
+        const linhasManutencoes = manutencoesLivroGrua.map((manutencao: any) => {
+          const dataManutencao = manutencao?.data_entrada || manutencao?.created_at
+          const responsavel = manutencao?.realizado_por_nome || manutencao?.funcionario_nome || manutencao?.funcionarioName || 'Não informado'
+          const descricao = manutencao?.descricao || manutencao?.observacoes || 'Não informado'
+
+          return [
+            dataManutencao ? formatarData(dataManutencao) : 'Não informado',
+            responsavel,
+            descricao.length > 120 ? `${descricao.slice(0, 117)}...` : descricao
+          ]
+        })
+
+        autoTable(doc, {
+          head: [['Data', 'Realizado Por', 'Descrição']],
+          body: linhasManutencoes,
+          startY: yPos,
+          margin: { left: 14, right: 14 },
+          styles: {
+            fontSize: 8,
+            cellPadding: 2.2,
+            lineColor: [200, 200, 200],
+            lineWidth: 0.1,
+            overflow: 'linebreak'
+          },
+          headStyles: {
+            fillColor: COR_BASE,
+            textColor: [255, 255, 255],
+            fontStyle: 'bold'
+          },
+          alternateRowStyles: { fillColor: [250, 250, 250] },
+          columnStyles: {
+            0: { cellWidth: 26 },
+            1: { cellWidth: 52 },
+            2: { cellWidth: 104 }
+          }
+        })
+
+        const lastAutoTable = (doc as any).lastAutoTable
+        yPos = (lastAutoTable?.finalY || yPos) + 10
+      } else {
+        doc.text('Nenhuma manutenção encontrada para esta grua.', 18, yPos)
+        yPos += 8
       }
 
       // Adicionar rodapé
@@ -2856,7 +3153,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                     <div className="p-3 bg-gray-50 rounded-md">
                       <p className="font-medium">{obra.art_numero || obra.artNumero || 'Não informado'}</p>
                       {(obra.art_arquivo || obra.artArquivo) && (
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
                           <Badge variant="outline">
                             <ClipboardCheck className="w-3 h-3 mr-1" />
                             Documento anexado
@@ -2864,6 +3161,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                           <Button
                             size="sm"
                             variant="ghost"
+                            className="w-full sm:w-auto"
                             onClick={async () => {
                               try {
                                 const arquivoUrl = obra.art_arquivo || obra.artArquivo
@@ -2893,7 +3191,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                     <div className="p-3 bg-gray-50 rounded-md">
                       <p className="font-medium">{obra.apolice_numero || obra.apoliceNumero || 'Não informado'}</p>
                       {(obra.apolice_arquivo || obra.apoliceArquivo) && (
-                        <div className="flex items-center gap-2 mt-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-2 mt-2">
                           <Badge variant="outline">
                             <Shield className="w-3 h-3 mr-1" />
                             Documento anexado
@@ -2901,6 +3199,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                           <Button
                             size="sm"
                             variant="ghost"
+                            className="w-full sm:w-auto"
                             onClick={async () => {
                               try {
                                 const arquivoUrl = obra.apolice_arquivo || obra.apoliceArquivo
@@ -2932,17 +3231,17 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                     <p className="text-xs text-gray-500 mb-2">Outros Documentos</p>
                     <div className="space-y-2">
                       {documentos.map((doc: any) => (
-                        <div key={doc.id} className="p-3 bg-gray-50 rounded-md flex items-center justify-between">
-                          <div className="flex-1">
-                            <p className="font-medium">{doc.titulo || doc.nome || doc.tipo}</p>
+                        <div key={doc.id} className="p-3 bg-gray-50 rounded-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium break-words">{doc.titulo || doc.nome || doc.tipo}</p>
                             {doc.descricao && <p className="text-sm text-gray-600">{doc.descricao}</p>}
                             {doc.arquivo_original && (
-                              <p className="text-xs text-gray-500 mt-1">
+                              <p className="text-xs text-gray-500 mt-1 break-all">
                                 {doc.arquivo_original.split('/').pop() || doc.arquivo_original}
                               </p>
                             )}
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex w-full sm:w-auto flex-col sm:flex-row sm:items-center gap-2">
                             <Badge variant="outline" className="capitalize">
                               {doc.status?.replace('_', ' ') || 'Documento'}
                             </Badge>
@@ -2950,6 +3249,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                               <Button
                                 size="sm"
                                 variant="outline"
+                                className="w-full sm:w-auto"
                                 onClick={() => downloadDocumento(doc)}
                               >
                                 <Download className="w-4 h-4 mr-1" />

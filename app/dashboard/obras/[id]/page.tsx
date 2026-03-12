@@ -64,7 +64,7 @@ import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
 import { LivroGruaObra } from "@/components/livro-grua-obra"
 import { CheckCircle2 } from "lucide-react"
-import { exportTabToPDF } from "@/lib/utils/export-pdf"
+import { exportAllTabsToPDF, exportTabToPDF } from "@/lib/utils/export-pdf"
 import { Progress } from "@/components/ui/progress"
 import GruaComplementosManager from "@/components/grua-complementos-manager"
 import { useParams, useRouter } from "next/navigation"
@@ -3572,29 +3572,104 @@ useEffect(() => {
                 // Aguardar um pouco para garantir que o DOM está atualizado
                 await new Promise(resolve => setTimeout(resolve, 200))
 
-                // Encontrar o conteúdo da tab ativa por marcador estável
-                let tabElement = document.querySelector(
-                  `[data-export-tab="${activeTab}"]`
-                ) as HTMLElement | null
+                if (activeTab === 'livro-grua') {
+                  const tabsParaExportar: Array<{ name: string; content: HTMLElement | null }> = []
+                  const tabOriginal = activeTab
+                  const aguardarConteudoChecklists = async (timeoutMs = 10000): Promise<HTMLElement | null> => {
+                    const inicio = Date.now()
 
-                // Fallback: painel ativo do Radix UI
-                if (!tabElement) {
-                  tabElement = document.querySelector(
-                    '[role="tabpanel"][data-state="active"]'
+                    while (Date.now() - inicio < timeoutMs) {
+                      const elemento = document.querySelector(
+                        '[data-export-tab="checklists"]'
+                      ) as HTMLElement | null
+
+                      if (elemento) {
+                        const totalLinhas = elemento.querySelectorAll('tbody tr').length
+                        const texto = (elemento.textContent || '').toLowerCase()
+                        const possuiEstadoVazio =
+                          texto.includes('nenhuma grua vinculada') ||
+                          texto.includes('nenhum checklist') ||
+                          texto.includes('nenhuma manutenção') ||
+                          texto.includes('nenhuma manutencao')
+
+                        if (totalLinhas > 0 || possuiEstadoVazio) {
+                          return elemento
+                        }
+                      }
+
+                      await new Promise(resolve => setTimeout(resolve, 300))
+                    }
+
+                    return document.querySelector('[data-export-tab="checklists"]') as HTMLElement | null
+                  }
+
+                  // Capturar Livro da Grua
+                  const livroElement = document.querySelector(
+                    '[data-export-tab="livro-grua"]'
                   ) as HTMLElement | null
-                }
 
-                if (!tabElement) {
-                  throw new Error(`Conteúdo da tab "${getTabName(activeTab)}" não encontrado. Tente recarregar a página.`)
-                }
+                  if (!livroElement) {
+                    throw new Error('Conteúdo da aba "Livro da Grua" não encontrado.')
+                  }
 
-                await exportTabToPDF(tabElement, {
-                  titulo: `Relatório - ${obra?.name || 'Obra'}`,
-                  subtitulo: `Aba: ${getTabName(activeTab)}`,
-                  obraNome: obra?.name || 'Obra',
-                  obraId: obra?.id?.toString() || '',
-                  tabName: getTabName(activeTab)
-                })
+                  tabsParaExportar.push({
+                    name: 'Livro da Grua',
+                    content: livroElement.cloneNode(true) as HTMLElement
+                  })
+
+                  // Capturar Checklists e Manutenções, mesmo se a aba não estiver montada
+                  let checklistsElement = document.querySelector(
+                    '[data-export-tab="checklists"]'
+                  ) as HTMLElement | null
+
+                  if (!checklistsElement) {
+                    setActiveTab('checklists')
+                    await new Promise(resolve => setTimeout(resolve, 150))
+                    checklistsElement = await aguardarConteudoChecklists()
+                  }
+
+                  // Retornar para a aba original para não impactar a UX
+                  if (tabOriginal !== 'checklists') {
+                    setActiveTab(tabOriginal)
+                  }
+
+                  if (checklistsElement) {
+                    tabsParaExportar.push({
+                      name: 'Checklists e Manutenções',
+                      content: checklistsElement.cloneNode(true) as HTMLElement
+                    })
+                  }
+
+                  await exportAllTabsToPDF(tabsParaExportar, {
+                    titulo: `Livro da Grua - ${obra?.name || 'Obra'}`,
+                    obraNome: obra?.name || 'Obra',
+                    obraId: obra?.id?.toString() || ''
+                  })
+                } else {
+                  // Encontrar o conteúdo da tab ativa por marcador estável
+                  let tabElement = document.querySelector(
+                    `[data-export-tab="${activeTab}"]`
+                  ) as HTMLElement | null
+
+                  // Fallback: painel ativo do Radix UI
+                  if (!tabElement) {
+                    tabElement = document.querySelector(
+                      '[role="tabpanel"][data-state="active"]'
+                    ) as HTMLElement | null
+                  }
+
+                  if (!tabElement) {
+                    throw new Error(`Conteúdo da tab "${getTabName(activeTab)}" não encontrado. Tente recarregar a página.`)
+                  }
+
+                  await exportTabToPDF(tabElement, {
+                    titulo: `Relatório - ${obra?.name || 'Obra'}`,
+                    subtitulo: `Aba: ${getTabName(activeTab)}`,
+                    obraNome: obra?.name || 'Obra',
+                    obraId: obra?.id?.toString() || '',
+                    tabName: getTabName(activeTab)
+                  })
+                }
 
                 toast({
                   title: "Sucesso",
