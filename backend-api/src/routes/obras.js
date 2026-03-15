@@ -45,6 +45,22 @@ function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
   return [...new Set(consultas)]
 }
 
+function montarEnderecoCompleto({ endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento }) {
+  const enderecoLegado = (endereco || '').toString().trim()
+  if (enderecoLegado) {
+    return enderecoLegado
+  }
+
+  const rua = (endereco_rua || '').toString().trim()
+  const numero = (endereco_numero || '').toString().trim()
+  const bairro = (endereco_bairro || '').toString().trim()
+  const complemento = (endereco_complemento || '').toString().trim()
+
+  const base = [rua, numero].filter(Boolean).join(', ')
+  const comBairro = [base, bairro].filter(Boolean).join(' - ')
+  return [comBairro, complemento].filter(Boolean).join(', ')
+}
+
 async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
   const consultas = montarConsultasEndereco({ endereco, cidade, estado, cep })
   if (consultas.length === 0) {
@@ -120,7 +136,11 @@ const router = express.Router()
 const obraSchema = Joi.object({
   nome: Joi.string().min(2).required(),
   cliente_id: Joi.number().integer().positive().required(),
-  endereco: Joi.string().required(),
+  endereco: Joi.string().allow('', null).optional(),
+  endereco_rua: Joi.string().allow('', null).optional(),
+  endereco_numero: Joi.string().allow('', null).optional(),
+  endereco_bairro: Joi.string().allow('', null).optional(),
+  endereco_complemento: Joi.string().allow('', null).optional(),
   cidade: Joi.string().required(),
   estado: Joi.string().min(2).max(2).required(),
   tipo: Joi.string().valid('Residencial', 'Comercial', 'Industrial', 'Infraestrutura').required(), // NOT NULL na tabela
@@ -276,6 +296,10 @@ const obraUpdateSchema = Joi.object({
   nome: Joi.string().min(2).optional(),
   cliente_id: Joi.number().integer().positive().optional(),
   endereco: Joi.string().optional(),
+  endereco_rua: Joi.string().allow('', null).optional(),
+  endereco_numero: Joi.string().allow('', null).optional(),
+  endereco_bairro: Joi.string().allow('', null).optional(),
+  endereco_complemento: Joi.string().allow('', null).optional(),
   cidade: Joi.string().optional(),
   estado: Joi.string().min(2).max(2).optional(),
   tipo: Joi.string().valid('Residencial', 'Comercial', 'Industrial', 'Infraestrutura').optional(),
@@ -1404,6 +1428,21 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
         allErrors: error.details
       })
     }
+
+    const enderecoFinal = montarEnderecoCompleto({
+      endereco: value.endereco,
+      endereco_rua: value.endereco_rua,
+      endereco_numero: value.endereco_numero,
+      endereco_bairro: value.endereco_bairro,
+      endereco_complemento: value.endereco_complemento
+    })
+
+    if (!enderecoFinal) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: 'Informe o endereço completo da obra (logradouro, número, bairro) ou o campo endereco.'
+      })
+    }
     
     console.log('✅ Dados validados com sucesso:', value)
     console.log('🔧 Dados da grua recebidos:', {
@@ -1507,7 +1546,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     }
 
     const coordenadasResolvidas = await resolverCoordenadasDaObra({
-      endereco: value.endereco,
+      endereco: enderecoFinal,
       cidade: value.cidade,
       estado: value.estado,
       cep: value.cep,
@@ -1525,7 +1564,11 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     const obraData = {
       nome: value.nome,
       cliente_id: value.cliente_id,
-      endereco: value.endereco,
+      endereco: enderecoFinal,
+      endereco_rua: value.endereco_rua || null,
+      endereco_numero: value.endereco_numero || null,
+      endereco_bairro: value.endereco_bairro || null,
+      endereco_complemento: value.endereco_complemento || null,
       cidade: value.cidade,
       estado: value.estado,
       tipo: value.tipo,
@@ -2317,7 +2360,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
 
     const { data: obraAtualExistente, error: obraAtualError } = await supabaseAdmin
       .from('obras')
-      .select('id, endereco, cidade, estado, cep, latitude, longitude')
+      .select('id, endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento, cidade, estado, cep, latitude, longitude')
       .eq('id', id)
       .single()
 
@@ -2328,7 +2371,28 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       })
     }
 
-    const enderecoParaGeocoding = value.endereco ?? obraAtualExistente.endereco
+    const algumCampoEnderecoDetalhadoAtualizado = ['endereco_rua', 'endereco_numero', 'endereco_bairro', 'endereco_complemento']
+      .some((campo) => value[campo] !== undefined)
+
+    const enderecoDetalhadoMesclado = {
+      endereco_rua: value.endereco_rua !== undefined ? value.endereco_rua : obraAtualExistente.endereco_rua,
+      endereco_numero: value.endereco_numero !== undefined ? value.endereco_numero : obraAtualExistente.endereco_numero,
+      endereco_bairro: value.endereco_bairro !== undefined ? value.endereco_bairro : obraAtualExistente.endereco_bairro,
+      endereco_complemento: value.endereco_complemento !== undefined ? value.endereco_complemento : obraAtualExistente.endereco_complemento
+    }
+
+    const enderecoCompostoDetalhado = montarEnderecoCompleto({
+      endereco_rua: enderecoDetalhadoMesclado.endereco_rua,
+      endereco_numero: enderecoDetalhadoMesclado.endereco_numero,
+      endereco_bairro: enderecoDetalhadoMesclado.endereco_bairro,
+      endereco_complemento: enderecoDetalhadoMesclado.endereco_complemento
+    })
+
+    const enderecoAtualizado = value.endereco !== undefined
+      ? value.endereco
+      : (algumCampoEnderecoDetalhadoAtualizado ? (enderecoCompostoDetalhado || obraAtualExistente.endereco) : undefined)
+
+    const enderecoParaGeocoding = enderecoAtualizado ?? obraAtualExistente.endereco
     const cidadeParaGeocoding = value.cidade ?? obraAtualExistente.cidade
     const estadoParaGeocoding = value.estado ?? obraAtualExistente.estado
     const cepParaGeocoding = value.cep ?? obraAtualExistente.cep
@@ -2352,7 +2416,11 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
     const updateData = {
       nome: value.nome,
       cliente_id: value.cliente_id,
-      endereco: value.endereco,
+      endereco: enderecoAtualizado,
+      endereco_rua: value.endereco_rua !== undefined ? value.endereco_rua : undefined,
+      endereco_numero: value.endereco_numero !== undefined ? value.endereco_numero : undefined,
+      endereco_bairro: value.endereco_bairro !== undefined ? value.endereco_bairro : undefined,
+      endereco_complemento: value.endereco_complemento !== undefined ? value.endereco_complemento : undefined,
       cidade: value.cidade,
       estado: value.estado,
       tipo: value.tipo,

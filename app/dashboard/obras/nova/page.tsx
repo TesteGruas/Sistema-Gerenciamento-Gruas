@@ -120,6 +120,27 @@ const formatCEP = (value: string) => {
     .substring(0, 9)
 }
 
+const montarEnderecoCompleto = ({
+  rua,
+  numero,
+  bairro,
+  complemento
+}: {
+  rua: string
+  numero: string
+  bairro: string
+  complemento?: string
+}) => {
+  const ruaLimpa = (rua || '').trim()
+  const numeroLimpo = (numero || '').trim()
+  const bairroLimpo = (bairro || '').trim()
+  const complementoLimpo = (complemento || '').trim()
+
+  const base = [ruaLimpa, numeroLimpo].filter(Boolean).join(', ')
+  const comBairro = [base, bairroLimpo].filter(Boolean).join(' - ')
+  return [comBairro, complementoLimpo].filter(Boolean).join(', ')
+}
+
 const toNumberOrUndefined = (value: any): number | undefined => {
   if (value === null || value === undefined || value === '') return undefined
   const parsed = Number(String(value).replace(',', '.'))
@@ -402,6 +423,10 @@ export default function NovaObraPage() {
     startDate: '',
     endDate: '',
     location: '',
+    endereco_rua: '',
+    endereco_numero: '',
+    endereco_bairro: '',
+    endereco_complemento: '',
     cidade: '',
     estado: 'SP',
     tipo: 'Residencial',
@@ -820,8 +845,16 @@ export default function NovaObraPage() {
       camposFaltando.push('Cliente')
     }
     
-    if (!obraFormData.location || !obraFormData.location.trim()) {
-      camposFaltando.push('Endereço')
+    if (!obraFormData.endereco_rua || !obraFormData.endereco_rua.trim()) {
+      camposFaltando.push('Rua')
+    }
+
+    if (!obraFormData.endereco_numero || !obraFormData.endereco_numero.trim()) {
+      camposFaltando.push('Número')
+    }
+
+    if (!obraFormData.endereco_bairro || !obraFormData.endereco_bairro.trim()) {
+      camposFaltando.push('Bairro')
     }
     
     if (!obraFormData.cidade || !obraFormData.cidade.trim()) {
@@ -830,6 +863,10 @@ export default function NovaObraPage() {
     
     if (!obraFormData.estado || !obraFormData.estado.trim()) {
       camposFaltando.push('Estado')
+    }
+
+    if (!obraFormData.cep || !obraFormData.cep.trim()) {
+      camposFaltando.push('CEP')
     }
     
     if (!obraFormData.tipo || !obraFormData.tipo.trim()) {
@@ -928,6 +965,13 @@ export default function NovaObraPage() {
       console.debug('  - gruasSelecionadas:', gruasSelecionadas)
       console.debug('  - obraFormData:', obraFormData)
 
+      const enderecoCompletoObra = montarEnderecoCompleto({
+        rua: obraFormData.endereco_rua,
+        numero: obraFormData.endereco_numero,
+        bairro: obraFormData.endereco_bairro,
+        complemento: obraFormData.endereco_complemento
+      })
+
       // Preparar dados para o backend
       const obraData = {
         name: obraFormData.name,
@@ -935,7 +979,11 @@ export default function NovaObraPage() {
         status: obraFormData.status,
         startDate: obraFormData.startDate,
         endDate: obraFormData.endDate,
-        location: obraFormData.location,
+        location: enderecoCompletoObra,
+        endereco_rua: obraFormData.endereco_rua,
+        endereco_numero: obraFormData.endereco_numero,
+        endereco_bairro: obraFormData.endereco_bairro,
+        endereco_complemento: obraFormData.endereco_complemento,
         cidade: obraFormData.cidade,
         estado: obraFormData.estado,
         tipo: obraFormData.tipo,
@@ -1001,7 +1049,7 @@ export default function NovaObraPage() {
           condicoes_ambiente: grua.condicoes_ambiente || undefined,
           raio_operacao: toNumberOrUndefined(grua.raio_operacao) ?? raioTrabalhoCalculado,
           altura: toNumberOrUndefined(grua.altura) ?? alturaFinalCalculada,
-          local_instalacao: grua.local_instalacao || obraFormData.location || undefined,
+          local_instalacao: grua.local_instalacao || enderecoCompletoObra || undefined,
           observacoes_montagem: grua.observacoes_montagem || grua.observacoes || obraFormData.observations || undefined,
           responsavel_tecnico: grua.responsavel_tecnico || responsavelTecnico?.nome || undefined,
           crea_responsavel: grua.crea_responsavel || responsavelTecnico?.crea || undefined,
@@ -2013,6 +2061,10 @@ export default function NovaObraPage() {
       startDate: '',
       endDate: '',
       location: '',
+      endereco_rua: '',
+      endereco_numero: '',
+      endereco_bairro: '',
+      endereco_complemento: '',
       cidade: '',
       estado: 'SP',
       tipo: 'Residencial',
@@ -2141,6 +2193,10 @@ startxref
       startDate: new Date().toISOString().split('T')[0],
       endDate: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 1 ano a partir de hoje
       location: 'Rua das Flores, 123 - Centro',
+      endereco_rua: 'Rua das Flores',
+      endereco_numero: '123',
+      endereco_bairro: 'Centro',
+      endereco_complemento: 'Torre A',
       cidade: 'São Paulo',
       estado: 'SP',
       tipo: 'Residencial',
@@ -2703,7 +2759,37 @@ startxref
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="md:col-span-2">
+                    <Label htmlFor="endereco_rua">Rua *</Label>
+                    <Input
+                      id="endereco_rua"
+                      value={obraFormData.endereco_rua}
+                      onChange={(e) => setObraFormData({ ...obraFormData, endereco_rua: e.target.value })}
+                      placeholder="Ex: Rua das Flores"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="endereco_numero">Nº *</Label>
+                    <Input
+                      id="endereco_numero"
+                      value={obraFormData.endereco_numero}
+                      onChange={(e) => setObraFormData({ ...obraFormData, endereco_numero: e.target.value })}
+                      placeholder="Ex: 123"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="endereco_bairro">Bairro *</Label>
+                    <Input
+                      id="endereco_bairro"
+                      value={obraFormData.endereco_bairro}
+                      onChange={(e) => setObraFormData({ ...obraFormData, endereco_bairro: e.target.value })}
+                      placeholder="Ex: Centro"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div>
                     <Label htmlFor="cidade">Cidade *</Label>
                     <Input
@@ -2714,12 +2800,22 @@ startxref
                     />
                   </div>
                   <div>
-                    <Label htmlFor="location">Endereço *</Label>
+                    <Label htmlFor="cep">CEP *</Label>
                     <Input
-                      id="location"
-                      value={obraFormData.location}
-                      onChange={(e) => setObraFormData({ ...obraFormData, location: e.target.value })}
-                      placeholder="Ex: Rua das Flores, 123 - Centro"
+                      id="cep"
+                      value={obraFormData.cep}
+                      onChange={(e) => setObraFormData({ ...obraFormData, cep: formatCEP(e.target.value) })}
+                      placeholder="Ex: 01234-567"
+                      maxLength={9}
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="endereco_complemento">Complemento</Label>
+                    <Input
+                      id="endereco_complemento"
+                      value={obraFormData.endereco_complemento}
+                      onChange={(e) => setObraFormData({ ...obraFormData, endereco_complemento: e.target.value })}
+                      placeholder="Ex: Bloco B, Sala 12"
                     />
                   </div>
                 </div>

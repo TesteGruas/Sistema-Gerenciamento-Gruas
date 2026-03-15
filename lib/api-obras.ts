@@ -8,6 +8,10 @@ export interface ObraBackend {
   nome: string
   cliente_id: number
   endereco: string
+  endereco_rua?: string
+  endereco_numero?: string
+  endereco_bairro?: string
+  endereco_complemento?: string
   cidade: string
   estado: string
   tipo: string
@@ -163,6 +167,10 @@ export interface ObraCreateData {
   nome: string
   cliente_id: number
   endereco: string
+  endereco_rua?: string
+  endereco_numero?: string
+  endereco_bairro?: string
+  endereco_complemento?: string
   cidade: string
   estado: string
   tipo: string
@@ -287,6 +295,10 @@ export interface ObraUpdateData {
   nome?: string
   cliente_id?: number
   endereco?: string
+  endereco_rua?: string
+  endereco_numero?: string
+  endereco_bairro?: string
+  endereco_complemento?: string
   cidade?: string
   estado?: string
   tipo?: string
@@ -752,6 +764,10 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     totalCustos: obraBackend.total_custos || (obraBackend.custos_iniciais || 0) + (obraBackend.custos_adicionais || 0),
     // Campos adicionais do backend
     endereco: obraBackend.endereco,
+    endereco_rua: obraBackend.endereco_rua,
+    endereco_numero: obraBackend.endereco_numero,
+    endereco_bairro: obraBackend.endereco_bairro,
+    endereco_complemento: obraBackend.endereco_complemento,
     cidade: obraBackend.cidade,
     estado: obraBackend.estado,
     cep: obraBackend.cep,
@@ -919,6 +935,10 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
     nome: obraFrontend.name,
     cliente_id: clienteIdParsed,
     endereco: obraFrontend.location || obraFrontend.endereco || '',
+    endereco_rua: obraFrontend.endereco_rua || obraFrontend.enderecoRua || undefined,
+    endereco_numero: obraFrontend.endereco_numero || obraFrontend.enderecoNumero || undefined,
+    endereco_bairro: obraFrontend.endereco_bairro || obraFrontend.enderecoBairro || undefined,
+    endereco_complemento: obraFrontend.endereco_complemento || obraFrontend.enderecoComplemento || undefined,
     cidade: obraFrontend.cidade || '',
     orcamento_id: obraFrontend.orcamento_id || obraFrontend.orcamentoId || undefined, // ID do orçamento aprovado
     estado: obraFrontend.estado || '',

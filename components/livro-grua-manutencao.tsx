@@ -495,8 +495,8 @@ export function LivroGruaManutencao({
 
       {/* Checklist de Manutenção */}
       <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base flex items-center justify-between gap-2">
+        <CardHeader className="pb-3 px-3 sm:px-6">
+          <CardTitle className="text-base flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
             <span className="flex items-center gap-2">
               <CheckCircle2 className="w-4 h-4" />
               Checklist de Manutenção
@@ -507,7 +507,7 @@ export function LivroGruaManutencao({
                 variant="outline"
                 size="sm"
                 onClick={preencherDadosAleatorios}
-                className="h-8 text-xs"
+                className="h-8 text-xs w-full sm:w-auto"
               >
                 <Shuffle className="w-3.5 h-3.5 mr-1" />
                 Preencher teste
@@ -518,8 +518,8 @@ export function LivroGruaManutencao({
             Marque os itens que foram verificados durante a manutenção
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="space-y-6">
+        <CardContent className="px-3 sm:px-6">
+          <div className="space-y-4 sm:space-y-6">
             {Object.entries(checklistPorSecao).map(([secao, itens]) => (
               <div key={secao} className="space-y-3">
                 <h4 className="text-sm font-semibold text-gray-700 border-b pb-2">
@@ -531,22 +531,22 @@ export function LivroGruaManutencao({
                     return (
                       <div
                         key={item.key}
-                        className="flex items-center justify-between p-3 rounded-md border hover:bg-gray-50 transition-colors"
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 sm:p-3 rounded-md border hover:bg-gray-50 transition-colors"
                       >
                         <Label
                           htmlFor={item.key}
-                          className="text-sm font-medium leading-none cursor-pointer flex-1"
+                          className="text-sm font-medium leading-snug cursor-pointer flex-1"
                         >
                           {item.label}
                         </Label>
-                        <div className="flex items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 sm:justify-end">
                           <Button
                             type="button"
                             variant={statusAtual === 'ok' ? 'default' : 'outline'}
                             size="sm"
                             onClick={() => toggleChecklistItem(item.key, 'ok')}
                             disabled={modoVisualizacao}
-                            className={statusAtual === 'ok' ? 'bg-green-600 hover:bg-green-700' : ''}
+                            className={`h-7 w-[92px] px-2 text-[11px] sm:h-8 sm:w-[116px] sm:px-3 sm:text-xs ${statusAtual === 'ok' ? 'bg-green-600 hover:bg-green-700' : ''}`}
                           >
                             OK
                           </Button>
@@ -556,7 +556,7 @@ export function LivroGruaManutencao({
                             size="sm"
                             onClick={() => toggleChecklistItem(item.key, 'manutencao')}
                             disabled={modoVisualizacao}
-                            className={statusAtual === 'manutencao' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}
+                            className={`h-7 w-[92px] px-2 text-[11px] sm:h-8 sm:w-[116px] sm:px-3 sm:text-xs ${statusAtual === 'manutencao' ? 'bg-yellow-600 hover:bg-yellow-700' : ''}`}
                           >
                             MANUTENÇÃO
                           </Button>
@@ -573,13 +573,13 @@ export function LivroGruaManutencao({
 
       {/* Descrição */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 px-3 sm:px-6">
           <CardTitle className="text-base flex items-center gap-2">
             <Wrench className="w-4 h-4" />
             Descrição da Manutenção
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <div>
             <Label htmlFor="descricao" className="text-xs text-gray-500">
               Descrição
@@ -599,10 +599,10 @@ export function LivroGruaManutencao({
 
       {/* Observações */}
       <Card>
-        <CardHeader className="pb-3">
+        <CardHeader className="pb-3 px-3 sm:px-6">
           <CardTitle className="text-base">Observações</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="px-3 sm:px-6">
           <div>
             <Label htmlFor="observacoes" className="text-xs text-gray-500">
               Observações Adicionais
@@ -629,13 +629,14 @@ export function LivroGruaManutencao({
       )}
 
       {/* Ações */}
-      <div className="flex justify-end gap-2 pt-2 border-t">
+      <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 pt-2 border-t">
         {onCancel && (
           <Button
             type="button"
             variant="outline"
             onClick={onCancel}
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             <X className="w-4 h-4 mr-2" />
             {modoVisualizacao ? 'Fechar' : 'Cancelar'}
@@ -645,6 +646,7 @@ export function LivroGruaManutencao({
           <Button
             type="submit"
             disabled={loading}
+            className="w-full sm:w-auto"
           >
             {loading ? (
               <ButtonLoader text="Salvando..." />

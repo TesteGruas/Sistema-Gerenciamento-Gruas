@@ -354,16 +354,16 @@ export function LivroGruaManutencaoList({
                       )}
 
                       {/* Ações */}
-                      <div className="flex gap-2 pt-2 border-t">
+                      <div className="grid grid-cols-3 gap-2 pt-2 border-t">
                         {onVisualizarManutencao && (
                           <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={() => onVisualizarManutencao(manutencao)}
-                            className="flex-1"
+                            className="w-full px-2 text-xs"
                           >
-                            <Eye className="w-4 h-4 mr-2" />
+                            <Eye className="w-4 h-4" />
                             Ver
                           </Button>
                         )}
@@ -373,9 +373,9 @@ export function LivroGruaManutencaoList({
                             variant="outline"
                             size="sm"
                             onClick={() => onEditarManutencao(manutencao)}
-                            className="flex-1"
+                            className="w-full px-2 text-xs"
                           >
-                            <Edit className="w-4 h-4 mr-2" />
+                            <Edit className="w-4 h-4" />
                             Editar
                           </Button>
                         )}
@@ -389,9 +389,9 @@ export function LivroGruaManutencaoList({
                                 onExcluirManutencao(manutencao)
                               }
                             }}
-                            className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            className="w-full px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
                           >
-                            <Trash2 className="w-4 h-4 mr-2" />
+                            <Trash2 className="w-4 h-4" />
                             Excluir
                           </Button>
                         )}

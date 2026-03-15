@@ -47,6 +47,67 @@ import LivroGruaList from "@/components/livro-grua-list"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { getApiOrigin } from "@/lib/runtime-config"
 
+const CHECKLIST_MANUTENCAO_MARKER = "__CHECKLIST_MANUTENCAO_JSON__:"
+
+type ChecklistManutencaoItem = {
+  chave: string
+  status: string
+}
+
+function formatarLabelChecklistManutencao(chave: string) {
+  return chave
+    .replace(/_/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/\b\w/g, (letra) => letra.toUpperCase())
+}
+
+const CHECKLIST_DIARIO_ITEMS = [
+  { key: "cabos", label: "Cabos" },
+  { key: "polias", label: "Polias" },
+  { key: "estrutura", label: "Estrutura" },
+  { key: "movimentos", label: "Movimentos" },
+  { key: "freios", label: "Freios" },
+  { key: "limitadores", label: "Limitadores" },
+  { key: "indicadores", label: "Indicadores" },
+  { key: "aterramento", label: "Aterramento" }
+] as const
+
+function parseObservacoesManutencao(observacoes?: string | null): {
+  textoLimpo: string
+  checklist: ChecklistManutencaoItem[]
+} {
+  if (!observacoes || typeof observacoes !== "string") {
+    return { textoLimpo: "", checklist: [] }
+  }
+
+  const markerIndex = observacoes.indexOf(CHECKLIST_MANUTENCAO_MARKER)
+  if (markerIndex < 0) {
+    return { textoLimpo: observacoes.trim(), checklist: [] }
+  }
+
+  const textoLimpo = observacoes.slice(0, markerIndex).trim()
+  const jsonBruto = observacoes.slice(markerIndex + CHECKLIST_MANUTENCAO_MARKER.length).trim()
+
+  try {
+    const parsed = JSON.parse(jsonBruto)
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return { textoLimpo: observacoes.trim(), checklist: [] }
+    }
+
+    const checklist = Object.entries(parsed)
+      .filter(([chave, status]) => typeof chave === "string" && typeof status === "string")
+      .map(([chave, status]) => ({
+        chave,
+        status: status.toLowerCase()
+      }))
+
+    return { textoLimpo, checklist }
+  } catch {
+    return { textoLimpo: observacoes.trim(), checklist: [] }
+  }
+}
+
 export default function PWAObraDetalhesPage() {
   const { toast } = useToast()
   const params = useParams()
@@ -102,6 +163,10 @@ export default function PWAObraDetalhesPage() {
   const [artNumero, setArtNumero] = useState<string>('')
   const [apoliceNumero, setApoliceNumero] = useState<string>('')
   const [salvandoDocumentos, setSalvandoDocumentos] = useState(false)
+  const observacoesManutencao = useMemo(
+    () => parseObservacoesManutencao(manutencaoSelecionada?.observacoes),
+    [manutencaoSelecionada?.observacoes]
+  )
 
   // Verificar status de conexão
   useEffect(() => {
@@ -752,6 +817,85 @@ export default function PWAObraDetalhesPage() {
           </p>
         </div>
       </div>
+
+      {/* Tabs para Checklist e Manutenções */}
+      <Tabs defaultValue="checklist" className="w-full">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="checklist" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
+            <CheckCircle2 className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Checklist</span>
+          </TabsTrigger>
+          <TabsTrigger value="manutencoes" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
+            <Wrench className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">Manutenções</span>
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Aba: Checklist */}
+        <TabsContent value="checklist" className="space-y-4">
+          {gruas.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <CheckCircle2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua encontrada</h3>
+                <p className="text-gray-600">Adicione gruas à obra para visualizar checklists.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {gruas.map((grua) => (
+                <Card key={grua.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{grua.name || `Grua ${grua.id}`}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <LivroGruaChecklistList
+                      gruaId={grua.id}
+                      onNovoChecklist={() => handleNovoChecklist(grua.id)}
+                      onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id)}
+                      onVisualizarChecklist={handleVisualizarChecklist}
+                      onExcluirChecklist={handleExcluirChecklist}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Aba: Manutenções */}
+        <TabsContent value="manutencoes" className="space-y-4">
+          {gruas.length === 0 ? (
+            <Card>
+              <CardContent className="p-8 text-center">
+                <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua encontrada</h3>
+                <p className="text-gray-600">Adicione gruas à obra para visualizar manutenções.</p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="space-y-4">
+              {gruas.map((grua) => (
+                <Card key={grua.id}>
+                  <CardHeader>
+                    <CardTitle className="text-base">{grua.name || `Grua ${grua.id}`}</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <LivroGruaManutencaoList
+                      gruaId={grua.id}
+                      onNovaManutencao={() => handleNovaManutencao(grua.id)}
+                      onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id)}
+                      onVisualizarManutencao={handleVisualizarManutencao}
+                      onExcluirManutencao={handleExcluirManutencao}
+                    />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+      </Tabs>
 
       {/* Informações da Obra */}
       <Card>
@@ -1528,97 +1672,6 @@ export default function PWAObraDetalhesPage() {
         </Card>
       )}
 
-      {/* Atalhos para páginas dedicadas */}
-      <div className="grid grid-cols-2 gap-3">
-        <Button variant="outline" onClick={() => router.push(`/pwa/obras/${obraId}/checklist`)}>
-          <CheckCircle2 className="w-4 h-4 mr-2" />
-          Checklist
-        </Button>
-        <Button variant="outline" onClick={() => router.push(`/pwa/obras/${obraId}/manutencoes`)}>
-          <Wrench className="w-4 h-4 mr-2" />
-          Manutenções
-        </Button>
-      </div>
-
-      {/* Tabs para Checklist e Manutenções */}
-      <Tabs defaultValue="checklist" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="checklist" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Checklist</span>
-          </TabsTrigger>
-          <TabsTrigger value="manutencoes" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
-            <Wrench className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">Manutenções</span>
-          </TabsTrigger>
-        </TabsList>
-
-        {/* Aba: Checklist */}
-        <TabsContent value="checklist" className="space-y-4">
-          {gruas.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <CheckCircle2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua encontrada</h3>
-                <p className="text-gray-600">Adicione gruas à obra para visualizar checklists.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {gruas.map((grua) => (
-                <Card key={grua.id}>
-                  <CardHeader>
-                    <CardTitle className="text-base">{grua.name || `Grua ${grua.id}`}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <LivroGruaChecklistList
-                      gruaId={grua.id}
-                      onNovoChecklist={() => handleNovoChecklist(grua.id)}
-                      onEditarChecklist={(checklist) => handleEditarChecklist(checklist, grua.id)}
-                      onVisualizarChecklist={handleVisualizarChecklist}
-                      onExcluirChecklist={handleExcluirChecklist}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-        {/* Aba: Manutenções */}
-        <TabsContent value="manutencoes" className="space-y-4">
-          {gruas.length === 0 ? (
-            <Card>
-              <CardContent className="p-8 text-center">
-                <Wrench className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhuma grua encontrada</h3>
-                <p className="text-gray-600">Adicione gruas à obra para visualizar manutenções.</p>
-              </CardContent>
-            </Card>
-          ) : (
-            <div className="space-y-4">
-              {gruas.map((grua) => (
-                <Card key={grua.id}>
-                  <CardHeader>
-                    <CardTitle className="text-base">{grua.name || `Grua ${grua.id}`}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <LivroGruaManutencaoList
-                      gruaId={grua.id}
-                      onNovaManutencao={() => handleNovaManutencao(grua.id)}
-                      onEditarManutencao={(manutencao) => handleEditarManutencao(manutencao, grua.id)}
-                      onVisualizarManutencao={handleVisualizarManutencao}
-                      onExcluirManutencao={handleExcluirManutencao}
-                    />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </TabsContent>
-
-      </Tabs>
-
       {/* Modal Novo Checklist */}
       <Dialog open={isNovoChecklistOpen} onOpenChange={setIsNovoChecklistOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -1655,13 +1708,13 @@ export default function PWAObraDetalhesPage() {
 
       {/* Modal Visualizar Checklist */}
       <Dialog open={isVisualizarChecklistOpen} onOpenChange={setIsVisualizarChecklistOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="w-[calc(100vw-1rem)] max-w-[calc(100vw-1rem)] sm:max-w-2xl max-h-[90vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
             <DialogTitle>Visualizar Checklist Diário</DialogTitle>
           </DialogHeader>
           {checklistSelecionado && (
             <div className="space-y-4 py-4">
-              <div className="grid grid-cols-2 gap-4 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Data</label>
                   <p className="text-sm font-medium mt-1">
@@ -1677,19 +1730,44 @@ export default function PWAObraDetalhesPage() {
               </div>
               <div>
                 <label className="text-xs font-semibold text-gray-500 uppercase">Itens Verificados</label>
-                <div className="mt-2 space-y-2">
-                  {['cabos', 'polias', 'estrutura', 'movimentos', 'freios', 'limitadores', 'indicadores', 'aterramento'].map((item) => (
-                    <div key={item} className="flex items-center gap-2">
-                      <CheckCircle2 className={`w-4 h-4 ${checklistSelecionado[item] ? 'text-green-600' : 'text-gray-400'}`} />
-                      <span className="text-sm capitalize">{item}</span>
-                    </div>
-                  ))}
+                <div className="mt-2 mb-3">
+                  {(() => {
+                    const totalItens = CHECKLIST_DIARIO_ITEMS.length
+                    const itensOk = CHECKLIST_DIARIO_ITEMS.filter((item) => Boolean(checklistSelecionado[item.key])).length
+                    const completo = itensOk === totalItens
+                    return (
+                      <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${completo ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
+                        {itensOk}/{totalItens} itens verificados
+                      </div>
+                    )
+                  })()}
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {CHECKLIST_DIARIO_ITEMS.map((item) => {
+                    const itemOk = Boolean(checklistSelecionado[item.key])
+                    return (
+                      <div
+                        key={item.key}
+                        className={`rounded-md border p-2 text-xs ${itemOk ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <span className="font-medium text-gray-800">{item.label}</span>
+                          <span className={`inline-flex items-center gap-1 font-semibold ${itemOk ? 'text-green-700' : 'text-gray-600'}`}>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            {itemOk ? 'OK' : 'Pendente'}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               </div>
               {checklistSelecionado.observacoes && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Observações</label>
-                  <p className="text-sm mt-1">{checklistSelecionado.observacoes}</p>
+                  <p className="text-sm mt-1 whitespace-pre-wrap break-all max-h-56 overflow-auto rounded-md bg-gray-50 p-2">
+                    {checklistSelecionado.observacoes}
+                  </p>
                 </div>
               )}
             </div>
@@ -1765,12 +1843,40 @@ export default function PWAObraDetalhesPage() {
                   <p className="text-sm mt-1 whitespace-pre-wrap break-words">{manutencaoSelecionada.descricao}</p>
                 </div>
               )}
-              {manutencaoSelecionada.observacoes && (
+              {observacoesManutencao.textoLimpo && (
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase">Observações</label>
                   <p className="text-sm mt-1 whitespace-pre-wrap break-all max-h-56 overflow-auto rounded-md bg-gray-50 p-2">
-                    {manutencaoSelecionada.observacoes}
+                    {observacoesManutencao.textoLimpo}
                   </p>
+                </div>
+              )}
+              {observacoesManutencao.checklist.length > 0 && (
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase">Checklist de Manutenção</label>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {observacoesManutencao.checklist.map((item) => {
+                      const statusOk = item.status === "ok"
+                      return (
+                        <div
+                          key={item.chave}
+                          className={`rounded-md border p-2 text-xs ${
+                            statusOk ? "border-green-200 bg-green-50" : "border-amber-200 bg-amber-50"
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="font-medium text-gray-800">
+                              {formatarLabelChecklistManutencao(item.chave)}
+                            </span>
+                            <span className={`inline-flex items-center gap-1 font-semibold ${statusOk ? "text-green-700" : "text-amber-700"}`}>
+                              {statusOk ? <CheckCircle2 className="w-3.5 h-3.5" /> : <AlertCircle className="w-3.5 h-3.5" />}
+                              {statusOk ? "OK" : "Manutenção"}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
               )}
             </div>
