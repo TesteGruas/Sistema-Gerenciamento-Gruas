@@ -114,6 +114,7 @@ export default function GruasPage() {
     valor_sinaleiro: string
     valor_manutencao: string
     ultima_manutencao: string
+    ultima_manutencao_corretiva?: string
     proxima_manutencao: string
   }>({
     name: '',
@@ -144,6 +145,7 @@ export default function GruasPage() {
     valor_sinaleiro: '',
     valor_manutencao: '',
     ultima_manutencao: '',
+    ultima_manutencao_corretiva: '',
     proxima_manutencao: ''
   })
   
@@ -1113,6 +1115,7 @@ export default function GruasPage() {
         valor_sinaleiro: parseFloat(gruaFormData.valor_sinaleiro) || 0,
         valor_manutencao: parseFloat(gruaFormData.valor_manutencao) || 0,
         ultima_manutencao: gruaFormData.ultima_manutencao || undefined,
+        ultima_manutencao_corretiva: gruaFormData.ultima_manutencao_corretiva || undefined,
         proxima_manutencao: gruaFormData.proxima_manutencao || undefined,
       }
       
@@ -1152,6 +1155,7 @@ export default function GruasPage() {
           valor_sinaleiro: '',
           valor_manutencao: '',
           ultima_manutencao: '',
+          ultima_manutencao_corretiva: '',
           proxima_manutencao: ''
         })
         setIsCreateDialogOpen(false)
@@ -1217,6 +1221,7 @@ export default function GruasPage() {
         valor_sinaleiro: parseFloat(gruaFormData.valor_sinaleiro) || 0,
         valor_manutencao: parseFloat(gruaFormData.valor_manutencao) || 0,
         ultima_manutencao: gruaFormData.ultima_manutencao || undefined,
+        ultima_manutencao_corretiva: gruaFormData.ultima_manutencao_corretiva || undefined,
         proxima_manutencao: gruaFormData.proxima_manutencao || undefined,
       }
       
@@ -1256,6 +1261,7 @@ export default function GruasPage() {
           valor_sinaleiro: '',
           valor_manutencao: '',
           ultima_manutencao: '',
+          ultima_manutencao_corretiva: '',
           proxima_manutencao: ''
         })
         setIsEditDialogOpen(false)
@@ -1967,11 +1973,9 @@ export default function GruasPage() {
               />
             </div>
 
-            {/* Campos Adicionais */}
+            {/* Campos complementares do cadastro */}
             <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Informações Adicionais</h3>
-
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <Label htmlFor="create-capacidade_ponta">Capacidade na Ponta</Label>
                   <Input
@@ -1979,15 +1983,6 @@ export default function GruasPage() {
                     value={gruaFormData.capacidade_ponta}
                     onChange={handleCapacidadePontaChange}
                     placeholder="Ex: 1000 KGS"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-altura_trabalho">Altura de Trabalho</Label>
-                  <Input
-                    id="create-altura_trabalho"
-                    value={gruaFormData.altura_trabalho}
-                    onChange={handleAlturaTrabalhoChange}
-                    placeholder="Ex: 80 metros"
                   />
                 </div>
                 <div>
@@ -2000,109 +1995,12 @@ export default function GruasPage() {
                   />
                 </div>
                 <div>
-                  <Label htmlFor="create-horas_operacao">Horas de Operação</Label>
+                  <Label htmlFor="create-ultima_manutencao_corretiva">Última Manutenção Corretiva</Label>
                   <Input
-                    id="create-horas_operacao"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.horas_operacao}
-                    onChange={handleHorasOperacaoChange}
-                    placeholder="Ex: 1500"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Informações Financeiras */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Informações Financeiras</h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="create-valor_locacao">Valor de Locação (R$)</Label>
-                  <Input
-                    id="create-valor_locacao"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.valor_locacao}
-                    onChange={handleValorLocacaoChange}
-                    placeholder="Ex: 5000.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-valor_real">Valor Real (R$)</Label>
-                  <Input
-                    id="create-valor_real"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.valor_real}
-                    onChange={handleValorRealChange}
-                    placeholder="Ex: 100000.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-valor_operacao">Valor de Operação (R$)</Label>
-                  <Input
-                    id="create-valor_operacao"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.valor_operacao}
-                    onChange={handleValorOperacaoChange}
-                    placeholder="Ex: 2000.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-valor_sinaleiro">Valor de Sinaleiro (R$)</Label>
-                  <Input
-                    id="create-valor_sinaleiro"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.valor_sinaleiro}
-                    onChange={handleValorSinaleiroChange}
-                    placeholder="Ex: 1500.00"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-valor_manutencao">Valor de Manutenção (R$)</Label>
-                  <Input
-                    id="create-valor_manutencao"
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={gruaFormData.valor_manutencao}
-                    onChange={handleValorManutencaoChange}
-                    placeholder="Ex: 3000.00"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Manutenção */}
-            <div className="border-t pt-4">
-              <h3 className="text-lg font-semibold mb-4">Manutenção</h3>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label htmlFor="create-ultima_manutencao">Última Manutenção</Label>
-                  <Input
-                    id="create-ultima_manutencao"
+                    id="create-ultima_manutencao_corretiva"
                     type="date"
-                    value={gruaFormData.ultima_manutencao}
-                    onChange={handleUltimaManutencaoChange}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="create-proxima_manutencao">Próxima Manutenção</Label>
-                  <Input
-                    id="create-proxima_manutencao"
-                    type="date"
-                    value={gruaFormData.proxima_manutencao}
-                    onChange={handleProximaManutencaoChange}
+                    value={gruaFormData.ultima_manutencao_corretiva || ''}
+                    onChange={(e) => setGruaFormData(prev => ({ ...prev, ultima_manutencao_corretiva: e.target.value }))}
                   />
                 </div>
               </div>

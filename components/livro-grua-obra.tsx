@@ -1583,8 +1583,8 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         [`Data de Montagem:`, relacaoGrua?.data_montagem ? formatarData(relacaoGrua.data_montagem) : relacaoGrua?.data_inicio_locacao ? formatarData(relacaoGrua.data_inicio_locacao) : 'Não informado'],
         [`Data de Desmontagem:`, relacaoGrua?.data_desmontagem ? formatarData(relacaoGrua.data_desmontagem) : relacaoGrua?.data_fim_locacao ? formatarData(relacaoGrua.data_fim_locacao) : 'Não informado'],
         [`Tipo de Base/Fundação:`, relacaoGrua?.tipo_base || dadosMontagemObra.tipo_base || relacaoGrua?.fundacao || 'Não informado'],
-        [`Altura Inicial:`, relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial ? `${relacaoGrua?.altura_inicial || dadosMontagemObra.altura_inicial}m` : 'Não informado'],
-        [`Altura Final:`, relacaoGrua?.altura_final || dadosMontagemObra.altura_final ? `${relacaoGrua?.altura_final || dadosMontagemObra.altura_final}m` : 'Não informado'],
+        [`Altura Inicial:`, (relacaoGrua?.altura_inicial ?? dadosMontagemObra.altura_inicial) !== null && (relacaoGrua?.altura_inicial ?? dadosMontagemObra.altura_inicial) !== undefined ? `${relacaoGrua?.altura_inicial ?? dadosMontagemObra.altura_inicial}m` : 'Não informado'],
+        [`Altura Final:`, (relacaoGrua?.altura_final ?? dadosMontagemObra.altura_final) !== null && (relacaoGrua?.altura_final ?? dadosMontagemObra.altura_final) !== undefined ? `${relacaoGrua?.altura_final ?? dadosMontagemObra.altura_final}m` : 'Não informado'],
         [`Capacidade com 2 Cabos:`, relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo ? `${relacaoGrua?.capacidade_1_cabo || dadosMontagemObra.capacidade_1_cabo} kg` : 'Não informado'],
         [`Capacidade com 4 Cabos:`, relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos ? `${relacaoGrua?.capacidade_2_cabos || dadosMontagemObra.capacidade_2_cabos} kg` : 'Não informado'],
         [`Capacidade na Ponta:`, relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta ? `${relacaoGrua?.capacidade_ponta || dadosMontagemObra.capacidade_ponta} kg` : 'Não informado'],
@@ -2825,7 +2825,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Inicial (m)</p>
-                  <p className="font-medium">{(relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial) ? `${relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial}m` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial) !== null && (relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial) !== undefined ? `${relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial}m` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Final (m)</p>
@@ -3282,7 +3282,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Inicial (m)</p>
-                  <p className="font-medium">{(relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial) ? `${relacaoGrua?.altura_inicial || obra.dados_montagem_equipamento?.altura_inicial} METROS` : 'Não informado'}</p>
+                  <p className="font-medium">{(relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial) !== null && (relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial) !== undefined ? `${relacaoGrua?.altura_inicial ?? obra.dados_montagem_equipamento?.altura_inicial} METROS` : 'Não informado'}</p>
                 </div>
                 <div>
                   <p className="text-xs text-gray-500">Altura Final (m)</p>

@@ -4631,6 +4631,16 @@ useEffect(() => {
                                   <strong>Valor Mensal:</strong> <ValorMonetarioOculto valor={grua.valorLocacaoMensal || grua.valor_locacao_mensal || 0} />
                                 </p>
                               )}
+                              {(grua.altura_inicial || grua.altura_inicial === 0) && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Altura Inicial:</strong> {grua.altura_inicial} m
+                                </p>
+                              )}
+                              {(grua.altura_final || grua.altura_final === 0) && (
+                                <p className="text-xs text-gray-500">
+                                  <strong>Altura Final:</strong> {grua.altura_final} m
+                                </p>
+                              )}
                               {(grua.raio_trabalho || grua.raio_trabalho === 0) && (
                                 <p className="text-xs text-gray-500">
                                   <strong>Raio de Trabalho:</strong> {grua.raio_trabalho} m

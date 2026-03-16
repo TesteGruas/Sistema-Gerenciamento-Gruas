@@ -509,6 +509,7 @@ export default function NovaObraPage() {
   
   // Estados para Dados de Montagem do Equipamento
   const [dadosMontagemEquipamento, setDadosMontagemEquipamento] = useState({
+    altura_inicial: '',
     altura_final: '',
     raio_trabalho: '',
     tipo_base: '',
@@ -2119,6 +2120,7 @@ export default function NovaObraPage() {
     setOrcamentoAprovado(null)
     setOrcamentoId(null)
     setDadosMontagemEquipamento({
+      altura_inicial: '',
       altura_final: '',
       raio_trabalho: '',
       tipo_base: '',
@@ -3232,6 +3234,18 @@ startxref
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div>
+                    <Label htmlFor="altura_inicial">Altura Inicial (m)</Label>
+                    <Input
+                      id="altura_inicial"
+                      type="number"
+                      step="0.01"
+                      value={dadosMontagemEquipamento.altura_inicial}
+                      onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, altura_inicial: e.target.value })}
+                      placeholder="Ex: 20.00"
+                    />
+                  </div>
+
                   <div>
                     <Label htmlFor="altura_final">Altura Final (m)</Label>
                     <Input

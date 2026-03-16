@@ -16,6 +16,7 @@ export interface Grua {
   current_obra_name?: string;
   horas_operacao?: number;
   ultima_manutencao?: string;
+  ultima_manutencao_corretiva?: string;
   proxima_manutencao?: string;
   obra_id?: number;
   observacoes?: string;
@@ -40,6 +41,8 @@ export interface GruaBackend {
   horasOperacao?: number;
   ultima_manutencao?: string;
   ultimaManutencao?: string;
+  ultima_manutencao_corretiva?: string;
+  ultimaManutencaoCorretiva?: string;
   proxima_manutencao?: string;
   proximaManutencao?: string;
   created_at?: string;
@@ -109,6 +112,7 @@ export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
     current_obra_name: grua.currentObraName || grua.obra_atual_nome,
     horas_operacao: grua.horasOperacao || grua.horas_operacao,
     ultima_manutencao: grua.ultimaManutencao || grua.ultima_manutencao,
+    ultima_manutencao_corretiva: grua.ultimaManutencaoCorretiva || grua.ultima_manutencao_corretiva,
     proxima_manutencao: grua.proximaManutencao || grua.proxima_manutencao,
     obra_id: grua.currentObraId ? Number(grua.currentObraId) : grua.obra_atual_id,
     observacoes: grua.observacoes,
@@ -132,6 +136,7 @@ export function converterGruaFrontendParaBackend(grua: Grua): GruaBackend {
     obra_atual_nome: grua.current_obra_name,
     horas_operacao: grua.horas_operacao,
     ultima_manutencao: grua.ultima_manutencao,
+    ultima_manutencao_corretiva: grua.ultima_manutencao_corretiva,
     proxima_manutencao: grua.proxima_manutencao,
   };
 }

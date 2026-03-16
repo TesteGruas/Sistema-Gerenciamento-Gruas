@@ -129,6 +129,7 @@ const enriquecerDadosGrua = async (grua) => {
       valorManutencao: grua.valor_manutencao,
       horasOperacao: grua.horas_operacao,
       ultimaManutencao: grua.ultima_manutencao,
+      ultimaManutencaoCorretiva: grua.ultima_manutencao_corretiva,
       proximaManutencao: grua.proxima_manutencao
     }
 
@@ -289,6 +290,7 @@ const gruaSchema = Joi.object({
   valor_sinaleiro: Joi.number().min(0).default(0),
   valor_manutencao: Joi.number().min(0).default(0),
   ultima_manutencao: Joi.date().allow(null).optional(),
+  ultima_manutencao_corretiva: Joi.date().allow(null).optional(),
   proxima_manutencao: Joi.date().allow(null).optional(),
   
   // Campos adicionais para compatibilidade com mocks (serão calculados dinamicamente)
@@ -376,6 +378,7 @@ const gruaInputSchema = Joi.object({
   valor_sinaleiro: Joi.number().min(0).default(0),
   valor_manutencao: Joi.number().min(0).default(0),
   ultima_manutencao: Joi.date().allow(null).optional(),
+  ultima_manutencao_corretiva: Joi.date().allow(null).optional(),
   proxima_manutencao: Joi.date().allow(null).optional(),
   
   // Campos adicionais para compatibilidade com mocks (serão calculados dinamicamente)
@@ -418,6 +421,7 @@ const gruaUpdateSchema = Joi.object({
   valor_sinaleiro: Joi.number().min(0).allow(null).optional(),
   valor_manutencao: Joi.number().min(0).allow(null).optional(),
   ultima_manutencao: Joi.date().allow(null).optional(),
+  ultima_manutencao_corretiva: Joi.date().allow(null).optional(),
   proxima_manutencao: Joi.date().allow(null).optional(),
   cliente_nome: Joi.string().allow(null, '').optional(),
   cliente_documento: Joi.string().allow(null, '').optional(),
@@ -568,6 +572,7 @@ router.get('/', async (req, res) => {
       valorManutencao: grua.valor_manutencao,
       horasOperacao: grua.horas_operacao,
       ultimaManutencao: grua.ultima_manutencao,
+      ultimaManutencaoCorretiva: grua.ultima_manutencao_corretiva,
       proximaManutencao: grua.proxima_manutencao
     }))
 
@@ -820,6 +825,7 @@ router.get('/export', async (req, res) => {
       valorManutencao: grua.valor_manutencao,
       horasOperacao: grua.horas_operacao,
       ultimaManutencao: grua.ultima_manutencao,
+      ultimaManutencaoCorretiva: grua.ultima_manutencao_corretiva,
       proximaManutencao: grua.proxima_manutencao
     }))
 
@@ -1163,6 +1169,7 @@ router.get('/:id', async (req, res) => {
       valorManutencao: grua.valor_manutencao,
       horasOperacao: grua.horas_operacao,
       ultimaManutencao: grua.ultima_manutencao,
+      ultimaManutencaoCorretiva: grua.ultima_manutencao_corretiva,
       proximaManutencao: grua.proxima_manutencao
     }
 
@@ -1254,6 +1261,7 @@ router.post('/', async (req, res) => {
       valor_sinaleiro: value.valor_sinaleiro ?? 0,
       valor_manutencao: value.valor_manutencao ?? 0,
       ultima_manutencao: value.ultima_manutencao ?? null,
+      ultima_manutencao_corretiva: value.ultima_manutencao_corretiva ?? null,
       proxima_manutencao: value.proxima_manutencao ?? null,
       observacoes: value.observacoes ?? null,
       created_at: new Date().toISOString(),
@@ -1469,6 +1477,7 @@ router.put('/:id', async (req, res) => {
     if (value.valor_sinaleiro !== undefined) updateData.valor_sinaleiro = value.valor_sinaleiro
     if (value.valor_manutencao !== undefined) updateData.valor_manutencao = value.valor_manutencao
     if (value.ultima_manutencao !== undefined) updateData.ultima_manutencao = value.ultima_manutencao
+    if (value.ultima_manutencao_corretiva !== undefined) updateData.ultima_manutencao_corretiva = value.ultima_manutencao_corretiva
     if (value.proxima_manutencao !== undefined) updateData.proxima_manutencao = value.proxima_manutencao
     if (value.observacoes !== undefined) updateData.observacoes = value.observacoes
     if (value.numero_serie !== undefined) updateData.numero_serie = value.numero_serie

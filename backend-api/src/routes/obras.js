@@ -933,7 +933,20 @@ router.get('/:id', authenticateToken, async (req, res) => {
           valor_locacao_mensal,
           status,
           observacoes,
+          tipo_base,
+          altura_inicial,
+          altura_final,
           raio_trabalho,
+          velocidade_rotacao,
+          velocidade_elevacao,
+          velocidade_translacao,
+          potencia_instalada,
+          voltagem,
+          tipo_ligacao,
+          capacidade_ponta,
+          capacidade_1_cabo,
+          capacidade_2_cabos,
+          observacoes_montagem,
           grua:gruas (
             id,
             modelo,
@@ -1973,6 +1986,19 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             valor_locacao_mensal: value.grua_mensalidade || 0,
             data_inicio_locacao: formatDate(value.data_inicio),
             status: 'Ativa',
+            tipo_base: value.dados_montagem_equipamento?.tipo_base || null,
+            altura_inicial: (() => {
+              const val = value.dados_montagem_equipamento?.altura_inicial
+              if (val === null || val === undefined || val === '') return null
+              const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
+              return Number.isNaN(parsed) ? null : parsed
+            })(),
+            altura_final: (() => {
+              const val = value.dados_montagem_equipamento?.altura_final
+              if (val === null || val === undefined || val === '') return null
+              const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
+              return Number.isNaN(parsed) ? null : parsed
+            })(),
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
           }
@@ -2581,7 +2607,20 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
           grua_id: value.grua_id,
           valor_locacao_mensal: value.grua_mensalidade,
           data_inicio_locacao: value.data_inicio || new Date().toISOString().split('T')[0],
-          status: 'Ativa'
+          status: 'Ativa',
+          tipo_base: value.dados_montagem_equipamento?.tipo_base || null,
+          altura_inicial: (() => {
+            const val = value.dados_montagem_equipamento?.altura_inicial
+            if (val === null || val === undefined || val === '') return null
+            const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
+            return Number.isNaN(parsed) ? null : parsed
+          })(),
+          altura_final: (() => {
+            const val = value.dados_montagem_equipamento?.altura_final
+            if (val === null || val === undefined || val === '') return null
+            const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
+            return Number.isNaN(parsed) ? null : parsed
+          })()
         }
         
         const { error: gruaError } = await supabaseAdmin
