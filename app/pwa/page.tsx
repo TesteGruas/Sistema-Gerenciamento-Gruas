@@ -803,16 +803,6 @@ export default function PWAMainPage() {
       requiresObra: true // Requer obra ativa
     },
     {
-      title: "Medições",
-      description: "Medições das obras",
-      icon: Calculator,
-      href: "/pwa/cliente/medicoes",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      borderColor: "border-blue-100",
-      requiresObra: true // Requer obra ativa
-    },
-    {
       title: "Checklist",
       description: "Checklist diário da obra",
       icon: CheckCircle,
@@ -853,6 +843,15 @@ export default function PWAMainPage() {
       borderColor: "border-indigo-100"
     },
     {
+      title: "Configurações",
+      description: "Configurações",
+      icon: Settings,
+      href: "/pwa/configuracoes",
+      color: "text-gray-600",
+      bgColor: "bg-gray-50",
+      borderColor: "border-gray-100"
+    },
+    {
       title: "Holerites",
       description: "Visualizar e assinar holerites",
       icon: Receipt,
@@ -891,25 +890,7 @@ export default function PWAMainPage() {
       bgColor: "bg-cyan-50",
       borderColor: "border-cyan-100"
     },
-    {
-      title: "Documentos da Obra",
-      description: "Documentos das obras",
-      icon: FileText,
-      href: "/pwa/obras",
-      color: "text-blue-600",
-      bgColor: "bg-blue-50",
-      borderColor: "border-blue-100",
-      requiresObra: true // Requer obra ativa
-    },
-    {
-      title: "Config",
-      description: "Configurações",
-      icon: Settings,
-      href: "/pwa/configuracoes",
-      color: "text-gray-600",
-      bgColor: "bg-gray-50",
-      borderColor: "border-gray-100"
-    }
+    
   ]
 
   // Função auxiliar para formatar hora do ponto
@@ -1448,38 +1429,6 @@ export default function PWAMainPage() {
                 }
               })()
 
-              const tipoUsuario = String(userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo || '').toLowerCase()
-              const funcionarioId = userData?.profile?.funcionario_id ||
-                userData?.funcionario_id ||
-                userData?.user?.funcionario_id ||
-                pwaUserData.user?.funcionario_id
-              const funcionarioIdDoPayloadFuncionario =
-                Boolean(userData?.usuario_existe) && Number(userData?.id) > 0
-                  ? Number(userData.id)
-                  : null
-              const temIndicadoresFuncionarioNoUserData =
-                Number(userData?.obra_atual_id) > 0 ||
-                Number(userData?.obra_atual?.id) > 0 ||
-                (Array.isArray(userData?.funcionarios_obras) && userData.funcionarios_obras.length > 0) ||
-                (Array.isArray(userData?.obras_vinculadas) && userData.obras_vinculadas.length > 0) ||
-                (Array.isArray(userData?.historico_obras) && userData.historico_obras.length > 0)
-              const temIndicadoresFuncionarioNoHook =
-                Number(pwaUserData.user?.obra_atual_id) > 0 ||
-                Number(pwaUserData.user?.obra_atual?.id) > 0 ||
-                (Array.isArray(pwaUserData.user?.funcionarios_obras) && pwaUserData.user.funcionarios_obras.length > 0) ||
-                (Array.isArray(pwaUserData.user?.historico_obras) && pwaUserData.user.historico_obras.length > 0)
-              const isFuncionario = tipoUsuario !== 'cliente' && (
-                Boolean(funcionarioId) ||
-                Boolean(funcionarioIdDoPayloadFuncionario) ||
-                Boolean(userData?.eh_funcionario) ||
-                tipoUsuario === 'funcionario' ||
-                temIndicadoresFuncionarioNoUserData ||
-                temIndicadoresFuncionarioNoHook
-              )
-              const isResponsavel = isResponsavelObra || tipoUsuario === 'responsavel_obra' ||
-                Boolean(userData?.is_responsavel_obra) ||
-                (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
-
               // Verificar se é cliente (múltiplas fontes)
               const isClient = (() => {
                 // 1. Verificar pelo hook
@@ -1504,14 +1453,6 @@ export default function PWAMainPage() {
                 
                 return false
               })()
-
-              // Card de Medições: mostrar apenas para funcionário ou responsável
-              // quando houver vínculo de obra ativa
-              if (action.title === "Medições") {
-                if (!(isFuncionario || isResponsavel)) return false
-                if (loadingObra) return false
-                return temObraAtiva === true
-              }
 
               // Cards de checklist/manutenções: funcionário ou responsável com obra vinculada
               if (action.title === "Checklist" || action.title === "Manutenções") {
@@ -1555,28 +1496,6 @@ export default function PWAMainPage() {
                   // Em caso de erro, verificar por role como fallback
                   const roleLower = (userRole || '').toLowerCase()
                   const podeVerObras = roleLower.includes('operador') || 
-                                      roleLower.includes('operário') || 
-                                      roleLower.includes('operario')
-                  return podeVerObras
-                }
-              }
-              
-              // "Documentos da Obra" deve ser mostrada baseado apenas em permissões
-              if (action.title === "Documentos da Obra") {
-                // Verificar permissão usando o hook
-                try {
-                  const podeVerObras = hasPermission('obras:visualizar') || canAccessModule('obras')
-                  if (!podeVerObras) {
-                    return false
-                  }
-                  // Se tem permissão, mostrar independente de temObraAtiva
-                  return true
-                } catch (e) {
-                  // Em caso de erro, verificar por role como fallback
-                  const roleLower = (userRole || '').toLowerCase()
-                  const podeVerObras = roleLower.includes('cliente') || 
-                                      roleLower.includes('supervisor') ||
-                                      roleLower.includes('operador') || 
                                       roleLower.includes('operário') || 
                                       roleLower.includes('operario')
                   return podeVerObras
@@ -1715,6 +1634,34 @@ export default function PWAMainPage() {
                 return canSee
               }
               return true
+            })
+            .filter(action => {
+              if (!isResponsavelObra) return true
+
+              const allowedResponsavelCards = [
+                "Obras",
+                "Aprovações de horas",
+                "Checklist",
+                "Manutenções",
+                "Perfil",
+                "Configurações"
+              ]
+
+              return allowedResponsavelCards.includes(action.title)
+            })
+            .sort((a, b) => {
+              if (!isResponsavelObra) return 0
+
+              const responsavelOrder = [
+                "Obras",
+                "Aprovações de horas",
+                "Checklist",
+                "Manutenções",
+                "Perfil",
+                "Configurações"
+              ]
+
+              return responsavelOrder.indexOf(a.title) - responsavelOrder.indexOf(b.title)
             })
             .map((action, index) => {
               const Icon = action.icon

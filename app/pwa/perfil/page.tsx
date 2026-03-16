@@ -940,9 +940,9 @@ function PWAPerfilPageContent() {
   return (
     <div className="space-y-4 pb-24">
       {/* Header */}
-      <div className="bg-[#75180a] p-4 -mx-4 -mt-4 mb-4">
-        <h1 className="text-2xl font-bold text-white">Meu Perfil</h1>
-        <p className="text-gray-200">Gerencie suas informações pessoais</p>
+      <div className="mb-4">
+        <h1 className="text-2xl font-bold text-gray-900">Meu Perfil</h1>
+        <p className="text-gray-600">Gerencie suas informações pessoais</p>
       </div>
 
       {/* Foto e Informações Principais */}

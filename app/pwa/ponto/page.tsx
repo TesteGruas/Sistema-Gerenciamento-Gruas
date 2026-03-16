@@ -1173,13 +1173,13 @@ export default function PWAPontoPage() {
       </div>
 
       {/* Relógio e data */}
-      <Card>
-        <CardContent className="p-6">
+      <Card className="gap-3 py-4">
+        <CardContent className="p-4">
           <div className="text-center">
-            <div className="text-5xl font-bold text-blue-600 mb-2">
+            <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-1">
               {currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
             </div>
-            <div className="text-lg text-gray-600 mb-4">
+            <div className="text-sm md:text-base text-gray-600 mb-2">
               {currentTime ? currentTime.toLocaleDateString("pt-BR", {
                 weekday: "long",
                 year: "numeric",
@@ -1187,8 +1187,8 @@ export default function PWAPontoPage() {
                 day: "numeric",
               }) : 'Carregando...'}
             </div>
-            <Badge 
-              className={`${
+            <Badge
+              className={`text-[11px] px-2 py-0.5 ${
                 status.cor === 'green' ? 'bg-green-100 text-green-800' :
                 status.cor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
                 status.cor === 'blue' ? 'bg-blue-100 text-blue-800' :

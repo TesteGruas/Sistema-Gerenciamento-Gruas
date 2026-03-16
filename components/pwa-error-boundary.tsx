@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { AlertTriangle, RefreshCw, Home, Smartphone } from 'lucide-react'
 import { getApiBasePath } from '@/lib/runtime-config'
+import { forcePwaRecoveryLogout } from '@/lib/pwa-emergency-recovery'
 
 interface Props {
   children: ReactNode
@@ -56,6 +57,9 @@ export class PWAErrorBoundary extends Component<Props, State> {
       } catch (e) {
         console.warn('Não foi possível salvar erro no localStorage:', e)
       }
+
+      // Falha crítica no PWA: recuperar sessão automaticamente
+      void forcePwaRecoveryLogout(`Erro crítico capturado pelo ErrorBoundary: ${error.message}`)
     }
   }
 
@@ -95,7 +99,7 @@ export class PWAErrorBoundary extends Component<Props, State> {
                   Ocorreu um erro inesperado no aplicativo.
                 </p>
                 <p className="text-sm text-gray-500">
-                  Tente recarregar a página ou voltar ao início.
+                  Sua sessão está sendo reiniciada para recuperar o aplicativo.
                 </p>
               </div>
 

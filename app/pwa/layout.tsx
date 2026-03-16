@@ -45,6 +45,7 @@ import { getApiBasePath } from "@/lib/runtime-config"
 import { ChatIa } from "@/components/chat-ia"
 import { pwaNotifications } from "@/lib/pwa-notifications"
 import { ensurePushSubscription } from "@/lib/pwa-push-subscription"
+import { forcePwaRecoveryLogout } from "@/lib/pwa-emergency-recovery"
 
 interface PWALayoutProps {
   children: React.ReactNode
@@ -113,6 +114,41 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       })
     }
   }, [])
+
+  // Recuperação global em erros não tratados que podem travar o PWA
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+
+    const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/forgot-password', '/pwa/reset-password']
+    const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith(path))
+    if (isPublicPath) return
+
+    const handleUnhandledError = (event: ErrorEvent) => {
+      const message = event.error?.message || event.message || ''
+
+      // Ignorar ruídos comuns que não devem derrubar a sessão
+      if (message.includes('ResizeObserver loop limit exceeded')) return
+
+      void forcePwaRecoveryLogout(`Erro global não tratado: ${message || 'desconhecido'}`)
+    }
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      const reason = event.reason?.message || String(event.reason || '')
+
+      // Cancelamentos esperados não devem disparar recuperação
+      if (reason.includes('AbortError')) return
+
+      void forcePwaRecoveryLogout(`Promise rejeitada sem tratamento: ${reason || 'desconhecida'}`)
+    }
+
+    window.addEventListener('error', handleUnhandledError)
+    window.addEventListener('unhandledrejection', handleUnhandledRejection)
+
+    return () => {
+      window.removeEventListener('error', handleUnhandledError)
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection)
+    }
+  }, [pathname])
 
   // Verificar se funcionário tem obra ativa
   useEffect(() => {
@@ -615,16 +651,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   // Evita "flash" inicial enquanto a checagem ainda está em andamento (temObraAtiva === null).
   const mostrarPontoFuncionario = temObraAtiva === true
   
-  // Se for cliente, usar Documentos, Medições, Home e Perfil
+  // Se for cliente, usar Medições, Home e Perfil
   const essentialNavItems = isClientUser ? [
-    // Documentos
-    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
-      name: 'Docs',
-      href: '/pwa/documentos',
-      icon: FileText,
-      label: 'Documentos',
-      description: 'Documentos'
-    },
     // Medições
     allNavigationItems.find(item => item.href === '/pwa/cliente/medicoes') || {
       name: 'Medições',
@@ -668,14 +696,6 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       label: 'Home',
       description: 'Página inicial'
     },
-    // Documentos
-    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
-      name: 'Docs',
-      href: '/pwa/documentos',
-      icon: FileText,
-      label: 'Documentos',
-      description: 'Documentos'
-    },
     // Perfil aparece apenas para supervisor (não para responsável de obra)
     ...(isResponsavelObraUser ? [] : [perfilItem])
   ] : [
@@ -703,14 +723,6 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       icon: Home,
       label: 'Home',
       description: 'Página inicial'
-    },
-    // Documentos
-    allNavigationItems.find(item => item.href === '/pwa/documentos') || {
-      name: 'Docs',
-      href: '/pwa/documentos',
-      icon: FileText,
-      label: 'Documentos',
-      description: 'Documentos'
     },
     // Perfil - SEMPRE presente
     perfilItem
@@ -762,6 +774,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
                           alt={empresa.nome}
                           fill
                           className="object-contain"
+                          style={{ mixBlendMode: 'multiply', filter: 'none' }}
                         />
                       </div>
                     ) : (
