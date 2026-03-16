@@ -47,7 +47,9 @@ interface CustoMensalForm {
 
 interface Grua {
   id: string | number
+  codigo?: string
   name: string
+  tipo?: string
   modelo?: string
   fabricante?: string
 }
@@ -199,12 +201,25 @@ export default function NovaMedicaoPage() {
       setLoadingGruas(true)
       const response = await gruaObraApi.buscarGruasPorObra(obraId)
       if (response.success && response.data) {
+        const montarNomeGrua = (relacao: any) => {
+          const codigo = String(relacao?.grua_id || relacao?.grua?.id || '').trim()
+          const tipo = String(relacao?.grua?.tipo || '').trim()
+          const modelo = String(relacao?.grua?.modelo || '').trim()
+
+          const base = [codigo, tipo].filter(Boolean).join(' - ')
+          if (base && modelo) return `${base} (${modelo})`
+          if (base) return base
+          return modelo || 'Grua sem identificação'
+        }
+
         // Extrair as gruas do relacionamento
         const gruasDaObra = response.data
           .filter((relacao: any) => relacao.grua)
           .map((relacao: any) => ({
-            id: relacao.grua.id,
-            name: relacao.grua.name || relacao.grua.modelo || relacao.grua_id,
+            id: relacao.grua_id || relacao.grua.id,
+            codigo: relacao.grua_id || relacao.grua.id,
+            name: montarNomeGrua(relacao),
+            tipo: relacao.grua.tipo,
             modelo: relacao.grua.modelo,
             fabricante: relacao.grua.fabricante
           }))
@@ -806,7 +821,7 @@ export default function NovaMedicaoPage() {
                   <SelectContent>
                     {gruas.map((grua) => (
                       <SelectItem key={grua.id} value={String(grua.id)}>
-                        {grua.name} {grua.modelo && `- ${grua.modelo}`}
+                        {grua.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
