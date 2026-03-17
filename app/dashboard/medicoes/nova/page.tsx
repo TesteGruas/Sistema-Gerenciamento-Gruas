@@ -349,6 +349,22 @@ export default function NovaMedicaoPage() {
     })
   }
 
+  const preencherDadosCustoMensal = () => {
+    const itemSelecionado = itens.find((item) => item.codigo === custoForm.item)
+    const itemBase = itemSelecionado || itens[0]
+
+    setCustoForm((prev) => ({
+      ...prev,
+      item: prev.item || itemBase?.codigo || "ITEM-TESTE",
+      descricao: prev.descricao || itemBase?.descricao || "Item Custo Mensal Teste",
+      unidade: itemBase?.unidade || prev.unidade || "mês",
+      tipo: itemBase?.tipo || prev.tipo || "contrato",
+      quantidade_orcamento: prev.quantidade_orcamento > 0 ? prev.quantidade_orcamento : 1,
+      valor_unitario: prev.valor_unitario > 0 ? prev.valor_unitario : 1000,
+      valor_total: 0
+    }))
+  }
+
   const removerCustoMensal = (index: number) => {
     setCustosMensais(custosMensais.filter((_, i) => i !== index))
   }
@@ -1370,7 +1386,11 @@ export default function NovaMedicaoPage() {
                 </div>
                 
                 {/* Terceira linha: Botão Adicionar */}
-                <div className="flex justify-end">
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={preencherDadosCustoMensal} size="sm" className="h-8">
+                    <Calculator className="w-3 h-3 mr-1" />
+                    Preencher dados
+                  </Button>
                   <Button type="button" onClick={adicionarCustoMensal} size="sm" className="h-8">
                     <Plus className="w-3 h-3 mr-1" />
                     Adicionar

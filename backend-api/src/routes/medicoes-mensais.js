@@ -1,5 +1,6 @@
 import express from 'express';
 import multer from 'multer';
+import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { 
@@ -10,6 +11,7 @@ import {
 } from '../schemas/medicao-mensal-schemas.js';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Função helper para formatar período (YYYY-MM) para "Mês Ano" (ex: "2025-12" -> "Dezembro 2025")
 const formatarPeriodo = (periodo) => {
@@ -28,6 +30,17 @@ const formatarPeriodo = (periodo) => {
   } catch {
     return periodo;
   }
+};
+
+const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
+  return jwt.sign(
+    {
+      type: 'medicao_pdf_publico',
+      medicao_id: medicaoId
+    },
+    JWT_SECRET,
+    { expiresIn }
+  );
 };
 
 // Configuração do multer para upload de arquivos
@@ -91,7 +104,11 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
             id,
             nome,
             cnpj,
-            contato_cpf
+            contato_cpf,
+            email,
+            telefone,
+            contato_email,
+            contato_telefone
           )
         ),
         obras:obra_id (
@@ -102,7 +119,9 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
           clientes:cliente_id (
             id,
             nome,
-            cnpj
+            cnpj,
+            email,
+            telefone
           )
         ),
         gruas:grua_id (
@@ -266,7 +285,11 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
             id,
             nome,
             cnpj,
-            contato_cpf
+            contato_cpf,
+            email,
+            telefone,
+            contato_email,
+            contato_telefone
           )
         ),
         obras:obra_id (
@@ -277,7 +300,11 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
           clientes:cliente_id (
             id,
             nome,
-            cnpj
+            cnpj,
+            email,
+            telefone,
+            contato_email,
+            contato_telefone
           )
         ),
         gruas:grua_id (
@@ -1055,7 +1082,13 @@ router.get('/grua/:grua_id', authenticateToken, requirePermission('obras:visuali
 router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
   try {
     const { id } = req.params;
-    const { email, telefone } = req.body;
+    const {
+      email,
+      telefone,
+      emails_adicionais = [],
+      telefones_adicionais = [],
+      incluir_contatos_cliente = true
+    } = req.body || {};
 
     // Buscar medição
     const { data: medicao, error: medicaoError } = await supabaseAdmin
@@ -1071,7 +1104,9 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             nome,
             cnpj,
             email,
-            telefone
+            telefone,
+            contato_email,
+            contato_telefone
           )
         ),
         orcamentos:orcamento_id (
@@ -1083,7 +1118,9 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             nome,
             cnpj,
             email,
-            telefone
+            telefone,
+            contato_email,
+            contato_telefone
           )
         ),
         gruas:grua_id (
@@ -1101,54 +1138,85 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
       });
     }
 
-    // Verificar se já foi enviada
-    if (medicao.status === 'enviada') {
-      return res.status(400).json({
-        error: 'Medição já enviada',
-        message: 'Esta medição já foi enviada ao cliente'
-      });
+    const jaEnviada = medicao.status === 'enviada';
+    let medicaoAtualizada = medicao;
+
+    // Primeira vez: atualizar status para enviada e bloquear edição
+    if (!jaEnviada) {
+      const { data: medicaoEnviada, error: updateError } = await supabaseAdmin
+        .from('medicoes_mensais')
+        .update({
+          status: 'enviada',
+          data_envio: new Date().toISOString(),
+          editavel: false, // Bloquear edição após envio
+          status_aprovacao: 'pendente',
+          updated_at: new Date().toISOString(),
+          updated_by: req.user?.id
+        })
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (updateError) {
+        return res.status(500).json({
+          error: 'Erro ao enviar medição',
+          message: updateError.message
+        });
+      }
+
+      medicaoAtualizada = medicaoEnviada;
     }
 
-    // Atualizar medição: status enviada, bloquear edição
-    const { data: medicaoAtualizada, error: updateError } = await supabaseAdmin
-      .from('medicoes_mensais')
-      .update({
-        status: 'enviada',
-        data_envio: new Date().toISOString(),
-        editavel: false, // Bloquear edição após envio
-        status_aprovacao: 'pendente',
-        updated_at: new Date().toISOString(),
-        updated_by: req.user?.id
-      })
-      .eq('id', id)
-      .select()
-      .single();
-
-    if (updateError) {
-      return res.status(500).json({
-        error: 'Erro ao enviar medição',
-        message: updateError.message
-      });
-    }
+    const normalizarEmail = (valor) => String(valor || '').trim().toLowerCase();
+    const normalizarTelefone = (valor) => {
+      let numero = String(valor || '').replace(/\D/g, '');
+      if (!numero) return '';
+      if (numero.startsWith('0')) {
+        numero = numero.substring(1);
+      }
+      if (!numero.startsWith('55')) {
+        numero = `55${numero}`;
+      }
+      return numero;
+    };
 
     // Buscar dados do cliente
     const cliente = medicao.obras?.clientes || medicao.orcamentos?.clientes;
-    const emailCliente = email || cliente?.email;
-    const telefoneCliente = telefone || cliente?.telefone;
+    const emailsDestino = [
+      ...(incluir_contatos_cliente && cliente?.contato_email ? [cliente.contato_email] : []),
+      ...(incluir_contatos_cliente && cliente?.email ? [cliente.email] : []),
+      ...(email ? [email] : []),
+      ...(Array.isArray(emails_adicionais) ? emails_adicionais : [])
+    ]
+      .map((valor) => normalizarEmail(valor))
+      .filter(Boolean);
+
+    const telefonesDestino = [
+      ...(incluir_contatos_cliente && cliente?.contato_telefone ? [cliente.contato_telefone] : []),
+      ...(incluir_contatos_cliente && cliente?.telefone ? [cliente.telefone] : []),
+      ...(telefone ? [telefone] : []),
+      ...(Array.isArray(telefones_adicionais) ? telefones_adicionais : [])
+    ]
+      .map((valor) => normalizarTelefone(valor))
+      .filter(Boolean);
+
+    const emailsUnicos = Array.from(new Set(emailsDestino));
+    const telefonesUnicos = Array.from(new Set(telefonesDestino));
 
     // Enviar notificações (e-mail e WhatsApp) - assíncrono
-    if (emailCliente || telefoneCliente) {
+    if (emailsUnicos.length > 0 || telefonesUnicos.length > 0) {
       (async () => {
         try {
           const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
-          const linkMedicao = `${FRONTEND_URL}/dashboard/medicoes/${id}`;
+          const tokenPublicoPdf = gerarTokenLinkPublicoMedicao(medicao.id, '7d');
+          const linkPdfPublico = `${FRONTEND_URL}/api/relatorios/medicao/publico/pdf/${tokenPublicoPdf}`;
 
           // Enviar e-mail
-          if (emailCliente) {
+          for (const emailDestino of emailsUnicos) {
             try {
               const { sendEmail } = await import('../services/email.service.js');
               await sendEmail({
-                to: emailCliente,
+                to: emailDestino,
                 subject: `Medição ${medicao.numero} - ${medicao.periodo}`,
                 html: `
                   <h2>Nova Medição Disponível</h2>
@@ -1159,7 +1227,7 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
                     <li><strong>Valor Total:</strong> R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}</li>
                     ${medicao.gruas ? `<li><strong>Grua:</strong> ${medicao.gruas.name}</li>` : ''}
                   </ul>
-                  <p><a href="${linkMedicao}">Visualizar Medição</a></p>
+                  <p><a href="${linkPdfPublico}">Abrir PDF da Medição (link público)</a></p>
                 `,
                 tipo: 'medicao_enviada'
               });
@@ -1169,11 +1237,14 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
           }
 
           // Enviar WhatsApp
-          if (telefoneCliente) {
+          for (const telefoneDestino of telefonesUnicos) {
             try {
               const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
-              const mensagem = `🔔 *Nova Medição Disponível*\n\nMedição ${medicao.numero} - ${medicao.periodo}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\n${linkMedicao}`;
-              await enviarMensagemWebhook(telefoneCliente, mensagem, linkMedicao, { tipo: 'medicao_enviada' });
+              const dataMedicaoFormatada = medicao.data_medicao
+                ? new Date(medicao.data_medicao).toLocaleDateString('pt-BR')
+                : '-';
+              const mensagem = `📄 *Medição Mensal*\nNúmero: ${medicao.numero}\nPeríodo: ${medicao.periodo}\nData: ${dataMedicaoFormatada}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\n${linkPdfPublico}`;
+              await enviarMensagemWebhook(telefoneDestino, mensagem, linkPdfPublico, { tipo: 'medicao_enviada' });
             } catch (whatsappErr) {
               console.error('Erro ao enviar WhatsApp:', whatsappErr);
             }
@@ -1187,7 +1258,9 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
     res.json({
       success: true,
       data: medicaoAtualizada,
-      message: 'Medição enviada ao cliente com sucesso'
+      message: jaEnviada
+        ? 'Notificações da medição reenviadas com sucesso'
+        : 'Medição enviada ao cliente com sucesso'
     });
   } catch (error) {
     console.error('Erro ao enviar medição:', error);
@@ -1697,6 +1770,100 @@ router.get('/obras-sem-medicao', authenticateToken, requirePermission('obras:vis
   } catch (error) {
     console.error('Erro ao buscar obras sem medição:', error);
     res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/medicoes-mensais/:id/link-publico-pdf
+ * Gerar link publico temporario para o PDF principal da medicao
+ */
+router.post('/:id/link-publico-pdf', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const expiracaoHorasBody = Number(req.body?.expiracao_horas);
+    const expiracaoHoras = Number.isFinite(expiracaoHorasBody) && expiracaoHorasBody > 0
+      ? Math.min(expiracaoHorasBody, 24 * 30)
+      : 24 * 7;
+
+    const { data: medicao, error: medicaoError } = await supabaseAdmin
+      .from('medicoes_mensais')
+      .select('id, numero')
+      .eq('id', id)
+      .single();
+
+    if (medicaoError || !medicao) {
+      return res.status(404).json({
+        success: false,
+        error: 'Medição não encontrada',
+        message: 'A medição especificada não existe'
+      });
+    }
+
+    const token = gerarTokenLinkPublicoMedicao(medicao.id, `${expiracaoHoras}h`);
+    const expiresAt = new Date(Date.now() + expiracaoHoras * 60 * 60 * 1000).toISOString();
+    const url = `/api/relatorios/medicao/publico/pdf/${token}`;
+
+    res.json({
+      success: true,
+      data: {
+        token,
+        url,
+        expires_at: expiresAt
+      },
+      message: 'Link público gerado com sucesso'
+    });
+  } catch (error) {
+    console.error('Erro ao gerar link público da medição:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/medicoes-mensais/publico/pdf/:token
+ * Compatibilidade: redireciona para PDF completo público
+ */
+router.get('/publico/pdf/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token obrigatório',
+        message: 'Informe o token de acesso público'
+      });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch (tokenError) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token inválido',
+        message: 'Link público inválido ou expirado'
+      });
+    }
+
+    if (!payload || payload.type !== 'medicao_pdf_publico' || !payload.medicao_id) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token inválido',
+        message: 'Token não corresponde a um link público de medição'
+      });
+    }
+
+    return res.redirect(`/api/relatorios/medicao/publico/pdf/${token}`);
+  } catch (error) {
+    console.error('Erro ao abrir link público do PDF da medição:', error);
+    res.status(500).json({
+      success: false,
       error: 'Erro interno do servidor',
       message: error.message
     });

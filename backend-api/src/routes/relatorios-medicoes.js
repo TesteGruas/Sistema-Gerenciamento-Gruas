@@ -1,10 +1,13 @@
 import express from 'express';
+import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
+import { PDFDocument as PDFLibDocument, StandardFonts, rgb } from 'pdf-lib';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 
 const router = express.Router();
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
 // Funções auxiliares de formatação
 const formatarMoeda = (valor) => {
@@ -31,6 +34,215 @@ const formatarPeriodo = (periodo) => {
   } catch {
     return periodo;
   }
+};
+
+const getDocumentoLabel = (tipo) => {
+  const labels = {
+    medicao_pdf: 'PDF da Medição',
+    nf_servico: 'NF de Serviço',
+    nf_produto: 'NF de Produto',
+    nf_locacao: 'NF de Locação',
+    boleto: 'Boleto'
+  };
+  return labels[tipo] || tipo;
+};
+
+const gerarResumoMedicaoPdfBuffer = async (medicao, documentos) => {
+  const doc = new PDFDocument({
+    size: 'A4',
+    margin: 40,
+    bufferPages: true,
+    info: {
+      Title: `Relatório Completo da Medição ${medicao.numero}`,
+      Author: 'Sistema de Gerenciamento de Gruas',
+      Subject: 'Medição com anexos',
+      Creator: 'Sistema IRBANA'
+    }
+  });
+
+  const chunks = [];
+  doc.on('data', (chunk) => chunks.push(chunk));
+
+  const finalizado = new Promise((resolve, reject) => {
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+
+  let yPos = 40;
+  yPos = adicionarLogosNoCabecalho(doc, yPos);
+
+  doc.fontSize(16).font('Helvetica-Bold').text('RELATÓRIO COMPLETO DA MEDIÇÃO', 40, yPos, { align: 'center' });
+  yPos += 25;
+  doc.fontSize(11).font('Helvetica');
+  doc.text(`Medição: ${medicao.numero || `#${medicao.id}`}`, 40, yPos, { align: 'center' });
+  yPos += 14;
+  doc.text(`Período: ${formatarPeriodo(medicao.periodo)}`, 40, yPos, { align: 'center' });
+  yPos += 14;
+  doc.text(`Data: ${formatarData(medicao.data_medicao)}`, 40, yPos, { align: 'center' });
+  yPos += 20;
+
+  doc.moveTo(40, yPos).lineTo(555, yPos).stroke();
+  yPos += 15;
+
+  doc.fontSize(11).font('Helvetica-Bold').text('Informações Gerais', 40, yPos);
+  yPos += 14;
+  doc.fontSize(9).font('Helvetica');
+  doc.text(`Obra: ${medicao.obras?.nome || '-'}`, 40, yPos); yPos += 12;
+  doc.text(`Cliente: ${medicao.obras?.clientes?.nome || medicao.orcamentos?.clientes?.nome || '-'}`, 40, yPos); yPos += 12;
+  doc.text(`Grua: ${medicao.gruas?.name || '-'}`, 40, yPos); yPos += 12;
+  doc.text(`Status: ${medicao.status || '-'}`, 40, yPos); yPos += 12;
+  doc.text(`Aprovação: ${medicao.status_aprovacao || 'pendente'}`, 40, yPos); yPos += 18;
+
+  doc.fontSize(11).font('Helvetica-Bold').text('Valores', 40, yPos);
+  yPos += 14;
+  doc.fontSize(9).font('Helvetica');
+  doc.text(`Valor Mensal Bruto: ${formatarMoeda(medicao.valor_mensal_bruto || 0)}`, 40, yPos); yPos += 12;
+  doc.text(`Aditivos: ${formatarMoeda(medicao.valor_aditivos || 0)}`, 40, yPos); yPos += 12;
+  doc.text(`Custos Extras: ${formatarMoeda(medicao.valor_custos_extras || 0)}`, 40, yPos); yPos += 12;
+  doc.text(`Descontos: ${formatarMoeda(medicao.valor_descontos || 0)}`, 40, yPos); yPos += 12;
+  doc.font('Helvetica-Bold').text(`VALOR TOTAL: ${formatarMoeda(medicao.valor_total || 0)}`, 40, yPos); yPos += 18;
+  doc.font('Helvetica');
+
+  if (medicao.observacoes) {
+    doc.fontSize(11).font('Helvetica-Bold').text('Observações', 40, yPos);
+    yPos += 14;
+    doc.fontSize(9).font('Helvetica').text(medicao.observacoes, 40, yPos, { width: 515 });
+    yPos = doc.y + 16;
+  }
+
+  doc.fontSize(11).font('Helvetica-Bold').text('Arquivos incluídos no PDF único', 40, yPos);
+  yPos += 14;
+  doc.fontSize(9).font('Helvetica');
+  if (!documentos.length) {
+    doc.text('Nenhum documento com arquivo encontrado.', 40, yPos);
+  } else {
+    documentos.forEach((arquivo, index) => {
+      const observacao = arquivo.observacoes ? ` - ${arquivo.observacoes}` : '';
+      doc.text(`${index + 1}. ${getDocumentoLabel(arquivo.tipo_documento)}${observacao}`, 40, yPos, { width: 515 });
+      yPos = doc.y + 6;
+      if (yPos > 740) {
+        doc.addPage();
+        try { adicionarLogosNaPagina(doc, 40); } catch {}
+        yPos = 150;
+      }
+    });
+  }
+
+  adicionarLogosEmTodasAsPaginas(doc);
+  adicionarRodapeEmpresa(doc);
+  doc.end();
+
+  return finalizado;
+};
+
+const buscarMedicaoCompleta = async (medicaoId) => {
+  const { data: medicao, error: medicaoError } = await supabaseAdmin
+    .from('medicoes_mensais')
+    .select(`
+      *,
+      obras:obra_id (
+        id,
+        nome,
+        clientes:cliente_id (id, nome)
+      ),
+      orcamentos:orcamento_id (
+        id,
+        numero,
+        clientes:cliente_id (id, nome)
+      ),
+      gruas:grua_id (id, name),
+      medicao_custos_mensais (*),
+      medicao_horas_extras (*),
+      medicao_servicos_adicionais (*),
+      medicao_aditivos (*),
+      medicao_documentos (*)
+    `)
+    .eq('id', medicaoId)
+    .single();
+
+  if (medicaoError || !medicao) {
+    const err = new Error(medicaoError?.message || 'Não foi possível localizar a medição');
+    err.statusCode = 404;
+    throw err;
+  }
+
+  return medicao;
+};
+
+const gerarPdfCompletoMedicao = async (medicao, medicaoId) => {
+  const documentosComArquivo = (medicao.medicao_documentos || [])
+    .filter((doc) => doc.caminho_arquivo)
+    .sort((a, b) => new Date(a.created_at || 0) - new Date(b.created_at || 0));
+
+  const resumoBuffer = await gerarResumoMedicaoPdfBuffer(medicao, documentosComArquivo);
+  const pdfFinal = await PDFLibDocument.create();
+  const fonteRegular = await pdfFinal.embedFont(StandardFonts.Helvetica);
+  const fonteNegrito = await pdfFinal.embedFont(StandardFonts.HelveticaBold);
+
+  const resumoPdf = await PDFLibDocument.load(resumoBuffer);
+  const paginasResumo = await pdfFinal.copyPages(resumoPdf, resumoPdf.getPageIndices());
+  paginasResumo.forEach((page) => pdfFinal.addPage(page));
+
+  for (let i = 0; i < documentosComArquivo.length; i++) {
+    const documento = documentosComArquivo[i];
+    const tituloAnexo = `${i + 1}. ${getDocumentoLabel(documento.tipo_documento)}`;
+    try {
+      const resposta = await fetch(documento.caminho_arquivo);
+      if (!resposta.ok) throw new Error(`HTTP ${resposta.status}`);
+      const bytes = await resposta.arrayBuffer();
+      const contentType = (resposta.headers.get('content-type') || '').toLowerCase();
+      const caminho = String(documento.caminho_arquivo || '').toLowerCase();
+
+      const isPdf = contentType.includes('pdf') || caminho.endsWith('.pdf');
+      const isPng = contentType.includes('png') || caminho.endsWith('.png');
+      const isJpg = contentType.includes('jpeg') || contentType.includes('jpg') || caminho.endsWith('.jpg') || caminho.endsWith('.jpeg');
+
+      if (isPdf) {
+        const anexoPdf = await PDFLibDocument.load(bytes, { ignoreEncryption: true });
+        const paginas = await pdfFinal.copyPages(anexoPdf, anexoPdf.getPageIndices());
+        paginas.forEach((page) => pdfFinal.addPage(page));
+        continue;
+      }
+
+      if (isPng || isJpg) {
+        const page = pdfFinal.addPage([595.28, 841.89]);
+        page.drawText(tituloAnexo, {
+          x: 40,
+          y: 810,
+          size: 12,
+          font: fonteNegrito,
+          color: rgb(0, 0, 0)
+        });
+
+        const imagem = isPng
+          ? await pdfFinal.embedPng(bytes)
+          : await pdfFinal.embedJpg(bytes);
+
+        const larguraMax = 515;
+        const alturaMax = 720;
+        const escala = Math.min(larguraMax / imagem.width, alturaMax / imagem.height);
+        const largura = imagem.width * escala;
+        const altura = imagem.height * escala;
+        const x = 40 + (larguraMax - largura) / 2;
+        const y = 60 + (alturaMax - altura) / 2;
+
+        page.drawImage(imagem, { x, y, width: largura, height: altura });
+        continue;
+      }
+
+      const page = pdfFinal.addPage([595.28, 841.89]);
+      page.drawText(tituloAnexo, { x: 40, y: 810, size: 12, font: fonteNegrito });
+      page.drawText('Este tipo de arquivo não pode ser incorporado automaticamente ao PDF.', { x: 40, y: 780, size: 10, font: fonteRegular });
+    } catch (error) {
+      const page = pdfFinal.addPage([595.28, 841.89]);
+      page.drawText(tituloAnexo, { x: 40, y: 810, size: 12, font: fonteNegrito });
+      page.drawText(`Erro ao incorporar anexo: ${error.message}`, { x: 40, y: 780, size: 10, font: fonteRegular });
+    }
+  }
+
+  const nomeArquivo = `medicao-completa-${medicao.numero || medicaoId}-${new Date().toISOString().split('T')[0]}.pdf`;
+  const pdfBytes = await pdfFinal.save();
+  return { pdfBytes, nomeArquivo };
 };
 
 /**
@@ -351,6 +563,80 @@ router.get('/medicoes/:orcamento_id/pdf', authenticateToken, requirePermission('
         message: error.message
       });
     }
+  }
+});
+
+/**
+ * GET /api/relatorios/medicao/:medicao_id/pdf-completo
+ * Exporta medição completa com anexos em um único PDF
+ */
+router.get('/medicao/:medicao_id/pdf-completo', authenticateToken, requirePermission('obras:visualizar'), async (req, res) => {
+  try {
+    const { medicao_id } = req.params;
+    const medicao = await buscarMedicaoCompleta(medicao_id);
+    const { pdfBytes, nomeArquivo } = await gerarPdfCompletoMedicao(medicao, medicao_id);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=${nomeArquivo}`);
+    return res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    console.error('Erro ao gerar PDF completo da medição:', error);
+    return res.status(500).json({
+      success: false,
+      error: 'Erro ao gerar PDF completo da medição',
+      message: error.message
+    });
+  }
+});
+
+/**
+ * GET /api/relatorios/medicao/publico/pdf/:token
+ * Exporta medição completa com anexos via token público
+ */
+router.get('/medicao/publico/pdf/:token', async (req, res) => {
+  try {
+    const { token } = req.params;
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'Token obrigatório',
+        message: 'Informe o token de acesso'
+      });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, JWT_SECRET);
+    } catch {
+      return res.status(401).json({
+        success: false,
+        error: 'Token inválido',
+        message: 'Link inválido ou expirado'
+      });
+    }
+
+    if (!payload || payload.type !== 'medicao_pdf_publico' || !payload.medicao_id) {
+      return res.status(401).json({
+        success: false,
+        error: 'Token inválido',
+        message: 'Token não corresponde a um link público de medição'
+      });
+    }
+
+    const medicaoId = payload.medicao_id;
+    const medicao = await buscarMedicaoCompleta(medicaoId);
+    const { pdfBytes, nomeArquivo } = await gerarPdfCompletoMedicao(medicao, medicaoId);
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `inline; filename=${nomeArquivo}`);
+    return res.send(Buffer.from(pdfBytes));
+  } catch (error) {
+    const status = error.statusCode || 500;
+    return res.status(status).json({
+      success: false,
+      error: 'Erro ao gerar PDF público da medição',
+      message: error.message
+    });
   }
 });
 

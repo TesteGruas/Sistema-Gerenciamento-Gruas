@@ -1083,12 +1083,19 @@ _Enviado por: ${value.remetente || 'Sistema'}_`
           console.log(`[notificacoes] 📝 Mensagem WhatsApp formatada (primeiros 100 chars):`, mensagemWhatsApp.substring(0, 100) + '...')
 
           // Enviar WhatsApp para cada destinatário único
+          const telefonesProcessados = new Set()
           for (const usuarioId of usuariosUnicos) {
             try {
               console.log(`[notificacoes] 🔍 [${usuarioId}] Buscando telefone WhatsApp...`)
               const telefone = await buscarTelefoneWhatsAppUsuario(usuarioId)
               
               if (telefone) {
+                if (telefonesProcessados.has(telefone)) {
+                  console.log(`[notificacoes] ↩️ [${usuarioId}] Telefone ${telefone} já processado, ignorando envio duplicado`)
+                  continue
+                }
+                telefonesProcessados.add(telefone)
+
                 console.log(`[notificacoes] 📞 [${usuarioId}] Telefone encontrado: ${telefone}`)
                 const resultado = await enviarMensagemWebhook(
                   telefone,

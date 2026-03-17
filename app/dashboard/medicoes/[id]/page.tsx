@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   ArrowLeft, 
@@ -24,10 +25,10 @@ import {
   Building2,
   Forklift,
   Plus,
-  Share2,
-  Edit
+  Edit,
+  Link2,
+  Copy
 } from "lucide-react"
-import { ExportButton } from "@/components/export-button"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -66,7 +67,17 @@ export default function MedicaoDetalhesPage() {
   const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
   const [emailsEnvio, setEmailsEnvio] = useState<string[]>([""])
   const [telefonesEnvio, setTelefonesEnvio] = useState<string[]>([""])
+  const [incluirContatosCliente, setIncluirContatosCliente] = useState(true)
+  const [enviarContatosExtras, setEnviarContatosExtras] = useState(false)
   const [enviando, setEnviando] = useState(false)
+  const [exportandoPdfCompleto, setExportandoPdfCompleto] = useState(false)
+  const [isLinkPublicoDialogOpen, setIsLinkPublicoDialogOpen] = useState(false)
+  const [gerandoLinkPublico, setGerandoLinkPublico] = useState(false)
+  const [linkPublicoPdf, setLinkPublicoPdf] = useState("")
+  const [isAprovarDialogOpen, setIsAprovarDialogOpen] = useState(false)
+  const [isRejeitarDialogOpen, setIsRejeitarDialogOpen] = useState(false)
+  const [observacoesAprovacao, setObservacoesAprovacao] = useState("")
+  const [processandoAprovacao, setProcessandoAprovacao] = useState(false)
 
   useEffect(() => {
     if (params.id) {
@@ -239,14 +250,34 @@ export default function MedicaoDetalhesPage() {
   const handleEnviar = async () => {
     if (!medicao) return
 
-    // Filtrar e-mails e telefones vazios
-    const emailsValidos = emailsEnvio.filter(email => email.trim() !== "")
-    const telefonesValidos = telefonesEnvio.filter(tel => tel.trim() !== "")
+    const emailClientePadrao =
+      medicao.obras?.clientes?.contato_email ||
+      medicao.obras?.clientes?.email ||
+      medicao.orcamentos?.clientes?.contato_email ||
+      medicao.orcamentos?.clientes?.email ||
+      ""
+    const telefoneClientePadrao =
+      medicao.obras?.clientes?.contato_telefone ||
+      medicao.obras?.clientes?.telefone ||
+      medicao.orcamentos?.clientes?.contato_telefone ||
+      medicao.orcamentos?.clientes?.telefone ||
+      ""
 
-    if (emailsValidos.length === 0 && telefonesValidos.length === 0) {
+    // Filtrar e-mails e telefones extras vazios
+    const emailsValidos = enviarContatosExtras
+      ? emailsEnvio.map((email) => email.trim()).filter((email) => email !== "")
+      : []
+    const telefonesValidos = enviarContatosExtras
+      ? telefonesEnvio.map((tel) => tel.trim()).filter((tel) => tel !== "")
+      : []
+
+    const temContatoPadraoSelecionado = incluirContatosCliente && (emailClientePadrao || telefoneClientePadrao)
+    const temContatoExtra = emailsValidos.length > 0 || telefonesValidos.length > 0
+
+    if (!temContatoPadraoSelecionado && !temContatoExtra) {
       toast({
         title: "Atenção",
-        description: "Adicione pelo menos um e-mail ou telefone",
+        description: "Selecione os contatos padrão do cliente ou adicione pelo menos um e-mail/telefone extra",
         variant: "destructive"
       })
       return
@@ -254,12 +285,13 @@ export default function MedicaoDetalhesPage() {
 
     try {
       setEnviando(true)
-      // Enviar para todos os e-mails e telefones
-      // Por enquanto, vamos enviar o primeiro e-mail e telefone (a API pode precisar ser ajustada para múltiplos)
       const response = await medicoesMensaisApi.enviar(
-        medicao.id, 
-        emailsValidos.length > 0 ? emailsValidos[0] : undefined, 
-        telefonesValidos.length > 0 ? telefonesValidos[0] : undefined
+        medicao.id,
+        {
+          incluir_contatos_cliente: incluirContatosCliente,
+          emails_adicionais: emailsValidos,
+          telefones_adicionais: telefonesValidos
+        }
       )
       if (response.success) {
         toast({
@@ -269,6 +301,8 @@ export default function MedicaoDetalhesPage() {
         setIsEnviarDialogOpen(false)
         setEmailsEnvio([""])
         setTelefonesEnvio([""])
+        setIncluirContatosCliente(true)
+        setEnviarContatosExtras(false)
         await carregarMedicao(medicao.id)
       }
     } catch (error: any) {
@@ -314,6 +348,157 @@ export default function MedicaoDetalhesPage() {
     setTelefonesEnvio(novosTelefones)
   }
 
+  const abrirDialogLinkPublico = async () => {
+    if (!medicao) return
+    try {
+      setGerandoLinkPublico(true)
+      const response = await medicoesMensaisApi.gerarLinkPublicoPdf(medicao.id)
+      if (response.success && response.data?.url) {
+        const origem = typeof window !== 'undefined' ? window.location.origin : ''
+        setLinkPublicoPdf(`${origem}${response.data.url}`)
+        setIsLinkPublicoDialogOpen(true)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível gerar o link público",
+        variant: "destructive"
+      })
+    } finally {
+      setGerandoLinkPublico(false)
+    }
+  }
+
+  const copiarLinkPublico = async () => {
+    if (!linkPublicoPdf) return
+    try {
+      await navigator.clipboard.writeText(linkPublicoPdf)
+      toast({
+        title: "Link copiado",
+        description: "Link público copiado para a área de transferência"
+      })
+    } catch {
+      toast({
+        title: "Atenção",
+        description: "Não foi possível copiar automaticamente. Copie manualmente.",
+        variant: "destructive"
+      })
+    }
+  }
+
+  const exportarPdfCompleto = async () => {
+    if (!medicao) return
+    try {
+      setExportandoPdfCompleto(true)
+      const token = localStorage.getItem('access_token')
+      const response = await fetch(`/api/relatorios/medicao/${medicao.id}/pdf-completo`, {
+        method: 'GET',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      })
+
+      if (!response.ok) {
+        throw new Error(`Falha ao exportar PDF completo (${response.status})`)
+      }
+
+      const blob = await response.blob()
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `medicao-completa-${medicao.numero || medicao.id}.pdf`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(url)
+
+      toast({
+        title: "Sucesso",
+        description: "PDF completo exportado com sucesso"
+      })
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Não foi possível exportar o PDF completo",
+        variant: "destructive"
+      })
+    } finally {
+      setExportandoPdfCompleto(false)
+    }
+  }
+
+  const fecharDialogsAprovacao = () => {
+    setIsAprovarDialogOpen(false)
+    setIsRejeitarDialogOpen(false)
+    setObservacoesAprovacao("")
+  }
+
+  const handleAprovarMedicao = async () => {
+    if (!medicao) return
+
+    try {
+      setProcessandoAprovacao(true)
+      const response = await medicoesMensaisApi.aprovar(
+        medicao.id,
+        'aprovada',
+        observacoesAprovacao.trim() || undefined
+      )
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Medição aprovada com sucesso"
+        })
+        fecharDialogsAprovacao()
+        await carregarMedicao(medicao.id)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao aprovar medição",
+        variant: "destructive"
+      })
+    } finally {
+      setProcessandoAprovacao(false)
+    }
+  }
+
+  const handleRejeitarMedicao = async () => {
+    if (!medicao) return
+    if (!observacoesAprovacao.trim()) {
+      toast({
+        title: "Atenção",
+        description: "Informe o motivo da rejeição",
+        variant: "destructive"
+      })
+      return
+    }
+
+    try {
+      setProcessandoAprovacao(true)
+      const response = await medicoesMensaisApi.aprovar(
+        medicao.id,
+        'rejeitada',
+        observacoesAprovacao.trim()
+      )
+
+      if (response.success) {
+        toast({
+          title: "Sucesso",
+          description: "Medição rejeitada"
+        })
+        fecharDialogsAprovacao()
+        await carregarMedicao(medicao.id)
+      }
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error.message || "Erro ao rejeitar medição",
+        variant: "destructive"
+      })
+    } finally {
+      setProcessandoAprovacao(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -329,9 +514,42 @@ export default function MedicaoDetalhesPage() {
     return null
   }
 
+  const podeAprovarNoDashboard =
+    medicao.status === 'enviada' &&
+    (!medicao.status_aprovacao || medicao.status_aprovacao === 'pendente')
+  const motivoBloqueioAprovacao =
+    medicao.status !== 'enviada'
+      ? 'A medição precisa estar enviada ao cliente para aprovar/rejeitar.'
+      : medicao.status_aprovacao === 'aprovada'
+        ? 'Esta medição já foi aprovada.'
+        : medicao.status_aprovacao === 'rejeitada'
+          ? 'Esta medição já foi rejeitada.'
+          : 'Aprovação indisponível no momento.'
+
   const documentosPdf = documentos.filter((d) => d.tipo_documento === 'medicao_pdf')
   const documentoPrincipalPdf = documentosPdf.find((d) => !(d.observacoes || '').toLowerCase().includes('anexo adicional')) || documentosPdf[0]
   const anexosAdicionais = documentosPdf.filter((d) => d.id !== documentoPrincipalPdf?.id)
+  const emailClientePadrao =
+    medicao.obras?.clientes?.contato_email ||
+    medicao.obras?.clientes?.email ||
+    medicao.orcamentos?.clientes?.contato_email ||
+    medicao.orcamentos?.clientes?.email ||
+    ""
+  const telefoneClientePadrao =
+    medicao.obras?.clientes?.contato_telefone ||
+    medicao.obras?.clientes?.telefone ||
+    medicao.orcamentos?.clientes?.contato_telefone ||
+    medicao.orcamentos?.clientes?.telefone ||
+    ""
+  const temContatoClientePadrao = Boolean(emailClientePadrao || telefoneClientePadrao)
+
+  const abrirDialogEnviar = () => {
+    setIncluirContatosCliente(temContatoClientePadrao)
+    setEnviarContatosExtras(false)
+    setEmailsEnvio([""])
+    setTelefonesEnvio([""])
+    setIsEnviarDialogOpen(true)
+  }
 
   return (
     <div className="space-y-4 p-4">
@@ -357,35 +575,53 @@ export default function MedicaoDetalhesPage() {
           {getStatusBadge(medicao.status)}
           {getAprovacaoBadge(medicao.status_aprovacao)}
           <Button
+            variant="default"
+            onClick={() => setIsAprovarDialogOpen(true)}
+            disabled={!podeAprovarNoDashboard}
+            title={!podeAprovarNoDashboard ? motivoBloqueioAprovacao : "Aprovar medição"}
+          >
+            <CheckCircle className="w-4 h-4 mr-2" />
+            Aprovar
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => setIsRejeitarDialogOpen(true)}
+            disabled={!podeAprovarNoDashboard}
+            title={!podeAprovarNoDashboard ? motivoBloqueioAprovacao : "Rejeitar medição"}
+          >
+            <XCircle className="w-4 h-4 mr-2" />
+            Rejeitar
+          </Button>
+          <Button
             variant="outline"
             onClick={() => router.push(`/dashboard/medicoes/${medicao.id}/editar`)}
           >
             <Edit className="w-4 h-4 mr-2" />
             Editar
           </Button>
-          <ExportButton
-            dados={[medicao]}
-            tipo="medicoes"
-            nomeArquivo={`medicao-${medicao.numero}`}
-            titulo={`Medição ${medicao.numero}`}
-            variant="outline"
-          />
           <Button
             variant="outline"
-            onClick={() => setIsEnviarDialogOpen(true)}
+            onClick={exportarPdfCompleto}
+            disabled={exportandoPdfCompleto}
           >
-            <Share2 className="w-4 h-4 mr-2" />
-            Compartilhar
+            <Download className="w-4 h-4 mr-2" />
+            {exportandoPdfCompleto ? "Exportando..." : "Exportar PDF Completo"}
           </Button>
-          {medicao.status === 'finalizada' && medicao.status !== 'enviada' && (
-            <Button
-              variant="default"
-              onClick={() => setIsEnviarDialogOpen(true)}
-            >
-              <Send className="w-4 h-4 mr-2" />
-              Enviar ao Cliente
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            onClick={abrirDialogLinkPublico}
+            disabled={gerandoLinkPublico}
+          >
+            <Link2 className="w-4 h-4 mr-2" />
+            {gerandoLinkPublico ? "Gerando..." : "Link Público PDF"}
+          </Button>
+          <Button
+            variant="outline"
+            onClick={abrirDialogEnviar}
+          >
+            <Send className="w-4 h-4 mr-2" />
+            Enviar
+          </Button>
         </div>
       </div>
 
@@ -501,6 +737,80 @@ export default function MedicaoDetalhesPage() {
             </Card>
           )}
 
+          {/* Histórico de Status da Medição */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Histórico de Status da Medição</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              <div className="space-y-2">
+                <div className="border rounded-md p-2 bg-gray-50">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-medium">Criada</p>
+                      <p className="text-xs text-gray-500">Registro inicial da medição</p>
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      {medicao.created_at
+                        ? format(new Date(medicao.created_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                        : "-"}
+                    </p>
+                  </div>
+                </div>
+
+                {medicao.data_finalizacao && (
+                  <div className="border rounded-md p-2 bg-gray-50">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">Finalizada</p>
+                        <p className="text-xs text-gray-500">Medição pronta para envio ao cliente</p>
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        {format(new Date(medicao.data_finalizacao), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {medicao.data_envio && (
+                  <div className="border rounded-md p-2 bg-gray-50">
+                    <div className="flex items-center justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-medium">Enviada ao Cliente</p>
+                        <p className="text-xs text-gray-500">Aguardando aprovação/rejeição</p>
+                      </div>
+                      <p className="text-xs text-gray-600">
+                        {format(new Date(medicao.data_envio), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="border rounded-md p-2 bg-gray-50">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1">
+                      <p className="text-sm font-medium">Status Atual</p>
+                      <div>{getStatusBadge(medicao.status)}</div>
+                      <div>{getAprovacaoBadge(medicao.status_aprovacao) || <p className="text-xs text-gray-500">Sem aprovação registrada</p>}</div>
+                      {medicao.observacoes_aprovacao && (
+                        <p className="text-xs text-gray-600 whitespace-pre-wrap">
+                          Observação: {medicao.observacoes_aprovacao}
+                        </p>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-600">
+                      {medicao.data_aprovacao
+                        ? format(new Date(medicao.data_aprovacao), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                        : medicao.updated_at
+                          ? format(new Date(medicao.updated_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })
+                          : "-"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Observações */}
           {medicao.observacoes && (
             <Card>
@@ -512,6 +822,7 @@ export default function MedicaoDetalhesPage() {
               </CardContent>
             </Card>
           )}
+
         </div>
 
         {/* Documentos */}
@@ -782,106 +1093,254 @@ export default function MedicaoDetalhesPage() {
       <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Compartilhar Medição</DialogTitle>
+            <DialogTitle>Enviar Medição ao Cliente</DialogTitle>
             <DialogDescription>
-              Adicione os e-mails e telefones (WhatsApp) para envio das notificações
+              Envie para os contatos padrão do cliente e, se quiser, adicione contatos extras.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            {/* E-mails */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label>E-mails</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={adicionarEmail}
-                  className="h-7 text-xs"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Adicionar
-                </Button>
+            <div className="rounded-md border p-3 space-y-2 bg-gray-50">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-sm">Contatos padrão do cliente</Label>
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={incluirContatosCliente}
+                    onChange={(e) => setIncluirContatosCliente(e.target.checked)}
+                    disabled={!temContatoClientePadrao}
+                  />
+                  Incluir no envio
+                </label>
               </div>
-              <div className="space-y-2">
-                {emailsEnvio.map((email, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      type="email"
-                      value={email}
-                      onChange={(e) => atualizarEmail(index, e.target.value)}
-                      placeholder="email@exemplo.com"
-                      className="bg-white flex-1"
-                    />
-                    {emailsEnvio.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removerEmail(index)}
-                        className="h-9 w-9 p-0"
-                      >
-                        <XCircle className="w-4 h-4 text-red-500" />
-                      </Button>
-                    )}
-                  </div>
-                ))}
-              </div>
+              <p className="text-xs text-gray-600">
+                E-mail: {emailClientePadrao || "Não cadastrado"} | WhatsApp: {telefoneClientePadrao || "Não cadastrado"}
+              </p>
+              {!temContatoClientePadrao && (
+                <p className="text-xs text-amber-600">
+                  Este cliente não possui contato padrão cadastrado.
+                </p>
+              )}
             </div>
 
-            {/* Telefones */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <Label>Telefones (WhatsApp)</Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={adicionarTelefone}
-                  className="h-7 text-xs"
-                >
-                  <Plus className="w-3 h-3 mr-1" />
-                  Adicionar
-                </Button>
-              </div>
-              <div className="space-y-2">
-                {telefonesEnvio.map((telefone, index) => (
-                  <div key={index} className="flex gap-2">
-                    <Input
-                      value={telefone}
-                      onChange={(e) => atualizarTelefone(index, e.target.value)}
-                      placeholder="5511999999999"
-                      className="bg-white flex-1"
-                    />
-                    {telefonesEnvio.length > 1 && (
+            <div className="rounded-md border p-3 space-y-3">
+              <label className="flex items-center gap-2 text-sm font-medium">
+                <input
+                  type="checkbox"
+                  checked={enviarContatosExtras}
+                  onChange={(e) => setEnviarContatosExtras(e.target.checked)}
+                />
+                Deseja enviar para outro e-mail/telefone além do padrão?
+              </label>
+
+              {enviarContatosExtras && (
+                <div className="space-y-4">
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label>E-mails adicionais</Label>
                       <Button
                         type="button"
-                        variant="ghost"
+                        variant="outline"
                         size="sm"
-                        onClick={() => removerTelefone(index)}
-                        className="h-9 w-9 p-0"
+                        onClick={adicionarEmail}
+                        className="h-7 text-xs"
                       >
-                        <XCircle className="w-4 h-4 text-red-500" />
+                        <Plus className="w-3 h-3 mr-1" />
+                        Adicionar
                       </Button>
-                    )}
+                    </div>
+                    <div className="space-y-2">
+                      {emailsEnvio.map((email, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            type="email"
+                            value={email}
+                            onChange={(e) => atualizarEmail(index, e.target.value)}
+                            placeholder="email@exemplo.com"
+                            className="bg-white flex-1"
+                          />
+                          {emailsEnvio.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removerEmail(index)}
+                              className="h-9 w-9 p-0"
+                            >
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                ))}
-              </div>
+
+                  <div>
+                    <div className="flex items-center justify-between mb-2">
+                      <Label>Telefones adicionais (WhatsApp)</Label>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={adicionarTelefone}
+                        className="h-7 text-xs"
+                      >
+                        <Plus className="w-3 h-3 mr-1" />
+                        Adicionar
+                      </Button>
+                    </div>
+                    <div className="space-y-2">
+                      {telefonesEnvio.map((telefone, index) => (
+                        <div key={index} className="flex gap-2">
+                          <Input
+                            value={telefone}
+                            onChange={(e) => atualizarTelefone(index, e.target.value)}
+                            placeholder="5511999999999"
+                            className="bg-white flex-1"
+                          />
+                          {telefonesEnvio.length > 1 && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => removerTelefone(index)}
+                              className="h-9 w-9 p-0"
+                            >
+                              <XCircle className="w-4 h-4 text-red-500" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
           <DialogFooter>
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => {
                 setIsEnviarDialogOpen(false)
                 setEmailsEnvio([""])
                 setTelefonesEnvio([""])
+                setIncluirContatosCliente(true)
+                setEnviarContatosExtras(false)
               }}
             >
               Cancelar
             </Button>
             <Button onClick={handleEnviar} disabled={enviando}>
               {enviando ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Aprovar Medição */}
+      <Dialog open={isAprovarDialogOpen} onOpenChange={setIsAprovarDialogOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Aprovar medição</DialogTitle>
+            <DialogDescription>
+              Confirme a aprovação da medição {medicao.numero}. Você pode adicionar uma observação opcional.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="observacoes-aprovacao">Observações (opcional)</Label>
+            <Textarea
+              id="observacoes-aprovacao"
+              value={observacoesAprovacao}
+              onChange={(e) => setObservacoesAprovacao(e.target.value)}
+              placeholder="Observações da aprovação..."
+              className="bg-white min-h-24"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={fecharDialogsAprovacao}
+              disabled={processandoAprovacao}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAprovarMedicao}
+              disabled={processandoAprovacao}
+            >
+              {processandoAprovacao ? "Aprovando..." : "Confirmar aprovação"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Rejeitar Medição */}
+      <Dialog open={isRejeitarDialogOpen} onOpenChange={setIsRejeitarDialogOpen}>
+        <DialogContent className="sm:max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle>Rejeitar medição</DialogTitle>
+            <DialogDescription>
+              Informe o motivo da rejeição da medição {medicao.numero}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="observacoes-rejeicao">Motivo da rejeição *</Label>
+            <Textarea
+              id="observacoes-rejeicao"
+              value={observacoesAprovacao}
+              onChange={(e) => setObservacoesAprovacao(e.target.value)}
+              placeholder="Descreva o motivo da rejeição..."
+              className="bg-white min-h-24"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={fecharDialogsAprovacao}
+              disabled={processandoAprovacao}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleRejeitarMedicao}
+              disabled={processandoAprovacao}
+            >
+              {processandoAprovacao ? "Rejeitando..." : "Confirmar rejeição"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Link Publico PDF */}
+      <Dialog open={isLinkPublicoDialogOpen} onOpenChange={setIsLinkPublicoDialogOpen}>
+        <DialogContent className="sm:max-w-[700px]">
+          <DialogHeader>
+            <DialogTitle>Link Público do PDF da Medição</DialogTitle>
+            <DialogDescription>
+              Compartilhe este link para acesso público ao PDF principal da medição.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="link-publico-medicao">Link</Label>
+            <div className="flex gap-2">
+              <Input
+                id="link-publico-medicao"
+                value={linkPublicoPdf}
+                readOnly
+                className="bg-white"
+              />
+              <Button type="button" variant="outline" onClick={copiarLinkPublico}>
+                <Copy className="w-4 h-4 mr-2" />
+                Copiar
+              </Button>
+            </div>
+            <p className="text-xs text-gray-500">
+              O link é temporário e pode expirar automaticamente por segurança.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsLinkPublicoDialogOpen(false)}>
+              Fechar
             </Button>
           </DialogFooter>
         </DialogContent>

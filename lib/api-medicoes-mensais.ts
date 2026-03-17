@@ -40,6 +40,10 @@ export interface MedicaoMensal {
       id: number;
       nome: string;
       cnpj_cpf?: string;
+      email?: string;
+      telefone?: string;
+      contato_email?: string;
+      contato_telefone?: string;
     };
   };
   obras?: {
@@ -51,6 +55,10 @@ export interface MedicaoMensal {
       id: number;
       nome: string;
       cnpj?: string;
+      email?: string;
+      telefone?: string;
+      contato_email?: string;
+      contato_telefone?: string;
     };
   };
   gruas?: { // NOVO
@@ -82,6 +90,20 @@ export interface MedicaoDocumento {
   observacoes?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface EnviarMedicaoOptions {
+  email?: string;
+  telefone?: string;
+  emails_adicionais?: string[];
+  telefones_adicionais?: string[];
+  incluir_contatos_cliente?: boolean;
+}
+
+export interface LinkPublicoMedicaoPdf {
+  token: string;
+  url: string;
+  expires_at: string;
 }
 
 export interface MedicaoCustoMensal {
@@ -280,8 +302,28 @@ export const medicoesMensaisApi = {
   /**
    * Enviar medição ao cliente
    */
-  async enviar(id: number, email?: string, telefone?: string): Promise<{ success: boolean; data: MedicaoMensal; message: string }> {
-    const response = await api.patch(`/medicoes-mensais/${id}/enviar`, { email, telefone });
+  async enviar(
+    id: number,
+    emailOuOpcoes?: string | EnviarMedicaoOptions,
+    telefone?: string
+  ): Promise<{ success: boolean; data: MedicaoMensal; message: string }> {
+    const payload =
+      typeof emailOuOpcoes === 'object' && emailOuOpcoes !== null
+        ? emailOuOpcoes
+        : { email: emailOuOpcoes, telefone };
+
+    const response = await api.patch(`/medicoes-mensais/${id}/enviar`, payload);
+    return response.data;
+  },
+
+  /**
+   * Gerar link publico para PDF da medicao
+   */
+  async gerarLinkPublicoPdf(
+    id: number,
+    expiracao_horas = 168
+  ): Promise<{ success: boolean; data: LinkPublicoMedicaoPdf; message: string }> {
+    const response = await api.post(`/medicoes-mensais/${id}/link-publico-pdf`, { expiracao_horas });
     return response.data;
   },
 
