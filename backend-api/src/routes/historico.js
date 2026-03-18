@@ -5,6 +5,155 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js';
 
 const router = express.Router();
 
+const COLUNAS_DATA_CANDIDATAS = [
+  'updated_at',
+  'created_at',
+  'criado_em',
+  'data_cadastro',
+  'data_criacao',
+  'data',
+  'timestamp'
+];
+
+const TABELAS_CRUD_FALLBACK = [
+  { tabela: 'gruas', entidade: 'gruas', nomeExibicao: 'Grua' },
+  { tabela: 'obras', entidade: 'obras', nomeExibicao: 'Obra' },
+  { tabela: 'clientes', entidade: 'clientes', nomeExibicao: 'Cliente' },
+  { tabela: 'usuarios', entidade: 'usuarios', nomeExibicao: 'Usuário' },
+  { tabela: 'funcionarios', entidade: 'funcionarios', nomeExibicao: 'Funcionário' },
+  { tabela: 'contratos', entidade: 'contratos', nomeExibicao: 'Contrato' },
+  { tabela: 'orcamentos', entidade: 'orcamentos', nomeExibicao: 'Orçamento' },
+  { tabela: 'fornecedores', entidade: 'fornecedores', nomeExibicao: 'Fornecedor' },
+  { tabela: 'produtos', entidade: 'produtos', nomeExibicao: 'Produto' },
+  { tabela: 'compras', entidade: 'compras', nomeExibicao: 'Compra' },
+  { tabela: 'vendas', entidade: 'vendas', nomeExibicao: 'Venda' },
+  { tabela: 'locacoes', entidade: 'locacoes', nomeExibicao: 'Locação' },
+  { tabela: 'medicoes', entidade: 'medicoes', nomeExibicao: 'Medição' },
+  { tabela: 'aditivos', entidade: 'aditivos', nomeExibicao: 'Aditivo' },
+  { tabela: 'contas_pagar', entidade: 'contas_pagar', nomeExibicao: 'Conta a pagar' },
+  { tabela: 'contas_receber', entidade: 'contas_receber', nomeExibicao: 'Conta a receber' },
+  { tabela: 'alugueis_residencias', entidade: 'alugueis_residencias', nomeExibicao: 'Aluguel' },
+  { tabela: 'cobrancas_aluguel', entidade: 'cobrancas_aluguel', nomeExibicao: 'Cobrança de aluguel' }
+];
+
+const normalizarAcao = (valor) => {
+  const acao = String(valor || '').toLowerCase().trim();
+
+  if (!acao) return '';
+  if (acao.includes('cria') || acao === 'insert' || acao === 'inserir') return 'criar';
+  if (acao.includes('edit') || acao.includes('atualiz') || acao === 'update' || acao === 'alterar') return 'editar';
+  if (acao.includes('delet') || acao.includes('exclu') || acao === 'delete' || acao === 'remover') return 'deletar';
+  if (acao.includes('visualiz') || acao === 'view' || acao === 'consultar') return 'visualizar';
+
+  return acao;
+};
+
+const extrairNomeRegistro = (registro) => {
+  return (
+    registro?.nome ||
+    registro?.name ||
+    registro?.titulo ||
+    registro?.descricao ||
+    registro?.codigo ||
+    registro?.email ||
+    registro?.modelo ||
+    registro?.numero ||
+    registro?.id
+  );
+};
+
+const inferirAcaoCrud = (registro) => {
+  const createdAt = registro?.created_at || registro?.criado_em || registro?.data_cadastro || registro?.data_criacao;
+  const updatedAt = registro?.updated_at;
+  const deletedAt = registro?.deleted_at || registro?.excluido_em;
+  const status = String(registro?.status || '').toLowerCase();
+
+  if (deletedAt || status.includes('exclu') || status.includes('inativ')) {
+    return 'deletar';
+  }
+
+  if (createdAt && updatedAt && new Date(updatedAt).getTime() > new Date(createdAt).getTime()) {
+    return 'editar';
+  }
+
+  return 'criar';
+};
+
+const buscarRegistrosRecentes = async (tabela, limite) => {
+  for (const colunaData of COLUNAS_DATA_CANDIDATAS) {
+    const { data, error } = await supabaseAdmin
+      .from(tabela)
+      .select('*')
+      .order(colunaData, { ascending: false })
+      .limit(limite);
+
+    if (!error) {
+      return {
+        registros: data || [],
+        colunaDataUsada: colunaData
+      };
+    }
+  }
+
+  return {
+    registros: [],
+    colunaDataUsada: null
+  };
+};
+
+const construirEventosCrudFallback = async ({ modulo, acao, limitePorTabela }) => {
+  const tabelasFiltradas = TABELAS_CRUD_FALLBACK.filter((config) => {
+    if (!modulo || modulo === 'todos') return true;
+    return config.entidade === modulo;
+  });
+
+  const resultados = await Promise.all(
+    tabelasFiltradas.map(async (config) => {
+      const { registros, colunaDataUsada } = await buscarRegistrosRecentes(config.tabela, limitePorTabela);
+
+      return registros.map((registro) => {
+        const timestamp =
+          registro?.[colunaDataUsada] ||
+          registro?.updated_at ||
+          registro?.created_at ||
+          registro?.criado_em ||
+          registro?.data_cadastro ||
+          registro?.data_criacao ||
+          registro?.data ||
+          registro?.timestamp;
+
+        const acaoRegistro = inferirAcaoCrud(registro);
+        const acaoFiltrada = normalizarAcao(acao);
+
+        if (acaoFiltrada && acaoFiltrada !== 'todas' && normalizarAcao(acaoRegistro) !== acaoFiltrada) {
+          return null;
+        }
+
+        const nomeRegistro = extrairNomeRegistro(registro);
+        const idRegistro = registro?.id ?? registro?.uuid ?? registro?.codigo ?? null;
+        const usuarioId = registro?.usuario_id ?? registro?.criado_por ?? registro?.updated_by ?? null;
+
+        if (!timestamp) return null;
+
+        return {
+          id: `crud_${config.tabela}_${idRegistro ?? Math.random().toString(36).slice(2)}`,
+          tipo: 'auditoria',
+          timestamp,
+          usuario_id: usuarioId,
+          acao: acaoRegistro,
+          entidade: config.entidade,
+          entidade_id: idRegistro,
+          titulo: `${config.nomeExibicao} ${acaoRegistro === 'criar' ? 'criado' : acaoRegistro === 'editar' ? 'atualizado' : 'removido'}`,
+          descricao: nomeRegistro ? String(nomeRegistro) : '',
+          usuario_nome: usuarioId ? `Usuário ${usuarioId}` : 'Sistema'
+        };
+      }).filter(Boolean);
+    })
+  );
+
+  return resultados.flat();
+};
+
 // Schema de validação
 const historicoSchema = Joi.object({
   grua_id: Joi.number().integer().positive().required(),
@@ -163,6 +312,8 @@ router.get('/geral', authenticateToken, requirePermission('historico:visualizar'
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
     const { modulo, acao } = req.query;
+    const acaoNormalizada = normalizarAcao(acao);
+    const limitePorFonte = Math.max(limit * 3, 100);
 
     const todasAtividades = [];
 
@@ -175,14 +326,14 @@ router.get('/geral', authenticateToken, requirePermission('historico:visualizar'
     if (modulo && modulo !== 'todos') {
       queryAuditoria = queryAuditoria.eq('entidade', modulo);
     }
-    if (acao && acao !== 'todas') {
-      queryAuditoria = queryAuditoria.eq('acao', acao);
-    }
-
     const { data: logsAuditoria, error: auditoriaError } = await queryAuditoria;
 
     if (!auditoriaError && logsAuditoria) {
       logsAuditoria.forEach(log => {
+        if (acaoNormalizada && acaoNormalizada !== 'todas' && normalizarAcao(log.acao) !== acaoNormalizada) {
+          return;
+        }
+
         todasAtividades.push({
           id: `auditoria_${log.id}`,
           tipo: 'auditoria',
@@ -315,12 +466,52 @@ router.get('/geral', authenticateToken, requirePermission('historico:visualizar'
       }
     }
 
+    // 5. Fallback: gerar histórico CRUD para entidades que não possuem log dedicado
+    // Isso mantém a aba "Geral" útil mesmo quando logs_auditoria não está populada.
+    const eventosCrudFallback = await construirEventosCrudFallback({
+      modulo,
+      acao,
+      limitePorTabela: limitePorFonte
+    });
+
+    todasAtividades.push(...eventosCrudFallback);
+
+    // Resolver nome do usuário quando possível para evitar "Usuário X" em massa.
+    const usuarioIds = [...new Set(
+      todasAtividades
+        .map((atividade) => atividade.usuario_id)
+        .filter((usuarioId) => usuarioId !== null && usuarioId !== undefined)
+    )];
+
+    if (usuarioIds.length > 0) {
+      const { data: usuarios } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, nome, email')
+        .in('id', usuarioIds);
+
+      const mapaUsuarios = new Map((usuarios || []).map((usuario) => [
+        usuario.id,
+        usuario.nome || usuario.email || `Usuário ${usuario.id}`
+      ]));
+
+      todasAtividades.forEach((atividade) => {
+        if (!atividade.usuario_id) return;
+        atividade.usuario_nome = mapaUsuarios.get(atividade.usuario_id) || atividade.usuario_nome || `Usuário ${atividade.usuario_id}`;
+      });
+    }
+
+    // Filtro de ação no agregado final (cobre todas as fontes)
+    const atividadesFiltradasPorAcao =
+      acaoNormalizada && acaoNormalizada !== 'todas'
+        ? todasAtividades.filter((atividade) => normalizarAcao(atividade.acao) === acaoNormalizada)
+        : todasAtividades;
+
     // Ordenar todas as atividades por timestamp (mais recente primeiro)
-    todasAtividades.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    atividadesFiltradasPorAcao.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
 
     // Aplicar paginação
-    const total = todasAtividades.length;
-    const atividadesPaginadas = todasAtividades.slice(offset, offset + limit);
+    const total = atividadesFiltradasPorAcao.length;
+    const atividadesPaginadas = atividadesFiltradasPorAcao.slice(offset, offset + limit);
     const totalPages = Math.ceil(total / limit);
 
     res.json({
