@@ -147,18 +147,24 @@ const apiRequest = async (url: string, options: RequestInit = {}) => {
 
 // ==================== API FUNCTIONS ====================
 
+// Garante exatamente um prefixo /api antes dos endpoints de colaboradores/documentos
+const buildColaboradoresUrl = (endpoint: string): string => {
+  const clean = endpoint.replace(/^\/+/, '').replace(/^api\/+/, '')
+  return buildApiUrl(`api/${clean}`).replace(/\/api\/api\//g, '/api/')
+}
+
 export const colaboradoresDocumentosApi = {
   // ==================== CERTIFICADOS ====================
   certificados: {
     // Listar certificados do colaborador
     async listar(colaboradorId: number): Promise<CertificadosResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/certificados`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/certificados`)
       return apiRequest(url)
     },
 
     // Criar certificado
     async criar(colaboradorId: number, data: CertificadoCreateData): Promise<CertificadoResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/certificados`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/certificados`)
       return apiRequest(url, {
         method: 'POST',
         headers: {
@@ -170,7 +176,7 @@ export const colaboradoresDocumentosApi = {
 
     // Atualizar certificado
     async atualizar(certificadoId: string, data: CertificadoUpdateData): Promise<CertificadoResponse> {
-      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}`)
+      const url = buildColaboradoresUrl(`colaboradores/certificados/${certificadoId}`)
       return apiRequest(url, {
         method: 'PUT',
         headers: {
@@ -182,7 +188,7 @@ export const colaboradoresDocumentosApi = {
 
     // Excluir certificado
     async excluir(certificadoId: string): Promise<{ success: boolean; message: string }> {
-      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}`)
+      const url = buildColaboradoresUrl(`colaboradores/certificados/${certificadoId}`)
       return apiRequest(url, {
         method: 'DELETE',
       })
@@ -190,13 +196,13 @@ export const colaboradoresDocumentosApi = {
 
     // Listar certificados vencendo em até 30 dias
     async listarVencendo(): Promise<CertificadosResponse> {
-      const url = buildApiUrl('colaboradores/certificados/vencendo')
+      const url = buildColaboradoresUrl('colaboradores/certificados/vencendo')
       return apiRequest(url)
     },
 
     // Adicionar assinatura digital ao certificado
     async assinar(certificadoId: string, data: CertificadoAssinaturaData): Promise<CertificadoResponse> {
-      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}/assinatura`)
+      const url = buildColaboradoresUrl(`colaboradores/certificados/${certificadoId}/assinatura`)
       return apiRequest(url, {
         method: 'PUT',
         headers: {
@@ -208,7 +214,7 @@ export const colaboradoresDocumentosApi = {
 
     // Baixar certificado (com opção de incluir assinatura)
     async baixar(certificadoId: string, comAssinatura: boolean = false): Promise<Blob> {
-      const url = buildApiUrl(`colaboradores/certificados/${certificadoId}/download`)
+      const url = buildColaboradoresUrl(`colaboradores/certificados/${certificadoId}/download`)
       const params = comAssinatura ? { comAssinatura: 'true' } : {}
       
       const response = await fetchWithAuth(url + (Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''), {
@@ -228,13 +234,13 @@ export const colaboradoresDocumentosApi = {
   documentosAdmissionais: {
     // Listar documentos admissionais do colaborador
     async listar(colaboradorId: number): Promise<DocumentosAdmissionaisResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/documentos-admissionais`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/documentos-admissionais`)
       return apiRequest(url)
     },
 
     // Criar documento admissional
     async criar(colaboradorId: number, data: DocumentoAdmissionalCreateData): Promise<DocumentoAdmissionalResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/documentos-admissionais`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/documentos-admissionais`)
       return apiRequest(url, {
         method: 'POST',
         headers: {
@@ -246,7 +252,7 @@ export const colaboradoresDocumentosApi = {
 
     // Atualizar documento admissional
     async atualizar(documentoId: string, data: DocumentoAdmissionalUpdateData): Promise<DocumentoAdmissionalResponse> {
-      const url = buildApiUrl(`colaboradores/documentos-admissionais/${documentoId}`)
+      const url = buildColaboradoresUrl(`colaboradores/documentos-admissionais/${documentoId}`)
       return apiRequest(url, {
         method: 'PUT',
         headers: {
@@ -258,7 +264,7 @@ export const colaboradoresDocumentosApi = {
 
     // Excluir documento admissional
     async excluir(documentoId: string): Promise<{ success: boolean; message: string }> {
-      const url = buildApiUrl(`colaboradores/documentos-admissionais/${documentoId}`)
+      const url = buildColaboradoresUrl(`colaboradores/documentos-admissionais/${documentoId}`)
       return apiRequest(url, {
         method: 'DELETE',
       })
@@ -266,7 +272,7 @@ export const colaboradoresDocumentosApi = {
 
     // Listar documentos admissionais vencendo em até 30 dias
     async listarVencendo(): Promise<DocumentosAdmissionaisResponse> {
-      const url = buildApiUrl('colaboradores/documentos-admissionais/vencendo')
+      const url = buildColaboradoresUrl('colaboradores/documentos-admissionais/vencendo')
       return apiRequest(url)
     },
   },
@@ -275,13 +281,13 @@ export const colaboradoresDocumentosApi = {
   holerites: {
     // Listar holerites do colaborador
     async listar(colaboradorId: number): Promise<HoleritesResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/holerites`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/holerites`)
       return apiRequest(url)
     },
 
     // Criar ou atualizar holerite
     async criar(colaboradorId: number, data: HoleriteCreateData): Promise<HoleriteResponse> {
-      const url = buildApiUrl(`colaboradores/${colaboradorId}/holerites`)
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/holerites`)
       return apiRequest(url, {
         method: 'POST',
         headers: {
@@ -293,7 +299,7 @@ export const colaboradoresDocumentosApi = {
 
     // Adicionar assinatura digital ao holerite
     async assinar(holeriteId: string, data: HoleriteAssinaturaData): Promise<HoleriteResponse> {
-      const url = buildApiUrl(`colaboradores/holerites/${holeriteId}/assinatura`)
+      const url = buildColaboradoresUrl(`colaboradores/holerites/${holeriteId}/assinatura`)
       return apiRequest(url, {
         method: 'PUT',
         headers: {
@@ -305,7 +311,7 @@ export const colaboradoresDocumentosApi = {
 
     // Excluir holerite
     async excluir(holeriteId: string): Promise<{ success: boolean; message: string }> {
-      const url = buildApiUrl(`colaboradores/holerites/${holeriteId}`)
+      const url = buildColaboradoresUrl(`colaboradores/holerites/${holeriteId}`)
       return apiRequest(url, {
         method: 'DELETE',
       })
@@ -313,7 +319,7 @@ export const colaboradoresDocumentosApi = {
 
     // Baixar holerite (com opção de incluir assinatura)
     async baixar(holeriteId: string, comAssinatura: boolean = false): Promise<Blob> {
-      const url = buildApiUrl(`colaboradores/holerites/${holeriteId}/download`)
+      const url = buildColaboradoresUrl(`colaboradores/holerites/${holeriteId}/download`)
       const params = comAssinatura ? { comAssinatura: 'true' } : {}
       
       const response = await fetchWithAuth(url + (Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''), {

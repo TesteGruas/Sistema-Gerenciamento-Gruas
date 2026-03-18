@@ -60,6 +60,7 @@ import { ColaboradorHolerites } from "@/components/colaborador-holerites"
 import { DocumentoUpload } from "@/components/documento-upload"
 import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 interface FuncionarioRH {
   id: number
@@ -552,6 +553,31 @@ export default function FuncionarioDetalhesPage() {
     return nome.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)
   }
 
+  // Converte texto monetário (pt-BR/en-US) para número.
+  // Ex.: "5.000,00" -> 5000 | "5000.50" -> 5000.5
+  const parseCurrencyToNumber = (raw: string): number => {
+    if (!raw) return NaN
+
+    let sanitized = raw.trim().replace(/[^\d,.-]/g, '')
+    if (!sanitized) return NaN
+
+    if (sanitized.includes(',')) {
+      // Formato brasileiro com separador decimal em vírgula
+      sanitized = sanitized.replace(/\./g, '').replace(',', '.')
+    } else if (sanitized.includes('.')) {
+      // Se houver múltiplos pontos, manter apenas o último como separador decimal
+      const parts = sanitized.split('.')
+      if (parts.length > 2) {
+        const decimalPart = parts.pop() || ''
+        sanitized = `${parts.join('')}.${decimalPart}`
+      }
+    }
+
+    // Permitir sinal apenas no início
+    sanitized = sanitized.replace(/(?!^)-/g, '')
+    return parseFloat(sanitized)
+  }
+
   // Função para converter tipo do backend (underscore) para frontend (hífen)
   const converterTipoDocumentoParaFrontend = (tipo: string): string => {
     const mapeamento: Record<string, string> = {
@@ -660,7 +686,7 @@ export default function FuncionarioDetalhesPage() {
         turno: editFormData.turno,
         status: editFormData.status,
         data_admissao: editFormData.data_admissao,
-        salario: editFormData.salario ? parseFloat(editFormData.salario) : undefined,
+        salario: editFormData.salario ? parseCurrencyToNumber(editFormData.salario) : undefined,
         observacoes: editFormData.observacoes
       }
 
@@ -700,7 +726,7 @@ export default function FuncionarioDetalhesPage() {
       camposFaltando.push('Salário')
     } else {
       // Validar formato do salário
-      const salarioNumero = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+      const salarioNumero = parseCurrencyToNumber(salarioForm.salario)
       if (isNaN(salarioNumero) || salarioNumero < 0) {
         camposFaltando.push('Salário (valor inválido)')
       }
@@ -723,7 +749,7 @@ export default function FuncionarioDetalhesPage() {
       setSubmitting(true)
 
       // Converter salário para número
-      const salarioNumero = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+      const salarioNumero = parseCurrencyToNumber(salarioForm.salario)
 
       // Atualizar apenas o salário
       const response = await funcionariosApi.atualizarFuncionario(funcionario.id, {
@@ -3541,8 +3567,7 @@ export default function FuncionarioDetalhesPage() {
                 }}
                 onBlur={(e) => {
                   // Formatar como moeda brasileira
-                  const value = e.target.value.replace(',', '.')
-                  const numValue = parseFloat(value)
+                  const numValue = parseCurrencyToNumber(e.target.value)
                   if (!isNaN(numValue)) {
                     setSalarioForm({ 
                       ...salarioForm, 
@@ -3559,7 +3584,7 @@ export default function FuncionarioDetalhesPage() {
             
             {funcionario && salarioForm.salario && (() => {
               const salarioAtual = funcionario.salario || 0
-              const novoSalario = parseFloat(salarioForm.salario.replace(/[^\d,.-]/g, '').replace(',', '.'))
+              const novoSalario = parseCurrencyToNumber(salarioForm.salario)
               if (!isNaN(novoSalario)) {
                 const diferenca = novoSalario - salarioAtual
                 const percentual = salarioAtual > 0 ? ((diferenca / salarioAtual) * 100).toFixed(2) : 0

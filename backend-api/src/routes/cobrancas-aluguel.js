@@ -13,12 +13,31 @@ const cobrancaSchema = Joi.object({
   aluguel_id: Joi.string().uuid().required(),
   mes: Joi.string().pattern(/^\d{4}-\d{2}$/).required(),
   conta_bancaria_id: Joi.number().integer().positive().required(),
-  valor_aluguel: Joi.number().positive().required(),
+  // Permite custo avulso sem mensalidade (valor_aluguel = 0)
+  valor_aluguel: Joi.number().min(0).required(),
   valor_custos: Joi.number().min(0).default(0),
   data_vencimento: Joi.date().required(),
   boleto_id: Joi.number().integer().positive().optional(),
   observacoes: Joi.string().allow('', null).optional()
+}).custom((value, helpers) => {
+  const valorAluguel = Number(value.valor_aluguel || 0)
+  const valorCustos = Number(value.valor_custos || 0)
+  if (valorAluguel <= 0 && valorCustos <= 0) {
+    return helpers.error('any.invalid', {
+      message: 'Informe valor_aluguel ou valor_custos maior que zero'
+    })
+  }
+  return value
 })
+
+const calcularDataVencimentoConta = (dataBase, diaVencimento) => {
+  const base = new Date(dataBase)
+  const ano = base.getFullYear()
+  const mes = base.getMonth()
+  const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate()
+  const diaAjustado = Math.min(Math.max(parseInt(diaVencimento) || 1, 1), ultimoDiaMes)
+  return new Date(ano, mes, diaAjustado).toISOString().split('T')[0]
+}
 
 /**
  * @swagger
@@ -200,8 +219,26 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
       })
     }
 
+    // Buscar contas recorrentes ativas do aluguel (luz, agua, energia etc.)
+    const { data: contasRecorrentes = [] } = await supabaseAdmin
+      .from('aluguel_contas_recorrentes')
+      .select('id, nome_conta, tipo_conta, valor_mensal, dia_vencimento, arquivo_pdf, observacoes')
+      .eq('aluguel_id', value.aluguel_id)
+      .eq('ativo', true)
+
+    const totalContasRecorrentes = (contasRecorrentes || []).reduce(
+      (sum, conta) => sum + parseFloat(conta.valor_mensal || 0),
+      0
+    )
+
+    // Cobranças com valor_aluguel > 0 são consideradas cobrança mensal.
+    // Neste caso, adicionamos automaticamente as contas recorrentes cadastradas.
+    const valorCustosBase = parseFloat(value.valor_custos || 0)
+    const incluirRecorrentes = parseFloat(value.valor_aluguel || 0) > 0
+    const valorCustosFinal = valorCustosBase + (incluirRecorrentes ? totalContasRecorrentes : 0)
+
     // Calcular valor total
-    const valorTotal = parseFloat(value.valor_aluguel) + parseFloat(value.valor_custos || 0)
+    const valorTotal = parseFloat(value.valor_aluguel) + valorCustosFinal
 
     const userId = req.user?.id
 
@@ -239,7 +276,7 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
         mes: value.mes,
         conta_bancaria_id: value.conta_bancaria_id,
         valor_aluguel: value.valor_aluguel,
-        valor_custos: value.valor_custos || 0,
+        valor_custos: valorCustosFinal,
         valor_total: valorTotal,
         data_vencimento: value.data_vencimento,
         boleto_id: boletoId,
@@ -253,7 +290,7 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
     if (cobrancaError) throw cobrancaError
 
     // Criar movimentação bancária automaticamente
-    const descricaoMovimentacao = `Cobrança Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}${value.valor_custos > 0 ? ' (inclui custos)' : ''}`
+    const descricaoMovimentacao = `Cobrança Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}${valorCustosFinal > 0 ? ' (inclui custos)' : ''}`
     
     const { data: movimentacao, error: movimentacaoError } = await supabaseAdmin
       .from('movimentacoes_bancarias')
@@ -286,24 +323,59 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
       return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor)
     }
     
-    const descricaoContaPagar = `Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}${value.valor_custos > 0 ? ` (Aluguel: ${formatarMoeda(value.valor_aluguel)} + Custos: ${formatarMoeda(value.valor_custos)})` : ''}`
-    
-    const { data: contaPagar, error: contaPagarError } = await supabaseAdmin
-      .from('contas_pagar')
-      .insert({
-        descricao: descricaoContaPagar,
-        valor: valorTotal,
+    const contasPagarParaCriar = []
+
+    // 1) Mensalidade principal do aluguel
+    if (parseFloat(value.valor_aluguel || 0) > 0) {
+      contasPagarParaCriar.push({
+        descricao: `Mensalidade Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
+        valor: parseFloat(value.valor_aluguel),
         data_vencimento: value.data_vencimento,
         status: 'pendente',
         categoria: 'Aluguel',
-        observacoes: `Cobrança de aluguel ID: ${cobranca.id}. ${value.observacoes || ''}`.trim()
+        observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: mensalidade. ${value.observacoes || ''}`.trim()
       })
-      .select()
-      .single()
+    }
 
-    if (contaPagarError) {
-      console.error('Erro ao criar conta a pagar:', contaPagarError)
-      // Não falhar a criação da cobrança se a conta a pagar falhar, apenas logar o erro
+    // 2) Contas recorrentes (N contas por aluguel)
+    if (incluirRecorrentes && Array.isArray(contasRecorrentes)) {
+      for (const conta of contasRecorrentes) {
+        const vencimentoConta = conta.dia_vencimento
+          ? calcularDataVencimentoConta(value.data_vencimento, conta.dia_vencimento)
+          : value.data_vencimento
+
+        contasPagarParaCriar.push({
+          descricao: `${conta.nome_conta} - ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
+          valor: parseFloat(conta.valor_mensal || 0),
+          data_vencimento: vencimentoConta,
+          status: 'pendente',
+          categoria: 'Aluguel',
+          observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Conta recorrente ID: ${conta.id}. Arquivo PDF: ${conta.arquivo_pdf || 'não informado'}. ${conta.observacoes || ''}`.trim()
+        })
+      }
+    }
+
+    // 3) Custo avulso informado no payload (sem conta recorrente)
+    if (!incluirRecorrentes && valorCustosBase > 0) {
+      contasPagarParaCriar.push({
+        descricao: `Custos avulsos do aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
+        valor: valorCustosBase,
+        data_vencimento: value.data_vencimento,
+        status: 'pendente',
+        categoria: 'Aluguel',
+        observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: custo_avulso. ${value.observacoes || ''}`.trim()
+      })
+    }
+
+    if (contasPagarParaCriar.length > 0) {
+      const { error: contaPagarError } = await supabaseAdmin
+        .from('contas_pagar')
+        .insert(contasPagarParaCriar)
+
+      if (contaPagarError) {
+        console.error('Erro ao criar contas a pagar do aluguel:', contaPagarError)
+        // Não falhar a criação da cobrança se a conta a pagar falhar, apenas logar o erro
+      }
     }
 
     // Buscar cobrança completa
@@ -427,7 +499,19 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
         const diaVencimento = aluguel.dia_vencimento || 5
         const dataVencimento = new Date(ano, mesNum - 1, diaVencimento).toISOString().split('T')[0]
 
-        const valorTotal = parseFloat(aluguel.valor_mensal || 0)
+        // Buscar contas recorrentes ativas do aluguel
+        const { data: contasRecorrentes = [] } = await supabaseAdmin
+          .from('aluguel_contas_recorrentes')
+          .select('id, nome_conta, valor_mensal, dia_vencimento, arquivo_pdf, observacoes')
+          .eq('aluguel_id', aluguel.id)
+          .eq('ativo', true)
+
+        const valorCustosRecorrentes = (contasRecorrentes || []).reduce(
+          (sum, conta) => sum + parseFloat(conta.valor_mensal || 0),
+          0
+        )
+
+        const valorTotal = parseFloat(aluguel.valor_mensal || 0) + valorCustosRecorrentes
 
         // Criar cobrança
         const { data: cobranca, error: cobrancaError } = await supabaseAdmin
@@ -436,8 +520,8 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
             aluguel_id: aluguel.id,
             mes: mesParaGerar,
             conta_bancaria_id: contaId,
-            valor_aluguel: valorTotal,
-            valor_custos: 0,
+            valor_aluguel: parseFloat(aluguel.valor_mensal || 0),
+            valor_custos: valorCustosRecorrentes,
             valor_total: valorTotal,
             data_vencimento: dataVencimento,
             created_by: req.user?.id,
@@ -472,6 +556,41 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
             .from('cobrancas_aluguel')
             .update({ movimentacao_bancaria_id: movimentacao.id })
             .eq('id', cobranca.id)
+        }
+
+        // Criar contas a pagar da mensalidade + contas recorrentes
+        const contasPagarParaCriar = [
+          {
+            descricao: `Mensalidade Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${mesParaGerar}`,
+            valor: parseFloat(aluguel.valor_mensal || 0),
+            data_vencimento: dataVencimento,
+            status: 'pendente',
+            categoria: 'Aluguel',
+            observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: mensalidade.`
+          }
+        ]
+
+        for (const conta of contasRecorrentes || []) {
+          const dataVencimentoConta = conta.dia_vencimento
+            ? calcularDataVencimentoConta(dataVencimento, conta.dia_vencimento)
+            : dataVencimento
+
+          contasPagarParaCriar.push({
+            descricao: `${conta.nome_conta} - ${aluguel.residencias?.nome || 'Residência'} - ${mesParaGerar}`,
+            valor: parseFloat(conta.valor_mensal || 0),
+            data_vencimento: dataVencimentoConta,
+            status: 'pendente',
+            categoria: 'Aluguel',
+            observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Conta recorrente ID: ${conta.id}. Arquivo PDF: ${conta.arquivo_pdf || 'não informado'}. ${conta.observacoes || ''}`.trim()
+          })
+        }
+
+        const { error: contaPagarError } = await supabaseAdmin
+          .from('contas_pagar')
+          .insert(contasPagarParaCriar)
+
+        if (contaPagarError) {
+          console.error('Erro ao criar contas a pagar automáticas do aluguel:', contaPagarError)
         }
 
         cobrancasCriadas.push(cobranca.id)

@@ -13,6 +13,7 @@ import { SignaturePad } from "./signature-pad"
 import { Download, Eye, FileText, FileSignature, CheckCircle2, Clock, AlertCircle, Upload, Plus } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentoUpload } from "./documento-upload"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 export interface Holerite {
   id?: number

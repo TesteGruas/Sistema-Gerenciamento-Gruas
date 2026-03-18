@@ -37,6 +37,7 @@ import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
 import { estoqueAPI } from "@/lib/api-estoque"
 import { Slider } from "@/components/ui/slider"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 interface ConfiguracaoGrua {
   id: string

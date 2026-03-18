@@ -60,6 +60,7 @@ import { responsaveisObraApi, type ResponsavelObraCreateData } from "@/lib/api-r
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {

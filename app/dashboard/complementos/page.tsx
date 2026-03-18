@@ -29,6 +29,7 @@ import {
   Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 const API_URL = getApiOrigin()
 

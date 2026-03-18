@@ -69,6 +69,7 @@ import { getVendas } from "@/lib/api-financial"
 import { locacoesApi } from "@/lib/api-locacoes"
 import { estoqueAPI } from "@/lib/api-estoque"
 import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Cores para gráficos
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']

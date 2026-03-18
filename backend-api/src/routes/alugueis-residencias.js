@@ -96,6 +96,16 @@ const pagamentoSchema = Joi.object({
   observacoes: Joi.string().allow('', null).optional()
 })
 
+const contaRecorrenteSchema = Joi.object({
+  nome_conta: Joi.string().min(2).max(150).required(),
+  tipo_conta: Joi.string().valid('luz', 'agua', 'energia', 'internet', 'gas', 'condominio', 'outros').default('outros'),
+  valor_mensal: Joi.number().min(0).required(),
+  dia_vencimento: Joi.number().integer().min(1).max(31).allow(null).optional(),
+  arquivo_pdf: Joi.string().allow('', null).optional(),
+  observacoes: Joi.string().allow('', null).optional(),
+  ativo: Joi.boolean().default(true)
+})
+
 // ==================== RESIDÊNCIAS ====================
 
 /**
@@ -591,6 +601,197 @@ router.get('/funcionario/:funcionarioId', async (req, res) => {
   }
 })
 
+// ==================== CONTAS RECORRENTES DO ALUGUEL ====================
+
+/**
+ * GET /api/alugueis-residencias/:aluguelId/contas-recorrentes
+ * Lista contas recorrentes de um aluguel
+ */
+router.get('/:aluguelId/contas-recorrentes', async (req, res) => {
+  try {
+    const { aluguelId } = req.params
+    const { ativo } = req.query
+
+    let query = supabaseAdmin
+      .from('aluguel_contas_recorrentes')
+      .select('*')
+      .eq('aluguel_id', aluguelId)
+      .order('created_at', { ascending: false })
+
+    if (ativo !== undefined) {
+      query = query.eq('ativo', ativo === 'true')
+    }
+
+    const { data, error } = await query
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar contas recorrentes do aluguel:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * POST /api/alugueis-residencias/:aluguelId/contas-recorrentes
+ * Cria conta recorrente para um aluguel
+ */
+router.post('/:aluguelId/contas-recorrentes', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { aluguelId } = req.params
+    const { error: validationError, value } = contaRecorrenteSchema.validate(req.body)
+
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: validationError.details[0].message
+      })
+    }
+
+    const { data: aluguel, error: aluguelError } = await supabaseAdmin
+      .from('alugueis_residencias')
+      .select('id')
+      .eq('id', aluguelId)
+      .single()
+
+    if (aluguelError || !aluguel) {
+      return res.status(404).json({
+        success: false,
+        error: 'Aluguel não encontrado'
+      })
+    }
+
+    const userId = req.user?.id
+    const { data, error } = await supabaseAdmin
+      .from('aluguel_contas_recorrentes')
+      .insert({
+        aluguel_id: aluguelId,
+        ...value,
+        created_by: userId,
+        updated_by: userId
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.status(201).json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao criar conta recorrente do aluguel:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * PUT /api/alugueis-residencias/contas-recorrentes/:id
+ * Atualiza conta recorrente
+ */
+router.put('/contas-recorrentes/:id', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const contaRecorrenteUpdateSchema = Joi.object({
+      nome_conta: Joi.string().min(2).max(150).optional(),
+      tipo_conta: Joi.string().valid('luz', 'agua', 'energia', 'internet', 'gas', 'condominio', 'outros').optional(),
+      valor_mensal: Joi.number().min(0).optional(),
+      dia_vencimento: Joi.number().integer().min(1).max(31).allow(null).optional(),
+      arquivo_pdf: Joi.string().allow('', null).optional(),
+      observacoes: Joi.string().allow('', null).optional(),
+      ativo: Joi.boolean().optional()
+    })
+
+    const { error: validationError, value } = contaRecorrenteUpdateSchema.validate(req.body)
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: validationError.details[0].message
+      })
+    }
+
+    const userId = req.user?.id
+    const { data, error } = await supabaseAdmin
+      .from('aluguel_contas_recorrentes')
+      .update({
+        ...value,
+        updated_by: userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: 'Conta recorrente não encontrada'
+        })
+      }
+      throw error
+    }
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao atualizar conta recorrente do aluguel:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * DELETE /api/alugueis-residencias/contas-recorrentes/:id
+ * Inativa conta recorrente (soft delete)
+ */
+router.delete('/contas-recorrentes/:id', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const userId = req.user?.id
+
+    const { data, error } = await supabaseAdmin
+      .from('aluguel_contas_recorrentes')
+      .update({
+        ativo: false,
+        updated_by: userId,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          success: false,
+          error: 'Conta recorrente não encontrada'
+        })
+      }
+      throw error
+    }
+
+    res.json({ success: true, data, message: 'Conta recorrente inativada com sucesso' })
+  } catch (error) {
+    console.error('Erro ao inativar conta recorrente do aluguel:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 /**
  * POST /api/alugueis-residencias
  * Criar novo aluguel
@@ -627,18 +828,61 @@ router.post('/', requirePermission('rh:editar'), async (req, res) => {
       })
     }
 
-    // Verificar se funcionário existe
+    // Verificar se funcionário existe.
+    // Compatibilidade: alguns fluxos enviam ID de usuário (usuarios.id) em vez de funcionarios.id.
+    let funcionarioIdParaSalvar = value.funcionario_id
+
     const { data: funcionario, error: funcionarioError } = await supabaseAdmin
       .from('funcionarios')
       .select('id')
-      .eq('id', value.funcionario_id)
-      .single()
+      .eq('id', funcionarioIdParaSalvar)
+      .maybeSingle()
 
-    if (funcionarioError || !funcionario) {
-      return res.status(404).json({ 
-        success: false,
-        error: 'Funcionário não encontrado' 
-      })
+    if (funcionarioError) throw funcionarioError
+
+    if (!funcionario) {
+      const { data: usuario, error: usuarioError } = await supabaseAdmin
+        .from('usuarios')
+        .select('id, funcionario_id, eh_funcionario')
+        .eq('id', funcionarioIdParaSalvar)
+        .is('deleted_at', null)
+        .maybeSingle()
+
+      if (usuarioError) throw usuarioError
+
+      if (!usuario) {
+        return res.status(404).json({
+          success: false,
+          error: 'Funcionário não encontrado'
+        })
+      }
+
+      // Se o ID enviado for de usuário, ele precisa estar vinculado a um funcionario_id válido
+      if (!usuario.funcionario_id) {
+        return res.status(400).json({
+          success: false,
+          error: 'Funcionário não encontrado',
+          message: 'O usuário informado não possui vínculo com a tabela de funcionários (funcionario_id).'
+        })
+      }
+
+      const { data: funcionarioVinculado, error: funcionarioVinculadoError } = await supabaseAdmin
+        .from('funcionarios')
+        .select('id')
+        .eq('id', usuario.funcionario_id)
+        .maybeSingle()
+
+      if (funcionarioVinculadoError) throw funcionarioVinculadoError
+
+      if (!funcionarioVinculado) {
+        return res.status(400).json({
+          success: false,
+          error: 'Funcionário não encontrado',
+          message: 'O funcionário vinculado ao usuário não existe na tabela de funcionários.'
+        })
+      }
+
+      funcionarioIdParaSalvar = usuario.funcionario_id
     }
 
     const userId = req.user?.id
@@ -671,6 +915,7 @@ router.post('/', requirePermission('rh:editar'), async (req, res) => {
         dadosBasicos[campo] = value[campo]
       }
     })
+    dadosBasicos.funcionario_id = funcionarioIdParaSalvar
 
     // Tentar inserir com todos os campos primeiro
     let aluguelData = { ...dadosBasicos }

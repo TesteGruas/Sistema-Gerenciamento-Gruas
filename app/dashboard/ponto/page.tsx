@@ -44,11 +44,11 @@ import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/c
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { ProtectedRoute } from "@/components/protected-route"
 import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
-import { PontoTestButtons } from "@/components/ponto-test-buttons"
 import { FuncionarioSearch } from "@/components/funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { JustificativaDialog } from "@/components/justificativa-dialog"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -1840,11 +1840,6 @@ export default function PontoPage() {
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
       <div className="space-y-6">
-        {/* Botões de Teste - Apenas em desenvolvimento */}
-        {process.env.NODE_ENV === 'development' && (
-          <PontoTestButtons />
-        )}
-        
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>

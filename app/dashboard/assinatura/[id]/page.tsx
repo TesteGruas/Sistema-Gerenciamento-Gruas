@@ -38,6 +38,7 @@ import { useUser } from '@/lib/user-context'
 import { obrasDocumentosApi, DocumentoObra, AssinaturaDocumento } from '@/lib/api-obras-documentos'
 import { obrasApi } from '@/lib/api-obras'
 import { isAdmin as checkIsAdmin } from '@/lib/user-utils'
+import { getApiOrigin } from "@/lib/runtime-config"
 
 export default function AssinaturaDocumentoPage() {
   const { toast } = useToast()

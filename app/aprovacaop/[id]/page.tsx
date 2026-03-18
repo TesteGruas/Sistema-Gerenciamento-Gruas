@@ -8,6 +8,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { CheckCircle2, XCircle, Loader2, Clock, User, Calendar, AlertCircle } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { getApiOrigin } from "@/lib/runtime-config"
 
 interface AprovacaoData {
   id: string

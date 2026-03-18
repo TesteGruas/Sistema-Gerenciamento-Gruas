@@ -532,11 +532,23 @@ router.post('/funcionario-beneficios', async (req, res) => {
       insertData.valor = parseFloat(valor)
     }
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('funcionario_beneficios')
       .insert(insertData)
       .select()
       .single()
+
+    // Compatibilidade: alguns bancos ainda não possuem a coluna "valor".
+    if (error && String(error.message || '').includes("Could not find the 'valor' column")) {
+      const { valor: _valorRemovido, ...insertSemValor } = insertData
+      const retry = await supabaseAdmin
+        .from('funcionario_beneficios')
+        .insert(insertSemValor)
+        .select()
+        .single()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) throw error
 
@@ -562,14 +574,27 @@ router.post('/funcionario-beneficios', async (req, res) => {
 router.put('/funcionario-beneficios/:id', async (req, res) => {
   try {
     const { id } = req.params
-    const updateData = req.body
+    const updateData = { ...req.body }
 
-    const { data, error } = await supabaseAdmin
+    let { data, error } = await supabaseAdmin
       .from('funcionario_beneficios')
       .update(updateData)
       .eq('id', id)
       .select()
       .single()
+
+    // Compatibilidade: alguns bancos ainda não possuem a coluna "valor".
+    if (error && String(error.message || '').includes("Could not find the 'valor' column")) {
+      delete updateData.valor
+      const retry = await supabaseAdmin
+        .from('funcionario_beneficios')
+        .update(updateData)
+        .eq('id', id)
+        .select()
+        .single()
+      data = retry.data
+      error = retry.error
+    }
 
     if (error) throw error
 

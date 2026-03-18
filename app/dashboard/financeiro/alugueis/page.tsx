@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from 'react'
+import Link from 'next/link'
 import {
   Home,
   Building,
@@ -1332,7 +1333,7 @@ export default function AlugueisIntegradoPage() {
       </div>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="alugueis">
             <List className="h-4 w-4 mr-2" />
@@ -1345,7 +1346,7 @@ export default function AlugueisIntegradoPage() {
         </TabsList>
 
         {/* Tab: Aluguéis */}
-        <TabsContent value="alugueis" className="space-y-6">
+        <TabsContent value="alugueis" className="space-y-4">
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">
@@ -1498,12 +1499,10 @@ export default function AlugueisIntegradoPage() {
                           </td>
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => abrirEditarAluguel(aluguel)}
-                              >
-                                <Edit className="h-3 w-3" />
+                              <Button variant="outline" size="sm" asChild>
+                                <Link href={`/dashboard/financeiro/alugueis/${aluguel.id}`}>
+                                  <Edit className="h-3 w-3" />
+                                </Link>
                               </Button>
                               <Button
                                 variant="outline"
@@ -1534,7 +1533,7 @@ export default function AlugueisIntegradoPage() {
         </TabsContent>
 
         {/* Tab: Residências */}
-        <TabsContent value="residencias" className="space-y-6">
+        <TabsContent value="residencias" className="space-y-4">
           {loading ? (
             <Card>
               <CardContent className="p-12 text-center text-gray-500">

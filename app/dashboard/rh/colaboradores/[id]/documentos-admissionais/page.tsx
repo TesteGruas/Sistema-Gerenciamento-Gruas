@@ -14,6 +14,7 @@ import { DocumentoUpload } from "@/components/documento-upload"
 import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loader2, ArrowLeft } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Tipos de documentos admissionais
 export const tiposDocumentos = [

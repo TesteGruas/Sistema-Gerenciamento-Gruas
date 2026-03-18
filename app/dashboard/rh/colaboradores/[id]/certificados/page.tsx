@@ -15,6 +15,7 @@ import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loade
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 import { DocumentoUpload } from "@/components/documento-upload"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Tipos de certificados
 // TODO: No futuro, estes tipos podem vir de uma API/configuração para permitir personalização

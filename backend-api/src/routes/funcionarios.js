@@ -1780,9 +1780,72 @@ router.put('/:id', async (req, res) => {
 
     if (updateError) {
       if (updateError.code === 'PGRST116') {
-        return res.status(404).json({
-          error: 'Funcionário não encontrado',
-          message: 'O funcionário com o ID especificado não existe'
+        // Fallback: item da listagem pode ser um usuário sem funcionario_id
+        const { data: usuarioSemFuncionario, error: usuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('id', funcionarioId)
+          .is('funcionario_id', null)
+          .is('deleted_at', null)
+          .maybeSingle()
+
+        if (usuarioError) {
+          return res.status(500).json({
+            error: 'Erro ao atualizar funcionário',
+            message: usuarioError.message
+          })
+        }
+
+        if (!usuarioSemFuncionario) {
+          return res.status(404).json({
+            error: 'Funcionário não encontrado',
+            message: 'O funcionário com o ID especificado não existe'
+          })
+        }
+
+        const cargoUsuario = cargoInfo?.nome || value.cargo
+        const usuarioUpdateData = {
+          nome: funcionarioData.nome,
+          email: funcionarioData.email,
+          telefone: funcionarioData.telefone,
+          cpf: funcionarioData.cpf,
+          status: funcionarioData.status,
+          turno: funcionarioData.turno,
+          data_admissao: funcionarioData.data_admissao,
+          salario: funcionarioData.salario,
+          ...(cargoUsuario ? { cargo: cargoUsuario } : {}),
+          updated_at: new Date().toISOString()
+        }
+
+        // Remover campos undefined para evitar sobrescritas indevidas
+        Object.keys(usuarioUpdateData).forEach((key) => {
+          if (usuarioUpdateData[key] === undefined) {
+            delete usuarioUpdateData[key]
+          }
+        })
+
+        const { data: usuarioAtualizado, error: updateUsuarioError } = await supabaseAdmin
+          .from('usuarios')
+          .update(usuarioUpdateData)
+          .eq('id', funcionarioId)
+          .select('*')
+          .single()
+
+        if (updateUsuarioError) {
+          return res.status(500).json({
+            error: 'Erro ao atualizar funcionário',
+            message: updateUsuarioError.message
+          })
+        }
+
+        return res.json({
+          success: true,
+          data: {
+            ...usuarioAtualizado,
+            funcionario_id: null,
+            usuario_existe: true,
+            usuario_criado: true
+          }
         })
       }
       return res.status(500).json({
@@ -1797,7 +1860,7 @@ router.put('/:id', async (req, res) => {
       const { data: usuarioFuncionario } = await supabaseAdmin
         .from('usuarios')
         .select('id')
-        .eq('funcionario_id', id)
+          .eq('funcionario_id', funcionarioId)
         .single()
 
       if (usuarioFuncionario) {

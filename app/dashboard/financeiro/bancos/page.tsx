@@ -45,6 +45,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import apiContasBancarias from "@/lib/api-contas-bancarias"
 import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 const API_URL = getApiOrigin()
 

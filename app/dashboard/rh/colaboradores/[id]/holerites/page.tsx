@@ -11,6 +11,7 @@ import { SignaturePad } from "@/components/signature-pad"
 import { Download, CheckCircle2, Clock, Loader2, ArrowLeft, FileText, FileSignature } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type HoleriteBackend } from "@/lib/api-colaboradores-documentos"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Interface compatível com o componente
 export interface Holerite {

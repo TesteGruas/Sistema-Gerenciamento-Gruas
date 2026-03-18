@@ -42,6 +42,7 @@ import { useToast } from "@/hooks/use-toast"
 import { estoqueAPI, type Produto } from "@/lib/api-estoque"
 import { fornecedoresApi, type Fornecedor } from "@/lib/api-fornecedores"
 import { DebugButton } from "@/components/debug-button"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Função utilitária para cores de status
 const getStatusColor = (status: string) => {

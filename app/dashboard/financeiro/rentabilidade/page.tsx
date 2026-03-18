@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { TrendingUp, TrendingDown, DollarSign, Percent, BarChart3, Calendar } from 'lucide-react'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { getApiOrigin } from "@/lib/runtime-config"
 
 const API_URL = getApiOrigin()
 

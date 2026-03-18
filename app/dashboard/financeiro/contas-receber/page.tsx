@@ -45,6 +45,7 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 // Interface local para obras com campos adicionais
 interface Obra {

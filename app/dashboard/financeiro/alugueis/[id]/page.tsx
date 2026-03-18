@@ -20,6 +20,7 @@ import {
   FileText,
   Upload,
   X,
+  Link as LinkIcon,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -54,7 +55,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useToast } from '@/hooks/use-toast'
-import { AlugueisAPI, AluguelResidencia, formatarMoeda } from '@/lib/api-alugueis-residencias'
+import { AlugueisAPI, AluguelResidencia, ContaRecorrenteAluguel, formatarMoeda } from '@/lib/api-alugueis-residencias'
 import { CobrancasAluguelAPI, CobrancaAluguel, formatarMes } from '@/lib/api-cobrancas-aluguel'
 import { apiContasBancarias, ContaBancaria } from '@/lib/api-contas-bancarias'
 import { boletosApi, Boleto } from '@/lib/api-boletos'
@@ -70,11 +71,15 @@ export default function AluguelDetalhesPage() {
   const [cobrancas, setCobrancas] = useState<CobrancaAluguel[]>([])
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
   const [boletos, setBoletos] = useState<Boleto[]>([])
+  const [contasRecorrentes, setContasRecorrentes] = useState<ContaRecorrenteAluguel[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreateCobrancaOpen, setIsCreateCobrancaOpen] = useState(false)
   const [isAddCustoOpen, setIsAddCustoOpen] = useState(false)
   const [isEditCobrancaOpen, setIsEditCobrancaOpen] = useState(false)
+  const [isContaRecorrenteOpen, setIsContaRecorrenteOpen] = useState(false)
   const [cobrancaSelecionada, setCobrancaSelecionada] = useState<CobrancaAluguel | null>(null)
+  const [contaRecorrenteSelecionada, setContaRecorrenteSelecionada] = useState<ContaRecorrenteAluguel | null>(null)
+  const [subindoArquivoContaRecorrente, setSubindoArquivoContaRecorrente] = useState(false)
 
   // Formulário de cobrança mensal (aluguel)
   const [formCobranca, setFormCobranca] = useState({
@@ -100,6 +105,17 @@ export default function AluguelDetalhesPage() {
     observacoes: ''
   })
 
+  // Formulário de conta recorrente
+  const [formContaRecorrente, setFormContaRecorrente] = useState({
+    nome_conta: '',
+    tipo_conta: 'luz' as 'luz' | 'agua' | 'energia' | 'internet' | 'gas' | 'condominio' | 'outros',
+    valor_mensal: 0,
+    dia_vencimento: '',
+    arquivo_pdf: '',
+    observacoes: '',
+    ativo: true
+  })
+
   useEffect(() => {
     if (aluguelId) {
       carregarDados()
@@ -111,9 +127,10 @@ export default function AluguelDetalhesPage() {
   const carregarDados = async () => {
     try {
       setLoading(true)
-      const [aluguelData, cobrancasResponse] = await Promise.all([
+      const [aluguelData, cobrancasResponse, contasRecorrentesData] = await Promise.all([
         AlugueisAPI.buscarPorId(aluguelId),
-        CobrancasAluguelAPI.listar({ aluguel_id: aluguelId })
+        CobrancasAluguelAPI.listar({ aluguel_id: aluguelId }),
+        AlugueisAPI.listarContasRecorrentes(aluguelId)
       ])
       
       // Garantir que cobrancasResponse seja um array
@@ -151,6 +168,7 @@ export default function AluguelDetalhesPage() {
         ? cobrancasData.filter(c => c?.status !== 'cancelado')
         : []
       setCobrancas(cobrancasArray)
+      setContasRecorrentes(Array.isArray(contasRecorrentesData) ? contasRecorrentesData : [])
     } catch (error: any) {
       toast({
         title: 'Erro',
@@ -267,7 +285,7 @@ export default function AluguelDetalhesPage() {
         mes: formCobranca.mes,
         conta_bancaria_id: parseInt(formCobranca.conta_bancaria_id),
         valor_aluguel: formCobranca.valor_aluguel,
-        valor_custos: 0, // Cobrança mensal não inclui custos
+        valor_custos: 0,
         data_vencimento: formCobranca.data_vencimento,
         boleto_id: boletoId,
         observacoes: formCobranca.observacoes || undefined
@@ -366,16 +384,17 @@ export default function AluguelDetalhesPage() {
           observacoes: `${cobrancaExistente.observacoes || ''}\n${formCusto.tipo_custo.toUpperCase()}: ${formCusto.descricao || formCusto.tipo_custo} - ${formatarMoeda(formCusto.valor)}`.trim()
         })
       } else {
-        // Criar nova cobrança apenas com custos
+        // Criar nova cobrança do mês com mensalidade + custo avulso
         const [ano, mes] = formCusto.mes.split('-')
         const diaVencimento = aluguel?.contrato.diaVencimento || 5
         const dataVencimento = new Date(parseInt(ano), parseInt(mes) - 1, diaVencimento).toISOString().split('T')[0]
+        const valorMensalAluguel = Number(aluguel?.contrato?.valorMensal || 0)
 
         await CobrancasAluguelAPI.criar({
           aluguel_id: aluguelId,
           mes: formCusto.mes,
           conta_bancaria_id: parseInt(formCusto.conta_bancaria_id),
-          valor_aluguel: 0, // Apenas custos
+          valor_aluguel: valorMensalAluguel,
           valor_custos: formCusto.valor,
           data_vencimento: dataVencimento,
           boleto_id: boletoId,
@@ -413,6 +432,128 @@ export default function AluguelDetalhesPage() {
       boletoFile: null,
       observacoes: ''
     })
+  }
+
+  const resetFormContaRecorrente = () => {
+    setFormContaRecorrente({
+      nome_conta: '',
+      tipo_conta: 'luz',
+      valor_mensal: 0,
+      dia_vencimento: aluguel?.contrato?.diaVencimento ? String(aluguel.contrato.diaVencimento) : '',
+      arquivo_pdf: '',
+      observacoes: '',
+      ativo: true
+    })
+  }
+
+  const handleUploadArquivoContaRecorrente = async (file?: File) => {
+    if (!file) return
+
+    if (file.type !== 'application/pdf') {
+      toast({
+        title: 'Formato inválido',
+        description: 'Apenas arquivos PDF são permitidos para contas recorrentes.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      toast({
+        title: 'Arquivo muito grande',
+        description: 'O PDF deve ter no máximo 10MB.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      setSubindoArquivoContaRecorrente(true)
+      const urlArquivo = await AlugueisAPI.uploadArquivoContaRecorrente(file)
+      setFormContaRecorrente(prev => ({ ...prev, arquivo_pdf: urlArquivo }))
+      toast({
+        title: 'PDF enviado',
+        description: 'Arquivo vinculado à conta recorrente.'
+      })
+    } catch (error: any) {
+      toast({
+        title: 'Erro no upload',
+        description: error.message || 'Não foi possível enviar o PDF.',
+        variant: 'destructive'
+      })
+    } finally {
+      setSubindoArquivoContaRecorrente(false)
+    }
+  }
+
+  const handleSalvarContaRecorrente = async () => {
+    if (!formContaRecorrente.nome_conta.trim() || !formContaRecorrente.valor_mensal) {
+      toast({
+        title: 'Campos obrigatórios',
+        description: 'Informe nome da conta e valor mensal.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    try {
+      const payload = {
+        nome_conta: formContaRecorrente.nome_conta.trim(),
+        tipo_conta: formContaRecorrente.tipo_conta,
+        valor_mensal: formContaRecorrente.valor_mensal,
+        dia_vencimento: formContaRecorrente.dia_vencimento ? parseInt(formContaRecorrente.dia_vencimento) : null,
+        arquivo_pdf: formContaRecorrente.arquivo_pdf || null,
+        observacoes: formContaRecorrente.observacoes || null,
+        ativo: formContaRecorrente.ativo
+      }
+
+      if (contaRecorrenteSelecionada) {
+        await AlugueisAPI.atualizarContaRecorrente(contaRecorrenteSelecionada.id, payload)
+        toast({ title: 'Sucesso', description: 'Conta recorrente atualizada.' })
+      } else {
+        await AlugueisAPI.criarContaRecorrente(aluguelId, payload)
+        toast({ title: 'Sucesso', description: 'Conta recorrente criada.' })
+      }
+
+      setIsContaRecorrenteOpen(false)
+      setContaRecorrenteSelecionada(null)
+      resetFormContaRecorrente()
+      carregarDados()
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível salvar a conta recorrente.',
+        variant: 'destructive'
+      })
+    }
+  }
+
+  const abrirEditarContaRecorrente = (conta: ContaRecorrenteAluguel) => {
+    setContaRecorrenteSelecionada(conta)
+    setFormContaRecorrente({
+      nome_conta: conta.nome_conta || '',
+      tipo_conta: conta.tipo_conta || 'outros',
+      valor_mensal: parseFloat(String(conta.valor_mensal || 0)),
+      dia_vencimento: conta.dia_vencimento ? String(conta.dia_vencimento) : '',
+      arquivo_pdf: conta.arquivo_pdf || '',
+      observacoes: conta.observacoes || '',
+      ativo: conta.ativo !== false
+    })
+    setIsContaRecorrenteOpen(true)
+  }
+
+  const handleInativarContaRecorrente = async (contaId: string) => {
+    try {
+      await AlugueisAPI.inativarContaRecorrente(contaId)
+      toast({ title: 'Sucesso', description: 'Conta recorrente inativada.' })
+      carregarDados()
+    } catch (error: any) {
+      toast({
+        title: 'Erro',
+        description: error.message || 'Não foi possível inativar a conta recorrente.',
+        variant: 'destructive'
+      })
+    }
   }
 
   const handleEditCobranca = async () => {
@@ -551,6 +692,9 @@ export default function AluguelDetalhesPage() {
 
   // Garantir que cobrancas seja um array antes de usar métodos de array
   const cobrancasArray = Array.isArray(cobrancas) ? cobrancas : []
+  const mensalidadesCriadas = [...cobrancasArray]
+    .filter((c) => Number(c?.valor_aluguel || 0) > 0)
+    .sort((a, b) => (a.mes < b.mes ? 1 : -1))
   const valorTotalCobrancas = cobrancasArray.reduce((sum, c) => sum + (c?.valor_total || 0), 0)
   const cobrancasPagas = cobrancasArray.filter(c => c?.status === 'pago').length
   const cobrancasPendentes = cobrancasArray.filter(c => c?.status === 'pendente').length
@@ -575,9 +719,20 @@ export default function AluguelDetalhesPage() {
             <Plus className="h-4 w-4 mr-2" />
             Nova Cobrança Mensal
           </Button>
+          <Button
+            onClick={() => {
+              setContaRecorrenteSelecionada(null)
+              resetFormContaRecorrente()
+              setIsContaRecorrenteOpen(true)
+            }}
+            variant="outline"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Conta Recorrente
+          </Button>
           <Button onClick={() => setIsAddCustoOpen(true)} variant="outline">
             <Plus className="h-4 w-4 mr-2" />
-            Adicionar Custo
+            Custo Avulso
           </Button>
         </div>
       </div>
@@ -682,6 +837,128 @@ export default function AluguelDetalhesPage() {
         </Card>
       </div>
 
+      {/* Contas Recorrentes */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Contas Recorrentes do Aluguel</CardTitle>
+          <CardDescription>
+            Mensalidade fixa + contas como luz, agua, energia, internet e outras (com PDF opcional)
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            <div>
+              <p className="text-sm font-medium">Mensalidades criadas por mês</p>
+              {mensalidadesCriadas.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  <p>Nenhuma mensalidade criada ainda.</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Mês</TableHead>
+                      <TableHead>Valor Mensalidade</TableHead>
+                      <TableHead>Vencimento</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {mensalidadesCriadas.map((item) => (
+                      <TableRow key={`mensalidade-${item.id}`}>
+                        <TableCell className="font-medium">{formatarMes(item.mes)}</TableCell>
+                        <TableCell>{formatarMoeda(Number(item.valor_aluguel || 0))}</TableCell>
+                        <TableCell>{new Date(item.data_vencimento).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(item.status)}>
+                            {getStatusLabel(item.status)}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+
+            <div>
+              <p className="text-sm font-medium">Outras contas recorrentes</p>
+              {contasRecorrentes.length === 0 ? (
+                <div className="text-center py-4 text-gray-500">
+                  <p>Nenhuma conta recorrente cadastrada.</p>
+                  <p className="text-xs mt-1">Cadastre para lançar automaticamente em contas a pagar todo mês.</p>
+                </div>
+              ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Conta</TableHead>
+                  <TableHead>Tipo</TableHead>
+                  <TableHead>Valor Mensal</TableHead>
+                  <TableHead>Vencimento</TableHead>
+                  <TableHead>PDF</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {contasRecorrentes.map((conta) => (
+                  <TableRow key={conta.id}>
+                    <TableCell className="font-medium">{conta.nome_conta}</TableCell>
+                    <TableCell className="uppercase">{conta.tipo_conta}</TableCell>
+                    <TableCell>{formatarMoeda(conta.valor_mensal || 0)}</TableCell>
+                    <TableCell>{conta.dia_vencimento ? `Dia ${conta.dia_vencimento}` : `Dia ${aluguel.contrato.diaVencimento}`}</TableCell>
+                    <TableCell>
+                      {conta.arquivo_pdf ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.open(conta.arquivo_pdf || '', '_blank')}
+                        >
+                          <LinkIcon className="h-3 w-3 mr-1" />
+                          Abrir
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-gray-500">Sem PDF</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={conta.ativo ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700'}>
+                        {conta.ativo ? 'Ativa' : 'Inativa'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => abrirEditarContaRecorrente(conta)}
+                        >
+                          <Edit className="h-3 w-3" />
+                        </Button>
+                        {conta.ativo && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-red-600"
+                            onClick={() => handleInativarContaRecorrente(conta.id)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Lista de Cobranças */}
       <Card>
         <CardHeader>
@@ -773,6 +1050,112 @@ export default function AluguelDetalhesPage() {
           )}
         </CardContent>
       </Card>
+
+      {/* Dialog Conta Recorrente */}
+      <Dialog open={isContaRecorrenteOpen} onOpenChange={setIsContaRecorrenteOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{contaRecorrenteSelecionada ? 'Editar Conta Recorrente' : 'Nova Conta Recorrente'}</DialogTitle>
+            <DialogDescription>
+              Essas contas serão lançadas automaticamente em contas a pagar junto da mensalidade.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Nome da Conta *</Label>
+                <Input
+                  value={formContaRecorrente.nome_conta}
+                  onChange={(e) => setFormContaRecorrente({ ...formContaRecorrente, nome_conta: e.target.value })}
+                  placeholder="Ex: Conta de Luz"
+                />
+              </div>
+              <div>
+                <Label>Tipo *</Label>
+                <Select
+                  value={formContaRecorrente.tipo_conta}
+                  onValueChange={(value: any) => setFormContaRecorrente({ ...formContaRecorrente, tipo_conta: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="luz">Luz</SelectItem>
+                    <SelectItem value="agua">Água</SelectItem>
+                    <SelectItem value="energia">Energia</SelectItem>
+                    <SelectItem value="internet">Internet</SelectItem>
+                    <SelectItem value="gas">Gás</SelectItem>
+                    <SelectItem value="condominio">Condomínio</SelectItem>
+                    <SelectItem value="outros">Outros</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>Valor Mensal *</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={formContaRecorrente.valor_mensal}
+                  onChange={(e) => setFormContaRecorrente({ ...formContaRecorrente, valor_mensal: parseFloat(e.target.value) || 0 })}
+                />
+              </div>
+              <div>
+                <Label>Dia de Vencimento (opcional)</Label>
+                <Input
+                  type="number"
+                  min="1"
+                  max="31"
+                  value={formContaRecorrente.dia_vencimento}
+                  onChange={(e) => setFormContaRecorrente({ ...formContaRecorrente, dia_vencimento: e.target.value })}
+                  placeholder={`Padrão: dia ${aluguel.contrato.diaVencimento}`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label>PDF da Conta (opcional)</Label>
+              <div className="flex gap-2 items-center">
+                <Input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => handleUploadArquivoContaRecorrente(e.target.files?.[0])}
+                  disabled={subindoArquivoContaRecorrente}
+                />
+                {subindoArquivoContaRecorrente && <span className="text-xs text-gray-500">Enviando...</span>}
+              </div>
+              {formContaRecorrente.arquivo_pdf && (
+                <div className="mt-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => window.open(formContaRecorrente.arquivo_pdf, '_blank')}>
+                    <FileText className="h-3 w-3 mr-1" />
+                    Visualizar PDF
+                  </Button>
+                </div>
+              )}
+            </div>
+
+            <div>
+              <Label>Observações</Label>
+              <Textarea
+                value={formContaRecorrente.observacoes}
+                onChange={(e) => setFormContaRecorrente({ ...formContaRecorrente, observacoes: e.target.value })}
+                rows={3}
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setIsContaRecorrenteOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={handleSalvarContaRecorrente}>
+                {contaRecorrenteSelecionada ? 'Salvar Alterações' : 'Criar Conta Recorrente'}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Criar Cobrança Mensal */}
       <Dialog open={isCreateCobrancaOpen} onOpenChange={setIsCreateCobrancaOpen}>
@@ -924,9 +1307,9 @@ export default function AluguelDetalhesPage() {
       <Dialog open={isAddCustoOpen} onOpenChange={setIsAddCustoOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Adicionar Custo</DialogTitle>
+            <DialogTitle>Adicionar Custo Avulso</DialogTitle>
             <DialogDescription>
-              Adicione um custo específico (luz, água, energia, etc.) para um mês
+              Adicione um custo pontual para um mês específico (não recorrente)
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
