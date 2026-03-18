@@ -651,7 +651,7 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   // Evita "flash" inicial enquanto a checagem ainda está em andamento (temObraAtiva === null).
   const mostrarPontoFuncionario = temObraAtiva === true
   
-  // Se for cliente, usar Medições, Home e Perfil
+  // Se for cliente, usar Medições, Obras, Home e Perfil
   const essentialNavItems = isClientUser ? [
     // Medições
     allNavigationItems.find(item => item.href === '/pwa/cliente/medicoes') || {
@@ -660,6 +660,14 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       icon: Calculator,
       label: 'Medições',
       description: 'Medições das obras'
+    },
+    // Obras
+    allNavigationItems.find(item => item.href === '/pwa/obras') || {
+      name: 'Obras',
+      href: '/pwa/obras',
+      icon: Building2,
+      label: 'Obras',
+      description: 'Minhas obras'
     },
     // Home (no meio)
     {

@@ -708,47 +708,80 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
 
       const obraIds = obras?.map(o => o.id) || [];
 
-      if (obraIds.length === 0) {
-        return res.json({
-          success: true,
-          data: [],
-          cliente: cliente.nome,
-          total: 0
-        });
-      }
-
-      // Buscar documentos das obras do cliente
-      const { data: documentos, error: documentosError } = await supabaseAdmin
-        .from('obras_documentos')
-        .select('id, titulo, descricao, arquivo_original, caminho_arquivo, tipo, status, obra_id, created_at, updated_at')
-        .in('obra_id', obraIds)
-        .order('created_at', { ascending: false });
-
-      if (documentosError) {
-        console.error('Erro ao buscar documentos das obras:', documentosError);
-        throw documentosError;
-      }
-
-      // Buscar assinaturas dos documentos onde o cliente é assinante
-      const documentoIds = documentos?.map(doc => doc.id) || [];
-      let assinaturas = [];
-
-      if (documentoIds.length > 0) {
-        // Buscar assinaturas do cliente (pode ser UUID do auth ou ID numérico)
-        const userIdString = user.id?.toString() || '';
-        
-        // Buscar assinaturas com o UUID do usuário
-        const { data: assinaturasData, error: assinaturasError } = await supabaseAdmin
-          .from('obras_documento_assinaturas')
-          .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
-          .in('documento_id', documentoIds)
-          .eq('user_id', userIdString)
+      // 1) Buscar documentos vinculados às obras do cliente (quando houver)
+      let documentosPorObra = [];
+      if (obraIds.length > 0) {
+        const { data: docsObra, error: docsObraError } = await supabaseAdmin
+          .from('obras_documentos')
+          .select('id, titulo, descricao, arquivo_original, caminho_arquivo, status, obra_id, created_at, updated_at')
+          .in('obra_id', obraIds)
           .order('created_at', { ascending: false });
 
-        if (!assinaturasError && assinaturasData) {
-          assinaturas = assinaturasData;
+        if (docsObraError) {
+          console.error('Erro ao buscar documentos das obras:', docsObraError);
+          throw docsObraError;
+        }
+        documentosPorObra = docsObra || [];
+      }
+
+      // 2) Buscar assinaturas do cliente (inclusive documentos sem obra_id)
+      const clienteIdString = String(cliente.id);
+      const userAuthIdString = String(user.id || '');
+      let assinaturas = [];
+
+      // Prioridade: assinaturas vinculadas ao cliente.id (numérico)
+      const { data: assinaturasClienteId, error: assinaturasClienteIdError } = await supabaseAdmin
+        .from('obras_documento_assinaturas')
+        .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
+        .eq('tipo', 'cliente')
+        .eq('user_id', clienteIdString)
+        .order('created_at', { ascending: false });
+
+      if (!assinaturasClienteIdError && assinaturasClienteId && assinaturasClienteId.length > 0) {
+        assinaturas = assinaturasClienteId;
+      } else if (userAuthIdString) {
+        // Fallback: alguns ambientes podem salvar user_id como UUID do auth.
+        const { data: assinaturasAuthId, error: assinaturasAuthIdError } = await supabaseAdmin
+          .from('obras_documento_assinaturas')
+          .select('documento_id, ordem, status, data_assinatura, arquivo_assinado, observacoes, tipo, created_at, updated_at, user_id')
+          .eq('tipo', 'cliente')
+          .eq('user_id', userAuthIdString)
+          .order('created_at', { ascending: false });
+
+        if (!assinaturasAuthIdError && assinaturasAuthId) {
+          assinaturas = assinaturasAuthId;
         }
       }
+
+      // 3) Buscar documentos referenciados pelas assinaturas do cliente
+      const documentoIdsPorAssinatura = [...new Set(
+        (assinaturas || [])
+          .map(a => a.documento_id)
+          .filter(id => id != null)
+      )];
+
+      let documentosPorAssinatura = [];
+      if (documentoIdsPorAssinatura.length > 0) {
+        const { data: docsAssinatura, error: docsAssinaturaError } = await supabaseAdmin
+          .from('obras_documentos')
+          .select('id, titulo, descricao, arquivo_original, caminho_arquivo, status, obra_id, created_at, updated_at')
+          .in('id', documentoIdsPorAssinatura)
+          .order('created_at', { ascending: false });
+
+        if (docsAssinaturaError) {
+          console.error('Erro ao buscar documentos por assinatura do cliente:', docsAssinaturaError);
+          throw docsAssinaturaError;
+        }
+        documentosPorAssinatura = docsAssinatura || [];
+      }
+
+      // 4) Unificar documentos sem duplicar (por id)
+      const documentosMap = new Map();
+      for (const doc of [...documentosPorObra, ...documentosPorAssinatura]) {
+        documentosMap.set(doc.id, doc);
+      }
+      const documentos = Array.from(documentosMap.values())
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
       // Criar mapa de obras para acesso rápido
       const obrasMap = new Map((obras || []).map(obra => [obra.id, obra.nome]));
@@ -904,7 +937,7 @@ router.get('/:id/documentos', authenticateToken, async (req, res) => {
     // Garantir que documentoIds são UUIDs válidos (não inteiros)
     const { data: documentos, error: documentosError } = await supabaseAdmin
       .from('obras_documentos')
-      .select('id, titulo, descricao, arquivo_original, caminho_arquivo, tipo, status, obra_id, created_at, updated_at')
+      .select('id, titulo, descricao, arquivo_original, caminho_arquivo, status, obra_id, created_at, updated_at')
       .in('id', documentoIds)
       .order('created_at', { ascending: false });
 

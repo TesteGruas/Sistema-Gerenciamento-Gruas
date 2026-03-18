@@ -151,6 +151,8 @@ export default function PWAObraDetalhesPage() {
   const [isDocumentosEquipamentoExpanded, setIsDocumentosEquipamentoExpanded] = useState(false)
   const [isDocumentosObraExpanded, setIsDocumentosObraExpanded] = useState(false)
   const [livroGruaObraData, setLivroGruaObraData] = useState<any>(null)
+  const [activeLivroTab, setActiveLivroTab] = useState("checklist")
+  const livroGruaSectionRef = useRef<HTMLDivElement | null>(null)
   
   // Estados para edição de documentos obrigatórios
   const [isEditingCNO, setIsEditingCNO] = useState(false)
@@ -453,6 +455,13 @@ export default function PWAObraDetalhesPage() {
         description: "Não foi possível exportar o PDF",
         variant: "destructive"
       })
+    }
+  }
+
+  const abrirLivroGrua = (tab: "checklist" | "manutencoes" = "checklist") => {
+    setActiveLivroTab(tab)
+    if (livroGruaSectionRef.current) {
+      livroGruaSectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" })
     }
   }
 
@@ -818,8 +827,70 @@ export default function PWAObraDetalhesPage() {
         </div>
       </div>
 
+      {/* Card rápido para clientes: Livro Grua e Exportação */}
+      {isClient() && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base flex items-center gap-2">
+              <BookOpen className="w-4 h-4 text-blue-600" />
+              Livro da Grua
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Acesso rápido ao livro da grua e exportação em PDF por equipamento.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {gruas.length === 0 ? (
+              <p className="text-sm text-gray-500">Nenhuma grua vinculada para liberar o livro.</p>
+            ) : (
+              <div className="space-y-3">
+                {gruas.map((grua) => {
+                  const nomeGrua = grua.name || `Grua ${grua.id}`
+                  const totalEntradas = livrosGruas[grua.id]?.length || 0
+                  const carregandoLivro = Boolean(loadingLivros[grua.id])
+
+                  return (
+                    <div
+                      key={`livro-grua-card-${grua.id}`}
+                      className="border rounded-lg p-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                    >
+                      <div>
+                        <p className="text-sm font-medium">{nomeGrua}</p>
+                        <p className="text-xs text-gray-500">
+                          {carregandoLivro ? "Carregando entradas..." : `${totalEntradas} entrada(s) no livro`}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => abrirLivroGrua("checklist")}
+                        >
+                          <BookOpen className="w-3 h-3 mr-1" />
+                          Abrir Livro
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => exportarLivroGruaPDF(grua.id, nomeGrua)}
+                          disabled={carregandoLivro}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Exportar PDF
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Tabs para Checklist e Manutenções */}
-      <Tabs defaultValue="checklist" className="w-full">
+      <div ref={livroGruaSectionRef}>
+      <Tabs value={activeLivroTab} onValueChange={setActiveLivroTab} className="w-full">
         <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="checklist" className="flex items-center gap-1.5 text-xs px-2 sm:px-3">
             <CheckCircle2 className="w-4 h-4 shrink-0" />
@@ -896,6 +967,7 @@ export default function PWAObraDetalhesPage() {
         </TabsContent>
 
       </Tabs>
+      </div>
 
       {/* Informações da Obra */}
       <Card>

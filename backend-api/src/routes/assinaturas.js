@@ -48,6 +48,67 @@ const generateFileName = (originalName) => {
   return `${sanitizedName}_${timestamp}_${random}${ext}`
 }
 
+// Resolve possíveis IDs de assinatura para o usuário autenticado.
+// Em alguns fluxos o user_id da assinatura aponta para:
+// - id do usuário autenticado
+// - funcionario_id
+// - id do cliente vinculado (tabela clientes)
+const resolverPossiveisIdsAssinatura = async (user) => {
+  const userId = user?.id
+  const userIdString = userId != null ? String(userId) : ''
+  const userIdUuid = userIdString ? `00000000-0000-0000-0000-${userIdString.padStart(12, '0')}` : null
+
+  const funcionarioId = user?.funcionario_id ?? null
+  const funcionarioIdString = funcionarioId != null ? String(funcionarioId) : null
+  const funcionarioIdUuid = funcionarioIdString
+    ? `00000000-0000-0000-0000-${funcionarioIdString.padStart(12, '0')}`
+    : null
+
+  let clienteId = user?.cliente_id ?? null
+
+  if (!clienteId && userIdString) {
+    // Fallback: localizar cliente vinculado ao usuário autenticado.
+    const { data: clienteVinculado } = await supabaseAdmin
+      .from('clientes')
+      .select('id')
+      .eq('contato_usuario_id', userId)
+      .maybeSingle()
+
+    if (clienteVinculado?.id) {
+      clienteId = clienteVinculado.id
+    }
+  }
+
+  const clienteIdString = clienteId != null ? String(clienteId) : null
+  const clienteIdUuid = clienteIdString
+    ? `00000000-0000-0000-0000-${clienteIdString.padStart(12, '0')}`
+    : null
+
+  const possiveisIds = [
+    userIdString,
+    userIdUuid,
+    funcionarioIdString,
+    funcionarioIdUuid,
+    clienteIdString,
+    clienteIdUuid
+  ].filter(Boolean)
+
+  return {
+    possiveisIds,
+    debug: {
+      userId,
+      userIdString,
+      userIdUuid,
+      funcionarioId,
+      funcionarioIdString,
+      funcionarioIdUuid,
+      clienteId,
+      clienteIdString,
+      clienteIdUuid
+    }
+  }
+}
+
 /**
  * GET /api/assinaturas/pendentes
  * Buscar documentos pendentes de assinatura para o usuário atual
@@ -344,23 +405,13 @@ router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
     }
 
     // Buscar assinatura do usuário
-    // O user_id pode estar em diferentes formatos (UUID, número como string, UUID formatado)
-    // IMPORTANTE: Se o usuário tem funcionario_id, também precisamos buscar por ele
-    const userIdString = userId.toString()
-    const funcionarioId = req.user.funcionario_id // Pode ser null se não for funcionário
-    const funcionarioIdString = funcionarioId ? funcionarioId.toString() : null
-    const funcionarioIdUuid = funcionarioIdString ? `00000000-0000-0000-0000-${funcionarioIdString.padStart(12, '0')}` : null
-    const userIdUuid = `00000000-0000-0000-0000-${userIdString.padStart(12, '0')}`
+    const { possiveisIds, debug: debugIds } = await resolverPossiveisIdsAssinatura(req.user)
     
     console.log('🔍 [DEBUG] Buscando assinatura:', {
       documentoId: id,
-      userId,
-      userIdString,
-      userIdUuid,
-      funcionarioId,
-      funcionarioIdString,
-      funcionarioIdUuid,
-      userIdType: typeof userId
+      ...debugIds,
+      userIdType: typeof userId,
+      possiveisIds
     })
     
     // Buscar todas as assinaturas do documento e filtrar no código
@@ -393,30 +444,13 @@ router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
     // Verificar tanto pelo userId (UUID do Supabase) quanto pelo funcionarioId (número)
     const assinaturaUser = todasAssinaturas?.find(ass => {
       const assUserId = ass.user_id?.toString() || ''
-      
-      // Comparar com userId (UUID do Supabase Auth)
-      const matchesUserId = assUserId === userIdString || 
-                           assUserId === userIdUuid || 
-                           assUserId === userId ||
-                           assUserId === userId.toString()
-      
-      // Comparar com funcionarioId (se existir)
-      let matchesFuncionarioId = false
-      if (funcionarioIdString) {
-        matchesFuncionarioId = assUserId === funcionarioIdString ||
-                              assUserId === funcionarioIdUuid ||
-                              (!isNaN(Number(assUserId)) && !isNaN(Number(funcionarioIdString)) && 
-                               Number(assUserId) === Number(funcionarioIdString))
-      }
-      
-      const matches = matchesUserId || matchesFuncionarioId
+      const matches = possiveisIds.includes(assUserId)
       
       if (matches) {
         console.log('✅ [DEBUG] Assinatura encontrada:', {
           assinaturaId: ass.id,
           assUserId,
-          userIdString,
-          funcionarioIdString,
+          possiveisIds,
           match: true
         })
       }
@@ -447,12 +481,8 @@ router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
         message: 'Você não tem permissão para assinar este documento',
         error: 'Assinatura não encontrada para este usuário',
         debug: {
-          userId,
-          userIdString,
-          userIdUuid,
-          funcionarioId,
-          funcionarioIdString,
-          funcionarioIdUuid,
+          ...debugIds,
+          possiveisIds,
           assinaturasDisponiveis: todasAssinaturas?.map(a => ({
             user_id: a.user_id,
             status: a.status,
@@ -666,16 +696,29 @@ router.post('/assinar/:id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Buscar assinatura do usuário
-    const { data: assinaturaUser, error: assinaturaError } = await supabaseAdmin
+    // Buscar assinatura do usuário com tolerância para id de cliente/funcionário.
+    const { possiveisIds } = await resolverPossiveisIdsAssinatura(req.user)
+    const { data: assinaturasDisponiveis, error: assinaturaError } = await supabaseAdmin
       .from('obras_documento_assinaturas')
       .select('*')
       .eq('documento_id', id)
-      .eq('user_id', userId)
-      .eq('status', 'aguardando')
-      .single()
+      .in('status', ['aguardando', 'pendente'])
+      .order('ordem', { ascending: true })
 
-    if (assinaturaError || !assinaturaUser) {
+    if (assinaturaError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar assinaturas',
+        error: assinaturaError.message
+      })
+    }
+
+    const assinaturaUser = (assinaturasDisponiveis || []).find((ass) => {
+      const assUserId = ass.user_id?.toString() || ''
+      return possiveisIds.includes(assUserId)
+    })
+
+    if (!assinaturaUser) {
       return res.status(403).json({
         success: false,
         message: 'Você não tem permissão para assinar este documento'

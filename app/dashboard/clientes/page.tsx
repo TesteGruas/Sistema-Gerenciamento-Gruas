@@ -134,8 +134,7 @@ export default function ClientesPage() {
       initialLoadDoneRef.current = true
       console.log('⏳ [Preload] Iniciando carregamento da página de clientes...')
       const pageStartTime = performance.now()
-      
-      isLoadingObrasRef.current = true
+
       // Carregar obras e clientes em paralelo (skipLoadingCheck para evitar conflito)
       Promise.all([
         carregarObras(),
@@ -144,7 +143,6 @@ export default function ClientesPage() {
         const pageDuration = Math.round(performance.now() - pageStartTime)
         console.log(`✅ [Preload] Página de clientes pronta (${pageDuration}ms total)`)
         setDadosIniciaisCarregados(true)
-        isLoadingObrasRef.current = false
       })
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,13 +255,32 @@ export default function ClientesPage() {
       isLoadingObrasRef.current = true
       console.log('⏳ [Preload] Carregando obras...')
       const startTime = performance.now()
-      
-      // Carregar todas as obras (sem paginação para ter acesso completo)
-      const response = await obrasApi.listarObras({ page: 1, limit: 10 })
+
+      // Carregar todas as páginas para garantir vínculo correto no card de clientes.
+      const limitPorPagina = 200
+      const primeiraPagina = await obrasApi.listarObras({ page: 1, limit: limitPorPagina })
+      const totalPaginas = Math.max(primeiraPagina?.pagination?.pages || 1, 1)
+      const todasObras: Obra[] = [...(primeiraPagina.data || [])]
+
+      if (totalPaginas > 1) {
+        const requisicoesPaginas = Array.from({ length: totalPaginas - 1 }, (_, index) => {
+          const page = index + 2
+          return obrasApi
+            .listarObras({ page, limit: limitPorPagina })
+            .then((res) => res.data || [])
+            .catch(() => [])
+        })
+
+        const paginasRestantes = await Promise.all(requisicoesPaginas)
+        paginasRestantes.forEach((pagina) => {
+          if (pagina.length > 0) todasObras.push(...pagina)
+        })
+      }
+
       const duration = Math.round(performance.now() - startTime)
-      console.log(`✅ [Preload] Obras carregadas (${duration}ms) - ${response.data.length} registros`)
-      
-      setObras(response.data)
+      console.log(`✅ [Preload] Obras carregadas (${duration}ms) - ${todasObras.length} registros`)
+
+      setObras(todasObras)
     } catch (err) {
       console.error('❌ [Preload] Erro ao carregar obras:', err instanceof Error ? err.message : 'Erro desconhecido')
       // Não definir erro aqui para não quebrar a interface de clientes
@@ -321,7 +338,7 @@ export default function ClientesPage() {
 
   // Função para obter obras por cliente
   const getObrasByCliente = (clienteId: number) => {
-    return obras.filter(obra => obra.cliente_id === clienteId)
+    return obras.filter((obra) => Number(obra.cliente_id) === Number(clienteId))
   }
 
   // Os clientes já vêm filtrados do backend, não precisamos filtrar novamente
@@ -1463,10 +1480,34 @@ function ClienteForm({
     }
   }
 
+  const gerarCnpjAleatorioFormatado = () => {
+    const gerarDigito = (numeros: number[]) => {
+      let peso = numeros.length - 7
+      let soma = 0
+
+      for (let i = 0; i < numeros.length; i++) {
+        soma += numeros[i] * peso
+        peso = peso === 2 ? 9 : peso - 1
+      }
+
+      const resto = soma % 11
+      return resto < 2 ? 0 : 11 - resto
+    }
+
+    const base = Array.from({ length: 8 }, () => Math.floor(Math.random() * 10))
+    const filial = [0, 0, 0, 1]
+    const semDigitos = [...base, ...filial]
+    const digito1 = gerarDigito(semDigitos)
+    const digito2 = gerarDigito([...semDigitos, digito1])
+    const cnpjNumerico = [...semDigitos, digito1, digito2].join("")
+
+    return cnpjNumerico.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5")
+  }
+
   const preencherDadosDebug = () => {
     setLocalFormData({
       nome: 'Construtora ABC Ltda',
-      cnpj: '12.345.678/0001-90',
+      cnpj: gerarCnpjAleatorioFormatado(),
       inscricao_estadual: '110.042.490.114',
       inscricao_municipal: '1234567',
       email: 'contato@construtoraabc.com.br',

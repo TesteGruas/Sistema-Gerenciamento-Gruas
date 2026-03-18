@@ -251,6 +251,20 @@ export default function PWAMainPage() {
         }
 
         const userData = JSON.parse(userDataStr)
+
+        const tipoUsuario = String(
+          userData?.user_metadata?.tipo ||
+          userData?.profile?.tipo ||
+          userData?.tipo ||
+          ''
+        ).toLowerCase()
+
+        // Cliente não deve usar endpoints de funcionário.
+        if (isClientRole() || tipoUsuario === 'cliente') {
+          setTemObraAtiva(true)
+          setLoadingObra(false)
+          return
+        }
         
         // PRIORIDADE 1: Verificar se já temos dados do funcionário com obra_atual ou funcionarios_obras
         // Isso evita chamadas desnecessárias à API
@@ -359,12 +373,12 @@ export default function PWAMainPage() {
     }
 
     verificarObraAtiva()
-  }, [pwaUserData.user])
+  }, [pwaUserData.user, isResponsavelObra, isClientRole])
 
   // Buscar registros pendentes de assinatura do funcionário (dupla assinatura)
   useEffect(() => {
     const verificarPendentesAssinatura = async () => {
-      if (typeof window === 'undefined' || isResponsavelObra) return
+      if (typeof window === 'undefined' || isResponsavelObra || isClientRole()) return
       try {
         const funcionarioId = await getFuncionarioIdWithFallback()
         if (!funcionarioId) return
@@ -387,7 +401,7 @@ export default function PWAMainPage() {
       }
     }
     verificarPendentesAssinatura()
-  }, [isResponsavelObra])
+  }, [isResponsavelObra, isClientRole])
 
   // Resolver obra para atalhos de checklist/manutenção
   useEffect(() => {
@@ -397,6 +411,18 @@ export default function PWAMainPage() {
       try {
         const userDataStr = localStorage.getItem('user_data')
         const userData = userDataStr ? JSON.parse(userDataStr) : null
+        const tipoUsuario = String(
+          userData?.user_metadata?.tipo ||
+          userData?.profile?.tipo ||
+          userData?.tipo ||
+          ''
+        ).toLowerCase()
+
+        // Cliente não deve cair em fallback de funcionário.
+        if (!isResponsavelObra && (isClientRole() || tipoUsuario === 'cliente')) {
+          setObraAtalhoId(null)
+          return
+        }
 
         // Responsável de obra: usar primeira obra vinculada
         const obrasResponsavel = userData?.obras_responsavel || userData?.user?.obras_responsavel || []
@@ -452,7 +478,7 @@ export default function PWAMainPage() {
     }
 
     resolverObraAtalho()
-  }, [pwaUserData.user, isResponsavelObra])
+  }, [pwaUserData.user, isResponsavelObra, isClientRole])
 
   // Carregar cards de medições para funcionário/responsável vinculados à obra
   useEffect(() => {

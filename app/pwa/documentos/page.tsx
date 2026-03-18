@@ -142,15 +142,25 @@ export default function PWADocumentosPage() {
 
       // Buscar documentos pendentes de assinatura
       try {
+        const role = String(user?.role || user?.cargo || '').toLowerCase()
+        const tipo = String(user?.user_metadata?.tipo || user?.profile?.tipo || user?.tipo || '').toLowerCase()
+        const userLevel = Number(user?.level || 0)
+        const isClienteLogin = tipo === 'cliente' || role.includes('cliente') || userLevel === 1
+
         // Tentar primeiro com funcionario_id se disponível
         const token = localStorage.getItem('access_token')
         if (token) {
-          const funcionarioId = await getFuncionarioIdWithFallback(
-            user, 
-            token, 
-            'ID do funcionário não encontrado'
-          )
-          console.log('🔍 [PWA Documentos] Usando funcionarioId:', funcionarioId, 'tipo:', typeof funcionarioId)
+          let funcionarioId: number | string = user?.id || 0
+
+          if (!isClienteLogin) {
+            funcionarioId = await getFuncionarioIdWithFallback(
+              user,
+              token,
+              'ID do funcionário não encontrado'
+            )
+          }
+
+          console.log('🔍 [PWA Documentos] Usando identificador:', funcionarioId, 'tipo:', typeof funcionarioId, 'cliente:', isClienteLogin)
           
           // Buscar documentos do funcionário
           const response = await documentosApi.getDocumentosFuncionario(funcionarioId)
@@ -183,6 +193,11 @@ export default function PWADocumentosPage() {
               caminho_arquivo: doc.caminho_arquivo
             }
           }).filter((doc: any) => {
+            if (isClienteLogin) {
+              // Para cliente, o backend já retorna apenas documentos das suas obras.
+              return ['pendente', 'aguardando', 'assinado', 'rejeitado'].includes(doc.status)
+            }
+
             // Filtrar documentos do usuário atual (pendentes, aguardando ou já assinados)
             const docUserId = doc.user_id?.toString() || ''
             const userFuncionarioId = funcionarioId.toString()
@@ -333,11 +348,18 @@ export default function PWADocumentosPage() {
         throw new Error('Token não encontrado')
       }
       
-      const funcionarioId = await getFuncionarioIdWithFallback(
-        user, 
-        token, 
-        'ID do funcionário não encontrado'
-      )
+      const role = String(user?.role || user?.cargo || '').toLowerCase()
+      const tipo = String(user?.user_metadata?.tipo || user?.profile?.tipo || user?.tipo || '').toLowerCase()
+      const userLevel = Number(user?.level || 0)
+      const isClienteLogin = tipo === 'cliente' || role.includes('cliente') || userLevel === 1
+
+      const funcionarioId = isClienteLogin
+        ? Number(user?.cliente_id || user?.profile?.cliente_id || user?.user_metadata?.cliente_id || 0)
+        : await getFuncionarioIdWithFallback(
+            user,
+            token,
+            'ID do funcionário não encontrado'
+          )
       
       // Capturar geolocalização se disponível
       let geoloc: string | undefined
@@ -386,6 +408,10 @@ export default function PWADocumentosPage() {
         
         // Encontrar a assinatura do usuário atual
         const assinaturaUsuario = documentoCompleto.assinaturas?.find((ass: any) => {
+          if (isClienteLogin) {
+            return ass?.tipo === 'cliente' && ['pendente', 'aguardando'].includes(String(ass?.status || '').toLowerCase())
+          }
+
           const assUserId = ass.user_id?.toString() || ''
           const userFuncionarioId = funcionarioId.toString()
           const userFuncionarioIdUuid = `00000000-0000-0000-0000-${userFuncionarioId.padStart(12, '0')}`
