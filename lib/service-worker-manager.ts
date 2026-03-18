@@ -138,6 +138,12 @@ export class ServiceWorkerManager {
    */
   onUpdate(callback: (registration: ServiceWorkerRegistration) => void) {
     this.onUpdateCallback = callback;
+
+    // Se já existe atualização aguardando quando o callback é registrado,
+    // notificar imediatamente para não perder a atualização.
+    if (this.registration?.waiting) {
+      callback(this.registration);
+    }
   }
 
   /**
@@ -264,19 +270,15 @@ export async function initServiceWorker() {
   if (typeof window === 'undefined') return null;
 
   const manager = getServiceWorkerManager();
-  const registration = await manager.register();
 
-  // Configurar notificação de atualização
-  manager.onUpdate((reg) => {
-    // Você pode mostrar um toast ou modal aqui
-    const shouldUpdate = confirm(
-      'Uma nova versão do aplicativo está disponível. Deseja atualizar agora?'
-    );
-    
-    if (shouldUpdate) {
-      manager.activateUpdate();
-    }
+  // Configurar atualização antes do registro para não perder eventos de updatefound.
+  manager.onUpdate((_registration) => {
+    // Em PWA, manter SW antigo após deploy pode deixar app preso em "Carregando..."
+    // com chunks desatualizados. Ativamos a atualização automaticamente.
+    manager.activateUpdate();
   });
+
+  const registration = await manager.register();
 
   // Registrar sincronizações quando voltar online
   window.addEventListener('online', () => {

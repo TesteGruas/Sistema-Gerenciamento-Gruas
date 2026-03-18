@@ -4,7 +4,7 @@
 // Implementa estratégias avançadas de cache,
 // sincronização em background e push notifications
 
-const VERSION = '3.2.0';
+const VERSION = '3.2.1';
 const CACHE_PREFIX = 'irbana-pwa';
 const CACHE_STATIC = `${CACHE_PREFIX}-static-v${VERSION}`;
 const CACHE_DYNAMIC = `${CACHE_PREFIX}-dynamic-v${VERSION}`;
@@ -32,17 +32,6 @@ const CONFIG = {
 
 // Assets estáticos para cache (cache-first)
 const STATIC_ASSETS = [
-  '/',
-  '/pwa',
-  '/pwa/login',
-  '/pwa/ponto',
-  '/pwa/gruas',
-  '/pwa/documentos',
-  '/pwa/notificacoes',
-  '/pwa/perfil',
-  '/pwa/assinatura',
-  '/pwa/encarregador',
-  '/pwa/redirect',
   '/manifest.json'
 ];
 
@@ -71,7 +60,11 @@ function isImageRequest(url) {
 
 function isStaticAsset(url) {
   const urlPath = new URL(url).pathname;
-  return STATIC_ASSETS.some(asset => urlPath === asset || urlPath.startsWith(asset));
+  return STATIC_ASSETS.includes(urlPath);
+}
+
+function isNavigationRequest(request) {
+  return request.mode === 'navigate' || request.destination === 'document';
 }
 
 async function cleanCache(cacheName, maxSize) {
@@ -173,6 +166,39 @@ async function networkFirst(request) {
       status: 503,
       headers: { 'Content-Type': 'application/json' }
     });
+  }
+}
+
+// Estratégia 2.1: Network First para páginas (HTML de navegação)
+// Evita servir HTML antigo após novo deploy, principal causa de white screen com "Carregando..."
+async function networkFirstPage(request) {
+  try {
+    const networkResponse = await fetchWithTimeout(request, 8000);
+
+    if (networkResponse.ok) {
+      const cache = await caches.open(CACHE_DYNAMIC);
+      cache.put(request, await addTimestamp(networkResponse.clone()));
+      await cleanCache(CACHE_DYNAMIC, CONFIG.maxCacheSize.dynamic);
+    }
+
+    log('Network hit (page):', request.url);
+    return networkResponse;
+  } catch (error) {
+    log('Network falhou, tentando cache (page):', request.url);
+
+    const cachedResponse = await caches.match(request);
+    if (cachedResponse) {
+      log('Cache hit (page fallback):', request.url);
+      return cachedResponse;
+    }
+
+    return new Response(
+      '<!doctype html><html><body><h1>Offline</h1><p>Sem conexão com o servidor.</p></body></html>',
+      {
+        status: 503,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' }
+      }
+    );
   }
 }
 
@@ -339,7 +365,10 @@ self.addEventListener('fetch', (event) => {
   // Escolher estratégia baseada no tipo de requisição
   let strategyPromise;
   
-  if (isApiRequest(url)) {
+  if (isNavigationRequest(request)) {
+    // Navegação HTML: sempre priorizar rede para evitar shell/HTML desatualizado
+    strategyPromise = networkFirstPage(request);
+  } else if (isApiRequest(url)) {
     // APIs: Network First com fallback para cache
     strategyPromise = networkFirst(request);
   } else if (isImageRequest(url)) {
