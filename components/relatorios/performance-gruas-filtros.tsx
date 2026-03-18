@@ -3,12 +3,11 @@
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Calendar } from "@/components/ui/calendar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { CalendarIcon, Filter, RefreshCw } from "lucide-react"
+import { ArrowDown, ArrowUp, CalendarIcon, Filter, RefreshCw } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import type { PerformanceGruasFiltros } from "@/lib/api-relatorios-performance"
@@ -86,10 +85,10 @@ export function PerformanceGruasFiltros({
           Filtros
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <CardContent className="overflow-x-auto">
+        <div className="min-w-[1200px] flex items-end gap-3">
           {/* Período Preset */}
-          <div>
+          <div className="min-w-[140px] flex-1">
             <Label>Período</Label>
             <Select value={periodoPreset} onValueChange={handlePresetChange}>
               <SelectTrigger>
@@ -107,7 +106,7 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Data Início */}
-          <div>
+          <div className="min-w-[160px] flex-1">
             <Label>Data Início</Label>
             <Popover>
               <PopoverTrigger asChild>
@@ -139,7 +138,7 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Data Fim */}
-          <div>
+          <div className="min-w-[160px] flex-1">
             <Label>Data Fim</Label>
             <Popover>
               <PopoverTrigger asChild>
@@ -171,7 +170,7 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Grua */}
-          <div>
+          <div className="min-w-[170px] flex-1">
             <Label>Grua (Opcional)</Label>
             <Select
               value={filtros.grua_id?.toString() || "all"}
@@ -197,7 +196,7 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Obra */}
-          <div>
+          <div className="min-w-[170px] flex-1">
             <Label>Obra (Opcional)</Label>
             <Select
               value={filtros.obra_id?.toString() || "all"}
@@ -223,7 +222,7 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Ordenar Por */}
-          <div>
+          <div className="min-w-[180px] flex-1">
             <Label>Ordenar Por</Label>
             <Select
               value={filtros.ordenar_por || "taxa_utilizacao"}
@@ -247,37 +246,39 @@ export function PerformanceGruasFiltros({
             </Select>
           </div>
 
-          {/* Ordem */}
-          <div>
+          {/* Ordem (ícone para economizar espaço) */}
+          <div className="min-w-[76px] shrink-0">
             <Label>Ordem</Label>
-            <Select
-              value={filtros.ordem || "desc"}
-              onValueChange={(value) => {
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-10"
+              aria-label={filtros.ordem === "asc" ? "Ordem crescente" : "Ordem decrescente"}
+              title={filtros.ordem === "asc" ? "Crescente" : "Decrescente"}
+              onClick={() =>
                 onFiltrosChange({
                   ...filtros,
-                  ordem: value as 'asc' | 'desc'
+                  ordem: filtros.ordem === "asc" ? "desc" : "asc"
                 })
-              }}
+              }
             >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="desc">Decrescente</SelectItem>
-                <SelectItem value="asc">Crescente</SelectItem>
-              </SelectContent>
-            </Select>
+              {filtros.ordem === "asc" ? (
+                <ArrowUp className="w-4 h-4" />
+              ) : (
+                <ArrowDown className="w-4 h-4" />
+              )}
+            </Button>
           </div>
-        </div>
 
-        <div className="flex gap-2 mt-4">
-          <Button onClick={onAplicar} disabled={loading}>
-            <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Aplicar Filtros
-          </Button>
-          <Button variant="outline" onClick={onLimpar} disabled={loading}>
-            Limpar Filtros
-          </Button>
+          <div className="flex gap-2 shrink-0 ml-auto">
+            <Button onClick={onAplicar} disabled={loading}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+              Aplicar Filtros
+            </Button>
+            <Button variant="outline" onClick={onLimpar} disabled={loading}>
+              Limpar Filtros
+            </Button>
+          </div>
         </div>
       </CardContent>
     </Card>
