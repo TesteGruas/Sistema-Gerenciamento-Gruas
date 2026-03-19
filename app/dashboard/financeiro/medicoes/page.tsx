@@ -93,6 +93,7 @@ export default function MedicoesPage() {
   const [emailEnvio, setEmailEnvio] = useState("")
   const [telefoneEnvio, setTelefoneEnvio] = useState("")
   const [enviando, setEnviando] = useState(false)
+  const [excluindoId, setExcluindoId] = useState<number | null>(null)
 
 
   useEffect(() => {
@@ -291,6 +292,28 @@ export default function MedicoesPage() {
       })
     } finally {
       setEnviando(false)
+    }
+  }
+
+  const handleExcluir = async (medicao: MedicaoMensal) => {
+    try {
+      setExcluindoId(medicao.id)
+      const response = await medicoesMensaisApi.deletar(medicao.id)
+
+      toast({
+        title: "Sucesso",
+        description: response.message || "Medição excluída com sucesso"
+      })
+
+      await carregarMedicoes()
+    } catch (error: any) {
+      toast({
+        title: "Erro ao excluir medição",
+        description: error.message || "Não foi possível excluir a medição",
+        variant: "destructive"
+      })
+    } finally {
+      setExcluindoId(null)
     }
   }
 
@@ -627,6 +650,39 @@ export default function MedicoesPage() {
                               >
                                 <Send className="w-4 h-4" />
                               </Button>
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    disabled={excluindoId === medicao.id || medicao.status === 'finalizada'}
+                                    title={
+                                      medicao.status === 'finalizada'
+                                        ? 'Medições finalizadas não podem ser excluídas'
+                                        : 'Excluir medição'
+                                    }
+                                  >
+                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Excluir medição</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Esta ação não pode ser desfeita. A medição do período {medicao.periodo} será removida permanentemente.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => handleExcluir(medicao)}
+                                      className="bg-red-600 hover:bg-red-700"
+                                    >
+                                      Excluir
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
                             </div>
                           </TableCell>
                         </TableRow>
