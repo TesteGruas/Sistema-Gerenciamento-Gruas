@@ -818,28 +818,117 @@ export default function OrcamentosPage() {
             </DialogDescription>
           </DialogHeader>
           {selectedOrcamento && (
-             <div className="grid gap-4 py-4">
-               {/* Resumo simples para visualização - pode ser expandido conforme necessidade */}
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                   <h3 className="font-semibold mb-2">Informações do Cliente</h3>
-                   <p className="text-sm">Cliente: {selectedOrcamento.cliente_nome}</p>
-                   <p className="text-sm">Obra: {selectedOrcamento.obra_nome}</p>
-                   <p className="text-sm">Endereço: {selectedOrcamento.obra_endereco}</p>
-                 </div>
-                 <div>
-                   <h3 className="font-semibold mb-2">Detalhes Comerciais</h3>
-                   <p className="text-sm">Status: {selectedOrcamento.status}</p>
-                   <p className="text-sm">Valor Total: {formatCurrencyDisplay(selectedOrcamento.total_mensal)}</p>
-                   <p className="text-sm">Prazo: {selectedOrcamento.prazo_locacao_meses} meses</p>
-                 </div>
-               </div>
-               
-               <div className="flex justify-end gap-2 mt-4">
-                 <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>Fechar</Button>
-                 <Button onClick={() => handleEdit(selectedOrcamento.id)}>Editar Orçamento</Button>
-               </div>
-             </div>
+            <div className="grid gap-5 py-2">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <Card className="md:col-span-2 border-blue-100 bg-blue-50/40">
+                  <CardContent className="p-4">
+                    <p className="text-xs text-blue-700 uppercase tracking-wide">Valor Total Mensal</p>
+                    <p className="text-2xl font-bold text-blue-900 mt-1">
+                      {formatCurrencyDisplay(selectedOrcamento.total_mensal)}
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Prazo</p>
+                    <p className="text-lg font-semibold mt-1">
+                      {selectedOrcamento.prazo_locacao_meses || 0} meses
+                    </p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Status</p>
+                    <div className="mt-2">{getStatusBadge(selectedOrcamento.status)}</div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Informações do Cliente e Obra</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p><span className="text-gray-500">Cliente:</span> <span className="font-medium">{selectedOrcamento.cliente_nome || "-"}</span></p>
+                    <p><span className="text-gray-500">Obra:</span> <span className="font-medium">{selectedOrcamento.obra_nome || "-"}</span></p>
+                    <p><span className="text-gray-500">Endereço:</span> <span className="font-medium">{selectedOrcamento.obra_endereco || "-"}</span></p>
+                    <p><span className="text-gray-500">Cidade/UF:</span> <span className="font-medium">{selectedOrcamento.obra_cidade || "-"}{selectedOrcamento.obra_estado ? `/${selectedOrcamento.obra_estado}` : ""}</span></p>
+                    <p><span className="text-gray-500">Tipo de Obra:</span> <span className="font-medium">{selectedOrcamento.tipo_obra || "-"}</span></p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Composição Comercial</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p><span className="text-gray-500">Locação Mensal:</span> <span className="font-medium">{formatCurrencyDisplay(selectedOrcamento.valor_locacao_mensal || 0)}</span></p>
+                    <p><span className="text-gray-500">Operador:</span> <span className="font-medium">{formatCurrencyDisplay(selectedOrcamento.valor_operador || 0)}</span></p>
+                    <p><span className="text-gray-500">Sinaleiro:</span> <span className="font-medium">{formatCurrencyDisplay(selectedOrcamento.valor_sinaleiro || 0)}</span></p>
+                    <p><span className="text-gray-500">Manutenção:</span> <span className="font-medium">{formatCurrencyDisplay(selectedOrcamento.valor_manutencao || 0)}</span></p>
+                    <p><span className="text-gray-500">Data de Início Estimada:</span> <span className="font-medium">{formatarData(selectedOrcamento.data_inicio_estimada)}</span></p>
+                    <p><span className="text-gray-500">Validade da Proposta:</span> <span className="font-medium">{formatarData(selectedOrcamento.validade_proposta)}</span></p>
+                    <p><span className="text-gray-500">Tolerância:</span> <span className="font-medium">{selectedOrcamento.tolerancia_dias || 0} dias</span></p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <Card>
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-base">Dados Técnicos do Equipamento</CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <p><span className="text-gray-500">Equipamento:</span> <span className="font-medium">{selectedOrcamento.equipamento || "-"}</span></p>
+                  <p><span className="text-gray-500">Altura Inicial:</span> <span className="font-medium">{selectedOrcamento.altura_inicial || 0} m</span></p>
+                  <p><span className="text-gray-500">Altura Final:</span> <span className="font-medium">{selectedOrcamento.altura_final || 0} m</span></p>
+                  <p><span className="text-gray-500">Lança:</span> <span className="font-medium">{selectedOrcamento.comprimento_lanca || 0} m</span></p>
+                  <p><span className="text-gray-500">Carga Máxima:</span> <span className="font-medium">{selectedOrcamento.carga_maxima || 0} kg</span></p>
+                  <p><span className="text-gray-500">Carga na Ponta:</span> <span className="font-medium">{selectedOrcamento.carga_ponta || 0} kg</span></p>
+                  <p><span className="text-gray-500">Potência Elétrica:</span> <span className="font-medium">{selectedOrcamento.potencia_eletrica || "-"}</span></p>
+                  <p><span className="text-gray-500">Energia Necessária:</span> <span className="font-medium">{selectedOrcamento.energia_necessaria || "-"}</span></p>
+                </CardContent>
+              </Card>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Condições e Escopo</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div>
+                      <p className="text-gray-500 mb-1">Condições Comerciais</p>
+                      <p className="font-medium whitespace-pre-wrap">{selectedOrcamento.condicoes_comerciais || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Escopo Incluso</p>
+                      <p className="font-medium whitespace-pre-wrap">{selectedOrcamento.escopo_incluso || "-"}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base">Responsabilidades e Observações</CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 text-sm">
+                    <div>
+                      <p className="text-gray-500 mb-1">Responsabilidades do Cliente</p>
+                      <p className="font-medium whitespace-pre-wrap">{selectedOrcamento.responsabilidades_cliente || "-"}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 mb-1">Observações</p>
+                      <p className="font-medium whitespace-pre-wrap">{selectedOrcamento.observacoes || "-"}</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              <div className="flex justify-end gap-2 mt-2">
+                <Button variant="outline" onClick={() => setIsViewDialogOpen(false)}>Fechar</Button>
+                <Button onClick={() => handleEdit(selectedOrcamento.id)}>Editar Orçamento</Button>
+              </div>
+            </div>
           )}
         </DialogContent>
       </Dialog>

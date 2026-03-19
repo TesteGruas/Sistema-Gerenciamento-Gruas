@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef, Suspense, useMemo, memo } from "react"
+import { useState, useEffect, useRef, Suspense, useMemo, useCallback, memo } from "react"
 import dynamic from "next/dynamic"
 import { AuthService } from "@/app/lib/auth"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -99,7 +99,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   
   // SEÇÃO NOTIFICAÇÕES
   { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "notificacoes", permission: "notificacoes:visualizar" },
-  { name: "WhatsApp Aprovações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "notificacoes", permission: "aprovacoes:visualizar" },
+  { name: "WhatsApp Notificações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "notificacoes", permission: "aprovacoes:visualizar" },
   
   // SEÇÃO OPERACIONAL
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
@@ -199,7 +199,7 @@ function DashboardLayoutContent({
         return canAccessDashboard()
       }
       
-      // WhatsApp Aprovações - apenas Admin
+      // WhatsApp Notificações - apenas Admin
       if (item.href === '/dashboard/aprovacoes-horas-extras/whatsapp') {
         return isAdminFromPermissions()
       }
@@ -338,6 +338,13 @@ function DashboardLayoutContent({
     isAdminFromPermissions() ? [...filteredBaseNavigation, ...filteredAdminNavigation] : filteredBaseNavigation,
     [isAdminFromPermissions, filteredBaseNavigation, filteredAdminNavigation]
   )
+
+  // Mantém o item da sidebar ativo também em rotas filhas (ex.: /dashboard/financeiro/*)
+  const isNavItemActive = useCallback((href: string) => {
+    if (!pathname) return false
+    if (href === "/dashboard") return pathname === href
+    return pathname === href || pathname.startsWith(`${href}/`)
+  }, [pathname])
 
   // Detectar mudanças no pathname para desativar loading
   const previousPathname = useRef(pathname)
@@ -517,7 +524,7 @@ function DashboardLayoutContent({
             {!collapsedSections.principal && (
               <div className="space-y-1">
                 {navigation.filter(item => item.category === "principal").map((item) => {
-                  const isActive = pathname === item.href
+                  const isActive = isNavItemActive(item.href)
                   return (
                     <Link
                       key={item.name}
@@ -553,7 +560,7 @@ function DashboardLayoutContent({
               {!collapsedSections.notificacoes && (
                 <div className="space-y-1">
                   {navigation.filter(item => item.category === "notificacoes").map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = isNavItemActive(item.href)
                     return (
                       <Link
                         key={item.name}
@@ -589,7 +596,7 @@ function DashboardLayoutContent({
             {!collapsedSections.operacional && (
               <div className="space-y-1">
                 {navigation.filter(item => item.category === "operacional").map((item) => {
-                  const isActive = pathname === item.href
+                  const isActive = isNavItemActive(item.href)
                   return (
                     <Link
                       key={item.name}
@@ -625,7 +632,7 @@ function DashboardLayoutContent({
               {!collapsedSections.rh && (
                 <div className="space-y-1">
                   {filteredBaseNavigation.filter(item => item.category === "rh").map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = isNavItemActive(item.href)
                     return (
                       <Link
                         key={item.name}
@@ -662,7 +669,7 @@ function DashboardLayoutContent({
               {!collapsedSections.financeiro && (
                 <div className="space-y-1">
                   {filteredBaseNavigation.filter(item => item.category === "financeiro").map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = isNavItemActive(item.href)
                     return (
                       <Link
                         key={item.name}
@@ -698,7 +705,7 @@ function DashboardLayoutContent({
             {!collapsedSections.relatorios && (
               <div className="space-y-1">
                 {navigation.filter(item => item.category === "relatorios").map((item) => {
-                  const isActive = pathname === item.href
+                  const isActive = isNavItemActive(item.href)
                   return (
                     <Link
                       key={item.name}
@@ -733,7 +740,7 @@ function DashboardLayoutContent({
             {!collapsedSections.documentos && (
               <div className="space-y-1">
                 {navigation.filter(item => item.category === "documentos").map((item) => {
-                  const isActive = pathname === item.href
+                  const isActive = isNavItemActive(item.href)
                   return (
                     <Link
                       key={item.name}
@@ -769,7 +776,7 @@ function DashboardLayoutContent({
               {!collapsedSections.admin && (
                 <div className="space-y-1">
                   {filteredAdminNavigation.map((item) => {
-                    const isActive = pathname === item.href
+                    const isActive = isNavItemActive(item.href)
                     return (
                       <Link
                         key={item.name}

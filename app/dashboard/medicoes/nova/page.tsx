@@ -34,6 +34,7 @@ import { gruaObraApi } from "@/lib/api-grua-obra"
 import { itensCustosMensaisApi, ItemCustoMensal } from "@/lib/api-itens-custos-mensais"
 import { medicoesMensaisApi, MedicaoMensalCreate } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils } from "@/lib/medicoes-utils"
+import { DebugButton } from "@/components/debug-button"
 
 interface CustoMensalForm {
   item: string
@@ -727,15 +728,12 @@ export default function NovaMedicaoPage() {
             <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
           </div>
         </div>
-        <Button 
-          type="button"
-          variant="outline" 
+        <DebugButton
           onClick={preencherDadosDebug}
+          variant="default"
+          label="Preencher Dados"
           className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-        >
-          <Calculator className="w-4 h-4 mr-2" />
-          Preencher Dados
-        </Button>
+        />
       </div>
 
       {/* Mensagem de Erro */}
@@ -1387,10 +1385,14 @@ export default function NovaMedicaoPage() {
                 
                 {/* Terceira linha: Botão Adicionar */}
                 <div className="flex justify-end gap-2">
-                  <Button type="button" variant="outline" onClick={preencherDadosCustoMensal} size="sm" className="h-8">
-                    <Calculator className="w-3 h-3 mr-1" />
-                    Preencher dados
-                  </Button>
+                  <DebugButton
+                    onClick={preencherDadosCustoMensal}
+                    size="sm"
+                    variant="outline"
+                    className="h-8"
+                    label="Preencher dados"
+                    title="Preencher dados de teste"
+                  />
                   <Button type="button" onClick={adicionarCustoMensal} size="sm" className="h-8">
                     <Plus className="w-3 h-3 mr-1" />
                     Adicionar

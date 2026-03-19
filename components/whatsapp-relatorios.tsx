@@ -51,6 +51,14 @@ export function WhatsAppRelatorios() {
   })
   const [logSelecionado, setLogSelecionado] = useState<WhatsAppLog | null>(null)
   const [showDetalhes, setShowDetalhes] = useState(false)
+  const [pagina, setPagina] = useState(1)
+  const [limite, setLimite] = useState(20)
+  const [paginacao, setPaginacao] = useState({
+    page: 1,
+    limit: 20,
+    total: 0,
+    pages: 1
+  })
   
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -75,7 +83,8 @@ export function WhatsAppRelatorios() {
     const timer = setTimeout(() => {
       if (!loadingRef.current) {
         loadingRef.current = true
-        Promise.all([carregarLogs(), carregarEstatisticas()]).finally(() => {
+        setPagina(1)
+        Promise.all([carregarLogs(1, limite), carregarEstatisticas()]).finally(() => {
           loadingRef.current = false
         })
       }
@@ -85,20 +94,46 @@ export function WhatsAppRelatorios() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtros, dadosIniciaisCarregados])
 
-  const carregarLogs = async () => {
+  // Recarregar logs quando página mudar
+  useEffect(() => {
+    if (!dadosIniciaisCarregados) return
+    if (loadingRef.current) return
+
+    loadingRef.current = true
+    carregarLogs(pagina, limite).finally(() => {
+      loadingRef.current = false
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pagina, limite, dadosIniciaisCarregados])
+
+  const carregarLogs = async (pageParam?: number, limitParam?: number) => {
     try {
       setLoading(true)
+      const paginaAtual = pageParam || pagina
+      const limiteAtual = limitParam || limite
       const filtrosApi: FiltrosLogs = {
         data_inicio: filtros.data_inicio || undefined,
         data_fim: filtros.data_fim || undefined,
         status: filtros.status && filtros.status !== 'all' ? filtros.status : undefined,
         tipo: filtros.tipo && filtros.tipo !== 'all' ? filtros.tipo : undefined,
-        aprovacao_id: filtros.aprovacao_id || undefined
+        aprovacao_id: filtros.aprovacao_id || undefined,
+        page: paginaAtual,
+        limit: limiteAtual
       }
       
       const response = await whatsappApi.listarLogs(filtrosApi)
       if (response.success) {
         setLogs(response.data || [])
+        if (response.pagination) {
+          setPaginacao(response.pagination)
+        } else {
+          setPaginacao({
+            page: paginaAtual,
+            limit: limiteAtual,
+            total: response.data?.length || 0,
+            pages: 1
+          })
+        }
       }
     } catch (error) {
       console.error('Erro ao carregar logs:', error)
@@ -186,6 +221,17 @@ export function WhatsAppRelatorios() {
     if (filtros.tipo && filtros.tipo !== 'all' && log.tipo !== filtros.tipo) return false
     return true
   })
+
+  const getPaginasVisiveis = () => {
+    const totalPages = Math.max(1, paginacao.pages)
+    const current = paginacao.page
+    const delta = 2
+    const start = Math.max(1, current - delta)
+    const end = Math.min(totalPages, current + delta)
+    const pages: number[] = []
+    for (let i = start; i <= end; i++) pages.push(i)
+    return pages
+  }
 
   return (
     <div className="space-y-6">
@@ -312,7 +358,7 @@ export function WhatsAppRelatorios() {
             </div>
           </div>
           <div className="flex gap-2 mt-4">
-            <Button variant="outline" onClick={carregarLogs} disabled={loading}>
+            <Button variant="outline" onClick={() => carregarLogs(pagina, limite)} disabled={loading}>
               <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
               Atualizar
             </Button>
@@ -320,6 +366,25 @@ export function WhatsAppRelatorios() {
               <Download className="w-4 h-4 mr-2" />
               Exportar CSV
             </Button>
+            <div className="ml-auto w-[150px]">
+              <Select
+                value={String(limite)}
+                onValueChange={(value) => {
+                  setLimite(parseInt(value, 10))
+                  setPagina(1)
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Por página" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="10">10 / página</SelectItem>
+                  <SelectItem value="20">20 / página</SelectItem>
+                  <SelectItem value="50">50 / página</SelectItem>
+                  <SelectItem value="100">100 / página</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -346,61 +411,103 @@ export function WhatsAppRelatorios() {
               <p className="text-gray-600">Nenhum log encontrado</p>
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data/Hora</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Destinatário</TableHead>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Tentativa</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {logsFiltrados.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell>
-                        <div className="text-sm">
-                          <div>{format(new Date(log.created_at), 'dd/MM/yyyy', { locale: ptBR })}</div>
-                          <div className="text-xs text-gray-500">
-                            {format(new Date(log.created_at), 'HH:mm:ss', { locale: ptBR })}
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>{getTipoBadge(log.tipo)}</TableCell>
-                      <TableCell>
-                        <span className="text-sm">{log.telefone_destino}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{log.aprovacao?.funcionario_nome || '-'}</span>
-                      </TableCell>
-                      <TableCell>
-                        <span className="text-sm">{log.aprovacao?.obra_nome || '-'}</span>
-                      </TableCell>
-                      <TableCell>{getStatusBadge(log.status)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{log.tentativa}</Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setLogSelecionado(log)
-                            setShowDetalhes(true)
-                          }}
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                      </TableCell>
+            <div className="space-y-4">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Data/Hora</TableHead>
+                      <TableHead>Tipo</TableHead>
+                      <TableHead>Destinatário</TableHead>
+                      <TableHead>Funcionário</TableHead>
+                      <TableHead>Obra</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Tentativa</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+                  </TableHeader>
+                  <TableBody>
+                    {logsFiltrados.map((log) => (
+                      <TableRow key={log.id}>
+                        <TableCell>
+                          <div className="text-sm">
+                            <div>{format(new Date(log.created_at), 'dd/MM/yyyy', { locale: ptBR })}</div>
+                            <div className="text-xs text-gray-500">
+                              {format(new Date(log.created_at), 'HH:mm:ss', { locale: ptBR })}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>{getTipoBadge(log.tipo)}</TableCell>
+                        <TableCell>
+                          <span className="text-sm">{log.telefone_destino}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{log.aprovacao?.funcionario_nome || '-'}</span>
+                        </TableCell>
+                        <TableCell>
+                          <span className="text-sm">{log.aprovacao?.obra_nome || '-'}</span>
+                        </TableCell>
+                        <TableCell>{getStatusBadge(log.status)}</TableCell>
+                        <TableCell>
+                          <Badge variant="outline">{log.tentativa}</Badge>
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setLogSelecionado(log)
+                              setShowDetalhes(true)
+                            }}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+              <div className="mt-4 flex items-center justify-between">
+                <p className="text-sm text-gray-500">
+                  Mostrando {logsFiltrados.length} de {paginacao.total} registros
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagina((prev) => Math.max(1, prev - 1))}
+                    disabled={loading || pagina <= 1}
+                  >
+                    Anterior
+                  </Button>
+                  <span className="text-sm text-gray-600 min-w-[100px] text-center">
+                    Página {paginacao.page} de {Math.max(1, paginacao.pages)}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPagina((prev) => Math.min(Math.max(1, paginacao.pages), prev + 1))}
+                    disabled={loading || pagina >= Math.max(1, paginacao.pages)}
+                  >
+                    Próxima
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-end gap-1">
+                {getPaginasVisiveis().map((page) => (
+                  <Button
+                    key={page}
+                    variant={page === paginacao.page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPagina(page)}
+                    disabled={loading}
+                    className="min-w-9"
+                  >
+                    {page}
+                  </Button>
+                ))}
+              </div>
             </div>
           )}
         </CardContent>

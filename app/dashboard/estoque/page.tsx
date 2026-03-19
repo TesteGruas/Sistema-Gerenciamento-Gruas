@@ -1434,18 +1434,12 @@ export default function EstoquePage() {
               <div className="flex-1 overflow-y-auto pr-2 min-h-0">
                 <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
+                  <DebugButton
                     onClick={preencherDadosDebugEstoque}
                     disabled={loading}
-                    className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-                    title="Preencher todos os campos com dados de teste"
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Preencher Dados de Teste
-                  </Button>
-                  <DebugButton onClick={preencherDadosDebugEstoque} disabled={loading} />
+                    variant="outline"
+                    label="Preencher Dados de Teste"
+                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">

@@ -326,10 +326,13 @@ function NovoClienteDialog({
         </DialogHeader>
         <form onSubmit={handleCreateCliente} className="space-y-2">
           <div className="flex justify-end mb-4">
-            <Button type="button" variant="outline" onClick={preencherDadosClienteDebug} disabled={isCreatingCliente} className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300" title="Preencher todos os campos com dados de exemplo">
-              <Zap className="w-4 h-4 mr-2" />
-              Preencher Todos os Dados
-            </Button>
+            <DebugButton
+              onClick={preencherDadosClienteDebug}
+              disabled={isCreatingCliente}
+              variant="outline"
+              label="Preencher Todos os Dados"
+              title="Preencher todos os campos com dados de exemplo"
+            />
           </div>
           <div className="space-y-4">
             <h3 className="text-lg font-medium">Informações Básicas</h3>
@@ -3480,19 +3483,21 @@ startxref
                           <AccordionContent>
                             <div className="space-y-4 pb-4">
                               {/* Botão para preencher todos os dados desta grua */}
-                              <div className="flex justify-end mb-2">
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  onClick={() => preencherTodosDadosGrua(grua.id)}
-                                  disabled={creating}
-                                  className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-                                  title="Preencher todos os campos com dados de exemplo"
-                                >
-                                  <Zap className="w-4 h-4 mr-2" />
-                                  Preencher Todos os Dados
-                                </Button>
-                              </div>
+                              {debugMode && (
+                                <div className="flex justify-end mb-2">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    onClick={() => preencherTodosDadosGrua(grua.id)}
+                                    disabled={creating}
+                                    className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                                    title="Preencher todos os campos com dados de exemplo"
+                                  >
+                                    <Zap className="w-4 h-4 mr-2" />
+                                    Preencher Todos os Dados
+                                  </Button>
+                                </div>
+                              )}
                               
                               {/* Seção: Parâmetros Técnicos */}
                               <Card>
@@ -3507,18 +3512,20 @@ startxref
                                         Os dados técnicos devem ser definidos no orçamento. Estes campos são apenas para ajustes finais se necessário.
                                       </CardDescription>
                                     </div>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={preencherParametrosTecnicos}
-                                      disabled={creating || gruasSelecionadas.length === 0}
-                                      className="shrink-0"
-                                      title="Preencher todos os campos de Parâmetros Técnicos com dados de teste"
-                                    >
-                                      <Zap className="w-3 h-3 mr-1" />
-                                      Preencher
-                                    </Button>
+                                    {debugMode && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={preencherParametrosTecnicos}
+                                        disabled={creating || gruasSelecionadas.length === 0}
+                                        className="shrink-0"
+                                        title="Preencher todos os campos de Parâmetros Técnicos com dados de teste"
+                                      >
+                                        <Zap className="w-3 h-3 mr-1" />
+                                        Preencher
+                                      </Button>
+                                    )}
                                   </div>
                                 </CardHeader>
                                 <CardContent>
@@ -3757,18 +3764,20 @@ startxref
                                       <Truck className="w-4 h-4" />
                                       Serviços e Logística
                                     </CardTitle>
-                                    <Button
-                                      type="button"
-                                      variant="outline"
-                                      size="sm"
-                                      onClick={preencherServicosLogistica}
-                                      disabled={creating || gruasSelecionadas.length === 0}
-                                      className="shrink-0"
-                                      title="Preencher todos os campos de Serviços e Logística com dados de teste"
-                                    >
-                                      <Zap className="w-3 h-3 mr-1" />
-                                      Preencher
-                                    </Button>
+                                    {debugMode && (
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={preencherServicosLogistica}
+                                        disabled={creating || gruasSelecionadas.length === 0}
+                                        className="shrink-0"
+                                        title="Preencher todos os campos de Serviços e Logística com dados de teste"
+                                      >
+                                        <Zap className="w-3 h-3 mr-1" />
+                                        Preencher
+                                      </Button>
+                                    )}
                                   </div>
                                 </CardHeader>
                                 <CardContent>
@@ -3997,18 +4006,20 @@ startxref
                       ? 'Atualize os dados do responsável'
                       : 'Cadastre um responsável para aprovar horas dos funcionários desta obra'}
                   </DialogDescription>
-                  <div className="flex justify-end">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={preencherResponsavelObraTeste}
-                      className="mt-2"
-                    >
-                      <Zap className="w-3 h-3 mr-1" />
-                      Preencher dados de teste
-                    </Button>
-                  </div>
+                  {debugMode && (
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={preencherResponsavelObraTeste}
+                        className="mt-2"
+                      >
+                        <Zap className="w-3 h-3 mr-1" />
+                        Preencher dados de teste
+                      </Button>
+                    </div>
+                  )}
                 </DialogHeader>
                 <div className="space-y-4 py-4">
                   <div>
@@ -4184,22 +4195,12 @@ startxref
             Cancelar
           </Button>
           <div className="flex gap-2">
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={preencherDadosTeste}
-              disabled={creating}
-              className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
-              title="Preencher todos os campos com dados de teste"
-            >
-              <Zap className="w-4 h-4 mr-2" />
-              Preencher Todos os Dados
-            </Button>
             <DebugButton 
               onClick={preencherDadosTeste}
               disabled={creating}
-              variant="zap"
-              label="Preencher Dados"
+              variant="outline"
+              label="Preencher Todos os Dados"
+              title="Preencher todos os campos com dados de teste"
             />
             <Button 
               type="button" 

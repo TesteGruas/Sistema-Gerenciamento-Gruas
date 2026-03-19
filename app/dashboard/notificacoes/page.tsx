@@ -22,10 +22,9 @@ import {
   ChevronRight,
   RefreshCw,
   Eye,
-  SendHorizontal,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -41,9 +40,6 @@ import {
 } from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
-import { clientesApi, type ClienteBackend } from '@/lib/api-clientes'
-import { funcionariosApi, type FuncionarioBackend } from '@/lib/api-funcionarios'
-import { triggerApiPushBroadcast } from '@/lib/pwa-push-subscription'
 
 // Lazy load de componentes pesados para melhorar performance inicial
 const NovaNotificacaoDialog = dynamic(
@@ -132,7 +128,6 @@ const tipoConfig: Record<NotificationType, {
 export default function NotificacoesPage() {
   const { user, loading: authLoading } = useAuth()
   const tiposPermitidos = obterTiposPermitidosPorRole(user?.role)
-  const isAdmin = ['admin', 'administrador', 'adm'].includes((user?.role || '').toLowerCase())
   
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [loading, setLoading] = useState(true)
@@ -151,15 +146,6 @@ export default function NotificacoesPage() {
   const [modalAberto, setModalAberto] = useState(false)
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
   const [notificacaoParaDeletar, setNotificacaoParaDeletar] = useState<string | null>(null)
-  const [debugModo, setDebugModo] = useState<'geral' | 'cliente' | 'funcionario'>('geral')
-  const [debugDestinatarioId, setDebugDestinatarioId] = useState<string>('')
-  const [debugTitulo, setDebugTitulo] = useState<string>('🔔 Push de teste')
-  const [debugMensagem, setDebugMensagem] = useState<string>('Esta é uma notificação de teste enviada pelo painel administrativo.')
-  const [debugUsarOrigemApi, setDebugUsarOrigemApi] = useState(true)
-  const [debugEnviando, setDebugEnviando] = useState(false)
-  const [clientesDebug, setClientesDebug] = useState<Array<Pick<ClienteBackend, 'id' | 'nome' | 'cnpj'>>>([])
-  const [funcionariosDebug, setFuncionariosDebug] = useState<Array<Pick<FuncionarioBackend, 'id' | 'nome' | 'cargo'>>>([])
-  const [carregandoClientesDebug, setCarregandoClientesDebug] = useState(false)
   const { toast } = useToast()
   
   // Flags para controlar carregamento e evitar chamadas duplicadas
@@ -287,44 +273,6 @@ export default function NotificacoesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busca, filtroTipo, filtroTipoNotificacao, limite, dadosIniciaisCarregados])
 
-  // Carregar destinatários de debug (clientes e funcionários)
-  useEffect(() => {
-    if (!isAdmin || carregandoClientesDebug || (clientesDebug.length > 0 && funcionariosDebug.length > 0)) return
-
-    const carregarDestinatariosDebug = async () => {
-      setCarregandoClientesDebug(true)
-      try {
-        const [clientesResult, funcionariosResult] = await Promise.allSettled([
-          clientesApi.listarClientes({ page: 1, limit: 200 }),
-          funcionariosApi.listarFuncionarios({ page: 1, limit: 200 })
-        ])
-
-        if (clientesResult.status === 'fulfilled') {
-          setClientesDebug(clientesResult.value.data || [])
-        } else {
-          console.error('Erro ao carregar clientes para debug:', clientesResult.reason)
-        }
-
-        if (funcionariosResult.status === 'fulfilled') {
-          setFuncionariosDebug(funcionariosResult.value.data || [])
-        } else {
-          console.error('Erro ao carregar funcionários para debug:', funcionariosResult.reason)
-        }
-      } catch (error) {
-        console.error('Erro ao carregar destinatários para debug:', error)
-        toast({
-          title: 'Erro ao carregar destinatários',
-          description: 'Não foi possível carregar clientes/funcionários para o debug.',
-          variant: 'destructive',
-        })
-      } finally {
-        setCarregandoClientesDebug(false)
-      }
-    }
-
-    carregarDestinatariosDebug()
-  }, [isAdmin, clientesDebug.length, funcionariosDebug.length, carregandoClientesDebug, toast])
-
   // Mudar página
   const mudarPagina = (novaPagina: number) => {
     if (!loadingRef.current) {
@@ -441,101 +389,6 @@ export default function NotificacoesPage() {
     }
   }
 
-  const enviarDebugPush = async () => {
-    if (!debugTitulo.trim() || !debugMensagem.trim()) {
-      toast({
-        title: 'Campos obrigatórios',
-        description: 'Preencha título e mensagem para enviar a notificação.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    if (debugModo !== 'geral' && !debugDestinatarioId) {
-      toast({
-        title: 'Destinatário obrigatório',
-        description: 'Selecione um destinatário para envio específico.',
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setDebugEnviando(true)
-    try {
-      const titulo = debugTitulo.trim()
-      const mensagem = debugMensagem.trim()
-
-      if (debugModo === 'geral' && debugUsarOrigemApi) {
-        const result = await triggerApiPushBroadcast({
-          titulo,
-          mensagem,
-          tipo: 'info',
-          link: '/pwa/notificacoes'
-        })
-
-        if (!result.success) {
-          throw new Error(result.message)
-        }
-
-        toast({
-          title: 'Push API enviado',
-          description: 'Broadcast disparado com origem na API para usuários inscritos no app.',
-        })
-
-        await carregarNotificacoes()
-        return
-      }
-
-      const clienteSelecionado = clientesDebug.find(c => String(c.id) === debugDestinatarioId)
-      const funcionarioSelecionado = funcionariosDebug.find(f => String(f.id) === debugDestinatarioId)
-      const destinatarios = debugModo === 'geral'
-        ? [{ tipo: 'geral' as const }]
-        : debugModo === 'cliente'
-        ? [{
-            tipo: 'cliente' as const,
-            id: debugDestinatarioId,
-            nome: clienteSelecionado?.nome || `Cliente ${debugDestinatarioId}`,
-            info: clienteSelecionado?.cnpj || ''
-          }]
-        : [{
-            tipo: 'funcionario' as const,
-            id: debugDestinatarioId,
-            nome: funcionarioSelecionado?.nome || `Funcionário ${debugDestinatarioId}`,
-            info: funcionarioSelecionado?.cargo || ''
-          }]
-
-      await NotificacoesAPI.criar({
-        titulo,
-        mensagem,
-        tipo: 'info',
-        link: '/pwa/notificacoes',
-        icone: '🔔',
-        destinatarios,
-        remetente: `${user?.nome || user?.email || 'Sistema'} (Debug Push)`
-      })
-
-      toast({
-        title: 'Push enviado',
-        description: debugModo === 'geral'
-          ? 'Notificação enviada para todos os clientes.'
-          : debugModo === 'cliente'
-          ? 'Notificação enviada para o cliente selecionado.'
-          : 'Notificação enviada para o funcionário selecionado.',
-      })
-
-      await carregarNotificacoes()
-    } catch (error: any) {
-      console.error('Erro ao enviar debug push:', error)
-      toast({
-        title: 'Erro no envio',
-        description: error?.response?.data?.message || 'Não foi possível enviar a notificação de debug.',
-        variant: 'destructive',
-      })
-    } finally {
-      setDebugEnviando(false)
-    }
-  }
-
   const naoLidas = notificacoes.filter(n => !n.lida).length
 
   // Função para formatar o destinatário
@@ -608,114 +461,6 @@ export default function NotificacoesPage() {
           <NovaNotificacaoDialog onNotificacaoCriada={carregarNotificacoes} />
         </div>
       </div>
-
-      {/* Debug Push Notification (Admin) */}
-      {isAdmin && (
-        <Card className="border-blue-200 bg-blue-50/30">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <SendHorizontal className="h-4 w-4 text-blue-600" />
-              Debug Push Notification
-            </CardTitle>
-            <CardDescription>
-              Envie uma notificação de teste para todos, cliente específico ou funcionário específico.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-3">
-              <div className="lg:col-span-1">
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Destino</label>
-                <Select
-                  value={debugModo}
-                  onValueChange={(value: 'geral' | 'cliente' | 'funcionario') => {
-                    setDebugModo(value)
-                    setDebugDestinatarioId('')
-                  }}
-                >
-                  <SelectTrigger className="h-9">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="geral">Geral (todos usuários)</SelectItem>
-                    <SelectItem value="cliente">Cliente específico</SelectItem>
-                    <SelectItem value="funcionario">Funcionário específico</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {debugModo !== 'geral' && (
-                <div className="lg:col-span-1">
-                  <label className="text-xs font-medium text-gray-600 mb-1 block">
-                    {debugModo === 'cliente' ? 'Cliente' : 'Funcionário'}
-                  </label>
-                  <Select value={debugDestinatarioId} onValueChange={setDebugDestinatarioId}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue placeholder={carregandoClientesDebug ? 'Carregando...' : `Selecione ${debugModo === 'cliente' ? 'o cliente' : 'o funcionário'}`} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {debugModo === 'cliente' ? (
-                        clientesDebug.map((cliente) => (
-                          <SelectItem key={cliente.id} value={String(cliente.id)}>
-                            {cliente.nome}
-                          </SelectItem>
-                        ))
-                      ) : (
-                        funcionariosDebug.map((funcionario) => (
-                          <SelectItem key={funcionario.id} value={String(funcionario.id)}>
-                            {funcionario.nome}
-                          </SelectItem>
-                        ))
-                      )}
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className={`${debugModo === 'cliente' ? 'lg:col-span-1' : 'lg:col-span-2'}`}>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Título</label>
-                <Input
-                  value={debugTitulo}
-                  onChange={(e) => setDebugTitulo(e.target.value)}
-                  className="h-9"
-                  placeholder="Título da notificação"
-                />
-              </div>
-
-              <div className={`${debugModo === 'cliente' ? 'lg:col-span-1' : 'lg:col-span-1'}`}>
-                <label className="text-xs font-medium text-gray-600 mb-1 block">Mensagem</label>
-                <Input
-                  value={debugMensagem}
-                  onChange={(e) => setDebugMensagem(e.target.value)}
-                  className="h-9"
-                  placeholder="Mensagem da notificação"
-                />
-              </div>
-            </div>
-
-            {debugModo === 'geral' && (
-              <label className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={debugUsarOrigemApi}
-                  onChange={(e) => setDebugUsarOrigemApi(e.target.checked)}
-                />
-                Usar origem da API (broadcast push real no app)
-              </label>
-            )}
-
-            <div className="flex justify-end">
-              <Button
-                onClick={enviarDebugPush}
-                disabled={debugEnviando || (debugModo !== 'geral' && !debugDestinatarioId)}
-                className="bg-blue-600 hover:bg-blue-700"
-              >
-                <SendHorizontal className="h-4 w-4 mr-2" />
-                {debugEnviando ? 'Enviando...' : 'Enviar Push Debug'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       {/* Filtros Compactos */}
       <Card>

@@ -382,9 +382,9 @@ export default function WhatsAppAprovacoesPage() {
     <div className="space-y-6 p-5">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">WhatsApp - Aprovações</h1>
+        <h1 className="text-3xl font-bold text-gray-900">WhatsApp - Notificações</h1>
         <p className="text-gray-600 mt-2">
-          Configure e monitore o envio de mensagens WhatsApp para aprovação de horas extras
+          Configure e monitore o envio de mensagens WhatsApp para notificações do sistema
         </p>
       </div>
 
@@ -414,7 +414,7 @@ export default function WhatsAppAprovacoesPage() {
                 Conexão WhatsApp (Evolution API)
               </CardTitle>
               <CardDescription>
-                Configure sua instância WhatsApp para receber notificações de aprovações
+                Configure sua instância WhatsApp para receber notificações do sistema
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -430,7 +430,7 @@ export default function WhatsAppAprovacoesPage() {
               ) : !whatsappInstance ? (
                 <div className="space-y-4">
                   <p className="text-sm text-gray-600">
-                    Crie uma instância WhatsApp para receber notificações de aprovações diretamente no seu WhatsApp.
+                    Crie uma instância WhatsApp para receber notificações diretamente no seu WhatsApp.
                   </p>
                   <Button
                     onClick={criarInstanciaWhatsApp}

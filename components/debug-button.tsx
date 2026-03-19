@@ -9,8 +9,10 @@ interface DebugButtonProps {
   onClick: () => void
   disabled?: boolean
   variant?: "default" | "outline" | "zap" | "wrench"
+  size?: "default" | "sm" | "lg" | "icon"
   className?: string
   label?: string
+  title?: string
 }
 
 /**
@@ -20,8 +22,10 @@ export function DebugButton({
   onClick, 
   disabled = false, 
   variant = "zap",
+  size = "default",
   className,
-  label
+  label,
+  title
 }: DebugButtonProps) {
   const { debugMode } = useDebugMode()
 
@@ -43,10 +47,11 @@ export function DebugButton({
     <Button
       type="button"
       variant="outline"
+      size={size}
       onClick={onClick}
       disabled={disabled}
       className={cn(variantClasses[variant], className)}
-      title="Preencher todos os campos com dados de teste"
+      title={title || "Preencher todos os campos com dados de teste"}
     >
       <Icon className="w-4 h-4 mr-2" />
       {label || defaultLabel}

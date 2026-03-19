@@ -43,7 +43,6 @@ import {
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { AdvancedPagination } from "@/components/ui/advanced-pagination"
 import { ProtectedRoute } from "@/components/protected-route"
-import { WhatsAppTestButton } from "@/components/whatsapp-test-button"
 import { FuncionarioSearch } from "@/components/funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { JustificativaDialog } from "@/components/justificativa-dialog"
@@ -1846,7 +1845,6 @@ export default function PontoPage() {
           <p className="text-gray-600">Sistema de controle de frequência dos funcionários</p>
         </div>
         <div className="flex gap-2">
-          <WhatsAppTestButton variant="outline" size="default" />
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">

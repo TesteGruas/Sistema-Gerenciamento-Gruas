@@ -13,25 +13,6 @@ import {
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Função helper para formatar período (YYYY-MM) para "Mês Ano" (ex: "2025-12" -> "Dezembro 2025")
-const formatarPeriodo = (periodo) => {
-  if (!periodo) return periodo;
-  try {
-    const [ano, mes] = periodo.split('-');
-    const meses = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
-    const mesIndex = parseInt(mes) - 1;
-    if (mesIndex >= 0 && mesIndex < 12) {
-      return `${meses[mesIndex]} ${ano}`;
-    }
-    return periodo;
-  } catch {
-    return periodo;
-  }
-};
-
 const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
   return jwt.sign(
     {
@@ -449,44 +430,6 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
       }
     }
 
-    // Verificar se já existe medição para este período
-    let medicaoExistente;
-    if (grua_id) {
-      const { data } = await supabaseAdmin
-        .from('medicoes_mensais')
-        .select('id')
-        .eq('grua_id', grua_id)
-        .eq('periodo', medicaoData.periodo)
-        .single();
-      medicaoExistente = data;
-    } else if (orcamento_id) {
-      const { data } = await supabaseAdmin
-        .from('medicoes_mensais')
-        .select('id')
-        .eq('orcamento_id', orcamento_id)
-        .eq('periodo', medicaoData.periodo)
-        .single();
-      medicaoExistente = data;
-    } else if (obra_id) {
-      const { data } = await supabaseAdmin
-        .from('medicoes_mensais')
-        .select('id')
-        .eq('obra_id', obra_id)
-        .eq('periodo', medicaoData.periodo)
-        .is('orcamento_id', null)
-        .single();
-      medicaoExistente = data;
-    }
-
-    if (medicaoExistente) {
-      const periodoFormatado = formatarPeriodo(medicaoData.periodo);
-      return res.status(400).json({
-        error: 'Medição já existe',
-        message: `Já existe uma medição para o período ${periodoFormatado}`,
-        data: { medicao_id: medicaoExistente.id }
-      });
-    }
-
     // Adicionar obra_id, orcamento_id e grua_id aos dados da medição
     medicaoData.obra_id = obra_id || null;
     medicaoData.orcamento_id = orcamento_id || null;
@@ -595,23 +538,6 @@ router.post('/gerar-automatica', authenticateToken, requirePermission('obras:edi
     }
 
     const { orcamento_id, periodo, data_medicao, aplicar_valores_orcamento, incluir_horas_extras, incluir_servicos_adicionais } = value;
-
-    // Verificar se já existe medição para este período
-    const { data: medicaoExistente } = await supabaseAdmin
-      .from('medicoes_mensais')
-      .select('id')
-      .eq('orcamento_id', orcamento_id)
-      .eq('periodo', periodo)
-      .single();
-
-    if (medicaoExistente) {
-      const periodoFormatado = formatarPeriodo(periodo);
-      return res.status(400).json({
-        error: 'Medição já existe',
-        message: `Já existe uma medição para o período ${periodoFormatado} deste orçamento`,
-        data: { medicao_id: medicaoExistente.id }
-      });
-    }
 
     // Buscar orçamento completo
     const { data: orcamento, error: orcamentoError } = await supabaseAdmin

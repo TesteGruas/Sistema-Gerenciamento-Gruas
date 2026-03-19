@@ -16,8 +16,14 @@ router.get('/', authenticateToken, async (req, res) => {
       data_fim,
       status,
       tipo,
-      aprovacao_id
+      aprovacao_id,
+      page = 1,
+      limit = 20
     } = req.query;
+
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 20));
+    const offset = (pageNum - 1) * limitNum;
 
     // Construir query - buscar logs com dados básicos da aprovação
     let query = supabaseAdmin
@@ -31,9 +37,7 @@ router.get('/', authenticateToken, async (req, res) => {
           horas_extras,
           registro_ponto_id
         )
-      `)
-      .order('created_at', { ascending: false })
-      .limit(1000);
+      `, { count: 'exact' });
 
     // Aplicar filtros
     if (data_inicio) {
@@ -55,7 +59,11 @@ router.get('/', authenticateToken, async (req, res) => {
       query = query.eq('aprovacao_id', aprovacao_id);
     }
 
-    const { data: logs, error } = await query;
+    query = query
+      .order('created_at', { ascending: false })
+      .range(offset, offset + limitNum - 1);
+
+    const { data: logs, error, count } = await query;
 
     if (error) {
       console.error('[whatsapp-logs] Erro ao buscar logs:', error);
@@ -195,7 +203,13 @@ router.get('/', authenticateToken, async (req, res) => {
 
     res.json({
       success: true,
-      data: logsFormatados
+      data: logsFormatados,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total: count || 0,
+        pages: Math.ceil((count || 0) / limitNum)
+      }
     });
   } catch (error) {
     console.error('[whatsapp-logs] Erro ao processar requisição:', error);

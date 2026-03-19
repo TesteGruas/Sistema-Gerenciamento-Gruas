@@ -64,7 +64,7 @@ export function WhatsAppConfiguracao() {
         },
         body: JSON.stringify({
           number: numeroLimpo,
-          text: "🔔 Mensagem de teste do sistema de aprovações WhatsApp\n\nSe você recebeu esta mensagem, a integração está funcionando corretamente!"
+          text: "🔔 Mensagem de teste do sistema de notificações WhatsApp\n\nSe você recebeu esta mensagem, a integração está funcionando corretamente!"
         }),
       })
 

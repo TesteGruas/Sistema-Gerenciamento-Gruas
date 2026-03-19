@@ -54,6 +54,7 @@ import { apiCompras } from "@/lib/api-compras"
 import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { DebugButton } from "@/components/debug-button"
 
 interface Cliente {
   id: number
@@ -2782,17 +2783,13 @@ export default function NotasFiscaisPage() {
                     <Upload className="w-4 h-4 mr-2" />
                     Importar XML
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
+                  <DebugButton
                     onClick={preencherDadosTeste}
-                    className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                    size="sm"
+                    variant="outline"
+                    label="Preencher Dados"
                     title="Preencher com dados de teste"
-                  >
-                    <Zap className="w-4 h-4 mr-2" />
-                    Preencher Dados
-                  </Button>
+                  />
                 </div>
               )}
             </div>
@@ -3968,17 +3965,14 @@ export default function NotasFiscaisPage() {
                 </DialogDescription>
               </div>
               {!editingItem && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
+                <DebugButton
                   onClick={preencherDadosItemTeste}
-                  className="ml-4 bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+                  size="sm"
+                  variant="outline"
+                  className="ml-4"
+                  label="Preencher Dados"
                   title="Preencher com dados de teste"
-                >
-                  <Zap className="w-4 h-4 mr-2" />
-                  Preencher Dados
-                </Button>
+                />
               )}
             </div>
           </DialogHeader>

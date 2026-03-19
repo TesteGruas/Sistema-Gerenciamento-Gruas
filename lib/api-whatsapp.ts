@@ -88,6 +88,15 @@ export interface FiltrosLogs {
   status?: string
   tipo?: string
   aprovacao_id?: string
+  page?: number
+  limit?: number
+}
+
+export interface WhatsAppLogsPagination {
+  page: number
+  limit: number
+  total: number
+  pages: number
 }
 
 export const whatsappApi = {
@@ -121,13 +130,15 @@ export const whatsappApi = {
   /**
    * Listar logs de mensagens
    */
-  async listarLogs(filtros?: FiltrosLogs): Promise<{ success: boolean; data: WhatsAppLog[] }> {
+  async listarLogs(filtros?: FiltrosLogs): Promise<{ success: boolean; data: WhatsAppLog[]; pagination?: WhatsAppLogsPagination }> {
     const params = new URLSearchParams()
     if (filtros?.data_inicio) params.append('data_inicio', filtros.data_inicio)
     if (filtros?.data_fim) params.append('data_fim', filtros.data_fim)
     if (filtros?.status) params.append('status', filtros.status)
     if (filtros?.tipo) params.append('tipo', filtros.tipo)
     if (filtros?.aprovacao_id) params.append('aprovacao_id', filtros.aprovacao_id)
+    if (filtros?.page) params.append('page', String(filtros.page))
+    if (filtros?.limit) params.append('limit', String(filtros.limit))
 
     const query = params.toString()
     return apiRequest(`/api/whatsapp-logs${query ? `?${query}` : ''}`)

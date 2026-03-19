@@ -41,6 +41,7 @@ import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { apiArquivos } from "@/lib/api-arquivos"
 import { buscarEnderecoPorCep as buscarViaCep } from "@/lib/api-cep"
+import { DebugButton } from "@/components/debug-button"
 
 const UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -981,9 +982,6 @@ export default function ClientesPage() {
       {!loading && !error && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredClientes.map((cliente) => {
-            const obrasCliente = getObrasByCliente(cliente.id)
-            const obrasAtivas = obrasCliente.filter(obra => obra.status === 'Em Andamento')
-            
             return (
               <Card key={cliente.id} className="hover:shadow-lg transition-shadow">
                 <CardHeader>
@@ -1033,40 +1031,12 @@ export default function ClientesPage() {
                       </div>
                     )}
 
-                    {(cliente.endereco_obra || cliente.cidade_obra || cliente.estado_obra || cliente.cep_obra) && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4 text-orange-500" />
-                        <span className="truncate" title={formatarEnderecoObra(cliente)}>
-                          Obra: {formatarEnderecoObra(cliente)}
-                        </span>
-                      </div>
-                    )}
-                    
                     {cliente.contato && (
                       <div className="flex items-center gap-2 text-sm text-gray-600">
                         <User className="w-4 h-4" />
                         <span>{cliente.contato}</span>
                       </div>
                     )}
-                    
-                    <div className="border-t pt-3">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="text-sm font-medium">Obras</h4>
-                        <Badge variant="outline">
-                          {obrasCliente.length} total
-                        </Badge>
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        <div className="flex justify-between">
-                          <span>Em Andamento:</span>
-                          <span className="font-medium text-green-600">{obrasAtivas.length}</span>
-                        </div>
-                        <div className="flex justify-between">
-                          <span>Outras:</span>
-                          <span className="font-medium text-gray-600">{obrasCliente.length - obrasAtivas.length}</span>
-                        </div>
-                      </div>
-                    </div>
                     
                     <div className="flex gap-2 pt-2">
                       <Button
@@ -1535,17 +1505,13 @@ function ClienteForm({
   return (
     <form onSubmit={(e) => onSubmit(e, localFormData)} className="space-y-2">
       <div className="flex justify-end mb-4">
-        <Button
-          type="button"
-          variant="outline"
+        <DebugButton
           onClick={preencherDadosDebug}
           disabled={isSubmitting}
-          className="bg-yellow-50 hover:bg-yellow-100 text-yellow-700 border-yellow-300"
+          variant="outline"
+          label="Preencher Todos os Dados"
           title="Preencher todos os campos com dados de exemplo"
-        >
-          <Zap className="w-4 h-4 mr-2" />
-          Preencher Todos os Dados
-        </Button>
+        />
       </div>
       {/* Informações Básicas */}
       <div className="space-y-4">
@@ -2308,3 +2274,4 @@ function ClienteDetails({
   )
 }
 }
+

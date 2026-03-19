@@ -172,10 +172,12 @@ export default function FinanceiroLayout({
                         <button
                           className={cn(
                             "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
-                            "hover:bg-gray-50 active:scale-95",
+                            "active:scale-95",
                             submenuActive
-                              ? "bg-blue-600 text-white shadow-sm"
+                              ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                               : "text-gray-700 hover:text-gray-900"
+                            ,
+                            !submenuActive && "hover:bg-gray-50"
                           )}
                         >
                           <item.icon className={cn(
@@ -219,10 +221,12 @@ export default function FinanceiroLayout({
                     href={item.href!}
                     className={cn(
                       "flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap",
-                      "hover:bg-gray-50 active:scale-95",
+                      "active:scale-95",
                       isActive
-                        ? "bg-blue-600 text-white shadow-sm"
+                        ? "bg-blue-600 text-white shadow-sm hover:bg-blue-700"
                         : "text-gray-700 hover:text-gray-900"
+                      ,
+                      !isActive && "hover:bg-gray-50"
                     )}
                   >
                     <item.icon className={cn(
@@ -246,10 +250,11 @@ export default function FinanceiroLayout({
                         <button
                           className={cn(
                             "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
-                            "hover:bg-gray-50",
                             submenuActive
-                              ? "bg-blue-600 text-white"
+                              ? "bg-blue-600 text-white hover:bg-blue-700"
                               : "text-gray-700 hover:text-gray-900"
+                            ,
+                            !submenuActive && "hover:bg-gray-50"
                           )}
                           title={item.title}
                         >
@@ -291,10 +296,11 @@ export default function FinanceiroLayout({
                     href={item.href!}
                     className={cn(
                       "flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all whitespace-nowrap",
-                      "hover:bg-gray-50",
                       isActive
-                        ? "bg-blue-600 text-white"
+                        ? "bg-blue-600 text-white hover:bg-blue-700"
                         : "text-gray-700 hover:text-gray-900"
+                      ,
+                      !isActive && "hover:bg-gray-50"
                     )}
                     title={item.title}
                   >
