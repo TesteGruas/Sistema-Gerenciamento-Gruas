@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { useRouter } from "next/navigation"
-import { useToast } from "@/hooks/use-toast"
+import { useRouter, useSearchParams } from "next/navigation"
+import { useToast, toast as toastNotify } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -47,7 +47,7 @@ import {
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 import { clientesApi } from "@/lib/api-clientes"
 import { fornecedoresApi } from "@/lib/api-fornecedores"
-import { medicoesMensaisApi } from "@/lib/api-medicoes-mensais"
+import { medicoesMensaisApi, type MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { locacoesApi, Locacao as LocacaoFull } from "@/lib/api-locacoes"
 import { gruasApi } from "@/lib/api-gruas"
 import { apiCompras } from "@/lib/api-compras"
@@ -88,9 +88,16 @@ interface Compra {
   numero_compra?: string
 }
 
+const NF_FROM_MEDICAO_STORAGE_KEY = "sgg_nf_prefill_medicao_id"
+
 export default function NotasFiscaisPage() {
   const router = useRouter()
+  const searchParams = useSearchParams()
   const { toast } = useToast()
+  /** Valor primitivo — evita reexecutar o efeito a cada render (objeto searchParams muda de referência). */
+  const fromMedicaoQuery = searchParams.get("fromMedicao")
+  /** Fallback se a query atrasar no primeiro paint ou for perdida na navegação */
+  const [medicaoIdFallback, setMedicaoIdFallback] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'saida' | 'entrada'>('saida')
   
   // Estados
@@ -320,6 +327,246 @@ export default function NotasFiscaisPage() {
     })
     setItemFormData(itemAtualizado)
   }
+
+  useEffect(() => {
+    if (fromMedicaoQuery) {
+      setMedicaoIdFallback(null)
+      return
+    }
+    try {
+      const s = sessionStorage.getItem(NF_FROM_MEDICAO_STORAGE_KEY)
+      if (s) setMedicaoIdFallback(s)
+    } catch {
+      /* ignore */
+    }
+  }, [fromMedicaoQuery])
+
+  /** Pré-preenche NF de saída a partir da medição (?fromMedicao=id) — medições sempre geram nota de saída */
+  useEffect(() => {
+    const rawId = fromMedicaoQuery ?? medicaoIdFallback
+    if (!rawId) return
+
+    const medicaoId = parseInt(rawId, 10)
+    if (Number.isNaN(medicaoId)) return
+
+    let cancelled = false
+
+    const unwrapRel = <T,>(x: T | T[] | null | undefined): T | undefined => {
+      if (x == null) return undefined
+      return Array.isArray(x) ? x[0] : x
+    }
+
+    const normId = (v: unknown): number | undefined => {
+      if (v == null || v === '') return undefined
+      const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
+      return Number.isFinite(n) ? n : undefined
+    }
+
+    const mkItem = (descricao: string, quantidade: number, valorUnit: number, valorTotal?: number): NotaFiscalItem => {
+      const q = quantidade > 0 ? quantidade : 1
+      const vu = Number(valorUnit) || 0
+      const pt = valorTotal !== undefined ? Number(valorTotal) : q * vu
+      return calcularImpostos({
+        descricao,
+        unidade: 'UN',
+        quantidade: q,
+        preco_unitario: vu,
+        preco_total: pt,
+        base_calculo_icms: 0,
+        percentual_icms: 0,
+        valor_icms: 0,
+        percentual_ipi: 0,
+        valor_ipi: 0,
+        base_calculo_issqn: 0,
+        aliquota_issqn: 0,
+        valor_issqn: 0,
+        valor_inss: 0,
+        valor_cbs: 0,
+        valor_liquido: 0,
+        impostos_dinamicos: []
+      })
+    }
+
+    ;(async () => {
+      try {
+        const medRes = await medicoesMensaisApi.obter(medicaoId)
+        if (cancelled) return
+
+        if (!medRes.success || !medRes.data) {
+          toastNotify({
+            title: 'Erro',
+            description: 'Não foi possível carregar a medição para pré-preencher a nota fiscal.',
+            variant: 'destructive'
+          })
+          return
+        }
+
+        const m = medRes.data as MedicaoMensal
+        if (m.status_aprovacao !== "aprovada") {
+          try {
+            sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
+          } catch {
+            /* ignore */
+          }
+          setMedicaoIdFallback(null)
+          toastNotify({
+            title: "Medição não aprovada",
+            description:
+              m.status_aprovacao === "rejeitada"
+                ? "Esta medição foi rejeitada. Não é possível gerar nota fiscal."
+                : "Aprove a medição antes de gerar a nota fiscal. A nota só pode ser criada após a aprovação.",
+            variant: "destructive"
+          })
+          router.replace("/dashboard/financeiro/notas-fiscais", { scroll: false })
+          return
+        }
+
+        const obra = unwrapRel(m.obras as any)
+        const orc = unwrapRel(m.orcamentos as any)
+        const cliente = obra?.clientes || orc?.clientes || null
+        const clienteId =
+          normId(cliente?.id) ??
+          normId(obra?.cliente_id) ??
+          normId(orc?.cliente_id)
+
+        const itensMedicao: NotaFiscalItem[] = []
+
+        for (const c of m.custos_mensais || []) {
+          const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
+          const vu = Number(c.valor_mensal) || 0
+          const tot = Number(c.valor_total) || qtd * vu
+          const label = `${c.descricao || c.tipo || 'Custo mensal'} — ref. medição ${m.numero || m.id} (${m.periodo})`
+          itensMedicao.push(mkItem(label, qtd, vu, tot))
+        }
+
+        for (const h of m.horas_extras || []) {
+          const q = Number(h.quantidade_horas) || 0
+          const tot = Number(h.valor_total) || 0
+          const vu = q > 0 ? tot / q : Number(h.valor_hora) || 0
+          itensMedicao.push(
+            mkItem(
+              `Horas extras (${h.tipo} / ${h.dia_semana}) — ref. medição ${m.numero || m.id}`,
+              q > 0 ? q : 1,
+              vu,
+              tot || vu
+            )
+          )
+        }
+
+        for (const s of m.servicos_adicionais || []) {
+          const q = Number(s.quantidade) > 0 ? Number(s.quantidade) : 1
+          const vu = Number(s.valor_unitario) || 0
+          const tot = Number(s.valor_total) || q * vu
+          itensMedicao.push(mkItem(s.descricao || 'Serviço adicional', q, vu, tot))
+        }
+
+        const descontosTexto: string[] = []
+        for (const a of m.aditivos || []) {
+          if (a.tipo === 'adicional') {
+            const v = Number(a.valor) || 0
+            itensMedicao.push(mkItem(`Aditivo: ${a.descricao || 'Adicional'}`, 1, v, v))
+          } else {
+            descontosTexto.push(`${a.descricao || 'Desconto'}: R$ ${Number(a.valor || 0).toFixed(2)}`)
+          }
+        }
+
+        const valorMedicaoBruto = Number(m.valor_total) || 0
+        if (itensMedicao.length === 0 && valorMedicaoBruto > 0) {
+          itensMedicao.push(
+            mkItem(
+              `Medição ${m.numero || m.id} — período ${m.periodo} (consolidado)`,
+              1,
+              valorMedicaoBruto,
+              valorMedicaoBruto
+            )
+          )
+        }
+
+        const somaItens = itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
+        const valorMedicao = valorMedicaoBruto
+        if (valorMedicao > 0 && Math.abs(valorMedicao - somaItens) > 0.02) {
+          const delta = valorMedicao - somaItens
+          itensMedicao.push(
+            mkItem('Ajuste (total da medição × soma dos itens)', 1, delta, delta)
+          )
+        }
+
+        const dataEmissao = m.data_medicao
+          ? String(m.data_medicao).split('T')[0]
+          : new Date().toISOString().split('T')[0]
+
+        const obsLinhas = [
+          `Gerado a partir da medição ${m.numero || '#' + m.id} (período ${m.periodo}).`,
+          obra?.nome ? `Obra: ${obra.nome}.` : '',
+          cliente?.nome ? `Cliente: ${cliente.nome}.` : '',
+          descontosTexto.length ? `Descontos na medição: ${descontosTexto.join('; ')}.` : ''
+        ].filter(Boolean)
+
+        const valorTotalForm =
+          valorMedicao > 0 ? valorMedicao : itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
+
+        const numeroSugerido = `REF-MED-${m.id}`
+
+        if (cancelled) return
+
+        // Aplicar estado no mesmo ciclo (evita Strict Mode + setTimeout com setState de instância desmontada)
+        setActiveTab('saida')
+        setFormData({
+          numero_nf: numeroSugerido,
+          serie: '',
+          data_emissao: dataEmissao,
+          data_vencimento: '',
+          valor_total: valorTotalForm,
+          tipo: 'saida',
+          status: 'pendente',
+          tipo_nota: 'nf_locacao',
+          cliente_id: clienteId,
+          medicao_id: m.id,
+          fornecedor_id: undefined,
+          observacoes: obsLinhas.join(' ')
+        })
+        setItens(itensMedicao)
+        setFormFile(null)
+        setGruaInfo(null)
+        setCriarBoleto(false)
+        setFormaPagamento('')
+        setTipoPagamentoPersonalizado('')
+        setBoletoFile(null)
+        setContaBancariaSelecionada(null)
+        setVincularCompraExistente(false)
+        setIsCreateDialogOpen(true)
+
+        try {
+          sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
+        } catch {
+          /* ignore */
+        }
+        setMedicaoIdFallback(null)
+
+        // Não chamar router.replace aqui: no App Router isso pode remontar a página e zerar modal/form.
+        // A query ?fromMedicao= é removida ao fechar o diálogo de criação.
+
+        toastNotify({
+          title: 'Nota fiscal pré-preenchida',
+          description: clienteId
+            ? 'Revise o número da NF, valores e itens antes de salvar.'
+            : 'Cliente não identificado na medição — selecione o cliente manualmente. Revise valores e itens antes de salvar.'
+        })
+      } catch (e: any) {
+        if (!cancelled) {
+          toastNotify({
+            title: 'Erro',
+            description: e?.message || 'Falha ao montar nota fiscal a partir da medição.',
+            variant: 'destructive'
+          })
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [fromMedicaoQuery, medicaoIdFallback, router])
 
   useEffect(() => {
     carregarDados()
@@ -2743,6 +2990,10 @@ export default function NotasFiscaisPage() {
           setIsEditDialogOpen(false)
           setEditingNota(null)
           resetForm()
+          // Remove ?fromMedicao= da URL sem remontar com estado “aberto” (replace só após fechar)
+          if (typeof window !== "undefined" && window.location.search.includes("fromMedicao=")) {
+            router.replace("/dashboard/financeiro/notas-fiscais", { scroll: false })
+          }
         }
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
@@ -2962,6 +3213,19 @@ export default function NotasFiscaisPage() {
                     </Select>
                   </div>
                 </div>
+
+                {formData.medicao_id ? (
+                  <p className="text-xs text-muted-foreground rounded-md border border-dashed bg-muted/30 px-3 py-2">
+                    Vinculada à medição <span className="font-medium">#{formData.medicao_id}</span>
+                    {medicoes.find((med) => med.id === formData.medicao_id) && (
+                      <>
+                        {' '}
+                        — {medicoes.find((med) => med.id === formData.medicao_id)?.numero}{' '}
+                        ({medicoes.find((med) => med.id === formData.medicao_id)?.periodo})
+                      </>
+                    )}
+                  </p>
+                ) : null}
 
                 <div className="space-y-2">
                   <div className="flex items-center space-x-2">

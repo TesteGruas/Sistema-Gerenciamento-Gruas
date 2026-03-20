@@ -21,10 +21,14 @@ function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  /** Quando definido, o popover é renderizado dentro deste elemento (ex.: painel de um Dialog) — evita cliques “fora” e focus trap. */
+  container,
   ...props
-}: React.ComponentProps<typeof PopoverPrimitive.Content>) {
+}: React.ComponentProps<typeof PopoverPrimitive.Content> & {
+  container?: HTMLElement | null
+}) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container ?? undefined}>
       <PopoverPrimitive.Content
         data-slot="popover-content"
         align={align}

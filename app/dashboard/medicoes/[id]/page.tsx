@@ -543,6 +543,13 @@ export default function MedicaoDetalhesPage() {
     ""
   const temContatoClientePadrao = Boolean(emailClientePadrao || telefoneClientePadrao)
 
+  const podeGerarNotaFiscal = medicao.status_aprovacao === "aprovada"
+  const motivoBloqueioNotaFiscal = podeGerarNotaFiscal
+    ? ""
+    : medicao.status_aprovacao === "rejeitada"
+      ? "Medição rejeitada — não é possível gerar nota fiscal."
+      : "Aprove a medição antes de gerar a nota fiscal."
+
   const abrirDialogEnviar = () => {
     setIncluirContatosCliente(temContatoClientePadrao)
     setEnviarContatosExtras(false)
@@ -598,6 +605,32 @@ export default function MedicaoDetalhesPage() {
           >
             <Edit className="w-4 h-4 mr-2" />
             Editar
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!podeGerarNotaFiscal}
+            onClick={() => {
+              if (!podeGerarNotaFiscal) return
+              try {
+                sessionStorage.setItem("sgg_nf_prefill_medicao_id", String(medicao.id))
+              } catch {
+                /* ignore */
+              }
+              router.push(`/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`)
+            }}
+            title={
+              podeGerarNotaFiscal
+                ? "Abrir formulário de nota fiscal de saída pré-preenchido (a nota só é criada ao salvar)"
+                : motivoBloqueioNotaFiscal
+            }
+            className={
+              podeGerarNotaFiscal
+                ? "border-emerald-200 text-emerald-800 hover:bg-emerald-50"
+                : "opacity-60"
+            }
+          >
+            <FileText className="w-4 h-4 mr-2" />
+            Gerar nota fiscal
           </Button>
           <Button
             variant="outline"

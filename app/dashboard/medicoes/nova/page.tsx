@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -25,7 +26,10 @@ import {
   ChevronsUpDown,
   Building2,
   AlertCircle,
-  X
+  X,
+  Receipt,
+  Edit,
+  Zap
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { gruasApi } from "@/lib/api-gruas"
@@ -34,7 +38,6 @@ import { gruaObraApi } from "@/lib/api-grua-obra"
 import { itensCustosMensaisApi, ItemCustoMensal } from "@/lib/api-itens-custos-mensais"
 import { medicoesMensaisApi, MedicaoMensalCreate } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils } from "@/lib/medicoes-utils"
-import { DebugButton } from "@/components/debug-button"
 
 interface CustoMensalForm {
   item: string
@@ -146,9 +149,12 @@ export default function NovaMedicaoPage() {
   
   // Lista de custos mensais
   const [custosMensais, setCustosMensais] = useState<CustoMensalForm[]>([])
-  
-  // Formulário de novo custo mensal
-  const [custoForm, setCustoForm] = useState<CustoMensalForm>({
+  const [isCustoDialogOpen, setIsCustoDialogOpen] = useState(false)
+  const [editingCustoIndex, setEditingCustoIndex] = useState<number | null>(null)
+  /** Elemento do painel do dialog de custo — portal do Popover de itens fica aqui dentro (evita bloqueio de clique pelo Dialog). */
+  const [custoDialogContentEl, setCustoDialogContentEl] = useState<HTMLDivElement | null>(null)
+
+  const custoFormInicial: CustoMensalForm = {
     item: "",
     descricao: "",
     unidade: "mês",
@@ -156,7 +162,10 @@ export default function NovaMedicaoPage() {
     quantidade_orcamento: 0,
     valor_unitario: 0,
     valor_total: 0
-  })
+  }
+  
+  // Formulário de novo custo mensal
+  const [custoForm, setCustoForm] = useState<CustoMensalForm>({ ...custoFormInicial })
 
   useEffect(() => {
     carregarObras()
@@ -197,7 +206,7 @@ export default function NovaMedicaoPage() {
     }
   }
 
-  const carregarGruasDaObra = async (obraId: number) => {
+  const carregarGruasDaObra = async (obraId: number): Promise<Grua[]> => {
     try {
       setLoadingGruas(true)
       const response = await gruaObraApi.buscarGruasPorObra(obraId)
@@ -225,9 +234,10 @@ export default function NovaMedicaoPage() {
             fabricante: relacao.grua.fabricante
           }))
         setGruas(gruasDaObra)
-      } else {
-        setGruas([])
+        return gruasDaObra
       }
+      setGruas([])
+      return []
     } catch (error: any) {
       toast({
         title: "Erro",
@@ -235,6 +245,7 @@ export default function NovaMedicaoPage() {
         variant: "destructive"
       })
       setGruas([])
+      return []
     } finally {
       setLoadingGruas(false)
     }
@@ -336,18 +347,31 @@ export default function NovaMedicaoPage() {
       valor_total: valorTotal
     }
 
-    setCustosMensais([...custosMensais, novoCusto])
-    
-    // Limpar formulário
-    setCustoForm({
-      item: "",
-      descricao: "",
-      unidade: "mês",
-      tipo: "contrato",
-      quantidade_orcamento: 0,
-      valor_unitario: 0,
-      valor_total: 0
-    })
+    if (editingCustoIndex !== null) {
+      const proxima = [...custosMensais]
+      proxima[editingCustoIndex] = novoCusto
+      setCustosMensais(proxima)
+      setEditingCustoIndex(null)
+    } else {
+      setCustosMensais([...custosMensais, novoCusto])
+    }
+
+    setCustoForm({ ...custoFormInicial })
+    setIsCustoDialogOpen(false)
+  }
+
+  const abrirDialogNovoCusto = () => {
+    setEditingCustoIndex(null)
+    setCustoForm({ ...custoFormInicial })
+    setIsCustoDialogOpen(true)
+  }
+
+  const abrirDialogEditarCusto = (index: number) => {
+    const custo = custosMensais[index]
+    if (!custo) return
+    setEditingCustoIndex(index)
+    setCustoForm({ ...custo })
+    setIsCustoDialogOpen(true)
   }
 
   const preencherDadosCustoMensal = () => {
@@ -405,23 +429,51 @@ export default function NovaMedicaoPage() {
     setTimeout(() => URL.revokeObjectURL(url), 10000)
   }
 
-  const preencherDadosDebug = () => {
+  /** PDF mínimo para testes (upload do documento obrigatório) */
+  const criarArquivoPdfPlaceholder = () => {
+    const conteudo = `%PDF-1.4
+1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj
+2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj
+3 0 obj<</Type/Page/MediaBox[0 0 200 200]/Parent 2 0 R>>endobj
+trailer<</Size 4/Root 1 0 R>>
+%%EOF`
+    return new File([conteudo], "medicao-preenchimento-automatico.pdf", { type: "application/pdf" })
+  }
+
+  const preencherDadosDebug = async () => {
     const now = new Date()
     const periodo = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
     const numero = `MED-DEBUG-${periodo}-${Date.now()}`
-    
+
+    let obraIdStr = medicaoForm.obra_id?.trim() || ""
+    if (!obraIdStr && obras.length > 0) {
+      obraIdStr = String(obras[0].id)
+    }
+
+    let gruaIdStr = medicaoForm.grua_id?.trim() || ""
+    if (obraIdStr) {
+      const listaGruas = await carregarGruasDaObra(parseInt(obraIdStr, 10))
+      if (!gruaIdStr && listaGruas.length > 0) {
+        gruaIdStr = String(listaGruas[0].id)
+      }
+    }
+
     // Preencher formulário principal
-    setMedicaoForm({
-      ...medicaoForm,
-      numero: numero,
+    setMedicaoForm((prev) => ({
+      ...prev,
+      obra_id: obraIdStr || prev.obra_id,
+      grua_id: gruaIdStr || prev.grua_id,
+      numero,
       data_inicio_emissao: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
-      data_fim_emissao: now.toISOString().split('T')[0],
-      valor_mensal_bruto: 15000.00,
-      valor_aditivos: 2500.00,
-      valor_custos_extras: 1200.00,
-      valor_descontos: 500.00,
-      observacoes: "Dados preenchidos automaticamente para debug e testes do sistema."
-    })
+      data_fim_emissao: now.toISOString().split("T")[0],
+      valor_mensal_bruto: 15000.0,
+      valor_aditivos: 2500.0,
+      valor_custos_extras: 1200.0,
+      valor_descontos: 500.0,
+      observacoes: "Dados preenchidos automaticamente para testes (botão Preencher dados)."
+    }))
+
+    setArquivoPdfMedicao(criarArquivoPdfPlaceholder())
 
     // Adicionar alguns custos mensais de exemplo se houver itens disponíveis
     if (itens.length > 0) {
@@ -505,9 +557,15 @@ export default function NovaMedicaoPage() {
       })
     }
 
+    const partesDesc: string[] = ["Número, valores, custos e PDF de exemplo."]
+    if (obraIdStr) partesDesc.push("Obra selecionada.")
+    else partesDesc.push("Cadastre uma obra ou selecione manualmente.")
+    if (gruaIdStr) partesDesc.push("Grua selecionada.")
+    else if (obraIdStr) partesDesc.push("Nenhuma grua na obra — vincule uma grua à obra ou escolha manualmente.")
+
     toast({
-      title: "Dados Preenchidos",
-      description: "Todos os campos foram preenchidos com valores de exemplo (exceto obra e grua)",
+      title: "Dados preenchidos",
+      description: partesDesc.join(" "),
     })
   }
 
@@ -728,12 +786,17 @@ export default function NovaMedicaoPage() {
             <p className="text-gray-600">Crie uma nova medição vinculada a uma grua</p>
           </div>
         </div>
-        <DebugButton
-          onClick={preencherDadosDebug}
-          variant="default"
-          label="Preencher Dados"
-          className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-        />
+        <Button
+          type="button"
+          variant="outline"
+          onClick={() => void preencherDadosDebug()}
+          disabled={loadingObras}
+          className="bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200"
+          title="Preenche número, datas, valores, custos de exemplo, PDF placeholder e tenta selecionar primeira obra/grua"
+        >
+          <Zap className="w-4 h-4 mr-2" />
+          Preencher dados
+        </Button>
       </div>
 
       {/* Mensagem de Erro */}
@@ -1081,357 +1144,517 @@ export default function NovaMedicaoPage() {
           </CardContent>
         </Card>
 
-        {/* Custos Mensais */}
+        {/* Custos Mensais — layout alinhado à NF (lista + dialog) */}
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Calculator className="w-4 h-4" />
               Custos Mensais
             </CardTitle>
+            <CardDescription>
+              Adicione os itens de custo desta medição (catálogo, quantidades e valores).
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Formulário de Novo Custo Mensal */}
-            <div className="border rounded-lg p-2 bg-gray-50">
-              <h3 className="font-semibold mb-2 flex items-center gap-2 text-xs">
-                <Plus className="w-3 h-3" />
-                Novo Custo Mensal
-              </h3>
-              <div className="space-y-2">
-                {/* Primeira linha: Item e Descrição */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <Label htmlFor="custo_item" className="text-xs">Item *</Label>
-                    <div className="flex gap-2">
-                      <Popover open={itemSearchOpen} onOpenChange={setItemSearchOpen}>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="outline"
-                            role="combobox"
-                            aria-expanded={itemSearchOpen}
-                            className="flex-1 justify-between h-8 text-sm bg-white"
-                            disabled={loadingItens}
-                          >
-                          {custoForm.item
-                            ? (() => {
-                                const itemSelecionado = itens.find((item) => item.codigo === custoForm.item)
-                                return itemSelecionado ? itemSelecionado.descricao : custoForm.item
-                              })()
-                            : loadingItens ? "Carregando itens..." : "Selecione um item"}
-                            <ChevronsUpDown className="ml-2 h-3 w-3 shrink-0 opacity-50" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-[400px] p-0" align="start">
-                          <Command>
-                            <CommandInput placeholder="Buscar item..." />
-                            <CommandList>
-                              <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
-                              <CommandGroup>
-                              {itens.map((item) => (
-                                <CommandItem
-                                  key={item.id}
-                                  value={item.descricao}
-                                  onSelect={() => {
-                                    setCustoForm({
-                                      ...custoForm,
-                                      item: item.codigo,
-                                      descricao: item.descricao,
-                                      unidade: item.unidade,
-                                      tipo: item.tipo
-                                    })
-                                    setItemSearchOpen(false)
-                                  }}
-                                >
-                                  <Check
-                                    className={cn(
-                                      "mr-2 h-4 w-4",
-                                      custoForm.item === item.codigo ? "opacity-100" : "opacity-0"
-                                    )}
-                                  />
-                                  <span>{item.descricao}</span>
-                                </CommandItem>
-                              ))}
-                              </CommandGroup>
-                            </CommandList>
-                          </Command>
-                        </PopoverContent>
-                      </Popover>
-                      <Dialog open={novoItemDialogOpen} onOpenChange={setNovoItemDialogOpen}>
-                        <DialogTrigger asChild>
-                          <Button type="button" variant="outline" size="sm" className="h-8 px-3">
-                            <Plus className="h-3 w-3 mr-1" />
-                            Novo
-                          </Button>
-                        </DialogTrigger>
-                        <DialogContent className="sm:max-w-[500px]">
-                          <DialogHeader>
-                            <DialogTitle>Novo Item de Custo Mensal</DialogTitle>
-                            <DialogDescription>
-                              Cadastre um novo item que poderá ser usado nas medições
-                            </DialogDescription>
-                          </DialogHeader>
-                          <div className="space-y-4 py-4">
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label htmlFor="novo_item_codigo" className="text-xs">Código *</Label>
-                                <Input
-                                  id="novo_item_codigo"
-                                  value={novoItemForm.codigo}
-                                  onChange={(e) => {
-                                    const value = e.target.value.slice(0, 20)
-                                    setNovoItemForm({ ...novoItemForm, codigo: value })
-                                  }}
-                                  placeholder="01.01"
-                                  maxLength={20}
-                                  className="h-8 text-sm bg-white"
-                                />
-                              </div>
-                              <div>
-                                <Label htmlFor="novo_item_unidade" className="text-xs">Unidade *</Label>
-                                <Select
-                                  value={novoItemForm.unidade}
-                                  onValueChange={(value: any) => setNovoItemForm({ ...novoItemForm, unidade: value })}
-                                >
-                                  <SelectTrigger className="h-8 text-sm bg-white">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="mês">mês</SelectItem>
-                                    <SelectItem value="und">und</SelectItem>
-                                    <SelectItem value="und.">und.</SelectItem>
-                                    <SelectItem value="km">km</SelectItem>
-                                    <SelectItem value="h">h</SelectItem>
-                                    <SelectItem value="hora">hora</SelectItem>
-                                    <SelectItem value="kg">kg</SelectItem>
-                                    <SelectItem value="m²">m²</SelectItem>
-                                    <SelectItem value="m³">m³</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
+          <CardContent className="space-y-4">
+            <div className="space-y-4 border-t pt-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-base font-semibold leading-none">Itens de custo</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Selecione itens do catálogo ou cadastre novos. Defina quantidade e valor unitário.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  onClick={abrirDialogNovoCusto}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar custo
+                </Button>
+              </div>
+
+              {custosMensais.length > 0 ? (
+                <div className="border rounded-lg">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-[50px]">#</TableHead>
+                        <TableHead>Item / Descrição</TableHead>
+                        <TableHead className="w-[90px]">Unidade</TableHead>
+                        <TableHead className="w-[90px]">Tipo</TableHead>
+                        <TableHead className="w-[100px]">Qtd.</TableHead>
+                        <TableHead className="w-[120px]">Valor unit.</TableHead>
+                        <TableHead className="w-[120px]">Total</TableHead>
+                        <TableHead className="w-[100px]">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {custosMensais.map((custo, index) => (
+                        <TableRow key={`${custo.item}-${index}`}>
+                          <TableCell>{index + 1}</TableCell>
+                          <TableCell>
+                            <span className="font-medium text-muted-foreground text-xs block">{custo.item}</span>
+                            <span className="font-medium">{custo.descricao}</span>
+                          </TableCell>
+                          <TableCell>{custo.unidade}</TableCell>
+                          <TableCell className="capitalize">{custo.tipo}</TableCell>
+                          <TableCell>{custo.quantidade_orcamento}</TableCell>
+                          <TableCell>{formatCurrency(custo.valor_unitario)}</TableCell>
+                          <TableCell className="font-semibold">
+                            {formatCurrency(custo.quantidade_orcamento * custo.valor_unitario)}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => abrirDialogEditarCusto(index)}
+                                title="Editar custo"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => removerCustoMensal(index)}
+                                title="Remover custo"
+                              >
+                                <Trash2 className="w-4 h-4 text-destructive" />
+                              </Button>
                             </div>
-                            <div>
-                              <Label htmlFor="novo_item_descricao" className="text-xs">Descrição *</Label>
-                              <Input
-                                id="novo_item_descricao"
-                                value={novoItemForm.descricao}
-                                onChange={(e) => setNovoItemForm({ ...novoItemForm, descricao: e.target.value })}
-                                placeholder="Locação de grua..."
-                                className="h-8 text-sm bg-white"
-                              />
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <Label htmlFor="novo_item_tipo" className="text-xs">Tipo *</Label>
-                                <Select
-                                  value={novoItemForm.tipo}
-                                  onValueChange={(value: any) => setNovoItemForm({ ...novoItemForm, tipo: value })}
-                                >
-                                  <SelectTrigger className="h-8 text-sm bg-white">
-                                    <SelectValue />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="contrato">Contrato</SelectItem>
-                                    <SelectItem value="aditivo">Aditivo</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                              <div>
-                                <Label htmlFor="novo_item_categoria" className="text-xs">Categoria</Label>
-                                <Select
-                                  value={novoItemForm.categoria || undefined}
-                                  onValueChange={(value: any) => setNovoItemForm({ ...novoItemForm, categoria: value as any })}
-                                >
-                                  <SelectTrigger className="h-8 text-sm bg-white">
-                                    <SelectValue placeholder="Selecione..." />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="funcionario">Funcionário</SelectItem>
-                                    <SelectItem value="horas_extras">Horas Extras</SelectItem>
-                                    <SelectItem value="servico">Serviço</SelectItem>
-                                    <SelectItem value="produto">Produto</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                              </div>
-                            </div>
-                          </div>
-                          <DialogFooter>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => {
-                                setNovoItemDialogOpen(false)
-                                setNovoItemForm({
-                                  codigo: "",
-                                  descricao: "",
-                                  unidade: "mês",
-                                  tipo: "contrato",
-                                  categoria: ""
-                                })
-                              }}
-                              disabled={salvandoItem}
-                            >
-                              Cancelar
-                            </Button>
-                            <Button
-                              type="button"
-                              onClick={criarNovoItem}
-                              disabled={salvandoItem}
-                            >
-                              {salvandoItem ? "Salvando..." : "Criar Item"}
-                            </Button>
-                          </DialogFooter>
-                        </DialogContent>
-                      </Dialog>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                  <div className="p-4 border-t bg-muted/50">
+                    <div className="flex justify-end">
+                      <div className="text-right text-sm">
+                        <span className="text-muted-foreground">Total dos custos: </span>
+                        <span className="font-semibold">
+                          {formatCurrency(
+                            custosMensais.reduce(
+                              (sum, c) => sum + c.quantidade_orcamento * c.valor_unitario,
+                              0
+                            )
+                          )}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                  <div>
-                    <Label htmlFor="custo_descricao" className="text-xs">Descrição *</Label>
-                    <Input
-                      id="custo_descricao"
-                      value={custoForm.descricao}
-                      onChange={(e) => setCustoForm({ ...custoForm, descricao: e.target.value })}
-                      placeholder="Locação de grua..."
-                      className="h-8 text-sm bg-white"
-                    />
-                  </div>
                 </div>
-                
-                {/* Segunda linha: Unidade, Tipo, Qtd. Orçamento, Valor Unitário, Total Orçamento */}
-                <div className="grid grid-cols-5 gap-2">
-                  <div>
-                    <Label htmlFor="custo_unidade" className="text-xs">Unidade *</Label>
-                    <Select
-                      value={custoForm.unidade}
-                      onValueChange={(value: any) => setCustoForm({ ...custoForm, unidade: value })}
-                    >
-                      <SelectTrigger className="h-8 text-sm bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="mês">mês</SelectItem>
-                        <SelectItem value="und">und</SelectItem>
-                        <SelectItem value="und.">und.</SelectItem>
-                        <SelectItem value="km">km</SelectItem>
-                        <SelectItem value="h">h</SelectItem>
-                        <SelectItem value="hora">hora</SelectItem>
-                        <SelectItem value="kg">kg</SelectItem>
-                        <SelectItem value="m²">m²</SelectItem>
-                        <SelectItem value="m³">m³</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="custo_tipo" className="text-xs">Tipo *</Label>
-                    <Select
-                      value={custoForm.tipo}
-                      onValueChange={(value: any) => setCustoForm({ ...custoForm, tipo: value })}
-                    >
-                      <SelectTrigger className="h-8 text-sm bg-white">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="contrato">Contrato</SelectItem>
-                        <SelectItem value="aditivo">Aditivo</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="custo_quantidade_orcamento" className="text-xs">Qtd. Orç. *</Label>
-                    <Input
-                      id="custo_quantidade_orcamento"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoForm.quantidade_orcamento === 0 ? '' : custoForm.quantidade_orcamento}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                        setCustoForm({ 
-                          ...custoForm, 
-                          quantidade_orcamento: value
-                        })
-                      }}
-                      placeholder="0.00"
-                      className="h-8 text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="custo_valor_unitario" className="text-xs">Valor Unit. *</Label>
-                    <Input
-                      id="custo_valor_unitario"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoForm.valor_unitario === 0 ? '' : custoForm.valor_unitario}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                        setCustoForm({ 
-                          ...custoForm, 
-                          valor_unitario: value
-                        })
-                      }}
-                      placeholder="0.00"
-                      className="h-8 text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-xs">Total Orçamento</Label>
-                    <Input
-                      value={formatCurrency(calcularTotalOrcamento())}
-                      disabled
-                      className="h-8 text-sm bg-white disabled:bg-white"
-                      style={{ backgroundColor: 'white' }}
-                    />
-                  </div>
+              ) : (
+                <div className="border rounded-lg p-8 text-center text-muted-foreground">
+                  <Receipt className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>Nenhum custo adicionado</p>
+                  <p className="text-sm">Clique em &quot;Adicionar custo&quot; para começar</p>
                 </div>
-                
-                {/* Terceira linha: Botão Adicionar */}
-                <div className="flex justify-end gap-2">
-                  <DebugButton
-                    onClick={preencherDadosCustoMensal}
-                    size="sm"
-                    variant="outline"
-                    className="h-8"
-                    label="Preencher dados"
-                    title="Preencher dados de teste"
-                  />
-                  <Button type="button" onClick={adicionarCustoMensal} size="sm" className="h-8">
-                    <Plus className="w-3 h-3 mr-1" />
-                    Adicionar
-                  </Button>
-                </div>
-              </div>
+              )}
             </div>
 
-            {/* Lista de Custos Adicionados */}
-            {custosMensais.length > 0 && (
-              <div className="space-y-2">
-                <h4 className="font-semibold">Custos Adicionados ({custosMensais.length})</h4>
-                <div className="space-y-2">
-                  {custosMensais.map((custo, index) => (
-                    <div key={index} className="border rounded-lg p-4 flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2">
-                          <span className="font-semibold">{custo.item}</span>
-                          <span className="text-sm text-gray-500">- {custo.descricao}</span>
-                        </div>
-                        <div className="text-sm text-gray-600 mt-1">
-                          {custo.unidade} | {custo.tipo} | Qtd: {custo.quantidade_orcamento} | 
-                          Valor Unit: {formatCurrency(custo.valor_unitario)} | 
-                          Total: {formatCurrency(custo.quantidade_orcamento * custo.valor_unitario)}
-                        </div>
+            <Dialog
+              open={isCustoDialogOpen}
+              onOpenChange={(open) => {
+                setIsCustoDialogOpen(open)
+                if (!open) {
+                  setEditingCustoIndex(null)
+                  setCustoForm({ ...custoFormInicial })
+                  setCustoDialogContentEl(null)
+                  setItemSearchOpen(false)
+                }
+              }}
+            >
+              <DialogContent
+                ref={setCustoDialogContentEl}
+                className="max-w-3xl max-h-[90vh] overflow-y-auto isolate"
+                onPointerDownOutside={(e) => {
+                  const t = e.target as HTMLElement
+                  if (
+                    t.closest('[data-slot="popover-content"]') ||
+                    t.closest("[data-radix-popover-content]") ||
+                    t.closest('[data-slot="command-item"]') ||
+                    t.closest("[cmdk-item]")
+                  ) {
+                    e.preventDefault()
+                  }
+                }}
+                onInteractOutside={(e) => {
+                  const t = e.target as HTMLElement
+                  if (
+                    t.closest('[data-slot="popover-content"]') ||
+                    t.closest("[data-radix-popover-content]") ||
+                    t.closest('[data-slot="command-item"]') ||
+                    t.closest("[cmdk-item]")
+                  ) {
+                    e.preventDefault()
+                  }
+                }}
+                onFocusOutside={(e) => {
+                  const t = e.target as HTMLElement
+                  if (
+                    t.closest('[data-slot="popover-content"]') ||
+                    t.closest("[data-radix-popover-content]") ||
+                    t.closest('[data-slot="command-list"]') ||
+                    t.closest("[cmdk-list]")
+                  ) {
+                    e.preventDefault()
+                  }
+                }}
+              >
+                <DialogHeader>
+                  <DialogTitle>
+                    {editingCustoIndex !== null ? "Editar custo mensal" : "Novo custo mensal"}
+                  </DialogTitle>
+                  <DialogDescription>
+                    Preencha o item (catálogo), descrição, unidade, tipo e valores. Use &quot;Novo&quot; para cadastrar um item no catálogo.
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <Label htmlFor="custo_item" className="text-sm font-medium">
+                          Item *
+                        </Label>
                       </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => removerCustoMensal(index)}
-                      >
-                        <Trash2 className="w-4 h-4 text-red-600" />
-                      </Button>
+                      <div className="flex gap-2">
+                        <Popover modal={false} open={itemSearchOpen} onOpenChange={setItemSearchOpen}>
+                          <PopoverTrigger asChild>
+                            <Button
+                              variant="outline"
+                              role="combobox"
+                              aria-expanded={itemSearchOpen}
+                              className="flex-1 justify-between h-10 text-sm"
+                              disabled={loadingItens}
+                            >
+                              {custoForm.item
+                                ? (() => {
+                                    const itemSelecionado = itens.find((item) => item.codigo === custoForm.item)
+                                    return itemSelecionado ? itemSelecionado.descricao : custoForm.item
+                                  })()
+                                : loadingItens
+                                  ? "Carregando itens..."
+                                  : "Selecione um item"}
+                              <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent
+                            container={custoDialogContentEl}
+                            className="z-[100] w-[400px] p-0"
+                            align="start"
+                            sideOffset={4}
+                          >
+                            <Command shouldFilter={true}>
+                              <CommandInput placeholder="Buscar item..." />
+                              <CommandList>
+                                <CommandEmpty>Nenhum item encontrado.</CommandEmpty>
+                                <CommandGroup>
+                                  {itens.map((item) => (
+                                    <CommandItem
+                                      key={item.id}
+                                      value={`${item.id} ${item.codigo} ${item.descricao}`}
+                                      onPointerDown={(e) => {
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                      }}
+                                      onSelect={() => {
+                                        setCustoForm({
+                                          ...custoForm,
+                                          item: item.codigo,
+                                          descricao: item.descricao,
+                                          unidade: item.unidade,
+                                          tipo: item.tipo
+                                        })
+                                        setItemSearchOpen(false)
+                                      }}
+                                    >
+                                      <Check
+                                        className={cn(
+                                          "mr-2 h-4 w-4",
+                                          custoForm.item === item.codigo ? "opacity-100" : "opacity-0"
+                                        )}
+                                      />
+                                      <span>{item.descricao}</span>
+                                    </CommandItem>
+                                  ))}
+                                </CommandGroup>
+                              </CommandList>
+                            </Command>
+                          </PopoverContent>
+                        </Popover>
+                        <Dialog open={novoItemDialogOpen} onOpenChange={setNovoItemDialogOpen}>
+                          <DialogTrigger asChild>
+                            <Button type="button" variant="outline" size="sm" className="h-10 px-3 shrink-0">
+                              <Plus className="h-4 w-4 mr-1" />
+                              Novo
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-[500px]">
+                            <DialogHeader>
+                              <DialogTitle>Novo item no catálogo</DialogTitle>
+                              <DialogDescription>
+                                Cadastre um novo item para usar nas medições
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4 py-4">
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label htmlFor="novo_item_codigo" className="text-sm font-medium">
+                                    Código *
+                                  </Label>
+                                  <Input
+                                    id="novo_item_codigo"
+                                    value={novoItemForm.codigo}
+                                    onChange={(e) => {
+                                      const value = e.target.value.slice(0, 20)
+                                      setNovoItemForm({ ...novoItemForm, codigo: value })
+                                    }}
+                                    placeholder="01.01"
+                                    maxLength={20}
+                                    className="h-9 mt-1.5"
+                                  />
+                                </div>
+                                <div>
+                                  <Label htmlFor="novo_item_unidade" className="text-sm font-medium">
+                                    Unidade *
+                                  </Label>
+                                  <Select
+                                    value={novoItemForm.unidade}
+                                    onValueChange={(value: any) => setNovoItemForm({ ...novoItemForm, unidade: value })}
+                                  >
+                                    <SelectTrigger className="h-9 mt-1.5">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="mês">mês</SelectItem>
+                                      <SelectItem value="und">und</SelectItem>
+                                      <SelectItem value="und.">und.</SelectItem>
+                                      <SelectItem value="km">km</SelectItem>
+                                      <SelectItem value="h">h</SelectItem>
+                                      <SelectItem value="hora">hora</SelectItem>
+                                      <SelectItem value="kg">kg</SelectItem>
+                                      <SelectItem value="m²">m²</SelectItem>
+                                      <SelectItem value="m³">m³</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                              <div>
+                                <Label htmlFor="novo_item_descricao" className="text-sm font-medium">
+                                  Descrição *
+                                </Label>
+                                <Input
+                                  id="novo_item_descricao"
+                                  value={novoItemForm.descricao}
+                                  onChange={(e) => setNovoItemForm({ ...novoItemForm, descricao: e.target.value })}
+                                  placeholder="Locação de grua..."
+                                  className="h-9 mt-1.5"
+                                />
+                              </div>
+                              <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                  <Label htmlFor="novo_item_tipo" className="text-sm font-medium">
+                                    Tipo *
+                                  </Label>
+                                  <Select
+                                    value={novoItemForm.tipo}
+                                    onValueChange={(value: any) => setNovoItemForm({ ...novoItemForm, tipo: value })}
+                                  >
+                                    <SelectTrigger className="h-9 mt-1.5">
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="contrato">Contrato</SelectItem>
+                                      <SelectItem value="aditivo">Aditivo</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                                <div>
+                                  <Label htmlFor="novo_item_categoria" className="text-sm font-medium">
+                                    Categoria
+                                  </Label>
+                                  <Select
+                                    value={novoItemForm.categoria || undefined}
+                                    onValueChange={(value: any) =>
+                                      setNovoItemForm({ ...novoItemForm, categoria: value as any })
+                                    }
+                                  >
+                                    <SelectTrigger className="h-9 mt-1.5">
+                                      <SelectValue placeholder="Selecione..." />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                      <SelectItem value="funcionario">Funcionário</SelectItem>
+                                      <SelectItem value="horas_extras">Horas Extras</SelectItem>
+                                      <SelectItem value="servico">Serviço</SelectItem>
+                                      <SelectItem value="produto">Produto</SelectItem>
+                                    </SelectContent>
+                                  </Select>
+                                </div>
+                              </div>
+                            </div>
+                            <DialogFooter>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => {
+                                  setNovoItemDialogOpen(false)
+                                  setNovoItemForm({
+                                    codigo: "",
+                                    descricao: "",
+                                    unidade: "mês",
+                                    tipo: "contrato",
+                                    categoria: ""
+                                  })
+                                }}
+                                disabled={salvandoItem}
+                              >
+                                Cancelar
+                              </Button>
+                              <Button type="button" onClick={criarNovoItem} disabled={salvandoItem}>
+                                {salvandoItem ? "Salvando..." : "Criar item"}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
                     </div>
-                  ))}
+                    <div>
+                      <Label htmlFor="custo_descricao" className="text-sm font-medium">
+                        Descrição *
+                      </Label>
+                      <Input
+                        id="custo_descricao"
+                        value={custoForm.descricao}
+                        onChange={(e) => setCustoForm({ ...custoForm, descricao: e.target.value })}
+                        placeholder="Locação de grua..."
+                        className="h-9 mt-1.5"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div>
+                      <Label htmlFor="custo_unidade" className="text-sm font-medium">
+                        Unidade *
+                      </Label>
+                      <Select
+                        value={custoForm.unidade}
+                        onValueChange={(value: any) => setCustoForm({ ...custoForm, unidade: value })}
+                      >
+                        <SelectTrigger className="h-10 mt-1.5">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="mês">mês</SelectItem>
+                          <SelectItem value="und">und</SelectItem>
+                          <SelectItem value="und.">und.</SelectItem>
+                          <SelectItem value="km">km</SelectItem>
+                          <SelectItem value="h">h</SelectItem>
+                          <SelectItem value="hora">hora</SelectItem>
+                          <SelectItem value="kg">kg</SelectItem>
+                          <SelectItem value="m²">m²</SelectItem>
+                          <SelectItem value="m³">m³</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="custo_tipo" className="text-sm font-medium">
+                        Tipo *
+                      </Label>
+                      <Select
+                        value={custoForm.tipo}
+                        onValueChange={(value: any) => setCustoForm({ ...custoForm, tipo: value })}
+                      >
+                        <SelectTrigger className="h-10 mt-1.5">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="contrato">Contrato</SelectItem>
+                          <SelectItem value="aditivo">Aditivo</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div>
+                      <Label htmlFor="custo_quantidade_orcamento" className="text-sm font-medium">
+                        Qtd. orç. *
+                      </Label>
+                      <Input
+                        id="custo_quantidade_orcamento"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={custoForm.quantidade_orcamento === 0 ? "" : custoForm.quantidade_orcamento}
+                        onChange={(e) => {
+                          const value = e.target.value === "" ? 0 : parseFloat(e.target.value) || 0
+                          setCustoForm({
+                            ...custoForm,
+                            quantidade_orcamento: value
+                          })
+                        }}
+                        placeholder="0.00"
+                        className="h-9 mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label htmlFor="custo_valor_unitario" className="text-sm font-medium">
+                        Valor unit. *
+                      </Label>
+                      <Input
+                        id="custo_valor_unitario"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={custoForm.valor_unitario === 0 ? "" : custoForm.valor_unitario}
+                        onChange={(e) => {
+                          const value = e.target.value === "" ? 0 : parseFloat(e.target.value) || 0
+                          setCustoForm({
+                            ...custoForm,
+                            valor_unitario: value
+                          })
+                        }}
+                        placeholder="0.00"
+                        className="h-9 mt-1.5"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Total orçamento</Label>
+                      <Input
+                        value={formatCurrency(calcularTotalOrcamento())}
+                        disabled
+                        className="h-9 mt-1.5 bg-muted/50"
+                      />
+                    </div>
+                  </div>
                 </div>
-              </div>
-            )}
+
+                <DialogFooter className="flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button type="button" variant="outline" onClick={() => setIsCustoDialogOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-9 bg-amber-50 hover:bg-amber-100 text-amber-900 border-amber-200"
+                    onClick={preencherDadosCustoMensal}
+                    title="Preencher linha do custo com valores de exemplo"
+                  >
+                    <Zap className="w-3.5 h-3.5 mr-1.5" />
+                    Preencher dados
+                  </Button>
+                  <Button type="button" onClick={adicionarCustoMensal} className="h-9">
+                    <Plus className="w-4 h-4 mr-2" />
+                    {editingCustoIndex !== null ? "Salvar alterações" : "Adicionar custo"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </CardContent>
         </Card>
 

@@ -707,6 +707,34 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // NF vinculada a medição: só permitir criação se a medição estiver aprovada
+    if (dadosLimpos.medicao_id != null && dadosLimpos.medicao_id !== '') {
+      const medId = Number(dadosLimpos.medicao_id);
+      if (Number.isFinite(medId) && medId > 0) {
+        const { data: medicaoRow, error: medicaoErr } = await supabaseAdmin
+          .from('medicoes_mensais')
+          .select('id, status_aprovacao')
+          .eq('id', medId)
+          .maybeSingle();
+        if (medicaoErr || !medicaoRow) {
+          return res.status(400).json({
+            success: false,
+            message: 'Medição não encontrada',
+            error: 'medicao_id inválido'
+          });
+        }
+        if (medicaoRow.status_aprovacao !== 'aprovada') {
+          return res.status(400).json({
+            success: false,
+            message: 'Medição não aprovada',
+            error:
+              medicaoRow.status_aprovacao === 'rejeitada'
+                ? 'Não é possível criar nota fiscal para medição rejeitada.'
+                : 'Aprove a medição antes de registrar a nota fiscal.'
+          });
+        }
+      }
+    }
 
     // Usar RPC ou query direta para garantir que as datas sejam salvas corretamente
     // O problema pode estar no PostgreSQL interpretando datas como UTC

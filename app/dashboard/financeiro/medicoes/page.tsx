@@ -34,7 +34,8 @@ import {
   XCircle,
   Clock,
   Forklift,
-  Send
+  Send,
+  FileText
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
@@ -649,6 +650,35 @@ export default function MedicoesPage() {
                                 title={medicao.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
                               >
                                 <Send className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="px-1.5"
+                                disabled={medicao.status_aprovacao !== "aprovada"}
+                                title={
+                                  medicao.status_aprovacao !== "aprovada"
+                                    ? "Só é possível gerar nota fiscal após a medição ser aprovada."
+                                    : "Abrir nota fiscal de saída a partir desta medição"
+                                }
+                                onClick={() => {
+                                  if (medicao.status_aprovacao !== "aprovada") return
+                                  try {
+                                    sessionStorage.setItem(
+                                      "sgg_nf_prefill_medicao_id",
+                                      String(medicao.id)
+                                    )
+                                  } catch {
+                                    /* ignore */
+                                  }
+                                  router.push(
+                                    `/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`
+                                  )
+                                }}
+                              >
+                                <FileText
+                                  className={`w-4 h-4 ${medicao.status_aprovacao === "aprovada" ? "text-emerald-700" : "text-muted-foreground opacity-50"}`}
+                                />
                               </Button>
                               <AlertDialog>
                                 <AlertDialogTrigger asChild>
