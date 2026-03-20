@@ -154,6 +154,13 @@ export default function PWANotificacoesDebugPage() {
             <Bell className="w-4 h-4 mr-2" />
             Solicitar / Revalidar Permissão
           </Button>
+          <p className="text-xs text-muted-foreground leading-relaxed border-t pt-3 mt-3">
+            <strong>Atenção:</strong> os botões de almoço / tipos abaixo usam{" "}
+            <code className="text-[10px]">showNotification</code> no próprio aparelho (app aberto). Já o{" "}
+            <strong>push de ponto</strong> vem do <strong>servidor</strong> (FCM) com o app em segundo plano — é
+            outro caminho. Para validar o servidor, use &quot;Simular broadcast API&quot; ou dispare o ponto e
+            confira o JSON <code className="text-[10px]">push_web.enviados</code>.
+          </p>
         </CardContent>
       </Card>
 

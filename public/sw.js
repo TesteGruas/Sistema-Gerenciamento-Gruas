@@ -4,7 +4,7 @@
 // Implementa estratégias avançadas de cache,
 // sincronização em background e push notifications
 
-const VERSION = '3.2.2';
+const VERSION = '3.2.3';
 const CACHE_PREFIX = 'irbana-pwa';
 const CACHE_STATIC = `${CACHE_PREFIX}-static-v${VERSION}`;
 const CACHE_DYNAMIC = `${CACHE_PREFIX}-dynamic-v${VERSION}`;
@@ -479,22 +479,48 @@ self.addEventListener('push', (event) => {
       }
 
       const title = data.title || 'IRBANA';
-      const options = {
+      const ua = self.navigator?.userAgent || '';
+      /** Safari iOS Web Push costuma falhar com actions/vibrate em showNotification */
+      const isAppleTouch = /iPhone|iPad|iPod/i.test(ua);
+
+      const baseOptions = {
         body: data.body || 'Nova notificação',
         icon: swAbsAsset(data.icon || '/icon-192x192.png'),
         badge: swAbsAsset(data.badge || '/icon-72x72.png'),
-        vibrate: data.vibrate || [200, 100, 200],
         data: data.data || {},
-        actions: data.actions || [
-          { action: 'open', title: 'Abrir' },
-          { action: 'close', title: 'Fechar' }
-        ],
         tag: data.tag || 'default',
-        requireInteraction: data.requireInteraction || false,
-        silent: data.silent || false
+        requireInteraction: Boolean(data.requireInteraction),
+        silent: Boolean(data.silent)
       };
 
-      await self.registration.showNotification(title, options);
+      let options = { ...baseOptions };
+      if (!isAppleTouch) {
+        options.vibrate = data.vibrate || [200, 100, 200];
+        options.actions =
+          Array.isArray(data.actions) && data.actions.length > 0
+            ? data.actions
+            : [
+                { action: 'open', title: 'Abrir' },
+                { action: 'close', title: 'Fechar' }
+              ];
+      }
+
+      try {
+        await self.registration.showNotification(title, options);
+      } catch (err) {
+        log('showNotification (completo) falhou, tentando mínimo iOS-safe:', err);
+        try {
+          await self.registration.showNotification(title, {
+            body: baseOptions.body,
+            icon: baseOptions.icon,
+            badge: baseOptions.badge,
+            tag: baseOptions.tag,
+            data: baseOptions.data
+          });
+        } catch (err2) {
+          log('showNotification mínimo falhou:', err2);
+        }
+      }
     })()
   );
 });
