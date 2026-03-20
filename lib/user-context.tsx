@@ -102,6 +102,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
         }
         
         setCurrentUser(userObject)
+        void import('@/lib/register-web-push-after-auth').then(({ registerWebPushAfterAuth }) =>
+          registerWebPushAfterAuth()
+        )
       } catch (error) {
         // Não logar erro se for token inválido (já foi tratado no AuthService)
         if (error instanceof Error && !error.message.includes('Token inválido')) {
@@ -172,6 +175,9 @@ export function UserProvider({ children }: { children: ReactNode }) {
               status: 'ativo',
               createdAt: new Date().toISOString()
             })
+            void import('@/lib/register-web-push-after-auth').then(({ registerWebPushAfterAuth }) =>
+              registerWebPushAfterAuth()
+            )
           } finally {
             loadingRef.current = false
           }

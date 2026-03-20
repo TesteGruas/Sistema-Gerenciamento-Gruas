@@ -147,6 +147,9 @@ export function useAuth() {
               loading: false,
               error: null
             })
+            void import('@/lib/register-web-push-after-auth').then(({ registerWebPushAfterAuth }) =>
+              registerWebPushAfterAuth()
+            )
           } catch (decodeError) {
             console.error('Erro ao decodificar token:', decodeError)
             logout()
@@ -186,6 +189,9 @@ export function useAuth() {
           loading: false,
           error: null
         })
+        void import('@/lib/register-web-push-after-auth').then(({ registerWebPushAfterAuth }) =>
+          registerWebPushAfterAuth()
+        )
       } else {
         checkAuthentication()
       }

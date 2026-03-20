@@ -261,6 +261,10 @@ function PWALoginPageContent(): JSX.Element {
           data.data.refresh_token
         )
 
+        void import('@/lib/register-web-push-after-auth').then(({ registerWebPushAfterAuth }) =>
+          registerWebPushAfterAuth()
+        )
+
         // No iOS/PWA evitamos solicitar permissão de notificação durante o login,
         // pois o prompt nativo pode travar a primeira navegação para a dashboard.
 

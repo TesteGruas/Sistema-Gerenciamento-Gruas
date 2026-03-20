@@ -31,5 +31,14 @@ export async function sendWebPush(subscription, payload) {
     throw new Error('WEB_PUSH_NOT_CONFIGURED')
   }
 
-  return webpush.sendNotification(subscription, JSON.stringify(payload))
+  let sub = subscription
+  if (typeof sub === 'string') {
+    try {
+      sub = JSON.parse(sub)
+    } catch {
+      throw new Error('WEB_PUSH_INVALID_SUBSCRIPTION_JSON')
+    }
+  }
+
+  return webpush.sendNotification(sub, JSON.stringify(payload))
 }

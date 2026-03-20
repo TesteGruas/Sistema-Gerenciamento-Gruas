@@ -27,7 +27,8 @@ import {
   notificarFuncionarioPontoAssinado,
   notificarFuncionarioPontoRejeitado,
   notificarResponsaveisObraPontosPendentes,
-  obraTemDestinatariosNotificacaoPonto
+  obraTemDestinatariosNotificacaoPonto,
+  resolverObraIdParaNotificacao
 } from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
@@ -1630,6 +1631,17 @@ router.post('/registros', async (req, res) => {
 
     const funcionarioId = funcionario.id;
 
+    /** Mesma regra de {@link resolverObraIdParaNotificacao}: obra atual → alocação ativa (funcionarios_obras) → grua. */
+    const obraIdParaRegistro = await resolverObraIdParaNotificacao(
+      { funcionario_id: funcionarioId, obra_id: null },
+      funcionario
+    );
+    if (obraIdParaRegistro) {
+      console.log(
+        `[ponto-eletronico] obra_id para registro: ${obraIdParaRegistro} (funcionario ${funcionarioId})`
+      );
+    }
+
     // Validação de cargo removida - todos os funcionários podem bater ponto
 
     // VALIDAÇÃO DE GEOLOCALIZAÇÃO - Verificar se está próximo da GRUA (prioridade) ou da obra
@@ -1919,8 +1931,8 @@ router.post('/registros', async (req, res) => {
       if (trabalho_corrido !== undefined) dadosAtualizacao.trabalho_corrido = Boolean(trabalho_corrido);
       if (observacoes) dadosAtualizacao.observacoes = observacoes;
       if (localizacao) dadosAtualizacao.localizacao = localizacao;
-      if (funcionario.obra_atual_id && !existingRecord.obra_id) {
-        dadosAtualizacao.obra_id = funcionario.obra_atual_id;
+      if (obraIdParaRegistro && !existingRecord.obra_id) {
+        dadosAtualizacao.obra_id = obraIdParaRegistro;
       }
 
       // Recalcular horas trabalhadas e extras com os dados atualizados
@@ -2136,7 +2148,7 @@ router.post('/registros', async (req, res) => {
       status,
       observacoes,
       localizacao,
-      obra_id: funcionario.obra_atual_id || null,
+      obra_id: obraIdParaRegistro,
       tipo_dia: tipoDiaFinal,
       feriado_id: feriadoId,
       is_feriado: isFeriadoFinal && !is_facultativo, // Só é feriado se não for facultativo
@@ -4900,7 +4912,10 @@ router.post('/registros/:id/assinar-responsavel', authenticateToken, async (req,
     }
 
     // Verificar que o usuário é responsável da obra deste registro
-    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    const funcResolverAssinResp =
+      registro.funcionario ||
+      ({ id: registro.funcionario_id, obra_atual_id: null, nome: 'Funcionário' });
+    const obraId = await resolverObraIdParaNotificacao(registro, funcResolverAssinResp);
     if (!obraId) {
       return res.status(400).json({ success: false, message: 'Registro sem obra vinculada' });
     }
@@ -5136,11 +5151,16 @@ router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
       });
     }
 
-    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    const funcionarioParaResolver =
+      registro.funcionario ||
+      ({ id: registro.funcionario_id, nome: 'Funcionário', obra_atual_id: null });
+
+    const obraId = await resolverObraIdParaNotificacao(registro, funcionarioParaResolver);
     if (!obraId) {
       return res.status(400).json({
         success: false,
-        message: 'Registro sem obra vinculada — não é possível notificar responsáveis.'
+        message:
+          'Registro sem obra vinculada — não é possível notificar responsáveis. Defina a obra atual do funcionário, o campo obra no registro ou um vínculo ativo grua–obra.'
       });
     }
 
@@ -5168,7 +5188,12 @@ router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
         obra_atual_id: obraId
       });
 
-    const resultadoNotif = await notificarResponsaveisObraPontoConcluido(registro, funcionarioPayload);
+    const registroParaNotif =
+      registro.obra_id != null && registro.obra_id !== ''
+        ? registro
+        : { ...registro, obra_id: obraId };
+
+    const resultadoNotif = await notificarResponsaveisObraPontoConcluido(registroParaNotif, funcionarioPayload);
 
     console.log(
       '[notificar-responsaveis] Detalhe (mesmo payload vai no JSON) registro=%s obra_usada=%s → %s',
@@ -5204,7 +5229,7 @@ router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
       funcionario_obra_atual_id: registro.funcionario?.obra_atual_id ?? null,
       funcionario_tambem_alocado_nestas_obras_ativas: obrasVinculoAtivo,
       regra:
-        'Usa (1) obra_id do registro de ponto, ou (2) se null, obra_atual_id do funcionário. Não usa a obra aberta no dashboard em outra aba.',
+        'Usa (1) obra_id do registro, (2) obra_atual_id do funcionário, (3) alocação ativa em funcionarios_obras ou (4) grua ativa com obra. Não usa só a aba do dashboard.',
       se_o_dashboard_e_de_outra_obra:
         'Se você cadastrou responsáveis na obra 142 mas a API mostra obra 137, o registro de ponto (ou a obra atual do funcionário) está na 137. Ajuste obra atual do funcionário, ou o campo obra_id do registro, ou cadastre o mesmo responsável/telefone na obra indicada em obra_id_usada_na_notificacao.'
     };
@@ -5286,7 +5311,10 @@ router.post('/registros/:id/rejeitar-responsavel', authenticateToken, async (req
     }
 
     // Verificar que o usuário é responsável da obra
-    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    const funcResolverRejeitar =
+      registro.funcionario ||
+      ({ id: registro.funcionario_id, obra_atual_id: null, nome: 'Funcionário' });
+    const obraId = await resolverObraIdParaNotificacao(registro, funcResolverRejeitar);
     if (!obraId) {
       return res.status(400).json({ success: false, message: 'Registro sem obra vinculada' });
     }
@@ -7954,7 +7982,10 @@ router.post('/debug/disparar-notificacao-responsavel-assinatura', async (req, re
       });
     }
 
-    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    const funcResolverDebug =
+      registro.funcionario ||
+      ({ id: registro.funcionario_id, obra_atual_id: null, nome: 'Funcionário' });
+    const obraId = await resolverObraIdParaNotificacao(registro, funcResolverDebug);
     if (!obraId) {
       return res.status(400).json({
         success: false,

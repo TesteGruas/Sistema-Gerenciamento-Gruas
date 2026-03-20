@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { initServiceWorker, getServiceWorkerManager } from '@/lib/service-worker-manager'
 import { useToast } from '@/hooks/use-toast'
+import { registerWebPushAfterAuth } from '@/lib/register-web-push-after-auth'
 
 export function ServiceWorkerProvider({ children }: { children: React.ReactNode }) {
   const { toast } = useToast()
@@ -78,6 +79,26 @@ export function ServiceWorkerProvider({ children }: { children: React.ReactNode 
       window.removeEventListener('offline', handleOffline)
     }
   }, [toast])
+
+  // Após o SW estar pronto: registrar push para quem já tem token + permissão (ex.: dashboard).
+  useEffect(() => {
+    if (!swReady || typeof window === 'undefined') return
+
+    const run = () => {
+      void registerWebPushAfterAuth()
+    }
+
+    run()
+    const onVis = () => {
+      if (document.visibilityState === 'visible') run()
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', run)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', run)
+    }
+  }, [swReady])
 
   return <>{children}</>
 }

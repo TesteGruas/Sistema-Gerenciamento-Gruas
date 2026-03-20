@@ -1296,7 +1296,34 @@ async function resolverUsuarioIdPorFuncionario(funcionarioId) {
   }
 }
 
-async function resolverObraIdParaNotificacao(registro, funcionario) {
+/**
+ * Primeira obra_id em alocações RH ativas (status ativo + data_fim futura ou nula).
+ * Ordem: data_inicio mais recente primeiro.
+ */
+async function obraIdDeAlocacaoAtivaFuncionario(funcionarioId) {
+  const { data: alocacoes, error } = await supabaseAdmin
+    .from('funcionarios_obras')
+    .select('obra_id, data_fim, data_inicio')
+    .eq('funcionario_id', funcionarioId)
+    .eq('status', 'ativo')
+    .order('data_inicio', { ascending: false });
+
+  if (error || !alocacoes?.length) return null;
+
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+
+  for (const a of alocacoes) {
+    if (!a?.obra_id) continue;
+    if (!a.data_fim) return a.obra_id;
+    const df = new Date(a.data_fim);
+    df.setHours(0, 0, 0, 0);
+    if (df >= hoje) return a.obra_id;
+  }
+  return null;
+}
+
+export async function resolverObraIdParaNotificacao(registro, funcionario) {
   const obraIdDireto = registro?.obra_id || funcionario?.obra_atual_id || funcionario?.obraAtualId;
   if (obraIdDireto) return obraIdDireto;
 
@@ -1310,7 +1337,38 @@ async function resolverObraIdParaNotificacao(registro, funcionario) {
       .eq('id', funcionarioId)
       .single();
 
-    return funcData?.obra_atual_id || null;
+    if (funcData?.obra_atual_id) return funcData.obra_atual_id;
+
+    const obraAlocacao = await obraIdDeAlocacaoAtivaFuncionario(funcionarioId);
+    if (obraAlocacao) {
+      console.log(
+        '[notificacoes-ponto] obra_id resolvida via funcionarios_obras (alocação ativa): %s funcionario=%s',
+        obraAlocacao,
+        funcionarioId
+      );
+      return obraAlocacao;
+    }
+
+    const { data: vinculoGrua } = await supabaseAdmin
+      .from('grua_funcionario')
+      .select('obra_id')
+      .eq('funcionario_id', funcionarioId)
+      .eq('status', 'Ativo')
+      .not('obra_id', 'is', null)
+      .order('data_inicio', { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (vinculoGrua?.obra_id) {
+      console.log(
+        '[notificacoes-ponto] obra_id resolvida via grua_funcionario: %s funcionario=%s',
+        vinculoGrua.obra_id,
+        funcionarioId
+      );
+      return vinculoGrua.obra_id;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -1402,6 +1460,12 @@ async function enviarPushParaUsuario(usuarioId, payload) {
         String(usuarioId),
         falhas,
         desativados
+      );
+    } else {
+      console.log(
+        '[notificacoes-ponto] Push: %s entregue(s) ao FCM/Web Push para user_id=%s',
+        enviados,
+        String(usuarioId)
       );
     }
 
