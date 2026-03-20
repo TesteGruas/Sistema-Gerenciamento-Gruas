@@ -24,6 +24,27 @@ const subscribeSchema = Joi.object({
   }).required()
 })
 
+/**
+ * `pwa_push_subscriptions.user_id` deve ser o mesmo `usuarios.id` usado em notificações/ponto.
+ * O JWT/req.user às vezes expunha só o UUID do Supabase Auth — resolvemos sempre pela tabela.
+ */
+async function resolverUsuarioIdParaPushSubscription(reqUser) {
+  const email = String(reqUser?.email || '').trim()
+  if (email) {
+    const { data: row, error } = await supabaseAdmin
+      .from('usuarios')
+      .select('id')
+      .eq('email', email)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (!error && row?.id != null) {
+      return String(row.id)
+    }
+  }
+  const fallback = reqUser?.id
+  return fallback != null && String(fallback).trim() !== '' ? String(fallback) : ''
+}
+
 const broadcastSchema = Joi.object({
   titulo: Joi.string().min(1).max(255).required(),
   mensagem: Joi.string().min(1).required(),
@@ -63,7 +84,7 @@ router.post('/subscribe', async (req, res) => {
     }
 
     const subscription = value.subscription
-    const userId = String(req.user?.id || '')
+    const userId = await resolverUsuarioIdParaPushSubscription(req.user)
 
     if (!userId) {
       return res.status(401).json({
@@ -97,7 +118,12 @@ router.post('/subscribe', async (req, res) => {
 
     return res.json({
       success: true,
-      message: 'Dispositivo inscrito para push com sucesso'
+      message: 'Dispositivo inscrito para push com sucesso',
+      data: {
+        usuario_id_gravado: userId,
+        dica:
+          'Deve ser o mesmo usuarios.id das notificações de ponto (ex. 181). Se era UUID antes, refaça subscribe após atualizar o backend.'
+      }
     })
   } catch (err) {
     return res.status(500).json({

@@ -22,6 +22,7 @@ import {
   ChevronRight,
   RefreshCw,
   Eye,
+  Smartphone,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +41,7 @@ import {
 } from '@/lib/api-notificacoes'
 import { useToast } from '@/hooks/use-toast'
 import { useAuth } from '@/hooks/use-auth'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 
 // Lazy load de componentes pesados para melhorar performance inicial
 const NovaNotificacaoDialog = dynamic(
@@ -147,6 +149,80 @@ export default function NotificacoesPage() {
   const [confirmacaoAberta, setConfirmacaoAberta] = useState(false)
   const [notificacaoParaDeletar, setNotificacaoParaDeletar] = useState<string | null>(null)
   const { toast } = useToast()
+
+  const [pushUiReady, setPushUiReady] = useState(false)
+  const [pushPermission, setPushPermission] = useState<NotificationPermission | 'unsupported'>('unsupported')
+  const [pushRegistrando, setPushRegistrando] = useState(false)
+  const [pushRegistradoOk, setPushRegistradoOk] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setPushPermission('unsupported')
+      setPushUiReady(true)
+      return
+    }
+    setPushPermission(Notification.permission)
+    setPushUiReady(true)
+  }, [])
+
+  const registrarPushNesteDispositivo = async () => {
+    if (typeof window === 'undefined') return
+    if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+      toast({
+        title: 'Não suportado',
+        description: 'Este navegador não suporta notificações push.',
+        variant: 'destructive'
+      })
+      return
+    }
+    try {
+      if (Notification.permission === 'default') {
+        const p = await Notification.requestPermission()
+        setPushPermission(p)
+        if (p !== 'granted') {
+          toast({
+            title: 'Permissão necessária',
+            description: 'Sem permissão, o servidor não consegue entregar push neste aparelho.',
+            variant: 'destructive'
+          })
+          return
+        }
+      }
+      if (Notification.permission === 'denied') {
+        toast({
+          title: 'Notificações bloqueadas',
+          description: 'Abra as configurações do site no navegador e permita notificações para este domínio.',
+          variant: 'destructive'
+        })
+        return
+      }
+      setPushRegistrando(true)
+      const { ensurePushSubscription } = await import('@/lib/pwa-push-subscription')
+      const r = await ensurePushSubscription()
+      if (r.success) {
+        setPushRegistradoOk(true)
+        toast({
+          title: 'Push ativado',
+          description: 'Este dispositivo foi registrado para o usuário logado. Avisos de ponto e outros pushes passam a poder chegar aqui.'
+        })
+      } else {
+        toast({
+          title: 'Não foi possível registrar',
+          description: r.message,
+          variant: 'destructive'
+        })
+      }
+    } catch (e) {
+      toast({
+        title: 'Erro ao registrar push',
+        description: e instanceof Error ? e.message : 'Tente de novo ou use outro navegador.',
+        variant: 'destructive'
+      })
+    } finally {
+      setPushRegistrando(false)
+    }
+  }
   
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -461,6 +537,44 @@ export default function NotificacoesPage() {
           <NovaNotificacaoDialog onNotificacaoCriada={carregarNotificacoes} />
         </div>
       </div>
+
+      {pushUiReady && pushPermission !== 'unsupported' && (
+        <Alert className="border-blue-200 bg-blue-50/80 text-blue-950">
+          <Smartphone className="text-blue-700" />
+          <AlertTitle>Notificações push neste dispositivo</AlertTitle>
+          <AlertDescription className="space-y-3 text-blue-900/90">
+            <p>
+              O envio pelo servidor só chega se <strong>este navegador</strong> estiver inscrito para o{' '}
+              <strong>mesmo usuário logado agora</strong> (ex.: responsável da obra = usuário 181 no banco). Enviar
+              teste para outro usuário (ex.: 180) comprova o servidor; cada conta precisa registrar o próprio
+              aparelho.
+            </p>
+            {pushPermission === 'denied' ? (
+              <p className="text-sm font-medium">
+                As notificações estão bloqueadas para este site. Ajuste em Configurações do navegador → permissões
+                do site.
+              </p>
+            ) : pushRegistradoOk ? (
+              <p className="text-sm font-medium text-green-800">
+                Dispositivo registrado. Se ainda não receber, confira no Supabase a tabela{' '}
+                <code className="rounded bg-white/80 px-1">pwa_push_subscriptions</code> com{' '}
+                <code className="rounded bg-white/80 px-1">user_id</code> igual ao seu{' '}
+                <code className="rounded bg-white/80 px-1">usuarios.id</code>.
+              </p>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                className="bg-blue-700 hover:bg-blue-800"
+                disabled={pushRegistrando}
+                onClick={() => void registrarPushNesteDispositivo()}
+              >
+                {pushRegistrando ? 'Registrando…' : 'Permitir e registrar push neste aparelho'}
+              </Button>
+            )}
+          </AlertDescription>
+        </Alert>
+      )}
 
       {/* Filtros Compactos */}
       <Card>

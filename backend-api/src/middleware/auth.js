@@ -45,6 +45,9 @@ export const authenticateToken = async (req, res, next) => {
       perfil: null
     }
 
+    /** PK numérica em `usuarios` — push e notificações usam este id, não o UUID do Supabase Auth */
+    let usuarioTabelaId = null
+
     try {
       // Buscar usuário na tabela usuarios
       const { data: userData, error: userError } = await supabaseAdmin
@@ -54,6 +57,7 @@ export const authenticateToken = async (req, res, next) => {
         .single()
 
       if (userData && !userError) {
+        usuarioTabelaId = userData.id
         // Buscar perfil do usuário (novo sistema simplificado)
         const { data: perfilData, error: perfilError } = await supabaseAdmin
           .from('usuario_perfis')
@@ -117,9 +121,14 @@ export const authenticateToken = async (req, res, next) => {
       console.error('❌ Erro ao buscar dados do usuário:', dbError.message)
     }
 
-    // Adicionar usuário enriquecido ao request
-    req.user = { ...user, ...userInfo }
-    
+    // Adicionar usuário enriquecido ao request (id da tabela usuarios prevalece sobre UUID do Auth)
+    req.user = {
+      ...user,
+      ...userInfo,
+      id: usuarioTabelaId != null ? usuarioTabelaId : userInfo.id,
+      supabase_auth_user_id: user.id
+    }
+
     next()
   } catch (error) {
     console.error('❌ Erro na autenticação:', error)
