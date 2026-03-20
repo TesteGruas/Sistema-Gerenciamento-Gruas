@@ -18,6 +18,10 @@ interface ObraStore {
   responsavelName?: string // Propriedade adicional
   location?: string // Localização da obra
   endereco?: string
+  endereco_rua?: string
+  endereco_numero?: string
+  endereco_bairro?: string
+  endereco_complemento?: string
   cidade?: string
   estado?: string
   cep?: string

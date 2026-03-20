@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
+import { validarTelefoneWhatsappBrasil } from '../utils/telefone-brasil.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -5150,6 +5151,19 @@ const responsavelObraSchema = Joi.object({
   ativo: Joi.boolean().optional()
 })
 
+/** Telefone opcional; se informado, deve ser celular BR válido (11 dígitos nacionais ou 13 com 55). Salva só os 11 dígitos (DDD+número). */
+function telefoneResponsavelObraParaSalvar(telefone) {
+  if (telefone == null || String(telefone).trim() === '') {
+    return { ok: true, valor: null };
+  }
+  const v = validarTelefoneWhatsappBrasil(telefone);
+  if (!v.ok) {
+    return { ok: false, mensagem: v.mensagem };
+  }
+  const nacional11 = v.e164.slice(2);
+  return { ok: true, valor: nacional11 };
+}
+
 /**
  * GET /api/obras/:id/responsaveis-obra
  * Listar responsáveis de uma obra
@@ -5200,6 +5214,12 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
       return res.status(404).json({ success: false, error: 'Obra não encontrada' })
     }
 
+    const telRes = telefoneResponsavelObraParaSalvar(value.telefone)
+    if (!telRes.ok) {
+      return res.status(400).json({ success: false, error: 'Telefone inválido', message: telRes.mensagem })
+    }
+    const telefoneSalvar = telRes.valor
+
     // Salvar na tabela responsaveis_obra
     const { data, error } = await supabaseAdmin
       .from('responsaveis_obra')
@@ -5208,7 +5228,7 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
         nome: value.nome,
         usuario: value.usuario || null,
         email: value.email || null,
-        telefone: value.telefone || null,
+        telefone: telefoneSalvar,
         ativo: value.ativo !== undefined ? value.ativo : true
       })
       .select()
@@ -5269,7 +5289,7 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
               .insert({
                 nome: value.nome,
                 email: value.email,
-                telefone: value.telefone || null,
+                telefone: telefoneSalvar,
                 status: 'Ativo',
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString()
@@ -5343,16 +5363,25 @@ router.put('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermissi
       return res.status(400).json({ success: false, error: 'Dados inválidos', message: validationError.details[0].message })
     }
 
+    const updatePayload = {
+      nome: value.nome,
+      usuario: value.usuario || null,
+      email: value.email || null,
+      ativo: value.ativo !== undefined ? value.ativo : true,
+      updated_at: new Date().toISOString()
+    }
+
+    if (Object.prototype.hasOwnProperty.call(req.body, 'telefone')) {
+      const telResPut = telefoneResponsavelObraParaSalvar(value.telefone)
+      if (!telResPut.ok) {
+        return res.status(400).json({ success: false, error: 'Telefone inválido', message: telResPut.mensagem })
+      }
+      updatePayload.telefone = telResPut.valor
+    }
+
     const { data, error } = await supabaseAdmin
       .from('responsaveis_obra')
-      .update({
-        nome: value.nome,
-        usuario: value.usuario || null,
-        email: value.email || null,
-        telefone: value.telefone || null,
-        ativo: value.ativo !== undefined ? value.ativo : true,
-        updated_at: new Date().toISOString()
-      })
+      .update(updatePayload)
       .eq('id', id)
       .eq('obra_id', obra_id)
       .select()

@@ -42,3 +42,26 @@ export async function buscarEnderecoPorCep(cep: string): Promise<ViaCepResponse>
   return data.data
 }
 
+/** Máscara 12345-678 */
+export function formatarCepBr(value: string): string {
+  const n = value.replace(/\D/g, '').slice(0, 8)
+  if (n.length <= 5) return n
+  return `${n.slice(0, 5)}-${n.slice(5)}`
+}
+
+/** Mesma regra do backend/nova obra: rua, nº — bairro — complemento */
+export function montarLinhaEnderecoObraDetalhado(p: {
+  endereco_rua?: string | null
+  endereco_numero?: string | null
+  endereco_bairro?: string | null
+  endereco_complemento?: string | null
+}): string {
+  const rua = (p.endereco_rua || '').trim()
+  const numero = (p.endereco_numero || '').trim()
+  const bairro = (p.endereco_bairro || '').trim()
+  const comp = (p.endereco_complemento || '').trim()
+  const base = [rua, numero].filter(Boolean).join(', ')
+  const comBairro = [base, bairro].filter(Boolean).join(' - ')
+  return [comBairro, comp].filter(Boolean).join(', ')
+}
+

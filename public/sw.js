@@ -4,7 +4,7 @@
 // Implementa estratégias avançadas de cache,
 // sincronização em background e push notifications
 
-const VERSION = '3.2.1';
+const VERSION = '3.2.2';
 const CACHE_PREFIX = 'irbana-pwa';
 const CACHE_STATIC = `${CACHE_PREFIX}-static-v${VERSION}`;
 const CACHE_DYNAMIC = `${CACHE_PREFIX}-dynamic-v${VERSION}`;
@@ -456,28 +456,46 @@ async function syncPonto() {
 // 🔔 PUSH NOTIFICATIONS
 // ============================================
 
+function swAbsAsset(pathOrUrl) {
+  try {
+    return new URL(pathOrUrl || '/icon-192x192.png', self.location.origin).href;
+  } catch (e) {
+    return new URL('/icon-192x192.png', self.location.origin).href;
+  }
+}
+
 self.addEventListener('push', (event) => {
   log('Push notification recebida');
-  
-  const data = event.data ? event.data.json() : {};
-  const title = data.title || 'IRBANA';
-  const options = {
-    body: data.body || 'Nova notificação',
-    icon: data.icon || '/icon-192x192.png',
-    badge: data.badge || '/icon-72x72.png',
-    vibrate: data.vibrate || [200, 100, 200],
-    data: data.data || {},
-    actions: data.actions || [
-      { action: 'open', title: 'Abrir' },
-      { action: 'close', title: 'Fechar' }
-    ],
-    tag: data.tag || 'default',
-    requireInteraction: data.requireInteraction || false,
-    silent: data.silent || false
-  };
-  
+
   event.waitUntil(
-    self.registration.showNotification(title, options)
+    (async () => {
+      let data = {};
+      try {
+        if (event.data) {
+          data = await event.data.json();
+        }
+      } catch (e) {
+        log('Push: payload JSON inválido ou vazio:', e);
+      }
+
+      const title = data.title || 'IRBANA';
+      const options = {
+        body: data.body || 'Nova notificação',
+        icon: swAbsAsset(data.icon || '/icon-192x192.png'),
+        badge: swAbsAsset(data.badge || '/icon-72x72.png'),
+        vibrate: data.vibrate || [200, 100, 200],
+        data: data.data || {},
+        actions: data.actions || [
+          { action: 'open', title: 'Abrir' },
+          { action: 'close', title: 'Fechar' }
+        ],
+        tag: data.tag || 'default',
+        requireInteraction: data.requireInteraction || false,
+        silent: data.silent || false
+      };
+
+      await self.registration.showNotification(title, options);
+    })()
   );
 });
 
@@ -490,19 +508,39 @@ self.addEventListener('notificationclick', (event) => {
     return;
   }
   
-  const urlToOpen = event.notification.data?.url || '/pwa';
+  const raw = event.notification.data?.url || '/pwa';
+  let urlToOpen;
+  try {
+    urlToOpen = new URL(raw, self.location.origin).href;
+  } catch (e) {
+    urlToOpen = new URL('/pwa', self.location.origin).href;
+  }
+  const pathForMatch = (() => {
+    try {
+      return new URL(urlToOpen).pathname + new URL(urlToOpen).search;
+    } catch {
+      return String(raw);
+    }
+  })();
   
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // Tentar focar em janela existente
+        // Tentar focar em janela existente (comparar path)
         for (const client of clientList) {
-          if (client.url.includes(urlToOpen) && 'focus' in client) {
-            return client.focus();
+          try {
+            const cu = new URL(client.url);
+            const openPath = new URL(urlToOpen).pathname + new URL(urlToOpen).search;
+            if (cu.pathname + cu.search === openPath && 'focus' in client) {
+              return client.focus();
+            }
+          } catch (_) {
+            if (client.url.includes(pathForMatch) && 'focus' in client) {
+              return client.focus();
+            }
           }
         }
         
-        // Abrir nova janela
         if (clients.openWindow) {
           return clients.openWindow(urlToOpen);
         }

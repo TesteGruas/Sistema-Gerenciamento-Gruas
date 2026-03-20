@@ -8,6 +8,13 @@ import { validarTelefoneWhatsappBrasil, normalizarTelefoneBrasilParaWhatsApp } f
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
+/** Ícones e links de push com origem absoluta — alguns SO/navegadores ignoram paths relativos no payload Web Push. */
+function urlPwaAbs(path) {
+  const base = String(FRONTEND_URL() || '').replace(/\/+$/, '');
+  const p = String(path || '').startsWith('/') ? path : `/${path || ''}`;
+  return `${base}${p}`;
+}
+
 /** SMTP / webhooks externos podem travar minutos — não bloquear a API. */
 const MS_TIMEOUT_EMAIL =
   Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_EMAIL_MS) > 0
@@ -463,9 +470,9 @@ async function enviarPacoteNotificacaoResponsavelPonto({
         enviarPushParaUsuario(usuarioId, {
           title: 'Ponto pendente de assinatura',
           body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
-          icon: '/icon-192x192.png',
-          badge: '/icon-72x72.png',
-          data: { url: `/pwa/aprovacao-assinatura?id=${registro.id}` },
+          icon: urlPwaAbs('/icon-192x192.png'),
+          badge: urlPwaAbs('/icon-72x72.png'),
+          data: { url: urlPwaAbs(`/pwa/aprovacao-assinatura?id=${registro.id}`) },
           tag: `ponto-pendente-${registro.id}`
         }),
         MS_TIMEOUT_PUSH,
@@ -619,9 +626,9 @@ async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, o
         enviarPushParaUsuario(usuarioIdFunc, {
           title: 'Ponto enviado ao responsável',
           body: `Seu dia ${formatarData(registro.data)} em ${obraNome || 'obra'} foi agendado para assinatura.`,
-          icon: '/icon-192x192.png',
-          badge: '/icon-72x72.png',
-          data: { url: '/pwa/espelho-ponto' },
+          icon: urlPwaAbs('/icon-192x192.png'),
+          badge: urlPwaAbs('/icon-72x72.png'),
+          data: { url: urlPwaAbs('/pwa/espelho-ponto') },
           tag: `ponto-func-confirm-${registro.id}`
         }),
         MS_TIMEOUT_PUSH,
@@ -988,9 +995,9 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
           pushResultado = await enviarPushParaUsuario(usuarioId, {
             title: 'Pontos pendentes de aprovação',
             body: `Existem registros aguardando sua assinatura em ${obraNome}.`,
-            icon: '/icon-192x192.png',
-            badge: '/icon-72x72.png',
-            data: { url: '/pwa/aprovacoes' },
+            icon: urlPwaAbs('/icon-192x192.png'),
+            badge: urlPwaAbs('/icon-72x72.png'),
+            data: { url: urlPwaAbs('/pwa/aprovacoes') },
             tag: `ponto-pendente-generico-${obraId}`
           });
         }

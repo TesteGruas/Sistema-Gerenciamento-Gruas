@@ -95,6 +95,11 @@ import { ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
 import { responsaveisObraApi, type ResponsavelObra, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
 import { getApiOrigin } from "@/lib/runtime-config"
 import { mensagemTelefoneBrWhatsappSePreenchido } from "@/lib/telefone-brasil-ui"
+import {
+  buscarEnderecoPorCep,
+  formatarCepBr,
+  montarLinhaEnderecoObraDetalhado
+} from "@/lib/api-cep"
 
 function ObraDetailsPageContent() {
 
@@ -252,6 +257,7 @@ function ObraDetailsPageContent() {
   })
   const [criandoMedicao, setCriandoMedicao] = useState(false)
   const [recalculandoCoordObra, setRecalculandoCoordObra] = useState(false)
+  const [buscandoCepObra, setBuscandoCepObra] = useState(false)
 
   /** Força geocodificação pelo endereço cadastrado (PUT sozinho não recalcula se o texto do endereço não mudou). */
   const recalcularCoordenadasNoMapa = async () => {
@@ -294,6 +300,11 @@ function ObraDetailsPageContent() {
   const iniciarEdicao = () => {
     if (!obra) return
     
+    const temEnderecoDetalhado = Boolean(
+      (obra as any)?.endereco_rua?.trim() ||
+        (obra as any)?.endereco_numero?.trim() ||
+        (obra as any)?.endereco_bairro?.trim()
+    )
     setEditingData({
       nome: obra.name || '',
       descricao: obra.description || '',
@@ -302,9 +313,13 @@ function ObraDetailsPageContent() {
       data_fim: obra.endDate ? new Date(obra.endDate).toISOString().split('T')[0] : '',
       orcamento: obra?.budget || 0,
       endereco: obra?.endereco || obra?.location || '',
+      endereco_rua: (obra as any)?.endereco_rua || (!temEnderecoDetalhado ? (obra?.endereco || obra?.location || '') : ''),
+      endereco_numero: (obra as any)?.endereco_numero || '',
+      endereco_bairro: (obra as any)?.endereco_bairro || '',
+      endereco_complemento: (obra as any)?.endereco_complemento || '',
       cidade: obra?.cidade || '',
       estado: obra?.estado || '',
-      cep: obra?.cep || '',
+      cep: obra?.cep ? formatarCepBr(String(obra.cep)) : '',
       tipo: obra?.tipo || '',
       cno: obra?.cno || '',
       art_numero: obra?.art_numero || '',
@@ -321,6 +336,46 @@ function ObraDetailsPageContent() {
     setApoliceArquivo(null)
     setCnoArquivo(null)
     setIsEditing(false)
+  }
+
+  const handleBuscarCepObra = async (cepRaw?: string) => {
+    const cepLimpo = String(cepRaw ?? editingData.cep ?? '').replace(/\D/g, '')
+    if (cepLimpo.length !== 8) {
+      toast({
+        title: 'CEP inválido',
+        description: 'Informe 8 dígitos.',
+        variant: 'destructive'
+      })
+      return
+    }
+    setBuscandoCepObra(true)
+    try {
+      const d = await buscarEnderecoPorCep(cepLimpo)
+      setEditingData((prev: Record<string, unknown>) => ({
+        ...prev,
+        endereco_rua: (d.logradouro as string) || prev.endereco_rua || '',
+        endereco_bairro: (d.bairro as string) || prev.endereco_bairro || '',
+        cidade: (d.localidade as string) || prev.cidade || '',
+        estado: (d.uf as string) || prev.estado || '',
+        cep: formatarCepBr(String(d.cep || cepLimpo)),
+        ...(d.complemento && String(d.complemento).trim() && !(prev.endereco_complemento as string)?.trim()
+          ? { endereco_complemento: String(d.complemento).trim() }
+          : {})
+      }))
+      toast({
+        title: 'CEP encontrado',
+        description: 'Logradouro, bairro e cidade foram preenchidos. Complete número e complemento se necessário.'
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Não foi possível buscar o CEP.'
+      toast({
+        title: 'CEP não encontrado',
+        description: msg,
+        variant: 'destructive'
+      })
+    } finally {
+      setBuscandoCepObra(false)
+    }
   }
   
   // Função para salvar edição
@@ -407,10 +462,21 @@ function ObraDetailsPageContent() {
       
       // 2. Converter dados para formato do backend
       // Campos obrigatórios devem sempre ser enviados
+      const linhaDetalhada = montarLinhaEnderecoObraDetalhado({
+        endereco_rua: editingData.endereco_rua,
+        endereco_numero: editingData.endereco_numero,
+        endereco_bairro: editingData.endereco_bairro,
+        endereco_complemento: editingData.endereco_complemento
+      })
+      const enderecoFallback =
+        editingData.endereco || obra?.endereco || obra?.location || ''
       const updateData: any = {
         nome: editingData.nome || obra?.name || '',
         cliente_id: obra?.cliente?.id ? parseInt(obra.cliente.id) : null,
-        endereco: editingData.endereco || obra?.endereco || obra?.location || '',
+        endereco_rua: editingData.endereco_rua ?? '',
+        endereco_numero: editingData.endereco_numero ?? '',
+        endereco_bairro: editingData.endereco_bairro ?? '',
+        endereco_complemento: editingData.endereco_complemento ?? '',
         cidade: editingData.cidade || obra?.cidade || '',
         estado: editingData.estado || obra?.estado || '',
         tipo: editingData.tipo || obra?.tipo || '',
@@ -420,11 +486,16 @@ function ObraDetailsPageContent() {
         data_inicio: editingData.data_inicio || null,
         data_fim: editingData.data_fim || null,
         orcamento: editingData.orcamento ? parseFloat(editingData.orcamento.toString()) : null,
-        cep: editingData.cep || null,
+        cep: editingData.cep ? String(editingData.cep).replace(/\D/g, '') : null,
         cno: editingData.cno || null,
         art_numero: editingData.art_numero || null,
         apolice_numero: editingData.apolice_numero || null,
         observacoes: editingData.observacoes || null
+      }
+      if (linhaDetalhada.trim()) {
+        // Backend compõe `endereco` a partir dos campos detalhados quando não enviamos `endereco` explícito
+      } else if (String(enderecoFallback).trim()) {
+        updateData.endereco = String(enderecoFallback).trim()
       }
       
       // Adicionar URLs dos arquivos se houver
@@ -439,7 +510,7 @@ function ObraDetailsPageContent() {
       }
       
       // Remover apenas campos opcionais vazios (manter obrigatórios mesmo se vazios)
-      const camposObrigatorios = ['nome', 'cliente_id', 'endereco', 'cidade', 'estado', 'tipo']
+      const camposObrigatorios = ['nome', 'cliente_id', 'cidade', 'estado', 'tipo']
       Object.keys(updateData).forEach(key => {
         if (!camposObrigatorios.includes(key) && (updateData[key] === null || updateData[key] === '' || updateData[key] === undefined)) {
           delete updateData[key]
@@ -3893,88 +3964,237 @@ useEffect(() => {
                       <span className="text-sm block mt-1">{obra?.tipo || 'Não informado'}</span>
                     )}
                   </div>
-                  <div>
-                    <Label className="text-sm text-gray-600">Endereço:</Label>
-                    {isEditing ? (
-                      <Input
-                        value={editingData.endereco || ''}
-                        onChange={(e) => setEditingData({ ...editingData, endereco: e.target.value })}
-                        placeholder="Endereço da obra"
-                      />
-                    ) : (
-                      <span className="text-sm block mt-1">{obra?.endereco || obra?.location || 'Não informado'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-600">Cidade:</Label>
-                    {isEditing ? (
-                      <Input
-                        value={editingData.cidade || ''}
-                        onChange={(e) => setEditingData({ ...editingData, cidade: e.target.value })}
-                        placeholder="Cidade"
-                        className="mt-1"
-                      />
-                    ) : (
-                      <span className="text-sm block mt-1">{obra?.cidade || 'Não informado'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-600">Estado:</Label>
-                    {isEditing ? (
-                      <Select
-                        value={editingData.estado || obra?.estado || ''}
-                        onValueChange={(value) => setEditingData({ ...editingData, estado: value })}
-                      >
-                        <SelectTrigger className="mt-1">
-                          <SelectValue placeholder="Selecione o estado" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="AC">AC</SelectItem>
-                          <SelectItem value="AL">AL</SelectItem>
-                          <SelectItem value="AP">AP</SelectItem>
-                          <SelectItem value="AM">AM</SelectItem>
-                          <SelectItem value="BA">BA</SelectItem>
-                          <SelectItem value="CE">CE</SelectItem>
-                          <SelectItem value="DF">DF</SelectItem>
-                          <SelectItem value="ES">ES</SelectItem>
-                          <SelectItem value="GO">GO</SelectItem>
-                          <SelectItem value="MA">MA</SelectItem>
-                          <SelectItem value="MT">MT</SelectItem>
-                          <SelectItem value="MS">MS</SelectItem>
-                          <SelectItem value="MG">MG</SelectItem>
-                          <SelectItem value="PA">PA</SelectItem>
-                          <SelectItem value="PB">PB</SelectItem>
-                          <SelectItem value="PR">PR</SelectItem>
-                          <SelectItem value="PE">PE</SelectItem>
-                          <SelectItem value="PI">PI</SelectItem>
-                          <SelectItem value="RJ">RJ</SelectItem>
-                          <SelectItem value="RN">RN</SelectItem>
-                          <SelectItem value="RS">RS</SelectItem>
-                          <SelectItem value="RO">RO</SelectItem>
-                          <SelectItem value="RR">RR</SelectItem>
-                          <SelectItem value="SC">SC</SelectItem>
-                          <SelectItem value="SP">SP</SelectItem>
-                          <SelectItem value="SE">SE</SelectItem>
-                          <SelectItem value="TO">TO</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    ) : (
-                      <span className="text-sm block mt-1">{obra?.estado || 'Não informado'}</span>
-                    )}
-                  </div>
-                  <div>
-                    <Label className="text-sm text-gray-600">CEP:</Label>
-                    {isEditing ? (
-                      <Input
-                        value={editingData.cep || ''}
-                        onChange={(e) => setEditingData({ ...editingData, cep: e.target.value })}
-                        placeholder="00000-000"
-                        className="mt-1"
-                      />
-                    ) : (
-                      <span className="text-sm block mt-1">{obra?.cep || 'Não informado'}</span>
-                    )}
-                  </div>
+                  {/* Endereço: CEP (ViaCEP) + logradouro, nº, bairro, complemento, cidade, UF */}
+                  {(() => {
+                    const o = obra as Record<string, unknown> | null | undefined
+                    const temDetalheCadastrado = Boolean(
+                      String(o?.endereco_rua || '').trim() ||
+                        String(o?.endereco_numero || '').trim() ||
+                        String(o?.endereco_bairro || '').trim()
+                    )
+                    const linhaResumoView = montarLinhaEnderecoObraDetalhado({
+                      endereco_rua: o?.endereco_rua as string | undefined,
+                      endereco_numero: o?.endereco_numero as string | undefined,
+                      endereco_bairro: o?.endereco_bairro as string | undefined,
+                      endereco_complemento: o?.endereco_complemento as string | undefined
+                    })
+                    const estadoSelectItems = (
+                      <>
+                        <SelectItem value="AC">AC</SelectItem>
+                        <SelectItem value="AL">AL</SelectItem>
+                        <SelectItem value="AP">AP</SelectItem>
+                        <SelectItem value="AM">AM</SelectItem>
+                        <SelectItem value="BA">BA</SelectItem>
+                        <SelectItem value="CE">CE</SelectItem>
+                        <SelectItem value="DF">DF</SelectItem>
+                        <SelectItem value="ES">ES</SelectItem>
+                        <SelectItem value="GO">GO</SelectItem>
+                        <SelectItem value="MA">MA</SelectItem>
+                        <SelectItem value="MT">MT</SelectItem>
+                        <SelectItem value="MS">MS</SelectItem>
+                        <SelectItem value="MG">MG</SelectItem>
+                        <SelectItem value="PA">PA</SelectItem>
+                        <SelectItem value="PB">PB</SelectItem>
+                        <SelectItem value="PR">PR</SelectItem>
+                        <SelectItem value="PE">PE</SelectItem>
+                        <SelectItem value="PI">PI</SelectItem>
+                        <SelectItem value="RJ">RJ</SelectItem>
+                        <SelectItem value="RN">RN</SelectItem>
+                        <SelectItem value="RS">RS</SelectItem>
+                        <SelectItem value="RO">RO</SelectItem>
+                        <SelectItem value="RR">RR</SelectItem>
+                        <SelectItem value="SC">SC</SelectItem>
+                        <SelectItem value="SP">SP</SelectItem>
+                        <SelectItem value="SE">SE</SelectItem>
+                        <SelectItem value="TO">TO</SelectItem>
+                      </>
+                    )
+                    return (
+                      <>
+                        {!isEditing && !temDetalheCadastrado && (
+                          <div className="md:col-span-2">
+                            <Label className="text-sm text-gray-600">Endereço (texto cadastrado):</Label>
+                            <span className="text-sm block mt-1">
+                              {obra?.endereco || obra?.location || 'Não informado'}
+                            </span>
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Edite a obra para informar CEP e endereço detalhado (rua, número, bairro).
+                            </p>
+                          </div>
+                        )}
+                        {!isEditing && temDetalheCadastrado && (
+                          <>
+                            <div>
+                              <Label className="text-sm text-gray-600">CEP</Label>
+                              <span className="text-sm block mt-1">
+                                {obra?.cep ? formatarCepBr(String(obra.cep)) : '—'}
+                              </span>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">Logradouro</Label>
+                              <span className="text-sm block mt-1">{String(o?.endereco_rua || '—')}</span>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Número</Label>
+                              <span className="text-sm block mt-1">{String(o?.endereco_numero || '—')}</span>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Bairro</Label>
+                              <span className="text-sm block mt-1">{String(o?.endereco_bairro || '—')}</span>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">Complemento</Label>
+                              <span className="text-sm block mt-1">{String(o?.endereco_complemento || '—')}</span>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Cidade</Label>
+                              <span className="text-sm block mt-1">{obra?.cidade || '—'}</span>
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">UF</Label>
+                              <span className="text-sm block mt-1">{obra?.estado || '—'}</span>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">Endereço completo (resumo)</Label>
+                              <span className="text-sm block mt-1 font-medium">
+                                {linhaResumoView || obra?.endereco || obra?.location || '—'}
+                              </span>
+                            </div>
+                          </>
+                        )}
+                        {isEditing && (
+                          <>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">CEP</Label>
+                              <div className="flex flex-col sm:flex-row gap-2 mt-1">
+                                <Input
+                                  inputMode="numeric"
+                                  autoComplete="postal-code"
+                                  value={editingData.cep || ''}
+                                  onChange={(e) =>
+                                    setEditingData({
+                                      ...editingData,
+                                      cep: formatarCepBr(e.target.value)
+                                    })
+                                  }
+                                  onBlur={(e) => {
+                                    const c = e.target.value.replace(/\D/g, '')
+                                    if (c.length === 8) void handleBuscarCepObra(e.target.value)
+                                  }}
+                                  placeholder="00000-000"
+                                  maxLength={9}
+                                  className="sm:max-w-xs"
+                                />
+                                <Button
+                                  type="button"
+                                  variant="secondary"
+                                  size="sm"
+                                  className="shrink-0"
+                                  disabled={buscandoCepObra}
+                                  onClick={() => void handleBuscarCepObra()}
+                                >
+                                  {buscandoCepObra ? (
+                                    <Loader2 className="h-4 w-4 animate-spin" />
+                                  ) : (
+                                    <Search className="h-4 w-4 mr-1" />
+                                  )}
+                                  Buscar CEP
+                                </Button>
+                              </div>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Digite 8 dígitos e clique em Buscar ou saia do campo para preencher logradouro, bairro e cidade (ViaCEP).
+                              </p>
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">Logradouro (rua)</Label>
+                              <Input
+                                value={editingData.endereco_rua || ''}
+                                onChange={(e) =>
+                                  setEditingData({ ...editingData, endereco_rua: e.target.value })
+                                }
+                                placeholder="Avenida, rua, travessa..."
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Número</Label>
+                              <Input
+                                value={editingData.endereco_numero || ''}
+                                onChange={(e) =>
+                                  setEditingData({ ...editingData, endereco_numero: e.target.value })
+                                }
+                                placeholder="Nº"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Bairro</Label>
+                              <Input
+                                value={editingData.endereco_bairro || ''}
+                                onChange={(e) =>
+                                  setEditingData({ ...editingData, endereco_bairro: e.target.value })
+                                }
+                                placeholder="Bairro"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div className="md:col-span-2">
+                              <Label className="text-sm text-gray-600">Complemento</Label>
+                              <Input
+                                value={editingData.endereco_complemento || ''}
+                                onChange={(e) =>
+                                  setEditingData({ ...editingData, endereco_complemento: e.target.value })
+                                }
+                                placeholder="Sala, bloco, andar, referência..."
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Cidade</Label>
+                              <Input
+                                value={editingData.cidade || ''}
+                                onChange={(e) =>
+                                  setEditingData({ ...editingData, cidade: e.target.value })
+                                }
+                                placeholder="Cidade"
+                                className="mt-1"
+                              />
+                            </div>
+                            <div>
+                              <Label className="text-sm text-gray-600">Estado (UF)</Label>
+                              <Select
+                                value={editingData.estado || obra?.estado || ''}
+                                onValueChange={(value) => setEditingData({ ...editingData, estado: value })}
+                              >
+                                <SelectTrigger className="mt-1">
+                                  <SelectValue placeholder="UF" />
+                                </SelectTrigger>
+                                <SelectContent>{estadoSelectItems}</SelectContent>
+                              </Select>
+                            </div>
+                            <div className="md:col-span-2 rounded-md border bg-muted/30 px-3 py-2">
+                              <Label className="text-xs text-muted-foreground">Pré-visualização do endereço completo</Label>
+                              <p className="text-sm font-medium mt-1">
+                                {montarLinhaEnderecoObraDetalhado({
+                                  endereco_rua: editingData.endereco_rua,
+                                  endereco_numero: editingData.endereco_numero,
+                                  endereco_bairro: editingData.endereco_bairro,
+                                  endereco_complemento: editingData.endereco_complemento
+                                }) ||
+                                  editingData.endereco ||
+                                  obra?.endereco ||
+                                  '—'}
+                                {editingData.cidade ? ` — ${editingData.cidade}/${editingData.estado || ''}` : ''}
+                                {editingData.cep
+                                  ? ` · CEP ${editingData.cep}`
+                                  : ''}
+                              </p>
+                            </div>
+                          </>
+                        )}
+                      </>
+                    )
+                  })()}
                   <div>
                     <Label className="text-sm text-gray-600">Descrição:</Label>
                     {isEditing ? (
