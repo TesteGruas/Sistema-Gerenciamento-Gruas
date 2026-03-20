@@ -230,6 +230,11 @@ const nextConfig = {
         source: '/api/:path*',
         destination: `${apiUrl}/api/:path*`,
       },
+      // Socket.IO no mesmo origin que o front (evita URL vazia em produção com proxy only /api)
+      {
+        source: '/socket.io/:path*',
+        destination: `${apiUrl}/socket.io/:path*`,
+      },
     ];
   },
 

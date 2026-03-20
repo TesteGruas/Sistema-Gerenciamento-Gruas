@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -43,6 +43,10 @@ import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import { useVencimentosDocumentos, STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 import Image from "next/image"
 import { getApiBasePath } from "@/lib/runtime-config"
+import {
+  usePWASocketNotifications,
+  PWA_NOTIFICACOES_API_EVENT,
+} from "@/hooks/use-pwa-socket-notifications"
 import { ChatIa } from "@/components/chat-ia"
 import { pwaNotifications } from "@/lib/pwa-notifications"
 import { ensurePushSubscription } from "@/lib/pwa-push-subscription"
@@ -66,7 +70,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   const [previousPathname, setPreviousPathname] = useState<string | null>(null)
   const [temObraAtiva, setTemObraAtiva] = useState<boolean | null>(null)
   const [loadingObra, setLoadingObra] = useState(true)
-  
+  const carregarNaoLidasRef = useRef<((userId: number) => Promise<void>) | null>(null)
+
   // Hook de sessão persistente
   const {
     isAuthenticated,
@@ -93,6 +98,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
   
   // Hook para verificar vencimentos de documentos
   useVencimentosDocumentos()
+
+  usePWASocketNotifications(user?.id)
   
   // Atualizar isClient apenas no cliente para evitar erro de hidratação
   useEffect(() => {
@@ -387,38 +394,38 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       const token = localStorage.getItem('access_token')
       
       if (token) {
-        // Verificar se o token não está expirado
+        // Sem `exp` no payload, ainda tentamos a API (antes só buscava se exp existia).
+        let tentarApi = false
         try {
           const tokenParts = token.split('.')
           if (tokenParts.length === 3) {
             const payload = decodeJwtPayload<{ exp?: number }>(token)
-            if (payload?.exp) {
-              const isExpired = payload.exp * 1000 < Date.now()
-              if (isExpired) {
-                // Token expirado, continuar para contar apenas notificações locais
-              } else {
-                // Token válido, buscar notificações da API
-                const apiUrl = getApiBasePath()
-                const response = await fetch(
-                  `${apiUrl}/notificacoes/count/nao-lidas`,
-                  {
-                    headers: {
-                      'Authorization': `Bearer ${token}`,
-                      'Content-Type': 'application/json'
-                    }
-                  }
-                )
-
-                // Se receber 403 ou 401, token é inválido - continuar para contar apenas locais
-                if (response.ok) {
-                  const data = await response.json()
-                  countAPI = data.count || 0
-                }
-              }
+            if (payload?.exp == null) {
+              tentarApi = true
+            } else {
+              tentarApi = payload.exp * 1000 >= Date.now()
             }
           }
-        } catch (tokenError) {
-          // Se não conseguir decodificar, continuar para contar apenas notificações locais
+        } catch {
+          tentarApi = true
+        }
+
+        if (tentarApi) {
+          try {
+            const apiUrl = getApiBasePath()
+            const response = await fetch(`${apiUrl}/notificacoes/count/nao-lidas`, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+              },
+            })
+            if (response.ok) {
+              const data = await response.json()
+              countAPI = data.count || 0
+            }
+          } catch {
+            /* mantém só locais */
+          }
         }
       }
 
@@ -454,6 +461,23 @@ function PWALayoutContent({ children }: PWALayoutProps) {
       }
     }
   }
+
+  carregarNaoLidasRef.current = carregarNotificacoesNaoLidas
+
+  useEffect(() => {
+    const onApiRefresh = () => {
+      try {
+        const raw = localStorage.getItem('user_data')
+        if (!raw) return
+        const parsed = JSON.parse(raw)
+        if (parsed?.id) void carregarNaoLidasRef.current?.(parsed.id)
+      } catch {
+        /* ignore */
+      }
+    }
+    window.addEventListener(PWA_NOTIFICACOES_API_EVENT, onApiRefresh)
+    return () => window.removeEventListener(PWA_NOTIFICACOES_API_EVENT, onApiRefresh)
+  }, [])
 
   const handleLogout = async () => {
     if (typeof window === 'undefined') return

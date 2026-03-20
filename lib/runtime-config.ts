@@ -40,21 +40,22 @@ export function getApiBasePath(): string {
   return origin ? `${origin}/api` : "/api"
 }
 
+/**
+ * URL base para socket.io-client (use http/https — a lib negocia ws/wss).
+ * Em produção com proxy same-origin, `getApiOrigin()` fica vazio; usamos o origin do browser.
+ */
 export function getWebSocketUrl(): string {
   const configured = process.env.NEXT_PUBLIC_WEBSOCKET_URL?.trim()
   if (configured) return configured
 
+  if (typeof window !== "undefined") {
+    return window.location.origin
+  }
+
   const apiOrigin = getApiOrigin()
   if (!apiOrigin) return ""
 
-  if (apiOrigin.startsWith("https://")) {
-    return apiOrigin.replace(/^https:\/\//, "wss://")
-  }
-  if (apiOrigin.startsWith("http://")) {
-    return apiOrigin.replace(/^http:\/\//, "ws://")
-  }
-
-  return ""
+  return apiOrigin
 }
 
 export function normalizeApiTarget(url: string): string {

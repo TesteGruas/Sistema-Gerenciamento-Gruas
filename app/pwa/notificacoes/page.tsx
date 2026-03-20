@@ -22,6 +22,7 @@ import {
 import { useToast } from "@/hooks/use-toast"
 import { NotificacoesAPI, Notificacao as NotificacaoAPI } from "@/lib/api-notificacoes"
 import { STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
+import { PWA_NOTIFICACOES_API_EVENT } from "@/hooks/use-pwa-socket-notifications"
 
 interface Notificacao {
   id: string
@@ -142,6 +143,14 @@ export default function PWANotificacoesPage() {
 
   useEffect(() => {
     carregarNotificacoes()
+  }, [carregarNotificacoes])
+
+  useEffect(() => {
+    const onApi = () => {
+      void carregarNotificacoes()
+    }
+    window.addEventListener(PWA_NOTIFICACOES_API_EVENT, onApi)
+    return () => window.removeEventListener(PWA_NOTIFICACOES_API_EVENT, onApi)
   }, [carregarNotificacoes])
 
   // Recarregar notificações quando houver mudanças no localStorage (notificações locais)

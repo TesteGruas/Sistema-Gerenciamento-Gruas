@@ -13,11 +13,10 @@ interface UseWebSocketNotificationsReturn {
   marcarTodasComoLidas: () => void
 }
 
-const SOCKET_URL = getWebSocketUrl()
 const maxReconnectAttempts = 5
 
 export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
-  const { user, token } = useAuth()
+  const { user } = useAuth()
   const socketRef = useRef<Socket | null>(null)
   const [connected, setConnected] = useState(false)
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
@@ -27,10 +26,13 @@ export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
 
   // Conectar ao WebSocket
   const connect = useCallback(() => {
+    const token =
+      typeof window !== 'undefined' ? localStorage.getItem('access_token') : null
     if (!token || socketRef.current?.connected) {
       return
     }
-    if (!SOCKET_URL) {
+    const socketUrl = getWebSocketUrl()
+    if (!socketUrl) {
       if (process.env.NODE_ENV !== 'production') {
         console.warn('[WebSocket] URL não configurada, conexões em tempo real desativadas')
       }
@@ -42,9 +44,9 @@ export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
       socketRef.current.disconnect()
     }
 
-    console.log('🔌 [WebSocket] Conectando...', SOCKET_URL)
+    console.log('🔌 [WebSocket] Conectando...', socketUrl)
 
-    const socket = io(SOCKET_URL, {
+    const socket = io(socketUrl, {
       auth: {
         token: token
       },
@@ -138,7 +140,7 @@ export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
     })
 
     socketRef.current = socket
-  }, [token])
+  }, [])
 
   // Desconectar ao desmontar
   const disconnect = useCallback(() => {
@@ -154,16 +156,16 @@ export function useWebSocketNotifications(): UseWebSocketNotificationsReturn {
     }
   }, [])
 
-  // Conectar quando token estiver disponível
+  // Conectar com access_token no storage (useAuth não expõe token; PWA só grava no login)
   useEffect(() => {
-    if (token && user) {
-      connect()
-    }
+    if (typeof window === 'undefined') return
+    if (!localStorage.getItem('access_token')) return
+    connect()
 
     return () => {
       disconnect()
     }
-  }, [token, user, connect, disconnect])
+  }, [user?.id, connect, disconnect])
 
   // Marcar como lida via WebSocket
   const marcarComoLida = useCallback((id: string) => {
