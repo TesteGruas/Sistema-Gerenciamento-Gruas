@@ -376,6 +376,7 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
         // 3) Notificação in-app (precisa de usuario_id)
         const usuarioId = await resolverUsuarioId(resp);
         if (usuarioId) {
+          const agora = new Date().toISOString();
           const { data: notif } = await supabaseAdmin
             .from('notificacoes')
             .insert({
@@ -385,7 +386,10 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
               mensagem: `${funcionario.nome || 'Funcionário'} fechou o dia ${formatarData(registro.data)} — aguardando sua assinatura`,
               link: `/pwa/aprovacao-assinatura?id=${registro.id}`,
               lida: false,
-              created_at: new Date().toISOString()
+              remetente: 'Sistema',
+              destinatarios: [],
+              data: agora,
+              created_at: agora
             })
             .select()
             .single();
@@ -689,14 +693,19 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
 // =========================================================
 
 async function resolverUsuarioId(responsavel) {
-  if (!responsavel.email) return null;
+  const emailCandidato =
+    responsavel.email ||
+    (typeof responsavel.usuario === 'string' && responsavel.usuario.includes('@')
+      ? responsavel.usuario.trim()
+      : null);
+  if (!emailCandidato) return null;
 
   try {
     const { data: usuario } = await supabaseAdmin
       .from('usuarios')
       .select('id')
-      .eq('email', responsavel.email)
-      .single();
+      .eq('email', emailCandidato)
+      .maybeSingle();
 
     return usuario?.id || null;
   } catch {

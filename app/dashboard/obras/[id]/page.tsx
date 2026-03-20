@@ -50,7 +50,8 @@ import {
   Settings,
   UserCheck,
   Phone,
-  Mail
+  Mail,
+  MapPin
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -77,6 +78,7 @@ import { gruasApi, converterGruaBackendParaFrontend } from "@/lib/api-gruas"
 import { obraGruasApi } from "@/lib/api-obra-gruas"
 import { gruaObraApi } from "@/lib/api-grua-obra"
 import { useObraStore } from "@/lib/obra-store"
+import { PontoMapa } from "@/components/pwa-ponto-mapa"
 import { DocumentoUpload } from "@/components/documento-upload"
 import api, { fetchWithAuth, buildApiUrl } from "@/lib/api"
 import { funcionariosApi } from "@/lib/api-funcionarios"
@@ -6305,6 +6307,71 @@ useEffect(() => {
           </Card>
         </TabsContent>
         </Tabs>
+
+      {/* Localização: coordenadas + mapa (final da página) */}
+      <Card className="mt-6 border-blue-100">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base flex items-center gap-2">
+            <MapPin className="h-5 w-5 text-blue-600" />
+            Localização da obra
+          </CardTitle>
+          <CardDescription>
+            Coordenadas usadas no mapa e na validação de proximidade do ponto eletrônico (PWA).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {typeof obra?.latitude === "number" &&
+          Number.isFinite(obra.latitude) &&
+          typeof obra?.longitude === "number" &&
+          Number.isFinite(obra.longitude) ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm rounded-lg border bg-muted/30 p-3">
+                <div>
+                  <span className="text-muted-foreground block text-xs mb-0.5">Latitude</span>
+                  <span className="font-mono tabular-nums">{obra.latitude.toFixed(7)}</span>
+                </div>
+                <div>
+                  <span className="text-muted-foreground block text-xs mb-0.5">Longitude</span>
+                  <span className="font-mono tabular-nums">{obra.longitude.toFixed(7)}</span>
+                </div>
+                {typeof obra.raio_permitido === "number" && obra.raio_permitido > 0 && (
+                  <div className="sm:col-span-2">
+                    <span className="text-muted-foreground block text-xs mb-0.5">
+                      Raio permitido para ponto (PWA)
+                    </span>
+                    <span>
+                      {obra.raio_permitido >= 1000
+                        ? `${(obra.raio_permitido / 1000).toFixed(2)} km`
+                        : `${obra.raio_permitido} m`}
+                    </span>
+                  </div>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Endereço no cadastro:{" "}
+                <span className="text-foreground">
+                  {[obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(" · ") || "—"}
+                </span>
+              </p>
+              <PontoMapa
+                usuario={null}
+                obra={{
+                  lat: obra.latitude,
+                  lng: obra.longitude,
+                  nome: obra.name || "Obra",
+                  enderecoTexto: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(" · "),
+                }}
+                raioObraMetros={typeof obra.raio_permitido === "number" ? obra.raio_permitido : 5000}
+              />
+            </>
+          ) : (
+            <div className="rounded-lg border border-dashed bg-muted/20 p-4 text-sm text-muted-foreground">
+              Esta obra ainda não possui latitude/longitude cadastradas. Salve o endereço no painel ou use a
+              ação de recalcular coordenadas no backend para gerar o ponto no mapa.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Modal para adicionar grua */}
       <Dialog open={isAdicionarGruaOpen} onOpenChange={setIsAdicionarGruaOpen}>

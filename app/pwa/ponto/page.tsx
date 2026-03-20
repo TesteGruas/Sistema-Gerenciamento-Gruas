@@ -16,11 +16,10 @@ import {
   MapPin,
   Wifi,
   WifiOff,
-  Navigation,
   RefreshCw,
   MapPinOff,
   Shield,
-  FileSignature
+  FileSignature,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
@@ -36,6 +35,7 @@ import {
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import { getApiBasePath } from "@/lib/runtime-config"
+import { PontoMapa } from "@/components/pwa-ponto-mapa"
 
 export default function PWAPontoPage() {
   const obterDataLocalISO = () => {
@@ -1446,6 +1446,35 @@ export default function PWAPontoPage() {
                 'Atualizar local'
               )}
             </Button>
+          </div>
+
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-slate-700">Mapa (GPS × obra)</p>
+            <p className="text-[11px] text-muted-foreground">
+              Azul = você · Laranja = obra · verde = raio permitido. Se estiver longe, o mapa mostra o Brasil inteiro.
+            </p>
+            <PontoMapa
+              usuario={
+                location
+                  ? {
+                      lat: location.lat,
+                      lng: location.lng,
+                      endereco: location.address,
+                    }
+                  : null
+              }
+              obra={
+                obra?.coordenadas
+                  ? {
+                      lat: obra.coordenadas.lat,
+                      lng: obra.coordenadas.lng,
+                      nome: obra.nome,
+                      enderecoTexto: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(" · "),
+                    }
+                  : null
+              }
+              raioObraMetros={obra?.coordenadas ? raioPermitidoAtual : 0}
+            />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">

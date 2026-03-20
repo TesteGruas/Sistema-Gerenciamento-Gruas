@@ -22,6 +22,11 @@ interface ObraStore {
   estado?: string
   cep?: string
   tipo?: string
+  /** Coordenadas da obra (cadastro / geocoding) */
+  latitude?: number
+  longitude?: number
+  /** Raio em metros para validação de ponto no PWA */
+  raio_permitido?: number
   cliente?: {
     id: string
     nome: string

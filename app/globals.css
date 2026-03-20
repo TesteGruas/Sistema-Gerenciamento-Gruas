@@ -406,3 +406,12 @@ html {
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* Leaflet + Tailwind: preflight quebra tiles (mapa cinza / “não mostra nada”) */
+.leaflet-container img.leaflet-tile {
+  max-width: none !important;
+}
+.leaflet-container img.leaflet-marker-icon,
+.leaflet-container img.leaflet-marker-shadow {
+  max-width: none !important;
+}

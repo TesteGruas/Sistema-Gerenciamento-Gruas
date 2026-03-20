@@ -1838,7 +1838,7 @@ router.post('/registros', async (req, res) => {
     // Verificar se já existe registro para este funcionário nesta data
     const { data: existingRecord } = await supabaseAdmin
       .from('registros_ponto')
-      .select('id, entrada, saida, saida_almoco, volta_almoco, status, trabalho_corrido, tipo_dia')
+      .select('id, entrada, saida, saida_almoco, volta_almoco, status, trabalho_corrido, tipo_dia, obra_id')
       .eq('funcionario_id', funcionarioId)
       .eq('data', data)
       .single();
@@ -1913,6 +1913,9 @@ router.post('/registros', async (req, res) => {
       if (trabalho_corrido !== undefined) dadosAtualizacao.trabalho_corrido = Boolean(trabalho_corrido);
       if (observacoes) dadosAtualizacao.observacoes = observacoes;
       if (localizacao) dadosAtualizacao.localizacao = localizacao;
+      if (funcionario.obra_atual_id && !existingRecord.obra_id) {
+        dadosAtualizacao.obra_id = funcionario.obra_atual_id;
+      }
 
       // Recalcular horas trabalhadas e extras com os dados atualizados
       const entradaFinal = entrada || existingRecord.entrada;
@@ -2003,7 +2006,9 @@ router.post('/registros', async (req, res) => {
       if (saida && registro.entrada && registro.saida) {
         try {
           const obraId = registro.obra_id || funcionario.obra_atual_id;
-          if (obraId) {
+          if (!obraId) {
+            console.warn('[ponto-eletronico] Dia fechado sem obra_id no registro nem obra_atual_id no funcionário — notificações não enviadas');
+          } else {
             const { data: responsaveisAtivos } = await supabaseAdmin
               .from('responsaveis_obra')
               .select('id')
@@ -2016,11 +2021,14 @@ router.post('/registros', async (req, res) => {
                 .update({ status: 'Pendente Assinatura' })
                 .eq('id', registro.id);
               registro.status = 'Pendente Assinatura';
-
-              notificarResponsaveisObraPontoConcluido(registro, funcionario)
-                .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
-              console.log(`[ponto-eletronico] Dia fechado — notificação enviada a responsáveis da obra ${obraId}`);
             }
+
+            // Email + WhatsApp + notificação in-app + push (para cada responsável em responsaveis_obra)
+            notificarResponsaveisObraPontoConcluido(registro, funcionario)
+              .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
+            console.log(
+              `[ponto-eletronico] Dia fechado — fluxo de notificação responsáveis obra ${obraId} (ativos: ${responsaveisAtivos?.length ?? 0})`
+            );
           }
         } catch (errNotif) {
           console.error('[ponto-eletronico] Erro ao notificar responsáveis (update path):', errNotif);
@@ -2126,6 +2134,7 @@ router.post('/registros', async (req, res) => {
       status,
       observacoes,
       localizacao,
+      obra_id: funcionario.obra_atual_id || null,
       tipo_dia: tipoDiaFinal,
       feriado_id: feriadoId,
       is_feriado: isFeriadoFinal && !is_facultativo, // Só é feriado se não for facultativo
@@ -2202,7 +2211,9 @@ router.post('/registros', async (req, res) => {
     if (saida && entrada && registro.saida) {
       try {
         const obraId = registro.obra_id || funcionario.obra_atual_id;
-        if (obraId) {
+        if (!obraId) {
+          console.warn('[ponto-eletronico] Registro com saída sem obra_id — notificações não enviadas');
+        } else {
           const { data: responsaveisAtivos } = await supabaseAdmin
             .from('responsaveis_obra')
             .select('id')
@@ -2215,11 +2226,13 @@ router.post('/registros', async (req, res) => {
               .update({ status: 'Pendente Assinatura' })
               .eq('id', registro.id);
             registro.status = 'Pendente Assinatura';
-
-            notificarResponsaveisObraPontoConcluido(registro, funcionario)
-              .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
-            console.log(`[ponto-eletronico] Novo registro com saída — notificação enviada a responsáveis da obra ${obraId}`);
           }
+
+          notificarResponsaveisObraPontoConcluido(registro, funcionario)
+            .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
+          console.log(
+            `[ponto-eletronico] Novo registro com saída — notificação enviada a responsáveis da obra ${obraId} (ativos: ${responsaveisAtivos?.length ?? 0})`
+          );
         }
       } catch (errNotif) {
         console.error('[ponto-eletronico] Erro ao notificar responsáveis (insert path):', errNotif);

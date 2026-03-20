@@ -34,6 +34,10 @@ export interface ObraBackend {
   art_arquivo?: string
   apolice_numero?: string
   apolice_arquivo?: string
+  /** Geolocalização da obra (ponto eletrônico / mapa) */
+  latitude?: number | null
+  longitude?: number | null
+  raio_permitido?: number | null
   created_at: string
   updated_at: string
   clientes?: {
@@ -782,6 +786,9 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     art_arquivo: obraBackend.art_arquivo,
     apolice_numero: obraBackend.apolice_numero,
     apolice_arquivo: obraBackend.apolice_arquivo,
+    latitude: obraBackend.latitude ?? undefined,
+    longitude: obraBackend.longitude ?? undefined,
+    raio_permitido: obraBackend.raio_permitido ?? undefined,
     // Relacionamentos - usar os que vêm do backend ou fallback para os passados como parâmetro
     gruasVinculadas: gruasVinculadas.length > 0 ? gruasVinculadas : (relacionamentos?.gruasVinculadas || []),
     funcionariosVinculados: funcionariosVinculados.length > 0 ? funcionariosVinculados : (relacionamentos?.funcionariosVinculados || []),

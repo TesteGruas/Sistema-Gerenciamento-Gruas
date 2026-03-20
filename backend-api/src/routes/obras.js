@@ -22,6 +22,39 @@ function coordenadaValida(valor) {
   return typeof valor === 'number' && Number.isFinite(valor)
 }
 
+function normalizarCepComparacao(cep) {
+  if (cep == null || cep === '') return ''
+  return String(cep).replace(/\D/g, '')
+}
+
+function textoEnderecoDiferente(a, b) {
+  return String(a ?? '').trim() !== String(b ?? '').trim()
+}
+
+/**
+ * Detecta se o PUT alterou dados de endereço em relação ao registro atual.
+ * Nesse caso precisamos ignorar lat/lng antigas e geocodificar de novo (senão o mapa/PWA ficam com ponto errado).
+ */
+function enderecoObraMudouNoPut({ value, obraAtual, algumCampoEnderecoDetalhadoAtualizado }) {
+  if (algumCampoEnderecoDetalhadoAtualizado) return true
+
+  if (value.endereco !== undefined && textoEnderecoDiferente(value.endereco, obraAtual.endereco)) {
+    return true
+  }
+  if (value.cidade !== undefined && textoEnderecoDiferente(value.cidade, obraAtual.cidade)) {
+    return true
+  }
+  if (value.estado !== undefined && textoEnderecoDiferente(value.estado, obraAtual.estado)) {
+    return true
+  }
+  if (value.cep !== undefined) {
+    const c1 = normalizarCepComparacao(value.cep)
+    const c2 = normalizarCepComparacao(obraAtual.cep)
+    if (c1 !== c2) return true
+  }
+  return false
+}
+
 function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
   const partesBase = [endereco, cidade, estado, 'Brasil']
     .map((item) => (item || '').toString().trim())
@@ -1188,13 +1221,14 @@ router.post('/:id/resolver-coordenadas', authenticateToken, async (req, res) => 
       })
     }
 
+    // Sempre geocodificar pelo endereço atual (ignorar lat/lng antigas), senão o ponto fica errado no mapa/PWA
     const coordenadasResolvidas = await resolverCoordenadasDaObra({
       endereco: obra.endereco,
       cidade: obra.cidade,
       estado: obra.estado,
       cep: obra.cep,
-      latitude: obra.latitude,
-      longitude: obra.longitude
+      latitude: null,
+      longitude: null
     })
 
     if (!coordenadasResolvidas.latitude || !coordenadasResolvidas.longitude) {
@@ -2425,14 +2459,49 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
     const latitudeAtual = value.latitude !== undefined ? value.latitude : obraAtualExistente.latitude
     const longitudeAtual = value.longitude !== undefined ? value.longitude : obraAtualExistente.longitude
 
-    const coordenadasResolvidas = await resolverCoordenadasDaObra({
+    const enderecoMudou = enderecoObraMudouNoPut({
+      value,
+      obraAtual: obraAtualExistente,
+      algumCampoEnderecoDetalhadoAtualizado
+    })
+    const usuarioEnviouCoordenadasExplicitas =
+      value.latitude !== undefined && value.longitude !== undefined
+
+    let latitudeParaResolver = latitudeAtual
+    let longitudeParaResolver = longitudeAtual
+
+    if (enderecoMudou && !usuarioEnviouCoordenadasExplicitas) {
+      latitudeParaResolver = null
+      longitudeParaResolver = null
+      console.log(
+        '📍 Endereço da obra alterado — recalculando coordenadas (ignorando lat/lng antigas do cadastro)'
+      )
+    }
+
+    let coordenadasResolvidas = await resolverCoordenadasDaObra({
       endereco: enderecoParaGeocoding,
       cidade: cidadeParaGeocoding,
       estado: estadoParaGeocoding,
       cep: cepParaGeocoding,
-      latitude: latitudeAtual,
-      longitude: longitudeAtual
+      latitude: latitudeParaResolver,
+      longitude: longitudeParaResolver
     })
+
+    if (
+      enderecoMudou &&
+      !usuarioEnviouCoordenadasExplicitas &&
+      !coordenadasResolvidas.geocodingAplicado &&
+      (!coordenadaValida(coordenadasResolvidas.latitude) || !coordenadaValida(coordenadasResolvidas.longitude))
+    ) {
+      console.warn(
+        '⚠️ Geocoding não retornou coordenadas após mudança de endereço; mantendo lat/lng anteriores para não apagar o ponto.'
+      )
+      coordenadasResolvidas = {
+        ...coordenadasResolvidas,
+        latitude: obraAtualExistente.latitude,
+        longitude: obraAtualExistente.longitude
+      }
+    }
 
     if (coordenadasResolvidas.geocodingAplicado) {
       console.log('📍 Coordenadas geradas automaticamente na atualização da obra:', coordenadasResolvidas.geocodingInfo)
