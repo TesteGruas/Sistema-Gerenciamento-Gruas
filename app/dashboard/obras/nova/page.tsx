@@ -61,6 +61,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 import { getApiOrigin } from "@/lib/runtime-config"
+import { mensagemTelefoneBrWhatsappSePreenchido } from "@/lib/telefone-brasil-ui"
 
 // Funções de máscara
 const formatCurrency = (value: string) => {
@@ -806,6 +807,15 @@ export default function NovaObraPage() {
   const salvarResponsavelObraLocal = () => {
     if (!formResponsavelObra.nome.trim()) {
       toast({ title: "Erro", description: "O nome é obrigatório", variant: "destructive" })
+      return
+    }
+    const telErro = mensagemTelefoneBrWhatsappSePreenchido(formResponsavelObra.telefone)
+    if (telErro) {
+      toast({
+        title: "Telefone inválido (WhatsApp)",
+        description: telErro,
+        variant: "destructive"
+      })
       return
     }
     if (editandoResponsavelObraIndex !== null) {
@@ -3914,8 +3924,13 @@ startxref
                     Adicionar Responsável
                   </Button>
                 </div>
-                <CardDescription>
-                  Responsáveis com acesso para aprovar as horas dos funcionários desta obra
+                <CardDescription className="space-y-1">
+                  <span>Responsáveis com acesso para aprovar as horas dos funcionários desta obra (serão vinculados à obra ao salvar).</span>
+                  <span className="block text-amber-900 dark:text-amber-200/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800 rounded-md px-2 py-1.5 text-xs font-normal">
+                    <strong>Ponto e WhatsApp:</strong> notificações de ponto vão para os responsáveis da{" "}
+                    <strong>obra do registro de ponto</strong>. Use telefone com <strong>11 dígitos</strong> (DDD + celular) para
+                    WhatsApp. Se o mesmo responsável atuar em várias obras, cadastre-o em cada obra ou copie os dados.
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -4054,14 +4069,20 @@ startxref
                     />
                   </div>
                   <div>
-                    <Label htmlFor="novo-resp-telefone">Telefone</Label>
+                    <Label htmlFor="novo-resp-telefone">Telefone (WhatsApp)</Label>
                     <Input
                       id="novo-resp-telefone"
                       value={formResponsavelObra.telefone || ''}
                       onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, telefone: e.target.value })}
-                      placeholder="(11) 99999-9999"
+                      placeholder="81987440990 ou (81) 98744-0990"
                       className="mt-1"
+                      inputMode="tel"
+                      autoComplete="tel"
                     />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Para WhatsApp: <strong>11 dígitos</strong> com DDD (celular), ex.{" "}
+                      <span className="font-mono">81987440990</span>. Opcional se não usar WhatsApp.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>

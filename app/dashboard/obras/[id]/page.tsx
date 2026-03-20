@@ -94,6 +94,7 @@ import { responsavelTecnicoApi } from "@/lib/api-responsavel-tecnico"
 import { ResponsavelTecnicoData } from "@/components/responsavel-tecnico-form"
 import { responsaveisObraApi, type ResponsavelObra, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
 import { getApiOrigin } from "@/lib/runtime-config"
+import { mensagemTelefoneBrWhatsappSePreenchido } from "@/lib/telefone-brasil-ui"
 
 function ObraDetailsPageContent() {
 
@@ -638,6 +639,15 @@ function ObraDetailsPageContent() {
   const salvarResponsavelObra = async () => {
     if (!obraId || !formResponsavelObra.nome.trim()) {
       toast({ title: "Erro", description: "O nome é obrigatório", variant: "destructive" })
+      return
+    }
+    const telErro = mensagemTelefoneBrWhatsappSePreenchido(formResponsavelObra.telefone)
+    if (telErro) {
+      toast({
+        title: "Telefone inválido (WhatsApp)",
+        description: telErro,
+        variant: "destructive"
+      })
       return
     }
     setSalvandoResponsavelObra(true)
@@ -4485,8 +4495,19 @@ useEffect(() => {
                     Adicionar Responsável
                   </Button>
                 </div>
-                <CardDescription>
-                  Responsáveis com acesso para aprovar as horas dos funcionários desta obra
+                <CardDescription className="space-y-1">
+                  <span>
+                    Responsáveis com acesso para aprovar as horas dos funcionários desta obra
+                    {obraId ? (
+                      <span className="text-muted-foreground"> (ID da obra: {obraId})</span>
+                    ) : null}
+                  </span>
+                  <span className="block text-amber-900 dark:text-amber-200/90 bg-amber-50 dark:bg-amber-950/40 border border-amber-200/80 dark:border-amber-800 rounded-md px-2 py-1.5 text-xs font-normal">
+                    <strong>Ponto e WhatsApp:</strong> e-mail, push e WhatsApp de “ponto pendente” vão para os responsáveis da{" "}
+                    <strong>mesma obra do registro de ponto</strong> (não necessariamente outra obra em que o funcionário também
+                    esteja alocado). Cadastre telefone com 11 dígitos (DDD) em cada obra em que esse responsável deva receber
+                    avisos. Esta tela é a obra <strong>{obraId || "—"}</strong>.
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -4614,14 +4635,20 @@ useEffect(() => {
                     />
                   </div>
                   <div>
-                    <Label htmlFor="resp-telefone">Telefone</Label>
+                    <Label htmlFor="resp-telefone">Telefone (WhatsApp)</Label>
                     <Input
                       id="resp-telefone"
                       value={formResponsavelObra.telefone || ''}
                       onChange={(e) => setFormResponsavelObra({ ...formResponsavelObra, telefone: e.target.value })}
-                      placeholder="(11) 99999-9999"
+                      placeholder="81987440990 ou (81) 98744-0990"
                       className="mt-1"
+                      inputMode="tel"
+                      autoComplete="tel"
                     />
+                    <p className="text-xs text-muted-foreground mt-1.5">
+                      Para envio automático de WhatsApp: <strong>11 dígitos</strong> com DDD (celular), ex.{" "}
+                      <span className="font-mono">81987440990</span>. Deixe em branco se não usar WhatsApp.
+                    </p>
                   </div>
                 </div>
                 <DialogFooter>
