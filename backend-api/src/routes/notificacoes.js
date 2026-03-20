@@ -234,7 +234,8 @@ router.get('/', authenticateToken, async (req, res) => {
 
     // Se é ADMIN, não aplicar filtro de usuario_id (vai buscar TODAS as notificações)
     // Se não é cliente e não é admin, buscar apenas por usuario_id
-    // Se é cliente, não aplicar filtro de usuario_id aqui (vai buscar por destinatários depois)
+    // Se é cliente (contato_usuario_id): precisa da caixa PESSOAL (usuario_id) — ex.: ponto para responsável
+    //   — antes só buscávamos por destinatarios; notif. com destinatarios: [] sumiam.
     if (isAdmin) {
       // Admin vê todas as notificações - não aplicar filtro de usuario_id
       console.log(`[notificacoes] 🔓 Admin detectado - buscando TODAS as notificações`)
@@ -242,7 +243,6 @@ router.get('/', authenticateToken, async (req, res) => {
       // Não é cliente e não é admin - buscar apenas por usuario_id
       query = query.eq('usuario_id', userId)
     }
-    // Se é cliente, não aplicar filtro aqui - vai buscar todas e filtrar por destinatários
 
     // Filtro por tipo
     if (req.query.tipo) {
@@ -309,10 +309,40 @@ router.get('/', authenticateToken, async (req, res) => {
         }
       }
     } else {
-      // Se é cliente, não buscar por usuario_id (vai buscar apenas por destinatários)
-      console.log(`[notificacoes] ⏭️ Pulando busca por usuario_id (é cliente ${clienteId})`)
-      notificacoesPorUsuario = []
-      countTotal = 0
+      // Contato de cliente: mesma caixa pessoal que /nao-lidas (usuario_id) + notif. com cliente em destinatarios
+      console.log(
+        `[notificacoes] 🔍 Usuário é contato do cliente ${clienteId} — buscando notificações por usuario_id ${userId} (caixa pessoal) e por destinatários`
+      )
+      let queryPessoal = supabaseAdmin
+        .from('notificacoes')
+        .select('*', { count: 'exact' })
+        .eq('usuario_id', userId)
+
+      if (req.query.tipo) {
+        queryPessoal = queryPessoal.eq('tipo', req.query.tipo)
+      }
+      if (req.query.lida !== undefined) {
+        const lida = req.query.lida === 'true'
+        queryPessoal = queryPessoal.eq('lida', lida)
+      }
+      if (req.query.search) {
+        const searchTerm = req.query.search.toLowerCase()
+        queryPessoal = queryPessoal.or(`titulo.ilike.%${searchTerm}%,mensagem.ilike.%${searchTerm}%`)
+      }
+
+      const { data: dataPessoal, error: errPessoal, count: countPessoal } = await queryPessoal
+        .order('data', { ascending: false })
+        .limit(5000)
+
+      if (errPessoal) {
+        console.error('Erro ao buscar notificações pessoais (cliente contato):', errPessoal)
+      } else {
+        notificacoesPorUsuario = dataPessoal || []
+        countTotal = countPessoal || 0
+        console.log(
+          `[notificacoes] ✅ Cliente-contato: ${notificacoesPorUsuario.length} notificação(ões) na caixa pessoal (usuario_id ${userId})`
+        )
+      }
     }
 
     // Query 2: Se é cliente (e não é admin), buscar também notificações onde o cliente está nos destinatários
@@ -336,7 +366,10 @@ router.get('/', authenticateToken, async (req, res) => {
           console.log(`[notificacoes] 🔍 Filtrando ${todasNotificacoes.length} notificações para cliente ID ${clienteId} (tipo: ${typeof clienteId}), CNPJ ${clienteCnpj || 'N/A'}`)
           
           notificacoesPorDestinatario = todasNotificacoes.filter(notif => {
-            // Se é cliente, não excluir por usuario_id (já não buscamos por usuario_id)
+            // Já incluídas na caixa pessoal (evita duplicata antes do dedupe por id)
+            if (notif.usuario_id === userId) {
+              return false
+            }
             // Verificar se o cliente está nos destinatários
             if (notif.destinatarios && Array.isArray(notif.destinatarios)) {
               // Log para debug
