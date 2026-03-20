@@ -205,35 +205,39 @@ function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
 
   const consultas = []
 
-  // 1) CEP + cidade + estado por extenso (prioridade no Brasil)
+  /**
+   * IMPORTANTE: não priorizar CEP+cidade antes da linha com logradouro e número.
+   * Consultas só por CEP tendem a cair no centro da área postal (longe do número).
+   */
+  const temEnderecoTexto = end.length >= 5
+
+  // 1) Linha completa (rua, nº, bairro…) + cidade + UF — melhor chance de ponto na rua
+  if (temEnderecoTexto && cid && estadoNome) {
+    consultas.push(`${end}, ${cid}, ${estadoNome}, Brasil`)
+  }
+  if (temEnderecoTexto && cid) {
+    consultas.push(`${end}, ${cid}, Brasil`)
+  }
+  if (temEnderecoTexto && estadoNome) {
+    consultas.push(`${end}, ${estadoNome}, Brasil`)
+  }
+  if (temEnderecoTexto) {
+    consultas.push(`${end}, Brasil`)
+  }
+
+  // 2) Fallback: CEP + cidade + estado (área postal; pode ficar longe do número)
   if (cepLimpo.length >= 8 && cid && estadoNome) {
     const cepFmt = `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5)}`
     consultas.push(`${cepFmt}, ${cid}, ${estadoNome}, Brasil`)
     consultas.push(`${cepLimpo}, ${cid}, ${estadoNome}, Brasil`)
   }
 
-  // 2) Cidade + estado (âncora regional — antes de rua que existe em vários estados)
+  // 3) Cidade + estado (âncora regional)
   if (cid && estadoNome) {
     consultas.push(`${cid}, ${estadoNome}, Brasil`)
   }
 
-  // 3) Linha completa com estado por extenso (não usar só "PE")
-  const partesCompletas = [end, cid, estadoNome, 'Brasil'].map((x) => (x || '').trim()).filter(Boolean)
-  if (partesCompletas.length >= 3) {
-    consultas.push(partesCompletas.join(', '))
-  }
-
-  const partesBase = [endereco, cidade, estado, 'Brasil']
-    .map((item) => (item || '').toString().trim())
-    .filter(Boolean)
-  if (partesBase.length >= 2) {
-    consultas.push(partesBase.join(', '))
-  }
-
-  if (end && cid) consultas.push([end, cid, 'Brasil'].filter(Boolean).join(', '))
-  if (end && estadoNome) consultas.push([end, estadoNome, 'Brasil'].filter(Boolean).join(', '))
-  if (end) consultas.push([end, 'Brasil'].filter(Boolean).join(', '))
-
+  // 4) Só CEP
   if (cepLimpo.length >= 8) {
     consultas.push(`CEP ${cepLimpo}, Brasil`)
   }
@@ -242,19 +246,19 @@ function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
 }
 
 function montarEnderecoCompleto({ endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento }) {
-  const enderecoLegado = (endereco || '').toString().trim()
-  if (enderecoLegado) {
-    return enderecoLegado
-  }
-
   const rua = (endereco_rua || '').toString().trim()
   const numero = (endereco_numero || '').toString().trim()
   const bairro = (endereco_bairro || '').toString().trim()
   const complemento = (endereco_complemento || '').toString().trim()
+  const temDetalhado = Boolean(rua || numero || bairro || complemento)
 
-  const base = [rua, numero].filter(Boolean).join(', ')
-  const comBairro = [base, bairro].filter(Boolean).join(' - ')
-  return [comBairro, complemento].filter(Boolean).join(', ')
+  if (temDetalhado) {
+    const base = [rua, numero].filter(Boolean).join(', ')
+    const comBairro = [base, bairro].filter(Boolean).join(' - ')
+    return [comBairro, complemento].filter(Boolean).join(', ')
+  }
+
+  return (endereco || '').toString().trim()
 }
 
 async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
@@ -1429,7 +1433,9 @@ router.post('/:id/resolver-coordenadas', authenticateToken, async (req, res) => 
 
     const { data: obra, error: obraError } = await supabaseAdmin
       .from('obras')
-      .select('id, nome, endereco, cidade, estado, cep, latitude, longitude')
+      .select(
+        'id, nome, endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento, cidade, estado, cep, latitude, longitude'
+      )
       .eq('id', obraId)
       .single()
 
@@ -1440,9 +1446,17 @@ router.post('/:id/resolver-coordenadas', authenticateToken, async (req, res) => 
       })
     }
 
+    const enderecoParaGeocoding = montarEnderecoCompleto({
+      endereco: obra.endereco,
+      endereco_rua: obra.endereco_rua,
+      endereco_numero: obra.endereco_numero,
+      endereco_bairro: obra.endereco_bairro,
+      endereco_complemento: obra.endereco_complemento
+    })
+
     // Sempre geocodificar pelo endereço atual (ignorar lat/lng antigas), senão o ponto fica errado no mapa/PWA
     const coordenadasResolvidas = await resolverCoordenadasDaObra({
-      endereco: obra.endereco,
+      endereco: enderecoParaGeocoding,
       cidade: obra.cidade,
       estado: obra.estado,
       cep: obra.cep,
@@ -2661,6 +2675,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
     }
 
     const enderecoCompostoDetalhado = montarEnderecoCompleto({
+      endereco: obraAtualExistente.endereco,
       endereco_rua: enderecoDetalhadoMesclado.endereco_rua,
       endereco_numero: enderecoDetalhadoMesclado.endereco_numero,
       endereco_bairro: enderecoDetalhadoMesclado.endereco_bairro,
