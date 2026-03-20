@@ -185,6 +185,16 @@ export async function notificarResponsaveisRegistro(registroId: string | number)
     obra_id: number;
     tem_destinatarios: boolean;
     notificacao?: NotificacaoResponsaveisPontoResultado | null;
+    /** Por que a obra_id pode ser diferente da obra aberta no dashboard */
+    diagnostico_obra?: {
+      obra_id_usada_na_notificacao: number;
+      obra_nome: string | null;
+      registro_obra_id: number | null;
+      funcionario_obra_atual_id: number | null;
+      funcionario_tambem_alocado_nestas_obras_ativas: number[];
+      regra: string;
+      se_o_dashboard_e_de_outra_obra: string;
+    };
     lembrete?: string;
   };
 }> {

@@ -5177,6 +5177,38 @@ router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
       JSON.stringify(resultadoNotif?.destinatarios || [], null, 0)
     );
 
+    let obraNomeEfetiva = null;
+    try {
+      const { data: rowObra } = await supabaseAdmin.from('obras').select('nome').eq('id', obraId).maybeSingle();
+      obraNomeEfetiva = rowObra?.nome ?? null;
+    } catch (_) {
+      /* ignore */
+    }
+
+    let obrasVinculoAtivo = [];
+    try {
+      const { data: fos } = await supabaseAdmin
+        .from('funcionarios_obras')
+        .select('obra_id')
+        .eq('funcionario_id', registro.funcionario_id)
+        .eq('status', 'ativo');
+      obrasVinculoAtivo = (fos || []).map((r) => r.obra_id).filter(Boolean);
+    } catch (e) {
+      console.warn('[notificar-responsaveis] funcionarios_obras:', e.message);
+    }
+
+    const diagnostico_obra = {
+      obra_id_usada_na_notificacao: obraId,
+      obra_nome: obraNomeEfetiva,
+      registro_obra_id: registro.obra_id ?? null,
+      funcionario_obra_atual_id: registro.funcionario?.obra_atual_id ?? null,
+      funcionario_tambem_alocado_nestas_obras_ativas: obrasVinculoAtivo,
+      regra:
+        'Usa (1) obra_id do registro de ponto, ou (2) se null, obra_atual_id do funcionário. Não usa a obra aberta no dashboard em outra aba.',
+      se_o_dashboard_e_de_outra_obra:
+        'Se você cadastrou responsáveis na obra 142 mas a API mostra obra 137, o registro de ponto (ou a obra atual do funcionário) está na 137. Ajuste obra atual do funcionário, ou o campo obra_id do registro, ou cadastre o mesmo responsável/telefone na obra indicada em obra_id_usada_na_notificacao.'
+    };
+
     return res.json({
       success: true,
       message: temDestinatarios
@@ -5188,6 +5220,7 @@ router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
         obra_id: obraId,
         tem_destinatarios: temDestinatarios,
         notificacao: resultadoNotif || null,
+        diagnostico_obra,
         lembrete:
           'Cadastre responsáveis em /api/obras/{obra_id}/responsaveis-obra para a MESMA obra_id do registro. Ex.: ponto na obra 137 não notifica quem está só na obra 142.'
       }
