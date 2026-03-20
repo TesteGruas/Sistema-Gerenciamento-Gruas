@@ -20,6 +20,8 @@ import {
   MapPinOff,
   Shield,
   FileSignature,
+  Bell,
+  Loader2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
@@ -75,6 +77,9 @@ export default function PWAPontoPage() {
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const [isDisparandoDebugAlmoco, setIsDisparandoDebugAlmoco] = useState(false)
   const [isDisparandoDebugResponsavel, setIsDisparandoDebugResponsavel] = useState(false)
+  /** ID do registro de ponto do dia (para reenviar notificação aos responsáveis). */
+  const [registroIdHoje, setRegistroIdHoje] = useState<string | number | null>(null)
+  const [notificandoResponsaveis, setNotificandoResponsaveis] = useState(false)
   const ultimaTentativaObraRef = useRef(0)
   const resolvendoObraRef = useRef(false)
   const { toast } = useToast()
@@ -277,6 +282,7 @@ export default function PWAPontoPage() {
     try {
       // Carregar do cache primeiro se offline
       if (!isOnline) {
+        setRegistroIdHoje(null)
         const cachedRegistros = localStorage.getItem('cached_registros_ponto_hoje')
         
         if (cachedRegistros) {
@@ -318,6 +324,7 @@ export default function PWAPontoPage() {
 
       if (data && data.length > 0) {
         const registro = data[0]
+        setRegistroIdHoje(registro.id ?? null)
         const registros = {
           entrada: registro.entrada || null,
           saida_almoco: registro.saida_almoco || null,
@@ -330,6 +337,7 @@ export default function PWAPontoPage() {
         // Salvar no cache
         localStorage.setItem('cached_registros_ponto_hoje', JSON.stringify(registros))
       } else {
+        setRegistroIdHoje(null)
         // Sem registros hoje
         const registrosVazios = {
           entrada: null,
@@ -361,6 +369,36 @@ export default function PWAPontoPage() {
       }
     } finally {
       setIsLoadingRegistros(false) // Finalizar loading
+    }
+  }
+
+  const enviarNotificacaoResponsaveisHoje = async () => {
+    if (!registroIdHoje) {
+      toast({
+        title: 'Indisponível',
+        description:
+          'ID do registro não encontrado. Conecte-se à internet ou abra o menu Espelho de ponto (/pwa/espelho-ponto) e use o botão no dia desejado.',
+        variant: 'destructive'
+      })
+      return
+    }
+    try {
+      setNotificandoResponsaveis(true)
+      const res = await pontoApi.notificarResponsaveisRegistro(registroIdHoje)
+      toast({
+        title: 'Notificação',
+        description: res.message || 'Solicitação enviada aos responsáveis da obra.'
+      })
+      await carregarRegistrosHoje()
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string }
+      toast({
+        title: 'Erro',
+        description: err?.response?.data?.message || err?.message || 'Não foi possível enviar.',
+        variant: 'destructive'
+      })
+    } finally {
+      setNotificandoResponsaveis(false)
     }
   }
 
@@ -1345,6 +1383,31 @@ export default function PWAPontoPage() {
               </div>
             </div>
           </div>
+
+          {registrosHoje.entrada && registrosHoje.saida && (
+            <div className="mt-4 pt-4 border-t border-gray-100">
+              <p className="text-xs text-muted-foreground mb-2">
+                Reenviar e-mail, WhatsApp e aviso no app para os responsáveis da obra assinarem o dia.
+              </p>
+              <Button
+                type="button"
+                variant="secondary"
+                className="w-full"
+                disabled={notificandoResponsaveis || !registroIdHoje}
+                onClick={enviarNotificacaoResponsaveisHoje}
+              >
+                {notificandoResponsaveis ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : (
+                  <Bell className="w-4 h-4 mr-2" />
+                )}
+                Enviar notificação
+              </Button>
+              {!registroIdHoje && isOnline && (
+                <p className="text-[11px] text-amber-700 mt-1">Recarregue a página para obter o ID do registro.</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

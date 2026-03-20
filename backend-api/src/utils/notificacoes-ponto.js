@@ -3,8 +3,35 @@ import { sendEmail } from '../services/email.service.js';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
+import { buscarSupervisorPorObra } from './aprovacoes-helpers.js';
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+
+/** SMTP / webhooks externos podem travar minutos — não bloquear a API. */
+const MS_TIMEOUT_EMAIL =
+  Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_EMAIL_MS) > 0
+    ? Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_EMAIL_MS)
+    : 12000;
+const MS_TIMEOUT_WHATSAPP =
+  Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_WHATSAPP_MS) > 0
+    ? Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_WHATSAPP_MS)
+    : 15000;
+const MS_TIMEOUT_PUSH =
+  Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_PUSH_MS) > 0
+    ? Number(process.env.NOTIFICACAO_PONTO_TIMEOUT_PUSH_MS)
+    : 10000;
+
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(
+        () => reject(new Error(`[notificacoes-ponto] Timeout ${label} após ${ms}ms`)),
+        ms
+      )
+    )
+  ]);
+}
 
 function formatarData(dataStr) {
   if (!dataStr) return '-';
@@ -295,6 +322,315 @@ Acesse o app para corrigir as horas: ${link}`;
 // =========================================================
 
 /**
+ * Indica se há alguém para receber notificação de ponto assinatura:
+ * responsáveis em `responsaveis_obra` OU supervisor da obra (cliente / responsavel_id).
+ */
+export async function obraTemDestinatariosNotificacaoPonto(obraId) {
+  if (!obraId) return false;
+  try {
+    const { data: rows } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id')
+      .eq('obra_id', obraId)
+      .eq('ativo', true)
+      .limit(1);
+    if (rows && rows.length > 0) return true;
+    const supervisor = await buscarSupervisorPorObra(obraId);
+    return !!supervisor;
+  } catch (e) {
+    console.error('[notificacoes-ponto] obraTemDestinatariosNotificacaoPonto:', e.message);
+    return false;
+  }
+}
+
+async function enviarPacoteNotificacaoResponsavelPonto({
+  nome,
+  email,
+  telefone,
+  usuarioIdDireto,
+  responsavelRow,
+  registro,
+  funcionario,
+  obraNome,
+  linkAssinar
+}) {
+  const usuarioId =
+    typeof usuarioIdDireto === 'number' && !Number.isNaN(usuarioIdDireto)
+      ? usuarioIdDireto
+      : await resolverUsuarioId(responsavelRow || { email, usuario: null });
+
+  const telefoneNormWhatsapp = normalizarTelefoneWhatsapp(telefone);
+  const loginResponsavelObra = responsavelRow?.usuario != null ? String(responsavelRow.usuario).trim() : '';
+
+  console.log(
+    '[notificacoes-ponto] ▶ Disparando notificação ao responsável',
+    JSON.stringify(
+      {
+        registro_ponto_id: registro?.id ?? null,
+        destinatario_nome: nome || null,
+        email: email || null,
+        telefone_cadastro: telefone || null,
+        telefone_whatsapp_usado_no_disparo: telefoneNormWhatsapp || null,
+        usuario_campo_responsaveis_obra: loginResponsavelObra || null,
+        usuario_id_tabela_usuarios: usuarioId ?? null,
+        canais_previstos: {
+          email: Boolean(email),
+          whatsapp: Boolean(telefoneNormWhatsapp),
+          notificacao_in_app_e_push: Boolean(usuarioId)
+        }
+      },
+      null,
+      0
+    )
+  );
+
+  if (!usuarioId && (email || responsavelRow?.usuario)) {
+    console.warn(
+      `[notificacoes-ponto] Responsável "${nome || '—'}" sem vínculo com usuarios (email/login). In-app/push não enviados.`
+    );
+  }
+
+  // 1) In-app + push primeiro (rápido; não depende de SMTP nem webhook WhatsApp)
+  if (usuarioId) {
+    const agora = new Date().toISOString();
+    const { data: notif } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: usuarioId,
+        tipo: 'info',
+        titulo: 'Registro de ponto concluído',
+        mensagem: `${funcionario.nome || 'Funcionário'} fechou o dia ${formatarData(registro.data)} — aguardando sua assinatura`,
+        link: `/pwa/aprovacao-assinatura?id=${registro.id}`,
+        lida: false,
+        remetente: 'Sistema',
+        destinatarios: [],
+        data: agora,
+        created_at: agora
+      })
+      .select()
+      .single();
+
+    if (notif) {
+      try {
+        emitirNotificacao(usuarioId, notif);
+      } catch (e) {
+        /* websocket offline */
+      }
+    }
+
+    try {
+      const pushResultado = await withTimeout(
+        enviarPushParaUsuario(usuarioId, {
+          title: 'Ponto pendente de assinatura',
+          body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
+          icon: '/icon-192x192.png',
+          badge: '/icon-72x72.png',
+          data: { url: `/pwa/aprovacao-assinatura?id=${registro.id}` },
+          tag: `ponto-pendente-${registro.id}`
+        }),
+        MS_TIMEOUT_PUSH,
+        'push'
+      );
+      console.log(
+        '[notificacoes-ponto] Push web (PWA) para usuario_id=%s registro=%s → %s',
+        usuarioId,
+        registro?.id,
+        JSON.stringify(pushResultado)
+      );
+    } catch (e) {
+      console.warn('[notificacoes-ponto] Push falhou ou timeout:', e.message);
+    }
+  }
+
+  // 2) E-mail e WhatsApp em background (SMTP/webhook podem travar → não bloqueiam a resposta HTTP)
+  if (email) {
+    void withTimeout(
+      sendEmail({
+        to: email,
+        subject: `Registro de ponto concluído — ${funcionario.nome || 'Funcionário'} — ${formatarData(registro.data)}`,
+        html: templateEmailResponsavel({
+          funcionarioNome: funcionario.nome || 'Funcionário',
+          funcionarioCargo: funcionario.cargo || '',
+          obraNome,
+          data: registro.data,
+          entrada: registro.entrada,
+          saidaAlmoco: registro.saida_almoco,
+          voltaAlmoco: registro.volta_almoco,
+          saida: registro.saida,
+          horasTrabalhadas: registro.horas_trabalhadas,
+          horasExtras: registro.horas_extras,
+          linkAssinar
+        }),
+        tipo: 'notificacao_ponto_responsavel'
+      }),
+      MS_TIMEOUT_EMAIL,
+      'email'
+    )
+      .then(() => console.log('[notificacoes-ponto] E-mail responsável concluído (background):', email))
+      .catch((e) => console.error('[notificacoes-ponto] Erro/timeout email responsável:', e.message));
+  }
+
+  if (telefoneNormWhatsapp) {
+    void withTimeout(
+      enviarMensagemWebhook(
+        telefoneNormWhatsapp,
+        mensagemWhatsAppResponsavel({
+          funcionarioNome: funcionario.nome || 'Funcionário',
+          obraNome,
+          data: registro.data,
+          entrada: registro.entrada,
+          saida: registro.saida,
+          horasTrabalhadas: registro.horas_trabalhadas,
+          horasExtras: registro.horas_extras,
+          link: linkAssinar
+        }),
+        linkAssinar,
+        { tipo: 'ponto_responsavel', destinatario_nome: nome }
+      ),
+      MS_TIMEOUT_WHATSAPP,
+      'whatsapp'
+    )
+      .then((r) =>
+        console.log(
+          '[notificacoes-ponto] WhatsApp responsável concluído (background):',
+          telefoneNormWhatsapp,
+          r?.sucesso === false ? r?.erro : 'ok'
+        )
+      )
+      .catch((e) => console.error('[notificacoes-ponto] Erro/timeout WhatsApp responsável:', e.message));
+  }
+
+  return {
+    nome: nome || null,
+    email: email || null,
+    telefone: telefone || null,
+    usuario_campo_responsaveis_obra: loginResponsavelObra || null,
+    usuario_id_para_app_e_push: usuarioId ?? null,
+    whatsapp_numero_normalizado: telefoneNormWhatsapp || null,
+    fonte: responsavelRow ? 'responsaveis_obra' : 'supervisor_ou_cliente_obra',
+    canais_disparados: {
+      email: Boolean(email),
+      whatsapp: Boolean(telefoneNormWhatsapp),
+      notificacao_app_e_push: Boolean(usuarioId)
+    }
+  };
+}
+
+/**
+ * Confirma ao funcionário que o dia foi encerrado e enviado ao responsável (in-app + push + WhatsApp, se houver telefone).
+ * Diferente do fluxo para responsáveis: o usuário que bateu ponto não recebia nada antes.
+ */
+async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, obraNome) {
+  const fid = funcionario?.id || funcionario?.funcionario_id || registro?.funcionario_id;
+  if (!fid) {
+    console.log('[notificacoes-ponto] Confirmação ao funcionário: sem funcionario_id — ignorado');
+    return { ok: false, motivo: 'sem_funcionario_id' };
+  }
+
+  let nomeFunc = funcionario?.nome;
+  let telefoneFunc = funcionario?.telefone_whatsapp || funcionario?.telefone;
+
+  if (!nomeFunc || !telefoneFunc) {
+    const { data: f } = await supabaseAdmin
+      .from('funcionarios')
+      .select('nome, telefone, telefone_whatsapp')
+      .eq('id', fid)
+      .maybeSingle();
+    nomeFunc = nomeFunc || f?.nome;
+    telefoneFunc = telefoneFunc || f?.telefone_whatsapp || f?.telefone;
+  }
+
+  const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(fid);
+  const baseUrl = FRONTEND_URL();
+  const linkEspelho = `${baseUrl}/pwa/espelho-ponto`;
+
+  if (usuarioIdFunc) {
+    const agora = new Date().toISOString();
+    const { data: notif } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: usuarioIdFunc,
+        tipo: 'success',
+        titulo: 'Ponto enviado para assinatura',
+        mensagem: `Seu registro de ${formatarData(registro.data)} em ${obraNome || 'sua obra'} foi enviado ao responsável.`,
+        link: `/pwa/espelho-ponto`,
+        lida: false,
+        remetente: 'Sistema',
+        destinatarios: [],
+        data: agora,
+        created_at: agora
+      })
+      .select()
+      .single();
+
+    if (notif) {
+      try {
+        emitirNotificacao(usuarioIdFunc, notif);
+      } catch (e) {
+        /* websocket offline */
+      }
+    }
+
+    try {
+      const pushResultado = await withTimeout(
+        enviarPushParaUsuario(usuarioIdFunc, {
+          title: 'Ponto enviado ao responsável',
+          body: `Seu dia ${formatarData(registro.data)} em ${obraNome || 'obra'} foi agendado para assinatura.`,
+          icon: '/icon-192x192.png',
+          badge: '/icon-72x72.png',
+          data: { url: '/pwa/espelho-ponto' },
+          tag: `ponto-func-confirm-${registro.id}`
+        }),
+        MS_TIMEOUT_PUSH,
+        'push_funcionario'
+      );
+      console.log(
+        '[notificacoes-ponto] Push ao funcionário (confirmação) usuario_id=%s → %s',
+        usuarioIdFunc,
+        JSON.stringify(pushResultado)
+      );
+    } catch (e) {
+      console.warn('[notificacoes-ponto] Push funcionário (confirmação) falhou ou timeout:', e.message);
+    }
+  } else {
+    console.log(
+      '[notificacoes-ponto] Funcionário id=%s sem usuário vinculado (usuarios.funcionario_id) — in-app/push não enviados',
+      fid
+    );
+  }
+
+  const telNorm = normalizarTelefoneWhatsapp(telefoneFunc);
+  if (telNorm) {
+    const msg = `✅ *Ponto registrado*\n\n${nomeFunc ? `Olá ${nomeFunc}! ` : ''}Seu dia ${formatarData(registro.data)} na obra *${obraNome || 'N/A'}* foi enviado para assinatura do responsável.\n${linkEspelho}`;
+    void withTimeout(
+      enviarMensagemWebhook(telNorm, msg, linkEspelho, {
+        tipo: 'ponto_confirmacao_funcionario',
+        destinatario_nome: nomeFunc || 'Funcionário'
+      }),
+      MS_TIMEOUT_WHATSAPP,
+      'whatsapp_funcionario'
+    )
+      .then((r) =>
+        console.log(
+          '[notificacoes-ponto] WhatsApp funcionário (confirmação) concluído:',
+          telNorm,
+          r?.sucesso === false ? r?.erro : 'ok'
+        )
+      )
+      .catch((e) => console.error('[notificacoes-ponto] Erro/timeout WhatsApp funcionário:', e.message));
+  } else {
+    console.log('[notificacoes-ponto] Funcionário sem telefone para WhatsApp (confirmação) — só app/in-app se houver usuário');
+  }
+
+  return {
+    ok: true,
+    funcionario_id: fid,
+    usuario_id: usuarioIdFunc || null,
+    whatsapp_numero_normalizado: telNorm || null
+  };
+}
+
+/**
  * Notifica todos os responsáveis da obra quando um funcionário fecha o dia.
  * Envia: email + WhatsApp + notificação in-app
  */
@@ -302,8 +638,21 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
   const obraId = await resolverObraIdParaNotificacao(registro, funcionario);
   if (!obraId) {
     console.warn('[notificacoes-ponto] Sem obra_id, não é possível notificar responsáveis');
-    return;
+    return {
+      ok: false,
+      motivo: 'sem_obra_id',
+      obra_id: null,
+      destinatarios: []
+    };
   }
+
+  console.log(
+    '[notificacoes-ponto] Iniciando lote de notificações — registro=%s obra_id=%s funcionario="%s" (id=%s)',
+    registro?.id,
+    obraId,
+    funcionario?.nome || '—',
+    funcionario?.id ?? funcionario?.funcionario_id ?? registro?.funcionario_id ?? '—'
+  );
 
   try {
     const { data: responsaveis, error } = await supabaseAdmin
@@ -312,9 +661,26 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
       .eq('obra_id', obraId)
       .eq('ativo', true);
 
-    if (error || !responsaveis || responsaveis.length === 0) {
-      console.log('[notificacoes-ponto] Nenhum responsável ativo encontrado para obra', obraId);
-      return;
+    if (error) {
+      console.error('[notificacoes-ponto] Erro ao listar responsaveis_obra:', error.message);
+    }
+
+    const lista = responsaveis || [];
+
+    if (lista.length > 0) {
+      console.log(
+        '[notificacoes-ponto] Destinatários em responsaveis_obra (obra %s): %s',
+        obraId,
+        JSON.stringify(
+          lista.map((r) => ({
+            id: r.id,
+            nome: r.nome,
+            email: r.email || null,
+            telefone: r.telefone || null,
+            usuario: r.usuario || null
+          }))
+        )
+      );
     }
 
     const { data: obra } = await supabaseAdmin
@@ -327,95 +693,96 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
     const baseUrl = FRONTEND_URL();
     const linkAssinar = `${baseUrl}/pwa/aprovacao-assinatura?id=${registro.id}`;
 
-    for (const resp of responsaveis) {
+    /** @type {Array<Record<string, unknown>>} */
+    const destinatarios = [];
+
+    for (const resp of lista) {
       try {
-        // 1) Email
-        if (resp.email) {
-          await sendEmail({
-            to: resp.email,
-            subject: `Registro de ponto concluído — ${funcionario.nome || 'Funcionário'} — ${formatarData(registro.data)}`,
-            html: templateEmailResponsavel({
-              funcionarioNome: funcionario.nome || 'Funcionário',
-              funcionarioCargo: funcionario.cargo || '',
-              obraNome,
-              data: registro.data,
-              entrada: registro.entrada,
-              saidaAlmoco: registro.saida_almoco,
-              voltaAlmoco: registro.volta_almoco,
-              saida: registro.saida,
-              horasTrabalhadas: registro.horas_trabalhadas,
-              horasExtras: registro.horas_extras,
-              linkAssinar
-            }),
-            tipo: 'notificacao_ponto_responsavel'
-          }).catch(e => console.error('[notificacoes-ponto] Erro email responsável:', e.message));
-        }
-
-        // 2) WhatsApp
-        const telefoneResponsavel = normalizarTelefoneWhatsapp(resp.telefone);
-        if (telefoneResponsavel) {
-          await enviarMensagemWebhook(
-            telefoneResponsavel,
-            mensagemWhatsAppResponsavel({
-              funcionarioNome: funcionario.nome || 'Funcionário',
-              obraNome,
-              data: registro.data,
-              entrada: registro.entrada,
-              saida: registro.saida,
-              horasTrabalhadas: registro.horas_trabalhadas,
-              horasExtras: registro.horas_extras,
-              link: linkAssinar
-            }),
-            linkAssinar,
-            { tipo: 'ponto_responsavel', destinatario_nome: resp.nome }
-          ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp responsável:', e.message));
-        } else {
-          console.warn(`[notificacoes-ponto] Responsável ${resp.nome || resp.id} sem telefone válido para WhatsApp`);
-        }
-
-        // 3) Notificação in-app (precisa de usuario_id)
-        const usuarioId = await resolverUsuarioId(resp);
-        if (usuarioId) {
-          const agora = new Date().toISOString();
-          const { data: notif } = await supabaseAdmin
-            .from('notificacoes')
-            .insert({
-              usuario_id: usuarioId,
-              tipo: 'info',
-              titulo: 'Registro de ponto concluído',
-              mensagem: `${funcionario.nome || 'Funcionário'} fechou o dia ${formatarData(registro.data)} — aguardando sua assinatura`,
-              link: `/pwa/aprovacao-assinatura?id=${registro.id}`,
-              lida: false,
-              remetente: 'Sistema',
-              destinatarios: [],
-              data: agora,
-              created_at: agora
-            })
-            .select()
-            .single();
-
-          if (notif) {
-            try { emitirNotificacao(usuarioId, notif); } catch (e) { /* websocket offline */ }
-          }
-
-          // 4) Push Notification (PWA)
-          await enviarPushParaUsuario(usuarioId, {
-            title: 'Ponto pendente de assinatura',
-            body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
-            icon: '/icon-192x192.png',
-            badge: '/icon-72x72.png',
-            data: { url: `/pwa/aprovacao-assinatura?id=${registro.id}` },
-            tag: `ponto-pendente-${registro.id}`
-          });
-        }
+        const det = await enviarPacoteNotificacaoResponsavelPonto({
+          nome: resp.nome,
+          email: resp.email,
+          telefone: resp.telefone,
+          usuarioIdDireto: undefined,
+          responsavelRow: resp,
+          registro,
+          funcionario,
+          obraNome,
+          linkAssinar
+        });
+        if (det) destinatarios.push({ responsavel_obra_id: resp.id, ...det });
       } catch (e) {
         console.error(`[notificacoes-ponto] Erro ao notificar responsável ${resp.nome}:`, e.message);
       }
     }
 
-    console.log(`[notificacoes-ponto] Notificações enviadas para ${responsaveis.length} responsável(is) da obra ${obraNome}`);
+    let modo = lista.length > 0 ? 'responsaveis_obra' : 'nenhum';
+
+    if (lista.length === 0) {
+      const supervisor = await buscarSupervisorPorObra(obraId);
+      if (supervisor) {
+        console.log(
+          '[notificacoes-ponto] Fallback supervisor da obra — usuario_id=%s nome="%s" email=%s telefone=%s',
+          supervisor.id,
+          supervisor.nome || '—',
+          supervisor.email || '(sem)',
+          supervisor.telefone || '(sem)'
+        );
+        modo = 'supervisor_obra';
+        try {
+          const det = await enviarPacoteNotificacaoResponsavelPonto({
+            nome: supervisor.nome,
+            email: supervisor.email,
+            telefone: supervisor.telefone,
+            usuarioIdDireto: supervisor.id,
+            responsavelRow: null,
+            registro,
+            funcionario,
+            obraNome,
+            linkAssinar
+          });
+          if (det) destinatarios.push(det);
+        } catch (e) {
+          console.error('[notificacoes-ponto] Erro ao notificar supervisor (fallback):', e.message);
+        }
+      } else {
+        console.log('[notificacoes-ponto] Nenhum responsável ativo nem supervisor da obra para notificar — obra', obraId);
+      }
+    }
+
+    console.log(
+      `[notificacoes-ponto] Fluxo de notificação concluído — ${lista.length} responsável(is) em responsaveis_obra — obra ${obraNome}` +
+        (lista.length === 0 ? ' (tentativa fallback supervisor)' : '')
+    );
+
+    let funcionario_confirmacao = null;
+    try {
+      funcionario_confirmacao = await notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, obraNome);
+    } catch (err) {
+      console.error('[notificacoes-ponto] Erro ao notificar funcionário (confirmação):', err.message);
+    }
+
+    const resumo = {
+      ok: true,
+      obra_id: obraId,
+      obra_nome: obraNome,
+      modo,
+      quantidade_destinatarios: destinatarios.length,
+      destinatarios,
+      funcionario_confirmacao,
+      onde_ver_logs_servidor:
+        'Terminal do backend (Node). No navegador só aparecem estes dados se a API os devolver no JSON (campo destinatarios).'
+    };
+    console.log('[notificacoes-ponto] Resumo retorno API:', JSON.stringify(resumo, null, 0));
+    return resumo;
   } catch (e) {
     console.error('[notificacoes-ponto] Erro geral ao notificar responsáveis:', e);
+    return {
+      ok: false,
+      motivo: 'erro',
+      erro: e.message,
+      obra_id: obraId,
+      destinatarios: []
+    };
   }
 }
 
@@ -433,8 +800,32 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
       .eq('obra_id', obraId)
       .eq('ativo', true);
 
-    if (error || !responsaveis || responsaveis.length === 0) {
-      console.log('[notificacoes-ponto] Nenhum responsável ativo encontrado para obra', obraId);
+    if (error) {
+      console.error('[notificacoes-ponto] Erro ao listar responsaveis_obra (pendência genérica):', error.message);
+    }
+
+    let lista = responsaveis || [];
+    if (lista.length === 0) {
+      const supervisor = await buscarSupervisorPorObra(obraId);
+      if (supervisor) {
+        console.log(
+          `[notificacoes-ponto] Pendência genérica: sem responsaveis_obra — notificando supervisor obra #${obraId} (usuário ${supervisor.id})`
+        );
+        lista = [
+          {
+            id: null,
+            nome: supervisor.nome,
+            email: supervisor.email,
+            telefone: supervisor.telefone,
+            usuario: null,
+            __usuarioId: supervisor.id
+          }
+        ];
+      }
+    }
+
+    if (lista.length === 0) {
+      console.log('[notificacoes-ponto] Nenhum responsável ativo nem supervisor para obra', obraId);
       return { success: false, motivo: 'sem_responsaveis', obra_id: obraId };
     }
 
@@ -450,7 +841,7 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
 
     const diagnostico = [];
 
-    for (const resp of responsaveis) {
+    for (const resp of lista) {
       try {
         if (resp.email) {
           await sendEmail({
@@ -473,7 +864,10 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
           ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp pendência genérica:', e.message));
         }
 
-        const usuarioId = await resolverUsuarioId(resp);
+        const usuarioId =
+          resp.__usuarioId != null && resp.__usuarioId !== undefined
+            ? resp.__usuarioId
+            : await resolverUsuarioId(resp);
         let pushResultado = null;
         if (usuarioId) {
           const { data: notif } = await supabaseAdmin
@@ -692,25 +1086,94 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
 // HELPERS INTERNOS
 // =========================================================
 
+/** Escapa % e _ para ILIKE tratar o email como texto literal (evita falso positivo com _ no email). */
+function escapeLikeLiteralEmail(email) {
+  return String(email).replace(/\\/g, '\\\\').replace(/%/g, '\\%').replace(/_/g, '\\_');
+}
+
+/**
+ * Resolve usuarios.id a partir do email com várias tentativas (cadastro às vezes difere em maiúsculas).
+ */
+async function buscarUsuarioIdPorEmail(email) {
+  const e = (email || '').trim();
+  if (!e) return null;
+
+  const tentativas = [e, e.toLowerCase(), e.toUpperCase()];
+  for (const candidato of tentativas) {
+    try {
+      const { data, error } = await supabaseAdmin
+        .from('usuarios')
+        .select('id')
+        .is('deleted_at', null)
+        .eq('email', candidato)
+        .maybeSingle();
+      if (error && error.code !== 'PGRST116') continue;
+      if (data?.id) return data.id;
+    } catch {
+      /* continua */
+    }
+  }
+
+  // ILIKE com padrão literal (case-insensitive sem wildcards acidentais)
+  try {
+    const literal = escapeLikeLiteralEmail(e);
+    const { data: rows, error } = await supabaseAdmin
+      .from('usuarios')
+      .select('id')
+      .is('deleted_at', null)
+      .ilike('email', literal)
+      .limit(2);
+    if (error) return null;
+    if (rows?.length === 1) return rows[0].id;
+    if (rows?.length > 1) {
+      console.warn('[notificacoes-ponto] Vários usuários com mesmo email (ilike literal):', e);
+    }
+  } catch {
+    /* ignora */
+  }
+
+  return null;
+}
+
 async function resolverUsuarioId(responsavel) {
+  if (!responsavel) return null;
+
+  // Campo `usuario` pode ser o ID numérico do usuário (cadastro legado)
+  if (responsavel.usuario != null && String(responsavel.usuario).trim() !== '') {
+    const raw = String(responsavel.usuario).trim();
+    if (/^\d+$/.test(raw)) {
+      const asNum = parseInt(raw, 10);
+      try {
+        const { data: porId } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('id', asNum)
+          .is('deleted_at', null)
+          .maybeSingle();
+        if (porId?.id) return porId.id;
+      } catch {
+        /* continua */
+      }
+    }
+  }
+
   const emailCandidato =
     responsavel.email ||
     (typeof responsavel.usuario === 'string' && responsavel.usuario.includes('@')
       ? responsavel.usuario.trim()
       : null);
-  if (!emailCandidato) return null;
 
-  try {
-    const { data: usuario } = await supabaseAdmin
-      .from('usuarios')
-      .select('id')
-      .eq('email', emailCandidato)
-      .maybeSingle();
-
-    return usuario?.id || null;
-  } catch {
+  if (emailCandidato) {
+    const id = await buscarUsuarioIdPorEmail(emailCandidato);
+    if (id) return id;
+    console.warn(
+      '[notificacoes-ponto] Email do responsável de obra não encontrou linha em usuarios (notificação in-app/push):',
+      emailCandidato
+    );
     return null;
   }
+
+  return null;
 }
 
 async function resolverUsuarioIdPorFuncionario(funcionarioId) {
@@ -721,7 +1184,7 @@ async function resolverUsuarioIdPorFuncionario(funcionarioId) {
       .from('usuarios')
       .select('id')
       .eq('funcionario_id', funcionarioId)
-      .single();
+      .maybeSingle();
 
     return usuario?.id || null;
   } catch {

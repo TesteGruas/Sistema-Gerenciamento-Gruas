@@ -22,7 +22,8 @@ import {
   ArrowLeft,
   Loader2,
   Share2,
-  FileSignature
+  FileSignature,
+  Bell
 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -58,6 +59,7 @@ export default function PWAEspelhoPontoPage() {
   const [dataFim, setDataFim] = useState("")
   const [registroDetalhes, setRegistroDetalhes] = useState<RegistroPonto | null>(null)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
+  const [notificandoId, setNotificandoId] = useState<string | number | null>(null)
 
   // Carregar dados do usuário
   useEffect(() => {
@@ -129,6 +131,29 @@ export default function PWAEspelhoPontoPage() {
       
     } finally {
       setLoading(false)
+    }
+  }
+
+  const enviarNotificacaoResponsaveis = async (registro: RegistroPonto) => {
+    try {
+      setNotificandoId(registro.id)
+      const res = await pontoApi.notificarResponsaveisRegistro(registro.id)
+      toast({
+        title: 'Notificação',
+        description: res.message || 'Solicitação enviada aos responsáveis da obra.'
+      })
+      await carregarRegistros()
+    } catch (error: unknown) {
+      const err = error as { response?: { data?: { message?: string } }; message?: string }
+      const msg =
+        err?.response?.data?.message || err?.message || 'Não foi possível enviar a notificação.'
+      toast({
+        title: 'Erro',
+        description: msg,
+        variant: 'destructive'
+      })
+    } finally {
+      setNotificandoId(null)
     }
   }
 
@@ -332,6 +357,9 @@ export default function PWAEspelhoPontoPage() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Espelho de Ponto</h1>
           <p className="text-gray-600">Visualize e exporte seus registros</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Com dia encerrado (entrada e saída), cada card mostra o botão <strong>Enviar notificação</strong> abaixo de &quot;Ver Detalhes Completos&quot;.
+          </p>
         </div>
       </div>
 
@@ -505,6 +533,24 @@ export default function PWAEspelhoPontoPage() {
                     <Clock className="w-4 h-4 mr-2" />
                     Ver Detalhes Completos
                   </Button>
+
+                  {registro.entrada && registro.saida && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="w-full mt-2"
+                      disabled={notificandoId === registro.id}
+                      onClick={() => enviarNotificacaoResponsaveis(registro)}
+                    >
+                      {notificandoId === registro.id ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      ) : (
+                        <Bell className="w-4 h-4 mr-2" />
+                      )}
+                      Enviar notificação
+                    </Button>
+                  )}
 
                   {(registro.status === 'Pendente Assinatura Funcionário' ||
                     registro.status === 'Pendente Assinatura Funcionario' ||

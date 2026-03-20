@@ -142,7 +142,8 @@ function ObraDetailsPageContent() {
     loadingCustos,
     errorCustos,
     carregarObra,
-    carregarCustosMensais
+    carregarCustosMensais,
+    atualizarObra
   } = useObraStore()
   
   // Estados locais para dados não armazenados no store
@@ -249,6 +250,44 @@ function ObraDetailsPageContent() {
     observacoes: ''
   })
   const [criandoMedicao, setCriandoMedicao] = useState(false)
+  const [recalculandoCoordObra, setRecalculandoCoordObra] = useState(false)
+
+  /** Força geocodificação pelo endereço cadastrado (PUT sozinho não recalcula se o texto do endereço não mudou). */
+  const recalcularCoordenadasNoMapa = async () => {
+    if (!obra?.id) return
+    setRecalculandoCoordObra(true)
+    try {
+      const res = await obrasApi.resolverCoordenadasObra(parseInt(obra.id, 10))
+      if (res.success && res.data?.coordenadas) {
+        const { lat, lng } = res.data.coordenadas
+        atualizarObra({
+          latitude: lat,
+          longitude: lng
+        })
+        toast({
+          title: "Coordenadas atualizadas",
+          description: `Ponto recalculado pelo endereço: ${lat.toFixed(6)}, ${lng.toFixed(6)}`
+        })
+      } else {
+        toast({
+          title: "Não foi possível geocodificar",
+          description:
+            (res as { error?: string }).error ||
+            "Confira endereço, cidade, estado e CEP. Veja os logs do servidor [obras][geocoding].",
+          variant: "destructive"
+        })
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Falha na API"
+      toast({
+        title: "Erro ao recalcular",
+        description: msg,
+        variant: "destructive"
+      })
+    } finally {
+      setRecalculandoCoordObra(false)
+    }
+  }
   
   // Função para iniciar edição
   const iniciarEdicao = () => {
@@ -4600,13 +4639,41 @@ useEffect(() => {
             {/* Localização: coordenadas + mapa (aba Geral — visível ao rolar após Responsáveis) */}
             <Card id="localizacao-obra" className="border-blue-100 scroll-mt-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base flex items-center gap-2">
-                  <MapPin className="h-5 w-5 text-blue-600" />
-                  Localização da obra
-                </CardTitle>
-                <CardDescription>
-                  Coordenadas usadas no mapa e na validação de proximidade do ponto eletrônico (PWA).
-                </CardDescription>
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div className="space-y-1.5">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <MapPin className="h-5 w-5 text-blue-600" />
+                      Localização da obra
+                    </CardTitle>
+                    <CardDescription>
+                      Coordenadas usadas no mapa e na validação de proximidade do ponto eletrônico (PWA).{" "}
+                      <span className="text-amber-800">
+                        Só salvar a obra não recalcula o ponto se o texto do endereço não mudou — use o botão abaixo
+                        para corrigir coordenadas antigas (ex.: mapa em SP com endereço em PE).
+                      </span>
+                    </CardDescription>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 border-blue-200 text-blue-900 hover:bg-blue-50"
+                    onClick={recalcularCoordenadasNoMapa}
+                    disabled={recalculandoCoordObra}
+                  >
+                    {recalculandoCoordObra ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Recalculando…
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        Recalcular pelo endereço
+                      </>
+                    )}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 {coordsObraDashboard ? (

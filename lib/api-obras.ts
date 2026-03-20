@@ -474,6 +474,27 @@ export const obrasApi = {
     })
   },
 
+  /**
+   * Recalcula latitude/longitude via Nominatim usando apenas o endereço cadastrado
+   * (ignora coordenadas antigas no banco). Útil quando o mapa ficou em outro estado.
+   */
+  async resolverCoordenadasObra(id: number): Promise<{
+    success: boolean
+    data?: {
+      obra_id: number
+      obra_nome: string
+      coordenadas: { lat: number; lng: number }
+      mensagem?: boolean
+    }
+    error?: string
+    message?: string
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}/${id}/resolver-coordenadas`)
+    return apiRequest(url, {
+      method: 'POST',
+    })
+  },
+
   // Atualizar apenas documentos (CNO, ART, Apólice)
   async atualizarDocumentos(id: number, data: ObraDocumentosUpdateData): Promise<ObraResponse> {
     const cleanData = Object.entries(data).reduce((acc, [key, value]) => {

@@ -64,7 +64,8 @@ function nomeEstadoBrasilPorSiglaOuTexto(estadoRaw) {
  * Nominatim pode devolver rua homônima em outro estado (ex.: mesmo nome em SP vs PE).
  * Escolhe o hit que bate com UF/cidade ou caixa geográfica aproximada.
  */
-function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade) {
+function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade, logCtx = '') {
+  const LOG = '[obras][geocoding][pick]'
   if (!Array.isArray(hits) || hits.length === 0) return null
   const sigla =
     String(estadoSiglaOuNome || '')
@@ -84,7 +85,13 @@ function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade) {
       const st = (h.address?.state || '').toLowerCase()
       return st && (st.includes(needle) || needle.includes(st))
     })
-    if (porEstado) return porEstado
+    if (porEstado) {
+      console.log(LOG, logCtx, 'critério: address.state bate com', nomeEstado, {
+        lat: porEstado.lat,
+        lon: porEstado.lon
+      })
+      return porEstado
+    }
   }
 
   // Caixas aproximadas (graus) — evita aceitar rua homônima em outro estado (ex.: SP vs PE)
@@ -104,7 +111,10 @@ function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade) {
         dentroCaixa(lat, lng, -10.4, -6.8, -41.5, -33.7)
       )
     })
-    if (pe) return pe
+    if (pe) {
+      console.log(LOG, logCtx, 'critério: caixa geográfica Pernambuco', { lat: pe.lat, lon: pe.lon })
+      return pe
+    }
   }
   if (sigla === 'SP') {
     const sp = hits.find((h) => {
@@ -116,7 +126,10 @@ function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade) {
         dentroCaixa(lat, lng, -25.4, -19.6, -53.4, -44.0)
       )
     })
-    if (sp) return sp
+    if (sp) {
+      console.log(LOG, logCtx, 'critério: caixa geográfica SP', { lat: sp.lat, lon: sp.lon })
+      return sp
+    }
   }
 
   if (cidadeNorm.length > 3) {
@@ -132,9 +145,18 @@ function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade) {
       ).toLowerCase()
       return acity && (acity.includes(token) || cidadeNorm.includes(acity.slice(0, 4)))
     })
-    if (porCidade) return porCidade
+    if (porCidade) {
+      console.log(LOG, logCtx, 'critério: cidade / display_name', { lat: porCidade.lat, lon: porCidade.lon })
+      return porCidade
+    }
   }
 
+  console.warn(
+    LOG,
+    logCtx,
+    'critério: FALLBACK = primeiro hit (pode ser rua homônima em outro estado!)',
+    { lat: hits[0]?.lat, lon: hits[0]?.lon }
+  )
   return hits[0]
 }
 
@@ -235,33 +257,61 @@ function montarEnderecoCompleto({ endereco, endereco_rua, endereco_numero, ender
 }
 
 async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
+  const TAG = '[obras][geocoding][nominatim]'
   const consultas = montarConsultasEndereco({ endereco, cidade, estado, cep })
+  console.log(TAG, 'entrada', {
+    endereco: (endereco || '').toString().slice(0, 120),
+    cidade,
+    estado,
+    cep,
+    totalConsultas: consultas.length,
+    consultasPreview: consultas.map((q, i) => ({ i: i + 1, q: q.slice(0, 140) }))
+  })
   if (consultas.length === 0) {
+    console.warn(TAG, 'nenhuma string de busca montada — abortando')
     return null
   }
 
-  for (const consulta of consultas) {
+  for (let idx = 0; idx < consultas.length; idx++) {
+    const consulta = consultas[idx]
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(consulta)}&limit=5&addressdetails=1`,
-        {
-          headers: {
-            'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
-            'Accept-Language': 'pt-BR,pt,en'
-          }
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(consulta)}&limit=5&addressdetails=1`
+      console.log(TAG, `requisição ${idx + 1}/${consultas.length}`, { consulta: consulta.slice(0, 200), urlLength: url.length })
+
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
+          'Accept-Language': 'pt-BR,pt,en'
         }
-      )
+      })
 
       if (!response.ok) {
+        console.warn(TAG, `HTTP ${response.status} para consulta`, consulta.slice(0, 100))
         await new Promise((r) => setTimeout(r, 1100))
         continue
       }
       const data = await response.json()
       if (Array.isArray(data) && data.length > 0) {
-        const hit = escolherMelhorResultadoNominatim(data, estado, cidade)
+        const resumoHits = data.map((h, i) => ({
+          i: i + 1,
+          lat: h.lat,
+          lon: h.lon,
+          state: h.address?.state || null,
+          city: h.address?.city || h.address?.town || h.address?.municipality || null,
+          nome: (h.display_name || '').slice(0, 140)
+        }))
+        console.log(TAG, `resposta: ${data.length} hit(s)`, resumoHits)
+
+        const hit = escolherMelhorResultadoNominatim(data, estado, cidade, `consulta #${idx + 1}`)
         const lat = parseFloat(hit.lat)
         const lng = parseFloat(hit.lon)
         if (Number.isFinite(lat) && Number.isFinite(lng)) {
+          console.log(TAG, 'RESULTADO FINAL (esta consulta)', {
+            latitude: lat,
+            longitude: lng,
+            consulta_usada: consulta.slice(0, 200),
+            display_name: (hit.display_name || '').slice(0, 200)
+          })
           return {
             latitude: lat,
             longitude: lng,
@@ -269,20 +319,30 @@ async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
             endereco_encontrado: hit.display_name || null
           }
         }
+      } else {
+        console.log(TAG, `consulta ${idx + 1}: sem resultados`)
       }
       // política de uso do Nominatim: ~1 req/s
       await new Promise((r) => setTimeout(r, 1100))
     } catch (error) {
-      console.warn('[obras] Falha ao geocodificar consulta:', consulta, error?.message || error)
+      console.warn(TAG, 'erro na consulta:', consulta.slice(0, 80), error?.message || error)
     }
   }
 
+  console.warn(TAG, 'nenhuma consulta retornou coordenadas válidas')
   return null
 }
 
 async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitude, longitude }) {
+  const TAG = '[obras][geocoding][resolver]'
   const jaTemCoordenadas = coordenadaValida(latitude) && coordenadaValida(longitude)
   if (jaTemCoordenadas) {
+    console.log(
+      TAG,
+      'Mantendo lat/lng existentes — NÃO chama Nominatim (geocodingAplicado=false).',
+      'Para forçar nova busca, envie lat/lng null no PUT ou altere endereço detectável.',
+      { latitude, longitude }
+    )
     return {
       latitude,
       longitude,
@@ -291,8 +351,19 @@ async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitu
     }
   }
 
+  console.log(TAG, 'Buscando coordenadas no Nominatim (lat/lng atuais inválidos ou nulos)', {
+    endereco: (endereco || '').toString().slice(0, 100),
+    cidade,
+    estado,
+    cep
+  })
+
   const coords = await buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep })
   if (!coords) {
+    console.warn(TAG, 'Nominatim não retornou coordenadas — devolvendo lat/lng anteriores se existirem', {
+      latitude,
+      longitude
+    })
     return {
       latitude: coordenadaValida(latitude) ? latitude : null,
       longitude: coordenadaValida(longitude) ? longitude : null,
@@ -301,6 +372,7 @@ async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitu
     }
   }
 
+  console.log(TAG, 'Geocoding OK', { latitude: coords.latitude, longitude: coords.longitude })
   return {
     latitude: coords.latitude,
     longitude: coords.longitude,
@@ -2624,6 +2696,37 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       )
     }
 
+    console.log('[obras][geocoding][put]', {
+      obraId: id,
+      enderecoMudou,
+      usuarioEnviouCoordenadasExplicitas,
+      comparacaoEndereco: {
+        endereco_req: value.endereco !== undefined,
+        endereco_antes: (obraAtualExistente.endereco || '').slice(0, 60),
+        cidade_antes: obraAtualExistente.cidade,
+        estado_antes: obraAtualExistente.estado,
+        cep_antes: obraAtualExistente.cep
+      },
+      camposParaGeocoding: {
+        endereco: (enderecoParaGeocoding || '').toString().slice(0, 80),
+        cidade: cidadeParaGeocoding,
+        estado: estadoParaGeocoding,
+        cep: cepParaGeocoding
+      },
+      latLngAntesNoBanco: {
+        lat: obraAtualExistente.latitude,
+        lng: obraAtualExistente.longitude
+      },
+      latLngPassadosAoResolver: {
+        lat: latitudeParaResolver,
+        lng: longitudeParaResolver
+      },
+      nota:
+        !enderecoMudou && !usuarioEnviouCoordenadasExplicitas
+          ? 'Se enderecoMudou=false, o resolver pode MANTER lat/lng antigas sem chamar Nominatim.'
+          : null
+    })
+
     let coordenadasResolvidas = await resolverCoordenadasDaObra({
       endereco: enderecoParaGeocoding,
       cidade: cidadeParaGeocoding,
@@ -2631,6 +2734,14 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       cep: cepParaGeocoding,
       latitude: latitudeParaResolver,
       longitude: longitudeParaResolver
+    })
+
+    console.log('[obras][geocoding][put] resultado resolver (bruto)', {
+      geocodingAplicado: coordenadasResolvidas.geocodingAplicado,
+      latitude: coordenadasResolvidas.latitude,
+      longitude: coordenadasResolvidas.longitude,
+      endereco_usado_geocoding: coordenadasResolvidas.geocodingInfo?.endereco_usado_geocoding?.slice?.(0, 120),
+      display_name: coordenadasResolvidas.geocodingInfo?.endereco_encontrado?.slice?.(0, 160)
     })
 
     if (
@@ -2647,6 +2758,10 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
         latitude: obraAtualExistente.latitude,
         longitude: obraAtualExistente.longitude
       }
+      console.warn('[obras][geocoding][put] após fallback — voltaram lat/lng do banco (antigas)', {
+        latitude: coordenadasResolvidas.latitude,
+        longitude: coordenadasResolvidas.longitude
+      })
     }
 
     if (coordenadasResolvidas.geocodingAplicado) {

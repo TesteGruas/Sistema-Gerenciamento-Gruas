@@ -137,6 +137,45 @@ export const apiFuncionarios = {
 // API DE REGISTROS DE PONTO
 // ========================================
 
+/**
+ * Detalhe retornado pelo backend (quem recebeu e por qual canal).
+ * Reenvia notificações — preferir `pontoApi.notificarResponsaveisRegistro` no cliente (Turbopack e `apiRegistrosPonto`).
+ */
+export interface NotificacaoResponsaveisPontoResultado {
+  ok?: boolean;
+  obra_id?: number | null;
+  obra_nome?: string;
+  modo?: 'responsaveis_obra' | 'supervisor_obra' | 'nenhum';
+  quantidade_destinatarios?: number;
+  destinatarios?: Array<{
+    nome?: string | null;
+    email?: string | null;
+    telefone?: string | null;
+    usuario_campo_responsaveis_obra?: string | null;
+    usuario_id_para_app_e_push?: number | null;
+    whatsapp_numero_normalizado?: string | null;
+    fonte?: string;
+    canais_disparados?: { email?: boolean; whatsapp?: boolean; notificacao_app_e_push?: boolean };
+    responsavel_obra_id?: number;
+  }>;
+  onde_ver_logs_servidor?: string;
+}
+
+export async function notificarResponsaveisRegistro(registroId: string | number): Promise<{
+  success: boolean;
+  message: string;
+  data?: {
+    registro_ponto_id: string | number;
+    obra_id: number;
+    tem_destinatarios: boolean;
+    notificacao?: NotificacaoResponsaveisPontoResultado | null;
+    lembrete?: string;
+  };
+}> {
+  const response = await api.post(`ponto-eletronico/registros/${registroId}/notificar-responsaveis`);
+  return response.data;
+}
+
 export const apiRegistrosPonto = {
   async listar(params?: {
     funcionario_id?: number | string;
@@ -235,6 +274,21 @@ export const apiRegistrosPonto = {
   }> {
     const response = await api.post(`ponto-eletronico/registros/${id}/assinar-funcionario`, payload);
     return response.data;
+  },
+
+  /** Reenvia e-mail / WhatsApp / notificação in-app aos responsáveis da obra (dia já encerrado). */
+  async notificarResponsaveis(id: string | number): Promise<{
+    success: boolean;
+    message: string;
+    data?: {
+      registro_ponto_id: string | number;
+      obra_id: number;
+      tem_destinatarios: boolean;
+      notificacao?: NotificacaoResponsaveisPontoResultado | null;
+      lembrete?: string;
+    };
+  }> {
+    return notificarResponsaveisRegistro(id);
   },
 
   async rejeitarResponsavel(

@@ -22,7 +22,13 @@ import {
 import { buscarSupervisorPorObra, calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-extras.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
-import { notificarResponsaveisObraPontoConcluido, notificarFuncionarioPontoAssinado, notificarFuncionarioPontoRejeitado, notificarResponsaveisObraPontosPendentes } from '../utils/notificacoes-ponto.js';
+import {
+  notificarResponsaveisObraPontoConcluido,
+  notificarFuncionarioPontoAssinado,
+  notificarFuncionarioPontoRejeitado,
+  notificarResponsaveisObraPontosPendentes,
+  obraTemDestinatariosNotificacaoPonto
+} from '../utils/notificacoes-ponto.js';
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 import { enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
@@ -2009,13 +2015,9 @@ router.post('/registros', async (req, res) => {
           if (!obraId) {
             console.warn('[ponto-eletronico] Dia fechado sem obra_id no registro nem obra_atual_id no funcionário — notificações não enviadas');
           } else {
-            const { data: responsaveisAtivos } = await supabaseAdmin
-              .from('responsaveis_obra')
-              .select('id')
-              .eq('obra_id', obraId)
-              .eq('ativo', true);
+            const temDestinatarios = await obraTemDestinatariosNotificacaoPonto(obraId);
 
-            if (responsaveisAtivos && responsaveisAtivos.length > 0) {
+            if (temDestinatarios) {
               await supabaseAdmin
                 .from('registros_ponto')
                 .update({ status: 'Pendente Assinatura' })
@@ -2023,11 +2025,11 @@ router.post('/registros', async (req, res) => {
               registro.status = 'Pendente Assinatura';
             }
 
-            // Email + WhatsApp + notificação in-app + push (para cada responsável em responsaveis_obra)
+            // Email + WhatsApp + notificação in-app + push (responsaveis_obra ou supervisor da obra)
             notificarResponsaveisObraPontoConcluido(registro, funcionario)
               .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
             console.log(
-              `[ponto-eletronico] Dia fechado — fluxo de notificação responsáveis obra ${obraId} (ativos: ${responsaveisAtivos?.length ?? 0})`
+              `[ponto-eletronico] Dia fechado — fluxo de notificação responsáveis obra ${obraId} (destinatários: ${temDestinatarios ? 'sim' : 'não'})`
             );
           }
         } catch (errNotif) {
@@ -2214,13 +2216,9 @@ router.post('/registros', async (req, res) => {
         if (!obraId) {
           console.warn('[ponto-eletronico] Registro com saída sem obra_id — notificações não enviadas');
         } else {
-          const { data: responsaveisAtivos } = await supabaseAdmin
-            .from('responsaveis_obra')
-            .select('id')
-            .eq('obra_id', obraId)
-            .eq('ativo', true);
+          const temDestinatarios = await obraTemDestinatariosNotificacaoPonto(obraId);
 
-          if (responsaveisAtivos && responsaveisAtivos.length > 0) {
+          if (temDestinatarios) {
             await supabaseAdmin
               .from('registros_ponto')
               .update({ status: 'Pendente Assinatura' })
@@ -2231,7 +2229,7 @@ router.post('/registros', async (req, res) => {
           notificarResponsaveisObraPontoConcluido(registro, funcionario)
             .catch(e => console.error('[ponto-eletronico] Erro notificação responsáveis:', e.message));
           console.log(
-            `[ponto-eletronico] Novo registro com saída — notificação enviada a responsáveis da obra ${obraId} (ativos: ${responsaveisAtivos?.length ?? 0})`
+            `[ponto-eletronico] Novo registro com saída — notificação obra ${obraId} (destinatários: ${temDestinatarios ? 'sim' : 'não'})`
           );
         }
       } catch (errNotif) {
@@ -5081,6 +5079,126 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
   } catch (error) {
     console.error('[Assinatura-Funcionario] Erro:', error);
     res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
+  }
+});
+
+// =========================================================
+// Reenviar notificação aos responsáveis da obra (funcionário dono do registro)
+// =========================================================
+router.post('/registros/:id/notificar-responsaveis', async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    const userId = req.user?.id ?? req.user?.userId;
+
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID do registro é obrigatório' });
+    }
+
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(
+        `
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, obra_atual_id)
+      `
+      )
+      .eq('id', id)
+      .single();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    const { data: usuarioLogado } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, funcionario_id')
+      .eq('id', userId)
+      .maybeSingle();
+
+    const roleNorm = String(req.user?.role || '').toLowerCase();
+    const isElevado =
+      (req.user?.level ?? 0) >= 8 || roleNorm === 'admin' || roleNorm === 'gerente' || roleNorm === 'gestores';
+
+    const isDono =
+      usuarioLogado?.funcionario_id != null && usuarioLogado.funcionario_id === registro.funcionario_id;
+
+    if (!isDono && !isElevado) {
+      return res.status(403).json({
+        success: false,
+        message: 'Apenas o funcionário dono do registro ou um gestor pode solicitar o reenvio das notificações.'
+      });
+    }
+
+    if (!registro.entrada || !registro.saida) {
+      return res.status(400).json({
+        success: false,
+        message: 'Só é possível notificar responsáveis após registrar entrada e saída (dia encerrado).'
+      });
+    }
+
+    const obraId = registro.obra_id || registro.funcionario?.obra_atual_id;
+    if (!obraId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Registro sem obra vinculada — não é possível notificar responsáveis.'
+      });
+    }
+
+    const temDestinatarios = await obraTemDestinatariosNotificacaoPonto(obraId);
+    const st = String(registro.status || '');
+    const podePromoverParaPendenteAssinatura =
+      temDestinatarios &&
+      (st === 'Atraso' || st === 'Pendente' || st.trim() === '') &&
+      !st.includes('Pendente Correc') &&
+      st !== 'Aprovado';
+
+    if (podePromoverParaPendenteAssinatura) {
+      await supabaseAdmin
+        .from('registros_ponto')
+        .update({ status: 'Pendente Assinatura', updated_at: new Date().toISOString() })
+        .eq('id', id);
+      registro.status = 'Pendente Assinatura';
+    }
+
+    const funcionarioPayload =
+      registro.funcionario ||
+      ({
+        id: registro.funcionario_id,
+        nome: 'Funcionário',
+        obra_atual_id: obraId
+      });
+
+    const resultadoNotif = await notificarResponsaveisObraPontoConcluido(registro, funcionarioPayload);
+
+    console.log(
+      '[notificar-responsaveis] Detalhe (mesmo payload vai no JSON) registro=%s obra_usada=%s → %s',
+      registro.id,
+      obraId,
+      JSON.stringify(resultadoNotif?.destinatarios || [], null, 0)
+    );
+
+    return res.json({
+      success: true,
+      message: temDestinatarios
+        ? 'Notificações reenviadas aos responsáveis da obra (e-mail, WhatsApp e app, quando configurados).'
+        : 'Nenhum responsável cadastrado para esta obra — não há destinatários para notificar.',
+      data: {
+        registro_ponto_id: registro.id,
+        /** Obra usada pelo fluxo: registro.obra_id ou obra_atual do funcionário — deve bater com responsaveis_obra */
+        obra_id: obraId,
+        tem_destinatarios: temDestinatarios,
+        notificacao: resultadoNotif || null,
+        lembrete:
+          'Cadastre responsáveis em /api/obras/{obra_id}/responsaveis-obra para a MESMA obra_id do registro. Ex.: ponto na obra 137 não notifica quem está só na obra 142.'
+      }
+    });
+  } catch (error) {
+    console.error('[notificar-responsaveis] Erro:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Erro ao enviar notificações',
+      error: error.message
+    });
   }
 });
 

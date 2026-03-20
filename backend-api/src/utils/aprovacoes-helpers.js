@@ -41,7 +41,7 @@ async function buscarSupervisorPorObra(obra_id) {
     if (obra.clientes && obra.clientes.contato_usuario_id) {
       const { data: usuarioCliente, error: usuarioError } = await supabaseAdmin
         .from('usuarios')
-        .select('id, nome, email, role')
+        .select('id, nome, email, role, telefone')
         .eq('id', obra.clientes.contato_usuario_id)
         .single();
 
@@ -50,6 +50,7 @@ async function buscarSupervisorPorObra(obra_id) {
           id: usuarioCliente.id,
           nome: usuarioCliente.nome || obra.clientes.nome,
           email: usuarioCliente.email || obra.clientes.email,
+          telefone: usuarioCliente.telefone || null,
           cargo: 'Cliente',
           role: usuarioCliente.role
         };
@@ -60,7 +61,7 @@ async function buscarSupervisorPorObra(obra_id) {
     if (obra.responsavel_id) {
       const { data: responsavelUsuario, error: responsavelError } = await supabaseAdmin
         .from('usuarios')
-        .select('id, nome, email, role')
+        .select('id, nome, email, role, telefone')
         .eq('id', obra.responsavel_id)
         .single();
 
@@ -69,6 +70,7 @@ async function buscarSupervisorPorObra(obra_id) {
           id: responsavelUsuario.id,
           nome: responsavelUsuario.nome || obra.responsavel_nome,
           email: responsavelUsuario.email,
+          telefone: responsavelUsuario.telefone || null,
           cargo: 'Responsável',
           role: responsavelUsuario.role
         };
