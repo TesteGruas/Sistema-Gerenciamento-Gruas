@@ -157,7 +157,23 @@ export interface NotificacaoResponsaveisPontoResultado {
     fonte?: string;
     canais_disparados?: { email?: boolean; whatsapp?: boolean; notificacao_app_e_push?: boolean };
     responsavel_obra_id?: number;
+    aviso_whatsapp_cadastro?: string | null;
+    /** Diagnóstico: VAPID, subscriptions, enviados */
+    push_web?: {
+      configurado?: boolean;
+      subscriptions_ativas?: number;
+      enviados?: number;
+      falhas?: number;
+      mensagem_usuario?: string | null;
+      erro?: string;
+    } | null;
   }>;
+  /** Telefone sem DDD completo ou formato inválido — WhatsApp não enviado; corrigir cadastro */
+  avisos_telefone_cadastro?: Array<{ tipo: string; nome: string | null; mensagem: string }>;
+  funcionario_confirmacao?: {
+    aviso_whatsapp_cadastro?: string | null;
+    [key: string]: unknown;
+  };
   onde_ver_logs_servidor?: string;
 }
 

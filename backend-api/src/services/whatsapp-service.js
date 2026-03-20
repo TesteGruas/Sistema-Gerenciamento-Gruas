@@ -1,6 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { gerarTokenAprovacao } from '../utils/approval-tokens.js';
 import { buscarFuncionario } from '../utils/aprovacoes-helpers.js';
+import { normalizarTelefoneBrasilParaWhatsApp } from '../utils/telefone-brasil.js';
 
 const WHATSAPP_WEBHOOK_URL = process.env.WHATSAPP_WEBHOOK_URL || 'https://gsouzabd.app.n8n.cloud/webhook/irbana-notify';
 const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
@@ -245,21 +246,7 @@ async function buscarTelefoneWhatsAppSupervisor(supervisor_id) {
  * @returns {string} - Telefone formatado
  */
 function formatarTelefone(telefone) {
-  if (!telefone) return null;
-  
-  // Remover todos os caracteres não numéricos
-  let numero = telefone.replace(/\D/g, '');
-  
-  // Se não começar com 55 (código do Brasil), adicionar
-  if (!numero.startsWith('55')) {
-    // Se começar com 0, remover
-    if (numero.startsWith('0')) {
-      numero = numero.substring(1);
-    }
-    numero = '55' + numero;
-  }
-  
-  return numero;
+  return normalizarTelefoneBrasilParaWhatsApp(telefone);
 }
 
 /**

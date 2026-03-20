@@ -115,6 +115,17 @@ function PWALayoutContent({ children }: PWALayoutProps) {
     }
   }, [])
 
+  // Após login, registrar push no backend (antes só rodava no 1º load, sem token)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!isAuthenticated) return
+    if (!('Notification' in window) || Notification.permission !== 'granted') return
+
+    ensurePushSubscription().catch((error) => {
+      console.warn('[PWA][Push] Falha ao registrar subscription após login:', error)
+    })
+  }, [isAuthenticated])
+
   // Recuperação global em erros não tratados que podem travar o PWA
   useEffect(() => {
     if (typeof window === 'undefined') return

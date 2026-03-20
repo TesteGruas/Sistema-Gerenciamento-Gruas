@@ -4,6 +4,7 @@ import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
 import { buscarSupervisorPorObra } from './aprovacoes-helpers.js';
+import { validarTelefoneWhatsappBrasil, normalizarTelefoneBrasilParaWhatsApp } from './telefone-brasil.js';
 
 const FRONTEND_URL = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
@@ -48,14 +49,7 @@ function formatarHoras(valor) {
 }
 
 function normalizarTelefoneWhatsapp(telefone) {
-  if (!telefone) return null;
-  let numero = String(telefone).replace(/\D/g, '');
-  if (!numero) return null;
-  if (!numero.startsWith('55')) {
-    if (numero.startsWith('0')) numero = numero.substring(1);
-    numero = `55${numero}`;
-  }
-  return numero;
+  return normalizarTelefoneBrasilParaWhatsApp(telefone);
 }
 
 // =========================================================
@@ -343,6 +337,39 @@ export async function obraTemDestinatariosNotificacaoPonto(obraId) {
   }
 }
 
+/** Avisa o funcionário (in-app) quando o telefone do responsável está preenchido mas inválido — sem inventar DDD. */
+async function notificarFuncionarioAvisoTelefoneResponsavel(registro, funcionario, nomeResponsavel, mensagem) {
+  const fid = funcionario?.id || funcionario?.funcionario_id || registro?.funcionario_id;
+  if (!fid || !mensagem) return;
+  const uid = await resolverUsuarioIdPorFuncionario(fid);
+  if (!uid) return;
+  const agora = new Date().toISOString();
+  const { data: notif } = await supabaseAdmin
+    .from('notificacoes')
+    .insert({
+      usuario_id: uid,
+      tipo: 'warning',
+      titulo: 'Telefone do responsável incompleto',
+      mensagem: `Não foi possível enviar WhatsApp para ${nomeResponsavel || 'o responsável'}: ${mensagem} Peça ao administrador para corrigir o telefone em Responsáveis da obra.`,
+      link: `/pwa/espelho-ponto`,
+      lida: false,
+      remetente: 'Sistema',
+      destinatarios: [],
+      data: agora,
+      created_at: agora
+    })
+    .select()
+    .single();
+
+  if (notif) {
+    try {
+      emitirNotificacao(uid, notif);
+    } catch (e) {
+      /* websocket offline */
+    }
+  }
+}
+
 async function enviarPacoteNotificacaoResponsavelPonto({
   nome,
   email,
@@ -359,7 +386,20 @@ async function enviarPacoteNotificacaoResponsavelPonto({
       ? usuarioIdDireto
       : await resolverUsuarioId(responsavelRow || { email, usuario: null });
 
-  const telefoneNormWhatsapp = normalizarTelefoneWhatsapp(telefone);
+  const telValidacao = validarTelefoneWhatsappBrasil(telefone);
+  const telefoneNormWhatsapp = telValidacao.ok ? telValidacao.e164 : null;
+  const aviso_whatsapp_cadastro =
+    telefone && String(telefone).trim() !== '' && !telValidacao.ok ? telValidacao.mensagem : null;
+
+  if (aviso_whatsapp_cadastro) {
+    void notificarFuncionarioAvisoTelefoneResponsavel(registro, funcionario, nome, aviso_whatsapp_cadastro).catch((e) =>
+      console.error('[notificacoes-ponto] Erro ao enviar aviso ao funcionário (telefone responsável):', e.message)
+    );
+  }
+
+  /** Resultado do envio Web Push (VAPID + pwa_push_subscriptions) — null se não houve usuario_id */
+  let pushWebResultado = null;
+
   const loginResponsavelObra = responsavelRow?.usuario != null ? String(responsavelRow.usuario).trim() : '';
 
   console.log(
@@ -419,7 +459,7 @@ async function enviarPacoteNotificacaoResponsavelPonto({
     }
 
     try {
-      const pushResultado = await withTimeout(
+      pushWebResultado = await withTimeout(
         enviarPushParaUsuario(usuarioId, {
           title: 'Ponto pendente de assinatura',
           body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
@@ -435,10 +475,11 @@ async function enviarPacoteNotificacaoResponsavelPonto({
         '[notificacoes-ponto] Push web (PWA) para usuario_id=%s registro=%s → %s',
         usuarioId,
         registro?.id,
-        JSON.stringify(pushResultado)
+        JSON.stringify(pushWebResultado)
       );
     } catch (e) {
       console.warn('[notificacoes-ponto] Push falhou ou timeout:', e.message);
+      pushWebResultado = { erro: e.message, mensagem_usuario: `Timeout ou erro no push: ${e.message}` };
     }
   }
 
@@ -512,7 +553,9 @@ async function enviarPacoteNotificacaoResponsavelPonto({
       email: Boolean(email),
       whatsapp: Boolean(telefoneNormWhatsapp),
       notificacao_app_e_push: Boolean(usuarioId)
-    }
+    },
+    aviso_whatsapp_cadastro: aviso_whatsapp_cadastro || null,
+    push_web: pushWebResultado
   };
 }
 
@@ -599,7 +642,38 @@ async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, o
     );
   }
 
-  const telNorm = normalizarTelefoneWhatsapp(telefoneFunc);
+  const telVal = validarTelefoneWhatsappBrasil(telefoneFunc);
+  const telNorm = telVal.ok ? telVal.e164 : null;
+  const aviso_whatsapp_cadastro =
+    telefoneFunc && String(telefoneFunc).trim() !== '' && !telVal.ok ? telVal.mensagem : null;
+
+  if (aviso_whatsapp_cadastro && usuarioIdFunc) {
+    const agoraAviso = new Date().toISOString();
+    const { data: notifAviso } = await supabaseAdmin
+      .from('notificacoes')
+      .insert({
+        usuario_id: usuarioIdFunc,
+        tipo: 'warning',
+        titulo: 'Telefone incompleto no seu cadastro',
+        mensagem: `WhatsApp não foi enviado: ${aviso_whatsapp_cadastro} Atualize seu telefone ou avise o RH/administrador.`,
+        link: `/pwa/espelho-ponto`,
+        lida: false,
+        remetente: 'Sistema',
+        destinatarios: [],
+        data: agoraAviso,
+        created_at: agoraAviso
+      })
+      .select()
+      .single();
+    if (notifAviso) {
+      try {
+        emitirNotificacao(usuarioIdFunc, notifAviso);
+      } catch (e) {
+        /* websocket offline */
+      }
+    }
+  }
+
   if (telNorm) {
     const msg = `✅ *Ponto registrado*\n\n${nomeFunc ? `Olá ${nomeFunc}! ` : ''}Seu dia ${formatarData(registro.data)} na obra *${obraNome || 'N/A'}* foi enviado para assinatura do responsável.\n${linkEspelho}`;
     void withTimeout(
@@ -618,15 +692,18 @@ async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, o
         )
       )
       .catch((e) => console.error('[notificacoes-ponto] Erro/timeout WhatsApp funcionário:', e.message));
+  } else if (!telefoneFunc || !String(telefoneFunc).trim()) {
+    console.log('[notificacoes-ponto] Funcionário sem telefone cadastrado — WhatsApp não enviado (confirmação)');
   } else {
-    console.log('[notificacoes-ponto] Funcionário sem telefone para WhatsApp (confirmação) — só app/in-app se houver usuário');
+    console.log('[notificacoes-ponto] Funcionário com telefone inválido — WhatsApp não enviado (aviso in-app se houver usuário)');
   }
 
   return {
     ok: true,
     funcionario_id: fid,
     usuario_id: usuarioIdFunc || null,
-    whatsapp_numero_normalizado: telNorm || null
+    whatsapp_numero_normalizado: telNorm || null,
+    aviso_whatsapp_cadastro: aviso_whatsapp_cadastro || null
   };
 }
 
@@ -761,6 +838,25 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
       console.error('[notificacoes-ponto] Erro ao notificar funcionário (confirmação):', err.message);
     }
 
+    /** @type {Array<{ tipo: string, nome: string|null, mensagem: string }>} */
+    const avisos_telefone_cadastro = [];
+    for (const d of destinatarios) {
+      if (d.aviso_whatsapp_cadastro) {
+        avisos_telefone_cadastro.push({
+          tipo: 'responsavel_obra',
+          nome: typeof d.nome === 'string' ? d.nome : null,
+          mensagem: d.aviso_whatsapp_cadastro
+        });
+      }
+    }
+    if (funcionario_confirmacao?.aviso_whatsapp_cadastro) {
+      avisos_telefone_cadastro.push({
+        tipo: 'funcionario',
+        nome: null,
+        mensagem: funcionario_confirmacao.aviso_whatsapp_cadastro
+      });
+    }
+
     const resumo = {
       ok: true,
       obra_id: obraId,
@@ -769,6 +865,7 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
       quantidade_destinatarios: destinatarios.length,
       destinatarios,
       funcionario_confirmacao,
+      avisos_telefone_cadastro,
       onde_ver_logs_servidor:
         'Terminal do backend (Node). No navegador só aparecem estes dados se a API os devolver no JSON (campo destinatarios).'
     };
@@ -1213,8 +1310,30 @@ async function resolverObraIdParaNotificacao(registro, funcionario) {
 }
 
 async function enviarPushParaUsuario(usuarioId, payload) {
-  if (!usuarioId) return { configurado: isWebPushConfigured(), subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
-  if (!isWebPushConfigured()) return { configurado: false, subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
+  const baseVazio = {
+    configurado: isWebPushConfigured(),
+    subscriptions_ativas: 0,
+    enviados: 0,
+    falhas: 0,
+    desativados: 0,
+    mensagem_usuario: null
+  };
+
+  if (!usuarioId) {
+    return { ...baseVazio, mensagem_usuario: 'Sem usuario_id vinculado ao responsável — in-app/push não enviados.' };
+  }
+
+  if (!isWebPushConfigured()) {
+    console.warn(
+      '[notificacoes-ponto] Push: WEB_PUSH_VAPID_PUBLIC_KEY / PRIVATE_KEY / SUBJECT ausentes no .env — push desativado no servidor.'
+    );
+    return {
+      ...baseVazio,
+      configurado: false,
+      mensagem_usuario:
+        'Push não configurado no servidor (defina WEB_PUSH_VAPID_SUBJECT, WEB_PUSH_VAPID_PUBLIC_KEY e WEB_PUSH_VAPID_PRIVATE_KEY no backend).'
+    };
+  }
 
   try {
     const { data: subscriptions } = await supabaseAdmin
@@ -1224,7 +1343,19 @@ async function enviarPushParaUsuario(usuarioId, payload) {
       .eq('is_active', true);
 
     if (!subscriptions || subscriptions.length === 0) {
-      return { configurado: true, subscriptions_ativas: 0, enviados: 0, falhas: 0, desativados: 0 };
+      console.warn(
+        '[notificacoes-ponto] Push: nenhuma subscription ativa em pwa_push_subscriptions para user_id=%s — abra o PWA logado como este usuário e permita notificações.',
+        String(usuarioId)
+      );
+      return {
+        configurado: true,
+        subscriptions_ativas: 0,
+        enviados: 0,
+        falhas: 0,
+        desativados: 0,
+        mensagem_usuario:
+          'Nenhum dispositivo inscrito para notificações push. No celular: abra o PWA (sistemairbana.com.br/pwa), faça login como responsável e ative as notificações do navegador.'
+      };
     }
 
     let enviados = 0;
@@ -1250,15 +1381,41 @@ async function enviarPushParaUsuario(usuarioId, payload) {
         }
       }
     }
+
+    const mensagemUsuario =
+      enviados > 0
+        ? null
+        : falhas > 0
+          ? 'Push não entregue (assinatura expirada ou navegador revogou). Abra o PWA e permita notificações de novo.'
+          : 'Nenhuma entrega push.';
+
+    if (enviados === 0) {
+      console.warn(
+        '[notificacoes-ponto] Push: 0 enviados para user_id=%s (falhas=%s, desativados=%s)',
+        String(usuarioId),
+        falhas,
+        desativados
+      );
+    }
+
     return {
       configurado: true,
       subscriptions_ativas: subscriptions.length,
       enviados,
       falhas,
-      desativados
+      desativados,
+      mensagem_usuario: mensagemUsuario
     };
   } catch (error) {
     console.error('[notificacoes-ponto] Erro ao enviar push:', error.message);
-    return { configurado: true, subscriptions_ativas: 0, enviados: 0, falhas: 1, desativados: 0, erro: error.message };
+    return {
+      configurado: true,
+      subscriptions_ativas: 0,
+      enviados: 0,
+      falhas: 1,
+      desativados: 0,
+      erro: error.message,
+      mensagem_usuario: `Erro ao enviar push: ${error.message}`
+    };
   }
 }

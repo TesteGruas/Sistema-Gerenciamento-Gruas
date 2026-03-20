@@ -385,6 +385,29 @@ export default function PWAPontoPage() {
     try {
       setNotificandoResponsaveis(true)
       const res = await pontoApi.notificarResponsaveisRegistro(registroIdHoje)
+      const avisosTel = res.data?.notificacao?.avisos_telefone_cadastro
+      if (avisosTel && avisosTel.length > 0) {
+        toast({
+          title: 'WhatsApp não enviado — cadastro de telefone',
+          description: avisosTel
+            .map((a) => `${a.nome ? `${a.nome}: ` : ''}${a.mensagem}`)
+            .join(' · '),
+          variant: 'destructive'
+        })
+      }
+      const dests = res.data?.notificacao?.destinatarios
+      if (dests?.length) {
+        for (const d of dests) {
+          const pushMsg = d.push_web?.mensagem_usuario
+          if (pushMsg) {
+            toast({
+              title: 'Notificação push (PWA)',
+              description: pushMsg,
+              variant: 'destructive'
+            })
+          }
+        }
+      }
       toast({
         title: 'Notificação',
         description: res.message || 'Solicitação enviada aos responsáveis da obra.'
