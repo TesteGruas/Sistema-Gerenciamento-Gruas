@@ -2,6 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { AuthService } from '@/app/lib/auth'
+import { decodeJwtPayload } from '@/lib/jwt-decode-client'
 
 interface User {
   id: string
@@ -57,8 +58,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
         try {
           const tokenParts = token.split('.')
           if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]))
-            if (payload.exp) {
+            const payload = decodeJwtPayload<{ exp?: number }>(token)
+            if (payload?.exp) {
               const isExpired = payload.exp * 1000 < Date.now()
               if (isExpired) {
                 // Token expirado, limpar e não fazer requisição

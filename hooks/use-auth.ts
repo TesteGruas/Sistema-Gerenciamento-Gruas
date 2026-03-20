@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { decodeJwtPayload, normalizeAccessToken } from "@/lib/jwt-decode-client"
 
 interface User {
   id: string
@@ -63,32 +64,81 @@ export function useAuth() {
         return
       }
       
-      const token = localStorage.getItem('access_token')
-        
+      const rawToken = localStorage.getItem('access_token')
+      const token = normalizeAccessToken(rawToken)
+      if (token && rawToken != null && token !== rawToken.trim()) {
+        localStorage.setItem('access_token', token)
+      }
+
         if (token) {
           // Buscar dados salvos no localStorage
           const userProfile = localStorage.getItem('user_profile')
           const userPerfil = localStorage.getItem('user_perfil')
           const userPermissoes = localStorage.getItem('user_permissoes')
           
-          // Decodificar token JWT para obter informações do usuário
+          // Decodificar token JWT (Base64URL no payload — não usar atob direto no segmento bruto)
           try {
-            const payload = JSON.parse(atob(token.split('.')[1]))
-            
-            // Parsear dados salvos
-            const perfil: Perfil | null = userPerfil ? JSON.parse(userPerfil) : null
-            const permissoes: Permissao[] = userPermissoes ? JSON.parse(userPermissoes) : []
-            
-            // Obter role do perfil ou do payload
-            const role = perfil?.nome || payload.role || payload.user_metadata?.role
-            
-            const user: User = {
-              id: payload.sub || payload.user_id,
-              email: payload.email,
-              nome: payload.user_metadata?.nome || payload.name,
-              role: role // Role vem do perfil (Admin, Gestores, Supervisores, Operários, Clientes)
+            const payload = decodeJwtPayload<{
+              sub?: string
+              user_id?: string
+              email?: string
+              role?: string
+              name?: string
+              user_metadata?: { nome?: string; role?: string }
+            }>(token)
+
+            let perfil: Perfil | null = null
+            let permissoes: Permissao[] = []
+            try {
+              perfil = userPerfil ? JSON.parse(userPerfil) : null
+            } catch {
+              perfil = null
             }
-            
+            try {
+              permissoes = userPermissoes ? JSON.parse(userPermissoes) : []
+            } catch {
+              permissoes = []
+            }
+
+            let user: User | null = null
+
+            if (payload) {
+              const role = perfil?.nome || payload.role || payload.user_metadata?.role
+              user = {
+                id: String(payload.sub || payload.user_id || ''),
+                email: String(payload.email || ''),
+                nome: payload.user_metadata?.nome || payload.name,
+                role
+              }
+            } else {
+              // Token opaco ou formato inesperado: usar user_data salvo no login
+              const raw = localStorage.getItem('user_data')
+              if (raw) {
+                try {
+                  const ud = JSON.parse(raw) as {
+                    id?: string | number
+                    email?: string
+                    user_metadata?: { nome?: string }
+                  }
+                  const role = perfil?.nome || localStorage.getItem('user_role') || undefined
+                  user = {
+                    id: String(ud.id ?? ''),
+                    email: String(ud.email ?? ''),
+                    nome: ud.user_metadata?.nome,
+                    role
+                  }
+                } catch {
+                  user = null
+                }
+              }
+            }
+
+            if (!user || !user.id) {
+              console.warn('[useAuth] Token sem payload decodificável e sem user_data — encerrando sessão')
+              logout()
+              return
+            }
+
             setAuthState({
               isAuthenticated: true,
               user,

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Smartphone, Lock } from "lucide-react"
+import { decodeJwtPayload } from "@/lib/jwt-decode-client"
 
 interface PWAAuthGuardProps {
   children: React.ReactNode
@@ -159,13 +160,13 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       localStorage.removeItem('loop_detected')
 
       // Verificar se o token está expirado
-      try {
-        const tokenParts = token.split('.')
-        if (tokenParts.length === 3) {
-          try {
-            const payload = JSON.parse(atob(tokenParts[1]))
-            if (payload.exp) {
-              const isExpired = payload.exp * 1000 < Date.now()
+        try {
+          const tokenParts = token.split('.')
+          if (tokenParts.length === 3) {
+            try {
+              const payload = decodeJwtPayload<{ exp?: number }>(token)
+              if (payload?.exp) {
+                const isExpired = payload.exp * 1000 < Date.now()
               
               // Se token expirado, sempre deslogar e ir para login
               if (isExpired) {

@@ -27,6 +27,7 @@ import {
   CheckCircle,
   Calculator
 } from "lucide-react"
+import { decodeJwtPayload } from "@/lib/jwt-decode-client"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import { PWAAuthGuard } from "@/components/pwa-auth-guard"
@@ -390,8 +391,8 @@ function PWALayoutContent({ children }: PWALayoutProps) {
         try {
           const tokenParts = token.split('.')
           if (tokenParts.length === 3) {
-            const payload = JSON.parse(atob(tokenParts[1]))
-            if (payload.exp) {
+            const payload = decodeJwtPayload<{ exp?: number }>(token)
+            if (payload?.exp) {
               const isExpired = payload.exp * 1000 < Date.now()
               if (isExpired) {
                 // Token expirado, continuar para contar apenas notificações locais

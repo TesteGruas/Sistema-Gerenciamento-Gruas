@@ -3,7 +3,59 @@ import { fileURLToPath } from 'url';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const LOCAL_API_ORIGIN = 'http://localhost:3001';
+/** Destino do proxy /api → backend (dev). Sobrescreva com BACKEND_URL se necessário. */
+const LOCAL_API_ORIGIN = (process.env.BACKEND_URL || 'http://localhost:3001')
+  .trim()
+  .replace(/\/+$/, '')
+  .replace(/\/api\/?$/, '');
+
+/**
+ * Evita loop: em dev, NEXT_PUBLIC_* às vezes aponta por engano para a porta do Next (3000).
+ */
+function shouldForceLocalBackend(apiUrl) {
+  if (process.env.NODE_ENV === 'production') return false;
+  try {
+    const u = new URL(apiUrl);
+    const port = u.port || (u.protocol === 'https:' ? '443' : '80');
+    const isLocal =
+      u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '::1';
+    if (!isLocal) return false;
+    // Next dev padrão — não é o backend Express
+    if (port === '3000') return true;
+    if ((port === '80' || port === '443') && (u.hostname === 'localhost' || u.hostname === '127.0.0.1')) {
+      // http://localhost sem porta explícita → 80, não é o backend típico
+      return false;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function resolveRewriteApiOrigin() {
+  const explicit = (process.env.BACKEND_URL || process.env.API_REWRITE_ORIGIN || '').trim();
+  if (explicit) {
+    return explicit.replace(/\/+$/, '').replace(/\/api\/?$/, '');
+  }
+
+  const fromEnv =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_URL ||
+    '';
+  const sanitized = fromEnv.trim().replace(/\/api\/?$/, '');
+  const isRelative = sanitized.startsWith('/');
+  let apiUrl = isRelative ? LOCAL_API_ORIGIN : sanitized || LOCAL_API_ORIGIN;
+
+  if (shouldForceLocalBackend(apiUrl)) {
+    console.warn(
+      '[Next.js Rewrite] NEXT_PUBLIC_API_* aponta para a porta do frontend; redirecionando API para',
+      LOCAL_API_ORIGIN
+    );
+    return LOCAL_API_ORIGIN;
+  }
+
+  return apiUrl;
+}
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -168,17 +220,9 @@ const nextConfig = {
   // 🔀 REWRITES (Proxy da API)
   // ==================================
   async rewrites() {
-    const fromEnv =
-      process.env.NEXT_PUBLIC_API_BASE_URL ||
-      process.env.NEXT_PUBLIC_API_URL ||
-      '';
-    const sanitized = fromEnv.trim().replace(/\/api\/?$/, '');
-    const isRelative = sanitized.startsWith('/');
-    const apiUrl = isRelative
-      ? LOCAL_API_ORIGIN
-      : (sanitized || LOCAL_API_ORIGIN);
+    const apiUrl = resolveRewriteApiOrigin();
     if (process.env.NODE_ENV !== 'production') {
-      console.log('[Next.js Rewrite] API origin:', apiUrl);
+      console.log('[Next.js Rewrite] /api →', `${apiUrl}/api/*`);
     }
 
     return [

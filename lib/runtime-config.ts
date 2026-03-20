@@ -26,8 +26,10 @@ export function getApiOrigin(): string {
     return configured.replace(/\/api\/?$/, "")
   }
 
+  // Sem URL absoluta: usar caminho relativo `/api` (proxy do Next → backend em dev).
+  // Evita montar `http://localhost:3000/api` quando o backend está em outra porta.
   if (typeof window !== "undefined") {
-    return window.location.origin
+    return ""
   }
 
   return ""
