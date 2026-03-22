@@ -532,16 +532,20 @@ router.get('/registros', async (req, res) => {
       });
     }
 
-    // Filtro por obra (através do funcionário) - suporta múltiplos IDs separados por vírgula
+    // Filtro por obra: usa obra_id do registro (ponto na obra) OU obra_atual_id do funcionário (legado)
     if (obra_id) {
-      const obraIds = obra_id.toString().split(',').map(id => parseInt(id.trim())).filter(id => !isNaN(id));
+      const obraIds = obra_id.toString().split(',').map((id) => parseInt(id.trim(), 10)).filter((id) => !isNaN(id));
+      const registroNaObra = (registro, oid) => {
+        const rid = registro.obra_id != null ? Number(registro.obra_id) : null;
+        const fid = registro.funcionario?.obra_atual_id != null ? Number(registro.funcionario.obra_atual_id) : null;
+        return rid === oid || fid === oid;
+      };
       if (obraIds.length === 1) {
-        filteredData = filteredData.filter(registro => 
-          registro.funcionario?.obra_atual_id === obraIds[0]
-        );
+        const oid = obraIds[0];
+        filteredData = filteredData.filter((registro) => registroNaObra(registro, oid));
       } else if (obraIds.length > 1) {
-        filteredData = filteredData.filter(registro => 
-          obraIds.includes(registro.funcionario?.obra_atual_id)
+        filteredData = filteredData.filter((registro) =>
+          obraIds.some((oid) => registroNaObra(registro, oid))
         );
       }
     }
@@ -748,6 +752,7 @@ router.get('/registros/estatisticas', async (req, res) => {
       .from('registros_ponto')
       .select(`
         id,
+        obra_id,
         horas_trabalhadas,
         horas_extras,
         status,
@@ -783,11 +788,16 @@ router.get('/registros/estatisticas', async (req, res) => {
 
     let filteredData = data || [];
 
-    // Aplicar filtros adicionais por relacionamento
+    // Aplicar filtros adicionais por relacionamento (mesma regra do GET /registros)
     if (obra_id) {
-      filteredData = filteredData.filter(registro => 
-        registro.funcionario?.obra_atual_id === parseInt(obra_id)
-      );
+      const oid = parseInt(obra_id, 10);
+      if (!isNaN(oid)) {
+        filteredData = filteredData.filter((registro) => {
+          const rid = registro.obra_id != null ? Number(registro.obra_id) : null;
+          const fid = registro.funcionario?.obra_atual_id != null ? Number(registro.funcionario.obra_atual_id) : null;
+          return rid === oid || fid === oid;
+        });
+      }
     }
 
     if (cargo) {
@@ -854,7 +864,12 @@ router.get('/registros/estatisticas', async (req, res) => {
 
     // Agrupar por obra
     filteredData.forEach(registro => {
-      const obraId = registro.funcionario?.obra_atual_id || 'Sem obra';
+      const obraId =
+        registro.obra_id != null
+          ? registro.obra_id
+          : registro.funcionario?.obra_atual_id != null
+            ? registro.funcionario.obra_atual_id
+            : 'Sem obra';
       
       if (!estatisticas.por_obra[obraId]) {
         estatisticas.por_obra[obraId] = {
