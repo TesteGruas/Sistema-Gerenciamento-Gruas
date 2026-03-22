@@ -1034,7 +1034,7 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
 
 /**
  * Notifica o funcionário quando o responsável assina seu registro.
- * Envia: email + WhatsApp + notificação in-app
+ * Envia: email + WhatsApp + notificação in-app + push PWA (quando houver usuário e subscription)
  */
 export async function notificarFuncionarioPontoAssinado(registro, funcionario, responsavel) {
   const baseUrl = FRONTEND_URL();
@@ -1042,18 +1042,36 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
   const responsavelNome = responsavel?.nome || 'Responsável';
 
   try {
-    // Buscar email e telefone do funcionário
-    const { data: funcData } = await supabaseAdmin
+    const fid =
+      funcionario?.id || funcionario?.funcionario_id || registro?.funcionario_id;
+
+    if (!fid) {
+      console.warn('[notificacoes-ponto] notificarFuncionarioPontoAssinado: sem funcionario_id — ignorado');
+      return;
+    }
+
+    const { data: funcData, error: errFunc } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome, email, telefone_whatsapp, telefone')
-      .eq('id', funcionario.id || funcionario.funcionario_id || registro.funcionario_id)
-      .single();
+      .eq('id', fid)
+      .maybeSingle();
 
-    const emailFunc = funcData?.email;
+    if (errFunc) {
+      console.error('[notificacoes-ponto] Erro ao buscar funcionário (assinatura responsável):', errFunc.message);
+    }
+
+    const emailFunc = funcData?.email || null;
     const telefoneFunc = normalizarTelefoneWhatsapp(funcData?.telefone_whatsapp || funcData?.telefone);
-    const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(
-      funcData?.id || funcionario.id || funcionario.funcionario_id || registro.funcionario_id
-    );
+
+    let usuarioIdFunc = await resolverUsuarioIdPorFuncionario(fid);
+    if (!usuarioIdFunc && emailFunc) {
+      usuarioIdFunc = await buscarUsuarioIdPorEmail(emailFunc);
+      if (usuarioIdFunc) {
+        console.log(
+          '[notificacoes-ponto] Assinatura responsável: usuario_id do funcionário resolvido por email (fallback usuarios.email)'
+        );
+      }
+    }
 
     // 1) Email
     if (emailFunc) {
@@ -1085,9 +1103,10 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
       ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp funcionário:', e.message));
     }
 
-    // 3) Notificação in-app
+    // 3) Notificação in-app + push (mesmo fluxo que “ponto enviado ao responsável”)
     if (usuarioIdFunc) {
-      const { data: notif } = await supabaseAdmin
+      const agora = new Date().toISOString();
+      const { data: notif, error: errNotif } = await supabaseAdmin
         .from('notificacoes')
         .insert({
           usuario_id: usuarioIdFunc,
@@ -1096,17 +1115,55 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
           mensagem: `${responsavelNome} assinou seu registro de ${formatarData(registro.data)}. Acesse o app para assinar também.`,
           link: `/pwa/aprovacao-assinatura?id=${registro.id}`,
           lida: false,
-          created_at: new Date().toISOString()
+          created_at: agora
         })
         .select()
         .single();
 
-      if (notif) {
-        try { emitirNotificacao(usuarioIdFunc, notif); } catch (e) { /* websocket offline */ }
+      if (errNotif) {
+        console.error(
+          '[notificacoes-ponto] Erro ao inserir notificação (assinatura responsável):',
+          errNotif.message
+        );
       }
+
+      if (notif) {
+        try {
+          emitirNotificacao(usuarioIdFunc, notif);
+        } catch (e) {
+          /* websocket offline */
+        }
+      }
+
+      try {
+        const pushResultado = await withTimeout(
+          enviarPushParaUsuario(usuarioIdFunc, {
+            title: 'Assine seu ponto',
+            body: `${responsavelNome} assinou seu registro de ${formatarData(registro.data)}. Toque para abrir e assinar.`,
+            ...pushPwaRelativo({ path: `/pwa/aprovacao-assinatura?id=${registro.id}` }),
+            tag: `ponto-func-assinar-${registro.id}`
+          }),
+          MS_TIMEOUT_PUSH,
+          'push_funcionario_assinatura_resp'
+        );
+        console.log(
+          '[notificacoes-ponto] Push ao funcionário (assinatura responsável) usuario_id=%s → %s',
+          usuarioIdFunc,
+          JSON.stringify(pushResultado)
+        );
+      } catch (e) {
+        console.warn('[notificacoes-ponto] Push funcionário (assinatura responsável) falhou ou timeout:', e.message);
+      }
+    } else {
+      console.warn(
+        '[notificacoes-ponto] Funcionário id=%s sem usuario_id (cadastre usuarios.funcionario_id ou use o mesmo email do colaborador no login) — in-app/push não enviados. Email/WhatsApp seguem se configurados.',
+        fid
+      );
     }
 
-    console.log(`[notificacoes-ponto] Funcionário ${funcData?.nome || registro.funcionario_id} notificado sobre assinatura do responsável`);
+    console.log(
+      `[notificacoes-ponto] Funcionário ${funcData?.nome || fid} notificado sobre assinatura do responsável (canais conforme cadastro)`
+    );
   } catch (e) {
     console.error('[notificacoes-ponto] Erro ao notificar funcionário:', e);
   }
@@ -1122,17 +1179,36 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
   const responsavelNome = responsavel?.nome || 'Responsável';
 
   try {
-    const { data: funcData } = await supabaseAdmin
+    const fid =
+      funcionario?.id || funcionario?.funcionario_id || registro?.funcionario_id;
+
+    if (!fid) {
+      console.warn('[notificacoes-ponto] notificarFuncionarioPontoRejeitado: sem funcionario_id — ignorado');
+      return;
+    }
+
+    const { data: funcData, error: errFunc } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome, email, telefone_whatsapp, telefone')
-      .eq('id', funcionario.id || funcionario.funcionario_id || registro.funcionario_id)
-      .single();
+      .eq('id', fid)
+      .maybeSingle();
 
-    const emailFunc = funcData?.email;
+    if (errFunc) {
+      console.error('[notificacoes-ponto] Erro ao buscar funcionário (rejeição):', errFunc.message);
+    }
+
+    const emailFunc = funcData?.email || null;
     const telefoneFunc = funcData?.telefone_whatsapp || funcData?.telefone;
-    const usuarioIdFunc = await resolverUsuarioIdPorFuncionario(
-      funcData?.id || funcionario.id || funcionario.funcionario_id || registro.funcionario_id
-    );
+
+    let usuarioIdFunc = await resolverUsuarioIdPorFuncionario(fid);
+    if (!usuarioIdFunc && emailFunc) {
+      usuarioIdFunc = await buscarUsuarioIdPorEmail(emailFunc);
+      if (usuarioIdFunc) {
+        console.log(
+          '[notificacoes-ponto] Rejeição: usuario_id do funcionário resolvido por email (fallback usuarios.email)'
+        );
+      }
+    }
 
     // 1) Email
     if (emailFunc) {
@@ -1165,9 +1241,10 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
       ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp rejeição:', e.message));
     }
 
-    // 3) Notificação in-app
+    // 3) Notificação in-app + push
     if (usuarioIdFunc) {
-      const { data: notif } = await supabaseAdmin
+      const agora = new Date().toISOString();
+      const { data: notif, error: errNotif } = await supabaseAdmin
         .from('notificacoes')
         .insert({
           usuario_id: usuarioIdFunc,
@@ -1176,17 +1253,52 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
           mensagem: `${responsavelNome} não concordou com seu registro de ${formatarData(registro.data)}. Motivo: ${comentario || 'Sem comentário'}. Corrija as horas no app.`,
           link: `/pwa/aprovacoes`,
           lida: false,
-          created_at: new Date().toISOString()
+          created_at: agora
         })
         .select()
         .single();
 
-      if (notif) {
-        try { emitirNotificacao(usuarioIdFunc, notif); } catch (e) { /* websocket offline */ }
+      if (errNotif) {
+        console.error('[notificacoes-ponto] Erro ao inserir notificação (rejeição):', errNotif.message);
       }
+
+      if (notif) {
+        try {
+          emitirNotificacao(usuarioIdFunc, notif);
+        } catch (e) {
+          /* websocket offline */
+        }
+      }
+
+      try {
+        const pushResultado = await withTimeout(
+          enviarPushParaUsuario(usuarioIdFunc, {
+            title: 'Ponto não aprovado',
+            body: `${responsavelNome} pediu correção no seu registro de ${formatarData(registro.data)}.`,
+            ...pushPwaRelativo({ path: '/pwa/aprovacoes' }),
+            tag: `ponto-func-rejeicao-${registro.id}`
+          }),
+          MS_TIMEOUT_PUSH,
+          'push_funcionario_rejeicao'
+        );
+        console.log(
+          '[notificacoes-ponto] Push ao funcionário (rejeição) usuario_id=%s → %s',
+          usuarioIdFunc,
+          JSON.stringify(pushResultado)
+        );
+      } catch (e) {
+        console.warn('[notificacoes-ponto] Push funcionário (rejeição) falhou ou timeout:', e.message);
+      }
+    } else {
+      console.warn(
+        '[notificacoes-ponto] Funcionário id=%s sem usuario_id — in-app/push não enviados (rejeição).',
+        fid
+      );
     }
 
-    console.log(`[notificacoes-ponto] Funcionário ${funcData?.nome || registro.funcionario_id} notificado sobre rejeição do responsável`);
+    console.log(
+      `[notificacoes-ponto] Funcionário ${funcData?.nome || fid} notificado sobre rejeição do responsável`
+    );
   } catch (e) {
     console.error('[notificacoes-ponto] Erro ao notificar funcionário (rejeição):', e);
   }

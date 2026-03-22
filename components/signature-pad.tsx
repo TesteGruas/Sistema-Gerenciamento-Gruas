@@ -4,15 +4,29 @@ import { useRef, useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { RotateCcw, Check, X } from "lucide-react"
+import { cn } from "@/lib/utils"
 
 interface SignaturePadProps {
   onSave: (signatureDataUrl: string) => void
   onCancel: () => void
   title?: string
   description?: string
+  /** PWA / telas estreitas: sem Card extra, botões em coluna, área de desenho maior */
+  compact?: boolean
+  className?: string
+  /** Texto do botão que aplica a assinatura ao estado pai (ex.: diferente do CTA final “Enviar”) */
+  applyLabel?: string
 }
 
-export function SignaturePad({ onSave, onCancel, title, description }: SignaturePadProps) {
+export function SignaturePad({
+  onSave,
+  onCancel,
+  title,
+  description,
+  compact = false,
+  className,
+  applyLabel
+}: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
@@ -31,11 +45,11 @@ export function SignaturePad({ onSave, onCancel, title, description }: Signature
 
       const rect = container.getBoundingClientRect()
       canvas.width = rect.width
-      canvas.height = 200
+      canvas.height = compact ? 220 : 200
 
       // Configurar estilo de desenho
       ctx.strokeStyle = "#000000"
-      ctx.lineWidth = 2
+      ctx.lineWidth = compact ? 2.5 : 2
       ctx.lineCap = "round"
       ctx.lineJoin = "round"
     }
@@ -44,7 +58,7 @@ export function SignaturePad({ onSave, onCancel, title, description }: Signature
     window.addEventListener("resize", resizeCanvas)
 
     return () => window.removeEventListener("resize", resizeCanvas)
-  }, [])
+  }, [compact])
 
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
@@ -104,13 +118,15 @@ export function SignaturePad({ onSave, onCancel, title, description }: Signature
     onSave(dataUrl)
   }
 
-  return (
-    <Card className="p-6 space-y-4">
+  const canvasH = compact ? 220 : 200
+  const applyText = applyLabel || "Confirmar Assinatura"
+
+  const inner = (
+    <>
       {title && <h3 className="text-lg font-semibold text-gray-900">{title}</h3>}
       {description && <p className="text-sm text-gray-600">{description}</p>}
 
-      {/* Canvas de Assinatura */}
-      <div className="relative">
+      <div className="relative rounded-xl overflow-hidden bg-white ring-1 ring-gray-200">
         <canvas
           ref={canvasRef}
           onMouseDown={startDrawing}
@@ -120,46 +136,77 @@ export function SignaturePad({ onSave, onCancel, title, description }: Signature
           onTouchStart={startDrawing}
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
-          className="w-full border-2 border-dashed border-gray-300 rounded-lg bg-white touch-none cursor-crosshair"
-          style={{ height: "200px" }}
+          className={cn(
+            "w-full touch-none cursor-crosshair bg-white",
+            compact
+              ? "border-0 rounded-xl"
+              : "border-2 border-dashed border-gray-300 rounded-lg"
+          )}
+          style={{ height: `${canvasH}px` }}
         />
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-gray-400 text-sm">Assine aqui</p>
+            <p className="text-gray-400 text-sm font-medium">Assine aqui</p>
           </div>
         )}
       </div>
 
-      {/* Botões */}
-      <div className="flex gap-2 justify-end">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={clearSignature}
-          disabled={!hasSignature}
-        >
-          <RotateCcw className="w-4 h-4 mr-2" />
-          Limpar
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onCancel}
-        >
-          <X className="w-4 h-4 mr-2" />
-          Cancelar
-        </Button>
-        <Button
-          size="sm"
-          onClick={saveSignature}
-          disabled={!hasSignature}
-          className="bg-green-600 hover:bg-green-700"
-        >
-          <Check className="w-4 h-4 mr-2" />
-          Confirmar Assinatura
-        </Button>
-      </div>
-    </Card>
+      {compact ? (
+        <div className="flex flex-col gap-2.5 pt-1">
+          <Button
+            type="button"
+            className="w-full h-11 text-base font-semibold bg-green-600 hover:bg-green-700"
+            onClick={saveSignature}
+            disabled={!hasSignature}
+          >
+            <Check className="w-5 h-5 mr-2 shrink-0" />
+            {applyText}
+          </Button>
+          <div className="grid grid-cols-2 gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="h-10"
+              onClick={clearSignature}
+              disabled={!hasSignature}
+            >
+              <RotateCcw className="w-4 h-4 mr-1.5 shrink-0" />
+              Limpar
+            </Button>
+            <Button type="button" variant="outline" className="h-10" onClick={onCancel}>
+              <X className="w-4 h-4 mr-1.5 shrink-0" />
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-wrap gap-2 justify-end">
+          <Button variant="outline" size="sm" onClick={clearSignature} disabled={!hasSignature}>
+            <RotateCcw className="w-4 h-4 mr-2" />
+            Limpar
+          </Button>
+          <Button variant="outline" size="sm" onClick={onCancel}>
+            <X className="w-4 h-4 mr-2" />
+            Cancelar
+          </Button>
+          <Button
+            size="sm"
+            onClick={saveSignature}
+            disabled={!hasSignature}
+            className="bg-green-600 hover:bg-green-700"
+          >
+            <Check className="w-4 h-4 mr-2" />
+            {applyText}
+          </Button>
+        </div>
+      )}
+    </>
   )
+
+  if (compact) {
+    return <div className={cn("space-y-3", className)}>{inner}</div>
+  }
+
+  return <Card className={cn("p-6 space-y-4", className)}>{inner}</Card>
 }
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, Suspense } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -348,6 +348,9 @@ function PWAAprovacaoAssinaturaPageContent() {
     );
   }
 
+  const showBottomActionsBar =
+    !isPendenteCorrecao && aprovacaoSelecionada.status !== 'Aprovado';
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
@@ -367,7 +370,11 @@ function PWAAprovacaoAssinaturaPageContent() {
         </p>
       </div>
 
-      <div className="px-2 py-1 space-y-2">
+      <div
+        className={`px-2 py-1 space-y-2 max-w-lg mx-auto w-full ${
+          showBottomActionsBar ? 'pb-[calc(11rem+env(safe-area-inset-bottom,0px))]' : 'pb-6'
+        }`}
+      >
         {/* Alerta de rejeição (quando o registro foi rejeitado) */}
         {isPendenteCorrecao && aprovacaoSelecionada.observacoes && (
           <Card className="border-red-300 bg-red-50">
@@ -528,45 +535,50 @@ function PWAAprovacaoAssinaturaPageContent() {
         {/* Componente de Assinatura (escondido se pendente correção) */}
         {!isPendenteCorrecao && (
           <Card className="border-0 shadow-none">
-            <CardHeader className="pb-1 px-3 pt-3">
+            <CardHeader className="pb-1 px-3 pt-3 space-y-1">
               <CardTitle className="flex items-center gap-2 text-base">
                 <CheckCircle className="w-4 h-4 text-green-600" />
                 Assinatura Digital
               </CardTitle>
+              <CardDescription className="text-xs leading-snug">
+                {isResponsavelObra
+                  ? 'Assine no quadro abaixo e toque em Aplicar; depois envie com o botão fixo no rodapé.'
+                  : isFuncionarioDoRegistro
+                    ? 'O responsável já assinou. Desenhe sua assinatura, aplique e envie pelo rodapé.'
+                    : aguardandoAssinaturaResponsavel
+                      ? 'Aguardando o responsável da obra. Depois você poderá assinar aqui.'
+                      : 'Desenhe sua assinatura no quadro, aplique e confirme no rodapé.'}
+              </CardDescription>
             </CardHeader>
-            <CardContent className="px-3 pb-3 space-y-2">
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2">
-                <p className="text-xs text-blue-800 font-medium">
-                  {isResponsavelObra
-                    ? '📝 Assine como responsável para confirmar as horas do funcionário'
-                    : isFuncionarioDoRegistro
-                      ? '📝 O responsável já assinou. Assine para validar seu registro de ponto'
-                      : aguardandoAssinaturaResponsavel
-                        ? '⏳ Aguardando assinatura do responsável da obra. Você poderá assinar depois.'
-                        : '📝 Assine digitalmente o registro de ponto'}
-                </p>
-              </div>
-
-              <div className="bg-white border-2 border-dashed border-gray-300 rounded-lg p-2">
+            <CardContent className="px-3 pb-4 space-y-3">
+              <div className="rounded-xl bg-muted/50 p-3 ring-1 ring-border/60">
                 <SignaturePad
+                  compact
                   title=""
                   description=""
+                  applyLabel="Aplicar assinatura"
                   onSave={setAssinatura}
                   onCancel={() => setAssinatura('')}
-                  className="mobile-signature"
                 />
               </div>
 
-              <div className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${assinatura ? 'bg-green-500' : 'bg-gray-300'}`}></div>
-                  <span className="text-xs font-medium text-gray-700">
-                    {assinatura ? 'Assinatura realizada' : 'Aguardando assinatura'}
+              <div className="flex items-center justify-between gap-2 px-1">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className={`w-2 h-2 shrink-0 rounded-full ${assinatura ? 'bg-green-500' : 'bg-gray-300'}`} />
+                  <span className="text-xs font-medium text-muted-foreground truncate">
+                    {assinatura
+                      ? 'Pronto para enviar — use o botão verde abaixo'
+                      : 'Desenhe e toque em Aplicar assinatura'}
                   </span>
                 </div>
                 {assinatura && (
-                  <Button variant="outline" size="sm" onClick={() => setAssinatura('')} className="text-xs h-6 px-2">
-                    Limpar
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setAssinatura('')}
+                    className="text-xs h-8 shrink-0 px-2"
+                  >
+                    Redefinir
                   </Button>
                 )}
               </div>
@@ -574,51 +586,8 @@ function PWAAprovacaoAssinaturaPageContent() {
           </Card>
         )}
 
-        {/* Botões de ação */}
-        {!isPendenteCorrecao && aprovacaoSelecionada.status !== 'Aprovado' && (
-          <div className="sticky bottom-4 bg-white border-t border-gray-200 p-4 -mx-4 space-y-2">
-            {/* Botão Assinar */}
-            <Button
-              onClick={handleAprovar}
-              disabled={!canAssinar || !assinatura.trim() || isLoading}
-              className="w-full bg-green-600 hover:bg-green-700 h-14 text-lg font-semibold shadow-lg"
-            >
-              {isLoading ? (
-                <div className="flex items-center gap-2">
-                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                  Processando...
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Check className="w-6 h-6" />
-                  {isResponsavelObra
-                    ? 'Assinar como Responsável'
-                    : isFuncionarioDoRegistro
-                      ? 'Assinar e Validar'
-                      : aguardandoAssinaturaResponsavel
-                        ? 'Aguardando Responsável'
-                        : 'Assinar Registro'}
-                </div>
-              )}
-            </Button>
-
-            {/* Botão Não Concordo (apenas para responsável) */}
-            {isResponsavelObra && (
-              <Button
-                variant="outline"
-                onClick={() => setShowRejeicao(true)}
-                disabled={isLoading}
-                className="w-full border-red-300 text-red-700 hover:bg-red-50 h-12 font-semibold"
-              >
-                <XCircle className="w-5 h-5 mr-2" />
-                Não Concordo
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Informações */}
-        <Card className="bg-blue-50 border-blue-200">
+        {/* Informações (secundário no mobile — menos rolagem) */}
+        <Card className="bg-blue-50 border-blue-200 hidden sm:block">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
@@ -634,20 +603,47 @@ function PWAAprovacaoAssinaturaPageContent() {
           </CardContent>
         </Card>
 
-        {/* Estilos CSS para Mobile */}
-        <style jsx>{`
-          .mobile-signature {
-            height: 250px;
-            width: 100%;
-          }
-          @media (max-width: 640px) {
-            .mobile-signature { height: 200px; }
-          }
-          @media (max-width: 480px) {
-            .mobile-signature { height: 180px; }
-          }
-        `}</style>
       </div>
+
+      {showBottomActionsBar && (
+        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200/90 bg-background/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] px-3 pt-3 space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-w-lg mx-auto w-full box-border">
+          <Button
+            onClick={handleAprovar}
+            disabled={!canAssinar || !assinatura.trim() || isLoading}
+            className="w-full bg-green-600 hover:bg-green-700 h-12 sm:h-14 text-base sm:text-lg font-semibold shadow-md"
+          >
+            {isLoading ? (
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                Processando...
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Check className="w-6 h-6" />
+                {isResponsavelObra
+                  ? 'Enviar assinatura (responsável)'
+                  : isFuncionarioDoRegistro
+                    ? 'Enviar minha assinatura'
+                    : aguardandoAssinaturaResponsavel
+                      ? 'Aguardando Responsável'
+                      : 'Enviar assinatura'}
+              </div>
+            )}
+          </Button>
+
+          {isResponsavelObra && (
+            <Button
+              variant="outline"
+              onClick={() => setShowRejeicao(true)}
+              disabled={isLoading}
+              className="w-full border-red-300 text-red-700 hover:bg-red-50 h-11 sm:h-12 font-semibold"
+            >
+              <XCircle className="w-5 h-5 mr-2" />
+              Não Concordo
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Dialog: Não Concordo (Rejeição) */}
       <Dialog open={showRejeicao} onOpenChange={setShowRejeicao}>
