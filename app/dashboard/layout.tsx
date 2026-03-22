@@ -35,6 +35,7 @@ import {
   Layers,
   MessageSquare,
   Calculator,
+  Smartphone,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -100,6 +101,7 @@ const baseNavigation: NavigationItemWithPermission[] = [
   // SEÇÃO NOTIFICAÇÕES
   { name: "Notificações", href: "/dashboard/notificacoes", icon: Bell, category: "notificacoes", permission: "notificacoes:visualizar" },
   { name: "WhatsApp Notificações", href: "/dashboard/aprovacoes-horas-extras/whatsapp", icon: MessageSquare, category: "notificacoes", permission: "aprovacoes:visualizar" },
+  { name: "Notificações app (debug)", href: "/dashboard/configuracoes/notificacoes-app", icon: Smartphone, category: "notificacoes", permission: "usuarios:gerenciar" },
   
   // SEÇÃO OPERACIONAL
   { name: "Clientes", href: "/dashboard/clientes", icon: Users, category: "operacional", permission: "clientes:visualizar" },
