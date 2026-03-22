@@ -38,6 +38,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { SignaturePad } from "@/components/signature-pad"
 import { getApiBasePath } from "@/lib/runtime-config"
 import { PontoMapa } from "@/components/pwa-ponto-mapa"
+import { responsaveisObraApi } from "@/lib/api-responsaveis-obra"
 
 export default function PWAPontoPage() {
   const obterDataLocalISO = () => {
@@ -126,12 +127,6 @@ export default function PWAPontoPage() {
             parsedUser.profile = parsedProfile
           }
           
-          console.log('🔍 [PWA Ponto] Dados do usuário carregados:', {
-            user_id: parsedUser.id,
-            funcionario_id: parsedUser.profile?.funcionario_id,
-            profile: parsedUser.profile
-          })
-          
           setUser(parsedUser)
           
           // Carregar obras do funcionário
@@ -167,6 +162,76 @@ export default function PWAPontoPage() {
     
     loadUserAndObras()
   }, [])
+
+  // Debug (DevTools): usuário logado, obra usada no ponto e responsáveis cadastrados na obra
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (!user?.id) return
+
+    const usuario_atual = {
+      id: user.id,
+      email: user.email ?? null,
+      nome: user.nome ?? user.name ?? null,
+      role: user.role ?? user.profile?.role ?? null,
+      funcionario_id: user.profile?.funcionario_id ?? user.funcionario_id ?? null,
+    }
+
+    const obra_debug = obra
+      ? {
+          id: obra.id,
+          nome: obra.nome,
+          endereco: obra.endereco,
+          cidade: obra.cidade ?? null,
+          estado: obra.estado ?? null,
+          raio_permitido_m: obra.raio_permitido,
+          tem_coordenadas: Boolean(obra.coordenadas),
+          geocoding_status: obra.geocoding_status ?? null,
+        }
+      : null
+
+    const run = async () => {
+      if (!obra?.id) {
+        console.debug("[PWA Ponto] debug contexto", {
+          usuario_atual,
+          obra: obra_debug,
+          responsaveis_obra: null,
+          aviso:
+            "Nenhuma obra carregada para o funcionário — responsáveis não foram consultados na API.",
+        })
+        return
+      }
+
+      let responsaveis_payload: unknown
+      try {
+        const res = await responsaveisObraApi.listar(obra.id)
+        const lista = res.data ?? []
+        responsaveis_payload = lista.map((r) => ({
+          id: r.id,
+          nome: r.nome,
+          usuario_login: r.usuario,
+          email: r.email,
+          telefone: r.telefone,
+          ativo: r.ativo,
+        }))
+      } catch (e) {
+        responsaveis_payload = {
+          erro: e instanceof Error ? e.message : String(e),
+          hint:
+            "GET /obras/:id/responsaveis-obra exige permissão obras:visualizar. Sem ela, a lista não aparece aqui.",
+        }
+      }
+
+      console.debug("[PWA Ponto] debug contexto", {
+        usuario_atual,
+        obra: obra_debug,
+        responsaveis_obra: responsaveis_payload,
+        lembrete:
+          "Notificações de ponto fechado usam esta obra (id) e responsaveis_obra ativos — confira se batem com o cadastro no painel.",
+      })
+    }
+
+    void run()
+  }, [user, obra])
 
   // Carregar registros do dia
   useEffect(() => {

@@ -346,8 +346,13 @@ export const apiRegistrosPonto = {
     return response.data;
   },
 
-  async deletar(id: string | number): Promise<void> {
-    await api.delete(`ponto-eletronico/registros/${id}`);
+  async deletar(id: string | number): Promise<{
+    success: boolean;
+    message?: string;
+    data?: { id: string; funcionario_id: number; data: string };
+  }> {
+    const response = await api.delete(`ponto-eletronico/registros/${id}`);
+    return response.data;
   },
 
   async aprovar(id: string | number, observacoes?: string): Promise<RegistroPonto> {

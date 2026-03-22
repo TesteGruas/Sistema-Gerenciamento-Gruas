@@ -1,7 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
-import { authenticateToken } from '../middleware/auth.js';
+import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
 import { 
@@ -2610,6 +2610,67 @@ router.put('/registros/:id', async (req, res) => {
       success: false,
       message: 'Erro interno do servidor'
     });
+  }
+});
+
+/**
+ * Exclui um registro de ponto (admin / quem tem ponto_eletronico:gerenciar).
+ * Remove vínculos comuns antes do DELETE para evitar erro de FK.
+ */
+router.delete('/registros/:id', requirePermission('ponto_eletronico:gerenciar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!id || !String(id).trim()) {
+      return res.status(400).json({ success: false, message: 'ID do registro é obrigatório' });
+    }
+
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select('id, funcionario_id, data')
+      .eq('id', id)
+      .maybeSingle();
+
+    if (errorBusca) {
+      console.error('[ponto-eletronico] DELETE: erro ao buscar registro:', errorBusca);
+      return res.status(500).json({ success: false, message: 'Erro ao buscar registro' });
+    }
+    if (!registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    const { error: errApr } = await supabaseAdmin
+      .from('aprovacoes_horas_extras')
+      .delete()
+      .eq('registro_ponto_id', id);
+    if (errApr) {
+      console.warn('[ponto-eletronico] DELETE: aprovacoes_horas_extras:', errApr.message);
+    }
+
+    const { error: errHist } = await supabaseAdmin
+      .from('historico_alteracoes_ponto')
+      .delete()
+      .eq('registro_ponto_id', id);
+    if (errHist) {
+      console.warn('[ponto-eletronico] DELETE: historico_alteracoes_ponto:', errHist.message);
+    }
+
+    const { error: errDel } = await supabaseAdmin.from('registros_ponto').delete().eq('id', id);
+    if (errDel) {
+      console.error('[ponto-eletronico] DELETE: registros_ponto:', errDel);
+      return res.status(500).json({
+        success: false,
+        message: errDel.message || 'Não foi possível excluir o registro (possível vínculo no banco).'
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: 'Registro de ponto excluído com sucesso',
+      data: { id: registro.id, funcionario_id: registro.funcionario_id, data: registro.data }
+    });
+  } catch (error) {
+    console.error('[ponto-eletronico] DELETE registro:', error);
+    return res.status(500).json({ success: false, message: 'Erro interno do servidor' });
   }
 });
 

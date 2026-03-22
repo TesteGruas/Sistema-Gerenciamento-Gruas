@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature } from "lucide-react"
+import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import { AuthService } from "@/app/lib/auth"
@@ -48,6 +48,17 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 import { JustificativaDialog } from "@/components/justificativa-dialog"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { getApiOrigin } from "@/lib/runtime-config"
+import { usePermissions } from "@/hooks/use-permissions"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -73,6 +84,7 @@ interface EstatisticasHorasExtras {
 
 export default function PontoPage() {
   const { toast } = useToast()
+  const { hasPermission } = usePermissions()
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [selectedFuncionario, setSelectedFuncionario] = useState("")
@@ -104,6 +116,9 @@ export default function PontoPage() {
   const [assinaturaDigital, setAssinaturaDigital] = useState('')
   const [isAssinando, setIsAssinando] = useState(false)
   const [usuarioAtual, setUsuarioAtual] = useState<{ id: number; nome: string; role?: string } | null>(null)
+  const [registroParaExcluir, setRegistroParaExcluir] = useState<RegistroPonto | null>(null)
+  const [excluindoRegistro, setExcluindoRegistro] = useState(false)
+  const podeExcluirRegistroPonto = hasPermission("ponto_eletronico:gerenciar")
   
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
@@ -504,6 +519,31 @@ export default function PontoPage() {
     }
   }
 
+  const confirmarExclusaoRegistro = async () => {
+    if (!registroParaExcluir?.id) return
+    try {
+      setExcluindoRegistro(true)
+      const res = await apiRegistrosPonto.deletar(registroParaExcluir.id)
+      toast({
+        title: "Registro excluído",
+        description: res?.message || "O ponto foi removido do sistema.",
+      })
+      setRegistroParaExcluir(null)
+      await carregarDadosComFiltros()
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string } }; message?: string }
+      toast({
+        title: "Erro ao excluir",
+        description:
+          ax?.response?.data?.message ||
+          ax?.message ||
+          "Não foi possível excluir o registro.",
+        variant: "destructive",
+      })
+    } finally {
+      setExcluindoRegistro(false)
+    }
+  }
 
   // Função para limpar todos os filtros
   const limparFiltros = () => {
@@ -1862,6 +1902,49 @@ export default function PontoPage() {
         </div>
       </div>
 
+      <AlertDialog
+        open={registroParaExcluir != null}
+        onOpenChange={(open) => {
+          if (!open && !excluindoRegistro) setRegistroParaExcluir(null)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir registro de ponto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação remove permanentemente o registro{" "}
+              <span className="font-mono text-foreground">{registroParaExcluir?.id}</span>
+              {registroParaExcluir?.funcionario?.nome
+                ? ` (${registroParaExcluir.funcionario.nome}, ${registroParaExcluir.data})`
+                : registroParaExcluir?.data
+                  ? ` (${registroParaExcluir.data})`
+                  : ""}
+              . Use para testes ou correção; não há desfazer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoRegistro}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              disabled={excluindoRegistro}
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmarExclusaoRegistro()
+              }}
+            >
+              {excluindoRegistro ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin inline" />
+                  Excluindo…
+                </>
+              ) : (
+                "Excluir"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Modal de Edição de Registro */}
       <Dialog open={isEditarOpen} onOpenChange={setIsEditarOpen}>
           <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0">
@@ -2864,6 +2947,22 @@ export default function PontoPage() {
                                   >
                                     <FileText className="w-4 h-4 mr-1" />
                                     Assinar
+                                  </Button>
+                                )
+                              }
+
+                              if (podeExcluirRegistroPonto) {
+                                acoes.push(
+                                  <Button
+                                    key="excluir"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setRegistroParaExcluir(registro)}
+                                    className="text-red-600 hover:text-red-700 hover:bg-red-50 border-red-200"
+                                    title="Excluir registro de ponto (teste / correção)"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-1" />
+                                    Excluir
                                   </Button>
                                 )
                               }
