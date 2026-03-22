@@ -433,7 +433,10 @@ const obraSchema = Joi.object({
       altura_final: Joi.number().min(0).allow(null).optional(),
       raio_trabalho: Joi.number().min(0).allow(null).optional(),
       velocidade_giro: Joi.number().min(0).allow(null).optional(),
-      velocidade_elevacao: Joi.number().min(0).allow(null).optional(),
+      velocidade_elevacao: Joi.alternatives()
+        .try(Joi.number().min(0), Joi.string().trim().max(64))
+        .allow(null, '')
+        .optional(),
       velocidade_translacao: Joi.number().min(0).allow(null).optional(),
       potencia_instalada: Joi.number().min(0).allow(null).optional(),
       voltagem: Joi.string().allow(null, '').optional(),
@@ -2046,6 +2049,11 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             const parsed = typeof val === 'string' ? parseFloat(val) : Number(val)
             return isNaN(parsed) ? null : parsed
           }
+
+          const parseVelocidadeElevacao = (val) => {
+            if (val === null || val === undefined || val === '') return null
+            return String(val).trim()
+          }
           
           const parseInteger = (val) => {
             if (val === null || val === undefined || val === '') return null
@@ -2088,7 +2096,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
             altura_final: parseNumber(grua.altura_final),
             raio_trabalho: parseNumber(grua.raio_trabalho),
             velocidade_giro: parseNumber(grua.velocidade_giro),
-            velocidade_elevacao: parseNumber(grua.velocidade_elevacao),
+            velocidade_elevacao: parseVelocidadeElevacao(grua.velocidade_elevacao),
             velocidade_translacao: parseNumber(grua.velocidade_translacao),
             potencia_instalada: parseNumber(grua.potencia_instalada),
             voltagem: grua.voltagem || null,

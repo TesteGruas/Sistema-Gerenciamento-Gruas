@@ -62,6 +62,7 @@ export interface GruaBackend {
   valorSinaleiro?: number;
   valor_manutencao?: number;
   valorManutencao?: number;
+  velocidade_elevacao?: string | number;
 }
 
 export interface GruaFiltros {

@@ -469,6 +469,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     return Number.isNaN(parsed) ? undefined : parsed
   }
 
+  const toVelocidadeElevacaoForApi = (value: any): string | number | undefined => {
+    if (value === null || value === undefined || value === '') return undefined
+    if (typeof value === 'number' && Number.isFinite(value)) return value
+    const s = String(value).trim()
+    return s === '' ? undefined : s
+  }
+
   const toEditableValue = (value: any) => {
     if (value === null || value === undefined) return ''
     if (typeof value === 'string') {
@@ -2367,7 +2374,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         capacidade_ponta: toNumberOrUndefined(livroForm.capacidade_ponta),
         capacidade_maxima_raio: toNumberOrUndefined(livroForm.capacidade_maxima_raio),
         velocidade_rotacao: toNumberOrUndefined(livroForm.velocidade_rotacao),
-        velocidade_elevacao: toNumberOrUndefined(livroForm.velocidade_elevacao),
+        velocidade_elevacao: toVelocidadeElevacaoForApi(livroForm.velocidade_elevacao),
         velocidade_translacao: toNumberOrUndefined(livroForm.velocidade_translacao),
         potencia_instalada: toNumberOrUndefined(livroForm.potencia_instalada),
         voltagem: livroForm.voltagem || undefined,

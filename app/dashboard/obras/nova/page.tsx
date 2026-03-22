@@ -149,6 +149,13 @@ const toNumberOrUndefined = (value: any): number | undefined => {
   return Number.isFinite(parsed) ? parsed : undefined
 }
 
+const toVelocidadeElevacaoForApi = (value: any): string | number | undefined => {
+  if (value === null || value === undefined || value === '') return undefined
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  const s = String(value).trim()
+  return s === '' ? undefined : s
+}
+
 const normalizarTipoBase = (value: any): string | undefined => {
   if (!value) return undefined
   const normalizado = String(value).trim().toLowerCase()
@@ -706,7 +713,7 @@ export default function NovaObraPage() {
       altura_inicial: toNumberOrUndefined(fonteDados.altura_inicial ?? fonteDados.alturaInicial),
       altura_final: toNumberOrUndefined(fonteDados.altura_final ?? fonteDados.alturaFinal),
       velocidade_giro: toNumberOrUndefined(fonteDados.velocidade_giro ?? fonteDados.velocidadeGiro ?? fonteDados.velocidade_rotacao),
-      velocidade_elevacao: toNumberOrUndefined(fonteDados.velocidade_elevacao ?? fonteDados.velocidadeElevacao),
+      velocidade_elevacao: toVelocidadeElevacaoForApi(fonteDados.velocidade_elevacao ?? fonteDados.velocidadeElevacao),
       velocidade_translacao: toNumberOrUndefined(fonteDados.velocidade_translacao ?? fonteDados.velocidadeTranslacao),
       potencia_instalada: toNumberOrUndefined(fonteDados.potencia_instalada ?? fonteDados.potenciaInstalada),
       voltagem: normalizarVoltagem(fonteDados.voltagem),
@@ -1037,7 +1044,9 @@ export default function NovaObraPage() {
           altura_final: alturaFinalCalculada,
           raio_trabalho: raioTrabalhoCalculado,
           velocidade_giro: toNumberOrUndefined(grua.velocidade_giro) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_rotacao),
-          velocidade_elevacao: toNumberOrUndefined(grua.velocidade_elevacao) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_elevacao),
+          velocidade_elevacao:
+            toVelocidadeElevacaoForApi(grua.velocidade_elevacao) ??
+            toVelocidadeElevacaoForApi(dadosMontagemEquipamento.velocidade_elevacao),
           velocidade_translacao: toNumberOrUndefined(grua.velocidade_translacao) ?? toNumberOrUndefined(dadosMontagemEquipamento.velocidade_translacao),
           potencia_instalada: toNumberOrUndefined(grua.potencia_instalada) ?? toNumberOrUndefined(dadosMontagemEquipamento.potencia_instalada),
           voltagem: grua.voltagem || dadosMontagemEquipamento.voltagem || undefined,
@@ -3404,11 +3413,10 @@ startxref
                     <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min)</Label>
                     <Input
                       id="velocidade_elevacao"
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={dadosMontagemEquipamento.velocidade_elevacao}
                       onChange={(e) => setDadosMontagemEquipamento({ ...dadosMontagemEquipamento, velocidade_elevacao: e.target.value })}
-                      placeholder="Ex: 40"
+                      placeholder="Ex: 0-25-062 ou 40"
                     />
                   </div>
 
@@ -3614,16 +3622,15 @@ startxref
                                       <Label htmlFor={`velocidadeElevacao-${grua.id}`}>Velocidade de Elevação (m/min)</Label>
                                       <Input
                                         id={`velocidadeElevacao-${grua.id}`}
-                                        type="number"
-                                        step="0.1"
-                                        value={grua.velocidade_elevacao || ''}
+                                        type="text"
+                                        value={grua.velocidade_elevacao ?? ''}
                                         onChange={(e) => {
                                           const updatedGruas = gruasSelecionadas.map(g => 
-                                            g.id === grua.id ? { ...g, velocidade_elevacao: parseFloat(e.target.value) || 0 } : g
+                                            g.id === grua.id ? { ...g, velocidade_elevacao: e.target.value } : g
                                           )
                                           setGruasSelecionadas(updatedGruas)
                                         }}
-                                        placeholder="0.0"
+                                        placeholder="Ex: 0-25-062"
                                       />
                                     </div>
                                     <div>

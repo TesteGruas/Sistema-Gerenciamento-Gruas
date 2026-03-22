@@ -2134,6 +2134,13 @@ function ObraDetailsPageContent() {
     return Number.isFinite(numero) ? numero : undefined
   }
 
+  const normalizarVelocidadeElevacao = (valor: any): string | number | undefined => {
+    if (valor === null || valor === undefined || valor === "") return undefined
+    if (typeof valor === "number" && Number.isFinite(valor)) return valor
+    const s = String(valor).trim()
+    return s === "" ? undefined : s
+  }
+
   const normalizarTipoLigacao = (valor: any): string | undefined => {
     if (!valor) return undefined
     const texto = String(valor).toLowerCase()
@@ -2174,7 +2181,7 @@ function ObraDetailsPageContent() {
         normalizarNumero(gruaDetalhada?.altura_final) ?? normalizarNumero(gruaDetalhada?.altura_trabalho),
       velocidade_giro: normalizarNumero(gruaDetalhada?.velocidade_giro),
       velocidade_rotacao: normalizarNumero(gruaDetalhada?.velocidade_rotacao),
-      velocidade_elevacao: normalizarNumero(gruaDetalhada?.velocidade_elevacao),
+      velocidade_elevacao: normalizarVelocidadeElevacao(gruaDetalhada?.velocidade_elevacao),
       velocidade_translacao: normalizarNumero(gruaDetalhada?.velocidade_translacao),
       potencia_instalada: normalizarNumero(gruaDetalhada?.potencia_instalada),
       voltagem: gruaDetalhada?.voltagem || undefined,

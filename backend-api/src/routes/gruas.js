@@ -210,6 +210,27 @@ const buscarOuCriarCliente = async (clienteData) => {
   return clienteCriado
 }
 
+/** Velocidade de elevação: número simples ou texto (ex.: 0-25-062). */
+function normalizarVelocidadeElevacao(val) {
+  if (val === null || val === undefined) return ''
+  return String(val).trim()
+}
+
+const velocidadeElevacaoJoiRequired = Joi.alternatives()
+  .try(Joi.number().min(0), Joi.string().trim().min(1).max(64))
+  .required()
+  .messages({
+    'alternatives.types': 'Velocidade de elevação é obrigatória',
+    'any.required': 'Velocidade de elevação é obrigatória',
+    'string.min': 'Velocidade de elevação é obrigatória',
+    'string.max': 'Velocidade de elevação deve ter no máximo 64 caracteres'
+  })
+
+const velocidadeElevacaoJoiOptional = Joi.alternatives()
+  .try(Joi.number().min(0), Joi.string().trim().max(64))
+  .allow(null, '')
+  .optional()
+
 // Schema de validação para gruas - baseado nos campos do frontend
 const gruaSchema = Joi.object({
   // Campos obrigatórios (baseados no frontend)
@@ -271,11 +292,7 @@ const gruaSchema = Joi.object({
     'number.min': 'Velocidade de rotação não pode ser negativa',
     'any.required': 'Velocidade de rotação é obrigatória'
   }),
-  velocidade_elevacao: Joi.number().min(0).required().messages({
-    'number.base': 'Velocidade de elevação deve ser um número',
-    'number.min': 'Velocidade de elevação não pode ser negativa',
-    'any.required': 'Velocidade de elevação é obrigatória'
-  }),
+  velocidade_elevacao: velocidadeElevacaoJoiRequired,
   
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
@@ -359,11 +376,7 @@ const gruaInputSchema = Joi.object({
     'number.min': 'Velocidade de rotação não pode ser negativa',
     'any.required': 'Velocidade de rotação é obrigatória'
   }),
-  velocidade_elevacao: Joi.number().min(0).required().messages({
-    'number.base': 'Velocidade de elevação deve ser um número',
-    'number.min': 'Velocidade de elevação não pode ser negativa',
-    'any.required': 'Velocidade de elevação é obrigatória'
-  }),
+  velocidade_elevacao: velocidadeElevacaoJoiRequired,
   
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
@@ -409,7 +422,7 @@ const gruaUpdateSchema = Joi.object({
   potencia_instalada: Joi.number().min(0).allow(null).optional(),
   voltagem: Joi.string().allow(null, '').optional(),
   velocidade_rotacao: Joi.number().min(0).allow(null).optional(),
-  velocidade_elevacao: Joi.number().min(0).allow(null).optional(),
+  velocidade_elevacao: velocidadeElevacaoJoiOptional,
   observacoes: Joi.string().allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
@@ -1251,7 +1264,7 @@ router.post('/', async (req, res) => {
       potencia_instalada: value.potencia_instalada,
       voltagem: value.voltagem,
       velocidade_rotacao: value.velocidade_rotacao,
-      velocidade_elevacao: value.velocidade_elevacao,
+      velocidade_elevacao: normalizarVelocidadeElevacao(value.velocidade_elevacao),
       status: value.status,
       localizacao: value.localizacao ?? '',
       horas_operacao: value.horas_operacao ?? 0,
@@ -1467,7 +1480,12 @@ router.put('/:id', async (req, res) => {
     if (value.potencia_instalada !== undefined) updateData.potencia_instalada = value.potencia_instalada
     if (value.voltagem !== undefined) updateData.voltagem = value.voltagem
     if (value.velocidade_rotacao !== undefined) updateData.velocidade_rotacao = value.velocidade_rotacao
-    if (value.velocidade_elevacao !== undefined) updateData.velocidade_elevacao = value.velocidade_elevacao
+    if (value.velocidade_elevacao !== undefined) {
+      updateData.velocidade_elevacao =
+        value.velocidade_elevacao === null || value.velocidade_elevacao === ''
+          ? value.velocidade_elevacao
+          : normalizarVelocidadeElevacao(value.velocidade_elevacao)
+    }
     if (value.status !== undefined) updateData.status = value.status
     if (value.localizacao !== undefined) updateData.localizacao = value.localizacao
     if (value.horas_operacao !== undefined) updateData.horas_operacao = value.horas_operacao

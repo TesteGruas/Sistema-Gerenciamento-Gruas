@@ -41,7 +41,7 @@ export interface GruaObraCreateData {
   altura_final?: number
   velocidade_giro?: number
   velocidade_rotacao?: number
-  velocidade_elevacao?: number
+  velocidade_elevacao?: string | number
   velocidade_translacao?: number
   potencia_instalada?: number
   voltagem?: string
@@ -81,7 +81,7 @@ export interface GruaObraUpdateData {
   altura_final?: number
   velocidade_giro?: number
   velocidade_rotacao?: number
-  velocidade_elevacao?: number
+  velocidade_elevacao?: string | number
   velocidade_translacao?: number
   potencia_instalada?: number
   voltagem?: string

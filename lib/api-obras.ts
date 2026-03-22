@@ -73,7 +73,7 @@ export interface ObraBackend {
     altura_final?: number
     raio_trabalho?: number
     velocidade_giro?: number
-    velocidade_elevacao?: number
+    velocidade_elevacao?: string | number
     velocidade_translacao?: number
     potencia_instalada?: number
     voltagem?: string
@@ -230,7 +230,7 @@ export interface ObraCreateData {
     altura_final?: number
     raio_trabalho?: number
     velocidade_giro?: number
-    velocidade_elevacao?: number
+    velocidade_elevacao?: string | number
     velocidade_translacao?: number
     potencia_instalada?: number
     voltagem?: string

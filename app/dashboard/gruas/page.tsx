@@ -931,7 +931,7 @@ export default function GruasPage() {
       potencia_instalada: '42',
       voltagem: '380V',
       velocidade_rotacao: '0.8',
-      velocidade_elevacao: '60',
+      velocidade_elevacao: '0-25-062',
       observacoes: 'Grua em excelente estado de conservação. Última manutenção preventiva realizada há 2 meses.',
       createdAt: new Date().toISOString(),
       capacidade_ponta: '2000',
@@ -967,7 +967,7 @@ export default function GruasPage() {
         potencia_instalada: '42',
         voltagem: '380V',
         velocidade_rotacao: '0.8',
-        velocidade_elevacao: '60',
+        velocidade_elevacao: '0-25-062',
         observacoes: 'Grua criada automaticamente para validação.',
         createdAt: new Date().toISOString(),
         capacidade_ponta: '2000',
@@ -1005,7 +1005,7 @@ export default function GruasPage() {
         potencia_instalada: 42,
         voltagem: '380V',
         velocidade_rotacao: 0.8,
-        velocidade_elevacao: 60,
+        velocidade_elevacao: '0-25-062',
         observacoes: 'Grua criada automaticamente para validação.',
         capacidade_ponta: '2000',
         altura_trabalho: '95',
@@ -1103,7 +1103,7 @@ export default function GruasPage() {
         potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
         voltagem: gruaFormData.voltagem,
         velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
-        velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
+        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim(),
         observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
         capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
         altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
@@ -1209,7 +1209,7 @@ export default function GruasPage() {
         potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
         voltagem: gruaFormData.voltagem,
         velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
-        velocidade_elevacao: parseFloat(gruaFormData.velocidade_elevacao) || 0,
+        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim(),
         observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
         capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
         altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
@@ -1921,12 +1921,12 @@ export default function GruasPage() {
                 <Label htmlFor="velocidade_elevacao">Velocidade de Elevação (m/min) *</Label>
                 <Input
                   id="velocidade_elevacao"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
                   value={gruaFormData.velocidade_elevacao}
                   onChange={handleVelocidadeElevacaoChange}
-                  placeholder="Ex: 60.00"
+                  placeholder="Ex: 0-25-062 ou 60"
                   required
                 />
               </div>
@@ -2229,12 +2229,12 @@ export default function GruasPage() {
                 <Label htmlFor="edit-velocidade_elevacao">Velocidade de Elevação (m/min) *</Label>
                 <Input
                   id="edit-velocidade_elevacao"
-                  type="number"
-                  step="0.01"
-                  min="0"
+                  type="text"
+                  inputMode="text"
+                  autoComplete="off"
                   value={gruaFormData.velocidade_elevacao}
                   onChange={handleVelocidadeElevacaoChange}
-                  placeholder="Ex: 60.00"
+                  placeholder="Ex: 0-25-062 ou 60"
                   required
                 />
               </div>

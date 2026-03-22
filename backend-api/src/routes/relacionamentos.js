@@ -27,7 +27,10 @@ const gruaObraSchema = Joi.object({
   altura_final: Joi.number().allow(null).optional(),
   velocidade_giro: Joi.number().allow(null).optional(),
   velocidade_rotacao: Joi.number().allow(null).optional(),
-  velocidade_elevacao: Joi.number().allow(null).optional(),
+  velocidade_elevacao: Joi.alternatives()
+    .try(Joi.number().min(0), Joi.string().trim().max(64))
+    .allow(null, '')
+    .optional(),
   velocidade_translacao: Joi.number().allow(null).optional(),
   potencia_instalada: Joi.number().allow(null).optional(),
   voltagem: Joi.string().allow(null, '').optional(),
