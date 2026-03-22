@@ -13,6 +13,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import jwt from 'jsonwebtoken'
 import { supabaseAdmin } from './config/supabase.js'
+import { getPublicFrontendUrl } from './config/public-frontend-url.js'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
@@ -153,7 +154,7 @@ const httpServer = createServer(app)
 // Configurar Socket.IO com CORS
 const io = new Server(httpServer, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: getPublicFrontendUrl(),
     methods: ['GET', 'POST'],
     credentials: true
   },
@@ -339,7 +340,7 @@ initRedis().catch(err => {
 // ========================================
 
 // Configurar origens permitidas
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000'
+const FRONTEND_URL = getPublicFrontendUrl()
 const isProduction = process.env.NODE_ENV === 'production'
 
 // Origens permitidas em desenvolvimento

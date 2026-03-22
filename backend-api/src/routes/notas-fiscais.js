@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { supabase, supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import Joi from 'joi';
 import { XMLParser } from 'fast-xml-parser';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
@@ -32,7 +33,7 @@ const upload = multer({
 });
 
 const router = express.Router();
-const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+const FRONTEND_URL = getPublicFrontendUrl();
 
 // Função helper para formatar datas para string YYYY-MM-DD (evita problemas de timezone)
 const formatarDataParaString = (dateValue) => {

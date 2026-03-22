@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { getFuncionarioId } from '@/lib/get-funcionario-id'
 import { getApiBasePath } from '@/lib/runtime-config'
-import { decodeJwtPayload } from '@/lib/jwt-decode-client'
 
 interface PWAUserData {
   user: any | null
@@ -117,6 +116,7 @@ export function usePWAUser(): PWAUserData {
         try {
           const tokenParts = token.split('.')
           if (tokenParts.length === 3) {
+            const { decodeJwtPayload } = await import('@/lib/jwt-payload-browser')
             const payload = decodeJwtPayload<{ exp?: number }>(token)
             if (payload?.exp) {
               const isExpired = payload.exp * 1000 < Date.now()

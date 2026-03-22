@@ -2,6 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import jwt from 'jsonwebtoken';
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { 
   medicaoMensalSchema, 
@@ -1133,9 +1134,8 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
     if (emailsUnicos.length > 0 || telefonesUnicos.length > 0) {
       (async () => {
         try {
-          const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
           const tokenPublicoPdf = gerarTokenLinkPublicoMedicao(medicao.id, '7d');
-          const linkPdfPublico = `${FRONTEND_URL}/api/relatorios/medicao/publico/pdf/${tokenPublicoPdf}`;
+          const linkPdfPublico = `${getPublicFrontendUrl()}/api/relatorios/medicao/publico/pdf/${tokenPublicoPdf}`;
 
           // Enviar e-mail
           for (const emailDestino of emailsUnicos) {

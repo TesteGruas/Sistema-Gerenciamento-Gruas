@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Smartphone, Lock } from "lucide-react"
-import { decodeJwtPayload } from "@/lib/jwt-decode-client"
+import { isPwaPublicAuthPath } from "@/lib/pwa-public-paths"
 
 interface PWAAuthGuardProps {
   children: React.ReactNode
@@ -82,7 +82,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
   }, [])
 
   useEffect(() => {
-    const checkAuth = () => {
+    const checkAuth = async () => {
       // Garantir que estamos no cliente
       if (typeof window === 'undefined') {
         return
@@ -101,10 +101,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       }
 
       // Permitir acesso sem autenticação para rotas públicas
-      const publicPaths = ['/pwa/login', '/pwa/redirect', '/pwa/test-api', '/']
-      const isPublicPath = publicPaths.some(path => pathname === path || pathname?.startsWith(path))
-      
-      if (isPublicPath) {
+      if (isPwaPublicAuthPath(pathname)) {
         setIsLoading(false)
         setIsAuthenticated(true)
         
@@ -160,39 +157,36 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       localStorage.removeItem('loop_detected')
 
       // Verificar se o token está expirado
-        try {
-          const tokenParts = token.split('.')
-          if (tokenParts.length === 3) {
-            try {
-              const payload = decodeJwtPayload<{ exp?: number }>(token)
-              if (payload?.exp) {
-                const isExpired = payload.exp * 1000 < Date.now()
-              
-              // Se token expirado, sempre deslogar e ir para login
+      try {
+        const tokenParts = token.split('.')
+        if (tokenParts.length === 3) {
+          try {
+              const { decodeJwtPayload } = await import("@/lib/jwt-payload-browser")
+            const payload = decodeJwtPayload<{ exp?: number }>(token)
+            if (payload?.exp) {
+              const isExpired = payload.exp * 1000 < Date.now()
+
               if (isExpired) {
                 console.warn('[PWAAuthGuard] Token expirado, deslogando')
                 setIsLoading(false)
                 setIsAuthenticated(false)
-                
-                // Se já estamos em login, não fazer nada
+
                 if (pathname === '/pwa/login') {
                   return
                 }
-                
-                // Incrementar contador
+
                 const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10) + 1
                 localStorage.setItem('redirect_count', redirectCount.toString())
                 localStorage.setItem('redirect_timestamp', Date.now().toString())
-                
-                // Limpar e redirecionar apenas uma vez
+
                 if (!isRedirecting) {
                   isRedirecting = true
                   limparDadosAutenticacao()
-                  
+
                   if (redirectTimeout) {
                     clearTimeout(redirectTimeout)
                   }
-                  
+
                   redirectTimeout = setTimeout(() => {
                     window.location.replace('/pwa/login')
                     isRedirecting = false
@@ -202,23 +196,22 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
               }
             }
           } catch (decodeError) {
-            // Se não conseguir decodificar o token, em caso de dúvida, deslogar
             console.warn('[PWAAuthGuard] Erro ao decodificar token, deslogando por segurança')
             setIsLoading(false)
             setIsAuthenticated(false)
-            
+
             if (pathname === '/pwa/login') {
               return
             }
-            
+
             if (!isRedirecting) {
               isRedirecting = true
               limparDadosAutenticacao()
-              
+
               if (redirectTimeout) {
                 clearTimeout(redirectTimeout)
               }
-              
+
               redirectTimeout = setTimeout(() => {
                 window.location.replace('/pwa/login')
                 isRedirecting = false
@@ -265,13 +258,13 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
 
     // Pequeno delay para evitar flash de loading
     const timer = setTimeout(() => {
-      checkAuth()
+      void checkAuth()
     }, 100)
 
     // Verificar autenticação a cada 5 minutos (mas não se loop foi detectado)
     const interval = setInterval(() => {
       if (!localStorage.getItem('loop_detected')) {
-        checkAuth()
+        void checkAuth()
       }
     }, 5 * 60 * 1000)
 
@@ -307,7 +300,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
 
   // Se não estiver autenticado e não for rota pública, não renderizar nada
   // (já redirecionou para login)
-  if (!isAuthenticated && pathname !== '/pwa/login' && pathname !== '/pwa/redirect') {
+  if (!isAuthenticated && !isPwaPublicAuthPath(pathname)) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
         <div className="text-center">

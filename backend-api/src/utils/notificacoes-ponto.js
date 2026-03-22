@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { sendEmail } from '../services/email.service.js';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
@@ -6,7 +7,7 @@ import { emitirNotificacao } from '../server.js';
 import { buscarSupervisorPorObra } from './aprovacoes-helpers.js';
 import { validarTelefoneWhatsappBrasil, normalizarTelefoneBrasilParaWhatsApp } from './telefone-brasil.js';
 
-const FRONTEND_URL = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+const FRONTEND_URL = () => getPublicFrontendUrl();
 
 /** Links absolutos para e-mail / WhatsApp (devem abrir fora do app). */
 function urlPwaAbs(path) {

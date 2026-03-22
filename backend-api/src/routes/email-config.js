@@ -11,6 +11,7 @@ import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { encrypt, decrypt, sendEmail, getEmailConfig, getTemplate, replaceVariables } from '../services/email.service.js'
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js'
 
 const router = express.Router()
 
@@ -375,8 +376,8 @@ router.post('/test', async (req, res) => {
       nome: dados_teste?.nome || 'Usuário Teste',
       email: destinatario,
       senha_temporaria: dados_teste?.senha_temporaria || 'Teste@123',
-      link_login: process.env.FRONTEND_URL + '/login',
-      reset_link: process.env.FRONTEND_URL + '/auth/reset-password/token-teste',
+      link_login: `${getPublicFrontendUrl()}/login`,
+      reset_link: `${getPublicFrontendUrl()}/auth/reset-password/token-teste`,
       expiry_time: '1 hora',
       data_alteracao: new Date().toLocaleString('pt-BR'),
       empresa: 'Sistema de Gerenciamento de Gruas',

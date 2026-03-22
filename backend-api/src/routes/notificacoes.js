@@ -1,6 +1,7 @@
 import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js'
 import { emitirNotificacaoMultiplos } from '../server.js'
@@ -1099,9 +1100,9 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
           console.log(`[notificacoes] 🚀 Iniciando envio de WhatsApp para ${usuariosUnicos.length} usuário(s)`)
           
           // Formatar mensagem para WhatsApp
-          const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000'
+          const baseUrl = getPublicFrontendUrl()
           const linkNotificacao = value.link 
-            ? (value.link.startsWith('http') ? value.link : `${FRONTEND_URL}${value.link}`)
+            ? (value.link.startsWith('http') ? value.link : `${baseUrl}${value.link}`)
             : null
           
           const mensagemWhatsApp = `🔔 *${value.titulo}*

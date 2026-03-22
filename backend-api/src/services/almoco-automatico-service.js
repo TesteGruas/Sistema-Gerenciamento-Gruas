@@ -2,8 +2,6 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { enviarMensagemWebhook } from './whatsapp-service.js';
 import { buscarTelefoneWhatsAppUsuario } from './whatsapp-service.js';
 
-const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
-
 // Função auxiliar para emitir notificação via WebSocket (opcional)
 async function tentarEmitirNotificacao(usuarioId, notificacao) {
   // Se SKIP_SERVER_IMPORT estiver definido, não tentar importar

@@ -1,6 +1,7 @@
 import express from 'express';
 import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
@@ -6377,7 +6378,7 @@ router.post('/horas-extras/:id/notificar', async (req, res) => {
           id: supervisor.id,
           nome: supervisor.nome
         },
-        link_aprovacao: `${process.env.FRONTEND_URL || 'http://localhost:3000'}/aprovacaop/${aprovacao.id}?token=${resultadoWhatsApp.token}`,
+        link_aprovacao: `${getPublicFrontendUrl()}/aprovacaop/${aprovacao.id}?token=${resultadoWhatsApp.token}`,
         telefone: resultadoWhatsApp.telefone
       }
     });

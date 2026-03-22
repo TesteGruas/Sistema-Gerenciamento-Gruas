@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { AuthService } from '@/app/lib/auth'
-import { decodeJwtPayload } from '@/lib/jwt-decode-client'
+import { decodeJwtPayload } from '@/lib/jwt-payload-browser'
 
 interface User {
   id: string

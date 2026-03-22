@@ -4,7 +4,7 @@
 // Implementa estratégias avançadas de cache,
 // sincronização em background e push notifications
 
-const VERSION = '3.2.3';
+const VERSION = '3.3.1';
 const CACHE_PREFIX = 'irbana-pwa';
 const CACHE_STATIC = `${CACHE_PREFIX}-static-v${VERSION}`;
 const CACHE_DYNAMIC = `${CACHE_PREFIX}-dynamic-v${VERSION}`;
@@ -339,6 +339,16 @@ self.addEventListener('fetch', (event) => {
   // Ignorar requisições não-GET e requisições de chrome-extension
   if (request.method !== 'GET' || url.includes('chrome-extension')) {
     return;
+  }
+
+  // Dev: em localhost não interceptar NADA — versões antigas do SW cacheavam /pwa e quebravam Next (Turbopack/jwt).
+  try {
+    const host = new URL(url).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || host === '[::1]') {
+      return;
+    }
+  } catch (_) {
+    /* ignore */
   }
   
   // ⚠️ CRÍTICO: NÃO interceptar arquivos estáticos do Next.js

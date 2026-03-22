@@ -1,6 +1,7 @@
 import express from 'express';
 import { authenticateToken } from '../middleware/auth.js';
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { calcularDataLimite } from '../utils/aprovacoes-helpers.js';
 import { gerarTokenAprovacao } from '../utils/approval-tokens.js';
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
@@ -20,8 +21,6 @@ function gerarIdRegistro(prefix = 'REG') {
 const router = express.Router();
 
 const WHATSAPP_WEBHOOK_URL = process.env.WHATSAPP_WEBHOOK_URL || 'https://gsouzabd.app.n8n.cloud/webhook/irbana-notify';
-const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
-
 /**
  * POST /api/whatsapp/test
  * Envia mensagem de teste via webhook n8n
@@ -239,7 +238,7 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
       };
 
       // Enviar mensagem usando o número fornecido (não o do supervisor)
-      const linkAprovacao = `${FRONTEND_URL}/aprovacaop/${aprovacao.id}?token=${token}`;
+      const linkAprovacao = `${getPublicFrontendUrl()}/aprovacaop/${aprovacao.id}?token=${token}`;
       
       // Buscar dados do funcionário para a mensagem
       const mensagem = `🔔 *Nova Solicitação de Aprovação de Horas Extras*
@@ -315,7 +314,7 @@ _Sistema de Gestão de Gruas - Teste_`;
         data: {
           aprovacao_id: aprovacao.id,
           token: token,
-          link_aprovacao: `${FRONTEND_URL}/aprovacaop/${aprovacao.id}?token=${token}`,
+          link_aprovacao: `${getPublicFrontendUrl()}/aprovacaop/${aprovacao.id}?token=${token}`,
           numero_destinatario: numeroLimpo
         }
       });

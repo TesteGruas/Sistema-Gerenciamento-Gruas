@@ -9,11 +9,11 @@
 import nodemailer from 'nodemailer';
 import crypto from 'crypto';
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 
 // Chave de criptografia (deve estar no .env)
 const ENCRYPTION_KEY = process.env.EMAIL_ENCRYPTION_KEY || 'default-key-32-chars-minimum!!';
 const ENCRYPTION_ALGORITHM = 'aes-256-cbc';
-const FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 
 /**
  * Criptografa texto usando AES-256-CBC
@@ -295,7 +295,7 @@ async function sendWelcomeEmail(userData) {
       nome: userData.nome,
       email: userData.email,
       senha_temporaria: userData.senha_temporaria,
-      link_login: `${FRONTEND_URL}/login`,
+      link_login: `${getPublicFrontendUrl()}/login`,
       empresa: 'Sistema de Gerenciamento de Gruas',
       ano: new Date().getFullYear()
     };
@@ -341,7 +341,7 @@ async function sendPasswordResetEmail(userData) {
     const nome = userData.nome || 'Usuário';
     const email = userData.email;
     const senhaTemporaria = userData.senha_temporaria;
-    const linkLogin = `${FRONTEND_URL}/login`;
+    const linkLogin = `${getPublicFrontendUrl()}/login`;
     const ano = new Date().getFullYear();
     
     console.log(`[sendPasswordResetEmail] Preparando envio de email para ${email}`);
@@ -521,7 +521,7 @@ async function sendResetPasswordEmail(userData) {
     const data = {
       nome: userData.nome,
       email: userData.email,
-      reset_link: `${FRONTEND_URL}/auth/reset-password/${userData.token}`,
+      reset_link: `${getPublicFrontendUrl()}/auth/reset-password/${userData.token}`,
       expiry_time: '1 hora',
       empresa: 'Sistema de Gerenciamento de Gruas',
       ano: new Date().getFullYear()

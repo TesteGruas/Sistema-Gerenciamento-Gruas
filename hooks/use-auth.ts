@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { decodeJwtPayload, normalizeAccessToken } from "@/lib/jwt-decode-client"
+import { decodeJwtPayload, normalizeAccessToken } from "@/lib/jwt-payload-browser"
 
 interface User {
   id: string

@@ -1,4 +1,5 @@
 import type { Metadata } from 'next'
+import Script from 'next/script'
 import { GeistSans } from 'geist/font/sans'
 import { GeistMono } from 'geist/font/mono'
 import './globals.css'
@@ -40,6 +41,28 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={GeistSans.className}>
+        {process.env.NODE_ENV === 'development' ? (
+          <Script id="dev-pwa-sw-nuke" strategy="beforeInteractive">
+            {`(function(){
+  try {
+    var h = typeof location !== 'undefined' ? location.hostname : '';
+    if (h !== 'localhost' && h !== '127.0.0.1' && h !== '[::1]') return;
+    if (navigator.serviceWorker && navigator.serviceWorker.getRegistrations) {
+      navigator.serviceWorker.getRegistrations().then(function(rs){
+        rs.forEach(function(r){ r.unregister(); });
+      });
+    }
+    if (typeof caches !== 'undefined' && caches.keys) {
+      caches.keys().then(function(keys){
+        keys.forEach(function(k){
+          if (k.indexOf('irbana-pwa') === 0) caches.delete(k);
+        });
+      });
+    }
+  } catch (e) {}
+})();`}
+          </Script>
+        ) : null}
         <ChunkErrorHandler />
         <ServiceWorkerProvider>
           <UserProvider>

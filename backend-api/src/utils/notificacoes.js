@@ -1,4 +1,5 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { enviarMensagemWebhook, buscarTelefoneWhatsAppUsuario } from '../services/whatsapp-service.js';
 import { emitirNotificacao } from '../server.js';
 
@@ -19,9 +20,9 @@ async function enviarNotificacaoWhatsApp(usuario_id, titulo, mensagem, link = nu
     const telefone = await buscarTelefoneWhatsAppUsuario(usuario_id);
     
     if (telefone) {
-      const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+      const baseUrl = getPublicFrontendUrl();
       const linkCompleto = link 
-        ? (link.startsWith('http') ? link : `${FRONTEND_URL}${link}`)
+        ? (link.startsWith('http') ? link : `${baseUrl}${link}`)
         : null;
       
       const mensagemWhatsApp = `🔔 *${titulo}*

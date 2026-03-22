@@ -269,6 +269,27 @@ export function getServiceWorkerManager(): ServiceWorkerManager {
 export async function initServiceWorker() {
   if (typeof window === 'undefined') return null;
 
+  // Next.js dev em localhost: SW antigo servia HTML/JS em cache → erros de módulo (jwt-decode, Turbopack).
+  if (process.env.NODE_ENV === 'development') {
+    const h = window.location.hostname;
+    const isLocal = h === 'localhost' || h === '127.0.0.1' || h === '[::1]';
+    if (isLocal) {
+      try {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(regs.map((r) => r.unregister()));
+        if ('caches' in window) {
+          const keys = await caches.keys();
+          await Promise.all(
+            keys.filter((k) => k.startsWith('irbana-pwa')).map((k) => caches.delete(k))
+          );
+        }
+      } catch {
+        /* ignore */
+      }
+      return null;
+    }
+  }
+
   const manager = getServiceWorkerManager();
 
   // Configurar atualização antes do registro para não perder eventos de updatefound.

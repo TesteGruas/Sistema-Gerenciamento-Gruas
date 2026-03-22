@@ -1,10 +1,10 @@
 import { supabaseAdmin } from '../config/supabase.js';
+import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { gerarTokenAprovacao } from '../utils/approval-tokens.js';
 import { buscarFuncionario } from '../utils/aprovacoes-helpers.js';
 import { normalizarTelefoneBrasilParaWhatsApp } from '../utils/telefone-brasil.js';
 
 const WHATSAPP_WEBHOOK_URL = process.env.WHATSAPP_WEBHOOK_URL || 'https://gsouzabd.app.n8n.cloud/webhook/irbana-notify';
-const FRONTEND_URL = process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
 
 /**
  * Busca configuração completa da Evolution API (URL base, instância e apikey)
@@ -707,7 +707,7 @@ function formatarMensagemNovaObra(obra, cliente) {
 📊 *Status:* ${obra.status || 'Não informado'}
 
 Acesse o sistema para mais detalhes:
-${FRONTEND_URL}/dashboard/obras/${obra.id}
+${getPublicFrontendUrl()}/dashboard/obras/${obra.id}
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -737,7 +737,7 @@ Seu acesso ao sistema foi criado com sucesso!
 ⚠️ *Importante:* Altere sua senha no primeiro acesso.
 
 🔗 *Link de Acesso:*
-${FRONTEND_URL}/login
+${getPublicFrontendUrl()}/login
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -768,7 +768,7 @@ Seu acesso ao sistema foi criado com sucesso para a empresa *${nomeEmpresa}*!
 ⚠️ *Importante:* Altere sua senha no primeiro acesso.
 
 🔗 *Link de Acesso:*
-${FRONTEND_URL}/login
+${getPublicFrontendUrl()}/login
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -798,7 +798,7 @@ Sua senha foi redefinida com sucesso!
 ⚠️ *Importante:* Altere sua senha no próximo acesso.
 
 🔗 *Link de Acesso:*
-${FRONTEND_URL}/login
+${getPublicFrontendUrl()}/login
 
 ---
 _Sistema de Gestão de Gruas_`;
@@ -864,7 +864,7 @@ export async function enviarMensagemNovaObra(obra) {
     
     // Formatar mensagem usando obra completa
     const mensagem = formatarMensagemNovaObra(obraCompleta, cliente);
-    const linkObra = `${FRONTEND_URL}/dashboard/obras/${obraCompleta.id}`;
+    const linkObra = `${getPublicFrontendUrl()}/dashboard/obras/${obraCompleta.id}`;
     
     // Lista de destinatários (cliente + responsável/gestores)
     const destinatarios = [];
@@ -1048,7 +1048,7 @@ export async function enviarMensagemNovoUsuarioFuncionario(funcionario, email, s
     
     // Formatar mensagem
     const mensagem = formatarMensagemNovoUsuarioFuncionario(funcionario, email, senhaTemporaria);
-    const linkLogin = `${FRONTEND_URL}/login`;
+    const linkLogin = `${getPublicFrontendUrl()}/login`;
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1121,7 +1121,7 @@ export async function enviarMensagemNovoUsuarioCliente(cliente, email, senhaTemp
     
     // Formatar mensagem
     const mensagem = formatarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria);
-    const linkLogin = `${FRONTEND_URL}/login`;
+    const linkLogin = `${getPublicFrontendUrl()}/login`;
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1194,7 +1194,7 @@ export async function enviarMensagemResetSenhaFuncionario(funcionario, email, se
     
     // Formatar mensagem de reset de senha
     const mensagem = formatarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria);
-    const linkLogin = `${FRONTEND_URL}/login`;
+    const linkLogin = `${getPublicFrontendUrl()}/login`;
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1262,7 +1262,7 @@ _Sistema de Gestão de Gruas_`;
  */
 function formatarMensagemForgotPassword(usuario, token) {
   const nomeUsuario = usuario?.nome || 'Usuário';
-  const resetLink = `${FRONTEND_URL}/auth/reset-password/${token}`;
+  const resetLink = `${getPublicFrontendUrl()}/auth/reset-password/${token}`;
   
   const mensagem = `🔐 *Redefinição de Senha - Sistema de Gestão de Gruas*
 
@@ -1331,7 +1331,7 @@ export async function enviarMensagemForgotPassword(usuario, token) {
     
     // Formatar mensagem
     const mensagem = formatarMensagemForgotPassword(usuario, token);
-    const resetLink = `${FRONTEND_URL}/auth/reset-password/${token}`;
+    const resetLink = `${getPublicFrontendUrl()}/auth/reset-password/${token}`;
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1407,7 +1407,7 @@ export async function enviarMensagemAprovacao(aprovacao, supervisor = null) {
     const funcionario = await buscarFuncionario(aprovacao.funcionario_id);
     
     // Gerar link de aprovação
-    const linkAprovacao = `${FRONTEND_URL}/aprovacaop/${aprovacao.id}?token=${token}`;
+    const linkAprovacao = `${getPublicFrontendUrl()}/aprovacaop/${aprovacao.id}?token=${token}`;
     
     // Formatar mensagem
     const mensagem = formatarMensagemAprovacao(aprovacao, funcionario, linkAprovacao);
