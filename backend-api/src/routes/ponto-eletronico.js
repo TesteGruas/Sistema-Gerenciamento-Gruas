@@ -5501,13 +5501,17 @@ router.post('/registros/:id/rejeitar-responsavel', authenticateToken, async (req
 
     console.log(`[Rejeitar-Responsavel] Registro ${id} rejeitado pelo responsável ${responsavel.nome}`);
 
-    // Notificar funcionário (não bloqueia)
-    notificarFuncionarioPontoRejeitado(
-      registroAtualizado,
-      registroAtualizado.funcionario || { id: registro.funcionario_id },
-      { nome: responsavel.nome || usuarioLogado.nome },
-      comentario.trim()
-    ).catch(e => console.error('[Rejeitar-Responsavel] Erro notificação:', e.message));
+    // Notificar funcionário (aguarda tentativa completa: e-mail, WhatsApp, in-app, push)
+    try {
+      await notificarFuncionarioPontoRejeitado(
+        registroAtualizado,
+        registroAtualizado.funcionario || { id: registro.funcionario_id },
+        { nome: responsavel.nome || usuarioLogado.nome },
+        comentario.trim()
+      );
+    } catch (e) {
+      console.error('[Rejeitar-Responsavel] Erro ao notificar funcionário:', e?.message || e);
+    }
 
     res.json({
       success: true,

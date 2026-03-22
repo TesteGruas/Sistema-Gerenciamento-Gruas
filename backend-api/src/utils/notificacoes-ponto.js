@@ -1175,8 +1175,14 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
  */
 export async function notificarFuncionarioPontoRejeitado(registro, funcionario, responsavel, comentario) {
   const baseUrl = FRONTEND_URL();
-  const linkCorrigir = `${baseUrl}/pwa/aprovacoes`;
+  const regId = registro?.id != null ? String(registro.id) : '';
+  const pathCorrigir = regId
+    ? `/pwa/aprovacao-assinatura?id=${encodeURIComponent(regId)}`
+    : '/pwa/aprovacoes';
+  const linkCorrigir = `${baseUrl.replace(/\/+$/, '')}${pathCorrigir.startsWith('/') ? pathCorrigir : `/${pathCorrigir}`}`;
   const responsavelNome = responsavel?.nome || 'Responsável';
+
+  const resumoCanais = { email: false, whatsapp: false, in_app_push: false };
 
   try {
     const fid =
@@ -1184,7 +1190,7 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
 
     if (!fid) {
       console.warn('[notificacoes-ponto] notificarFuncionarioPontoRejeitado: sem funcionario_id — ignorado');
-      return;
+      return resumoCanais;
     }
 
     const { data: funcData, error: errFunc } = await supabaseAdmin
@@ -1198,7 +1204,7 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
     }
 
     const emailFunc = funcData?.email || null;
-    const telefoneFunc = funcData?.telefone_whatsapp || funcData?.telefone;
+    const telefoneNorm = normalizarTelefoneWhatsapp(funcData?.telefone_whatsapp || funcData?.telefone);
 
     let usuarioIdFunc = await resolverUsuarioIdPorFuncionario(fid);
     if (!usuarioIdFunc && emailFunc) {
@@ -1209,6 +1215,8 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
         );
       }
     }
+
+    console.log('[notificacoes-ponto] Rejeição responsável → funcionário fid=%s usuario_id=%s email=%s tel_norm=%s link=%s', fid, usuarioIdFunc || '(nenhum)', emailFunc ? '(sim)' : '(não)', telefoneNorm || '(não)', pathCorrigir);
 
     // 1) Email
     if (emailFunc) {
@@ -1228,17 +1236,25 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
           linkCorrigir
         }),
         tipo: 'notificacao_ponto_rejeicao'
-      }).catch(e => console.error('[notificacoes-ponto] Erro email rejeição:', e.message));
+      })
+        .then(() => {
+          resumoCanais.email = true;
+        })
+        .catch(e => console.error('[notificacoes-ponto] Erro email rejeição:', e.message));
     }
 
-    // 2) WhatsApp
-    if (telefoneFunc) {
+    // 2) WhatsApp (número no formato esperado pela Evolution / webhook)
+    if (telefoneNorm) {
       await enviarMensagemWebhook(
-        telefoneFunc,
+        telefoneNorm,
         mensagemWhatsAppRejeicao({ responsavelNome, data: registro.data, comentario: comentario || 'Sem comentário', link: linkCorrigir }),
         linkCorrigir,
         { tipo: 'ponto_rejeicao', destinatario_nome: funcData?.nome || 'Funcionário' }
-      ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp rejeição:', e.message));
+      )
+        .then(r => {
+          if (r?.sucesso) resumoCanais.whatsapp = true;
+        })
+        .catch(e => console.error('[notificacoes-ponto] Erro WhatsApp rejeição:', e.message));
     }
 
     // 3) Notificação in-app + push
@@ -1251,7 +1267,7 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
           tipo: 'warning',
           titulo: 'Registro de ponto não aprovado',
           mensagem: `${responsavelNome} não concordou com seu registro de ${formatarData(registro.data)}. Motivo: ${comentario || 'Sem comentário'}. Corrija as horas no app.`,
-          link: `/pwa/aprovacoes`,
+          link: pathCorrigir,
           lida: false,
           created_at: agora
         })
@@ -1263,6 +1279,7 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
       }
 
       if (notif) {
+        resumoCanais.in_app_push = true;
         try {
           emitirNotificacao(usuarioIdFunc, notif);
         } catch (e) {
@@ -1275,7 +1292,7 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
           enviarPushParaUsuario(usuarioIdFunc, {
             title: 'Ponto não aprovado',
             body: `${responsavelNome} pediu correção no seu registro de ${formatarData(registro.data)}.`,
-            ...pushPwaRelativo({ path: '/pwa/aprovacoes' }),
+            ...pushPwaRelativo({ path: pathCorrigir }),
             tag: `ponto-func-rejeicao-${registro.id}`
           }),
           MS_TIMEOUT_PUSH,
@@ -1297,10 +1314,12 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
     }
 
     console.log(
-      `[notificacoes-ponto] Funcionário ${funcData?.nome || fid} notificado sobre rejeição do responsável`
+      `[notificacoes-ponto] Rejeição: funcionário ${funcData?.nome || fid} — canais: email=${resumoCanais.email} whatsapp=${resumoCanais.whatsapp} in_app=${resumoCanais.in_app_push}`
     );
+    return resumoCanais;
   } catch (e) {
     console.error('[notificacoes-ponto] Erro ao notificar funcionário (rejeição):', e);
+    return resumoCanais;
   }
 }
 

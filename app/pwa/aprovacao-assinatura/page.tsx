@@ -370,9 +370,12 @@ function PWAAprovacaoAssinaturaPageContent() {
         </p>
       </div>
 
+      {/* Espaço inferior: altura do rodapé PWA (nav z-50) + faixa de ações acima dela */}
       <div
         className={`px-2 py-1 space-y-2 max-w-lg mx-auto w-full ${
-          showBottomActionsBar ? 'pb-[calc(11rem+env(safe-area-inset-bottom,0px))]' : 'pb-6'
+          showBottomActionsBar
+            ? 'pb-[calc(4rem+10px+env(safe-area-inset-bottom,0px)+9.5rem)]'
+            : 'pb-6'
         }`}
       >
         {/* Alerta de rejeição (quando o registro foi rejeitado) */}
@@ -582,6 +585,24 @@ function PWAAprovacaoAssinaturaPageContent() {
                   </Button>
                 )}
               </div>
+
+              {isResponsavelObra && showBottomActionsBar && (
+                <div className="pt-3 mt-1 border-t border-dashed border-border/70 space-y-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-red-300 text-red-700 hover:bg-red-50 h-11 font-semibold"
+                    onClick={() => setShowRejeicao(true)}
+                    disabled={isLoading}
+                  >
+                    <XCircle className="w-5 h-5 mr-2 shrink-0" />
+                    Não concordo com as horas
+                  </Button>
+                  <p className="text-[11px] text-muted-foreground text-center leading-snug px-0.5">
+                    Use se o registro estiver incorreto. O funcionário receberá o motivo e poderá ajustar os horários.
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
@@ -606,7 +627,10 @@ function PWAAprovacaoAssinaturaPageContent() {
       </div>
 
       {showBottomActionsBar && (
-        <div className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200/90 bg-background/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] px-3 pt-3 space-y-2 pb-[max(0.75rem,env(safe-area-inset-bottom))] max-w-lg mx-auto w-full box-border">
+        <div
+          className="fixed inset-x-0 z-40 border-t border-gray-200/90 bg-background/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] px-3 pt-3 space-y-2 pb-3 max-w-lg mx-auto w-full box-border bottom-[calc(4rem+10px+env(safe-area-inset-bottom,0px))]"
+          aria-label="Ações de assinatura"
+        >
           <Button
             onClick={handleAprovar}
             disabled={!canAssinar || !assinatura.trim() || isLoading}
