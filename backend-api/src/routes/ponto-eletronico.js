@@ -2598,6 +2598,69 @@ router.put('/registros/:id', async (req, res) => {
         .insert(historicoAlteracoes);
     }
 
+    // PWA e clientes usam PUT para registrar saída em registro existente — espelhar o POST (dupla assinatura / notificações)
+    const saidaInformadaNestePut = Boolean(saida && String(saida).trim() !== '');
+    const diaFechadoPelaPrimeiraVez =
+      saidaInformadaNestePut &&
+      Boolean(registroAtualizado.entrada) &&
+      Boolean(registroAtualizado.saida) &&
+      !registroAtual.saida;
+
+    if (diaFechadoPelaPrimeiraVez) {
+      try {
+        const funcionarioNotif = {
+          id: registroAtualizado.funcionario_id,
+          nome: registroAtualizado.funcionario?.nome || 'Funcionário',
+          cargo: registroAtualizado.funcionario?.cargo ?? null,
+          turno: registroAtualizado.funcionario?.turno ?? null,
+          obra_atual_id: null
+        };
+
+        let obraId = registroAtualizado.obra_id || null;
+        if (!obraId) {
+          const { data: fn } = await supabaseAdmin
+            .from('funcionarios')
+            .select('obra_atual_id')
+            .eq('id', registroAtualizado.funcionario_id)
+            .maybeSingle();
+          if (fn?.obra_atual_id) {
+            obraId = fn.obra_atual_id;
+            funcionarioNotif.obra_atual_id = fn.obra_atual_id;
+          }
+        }
+
+        if (!obraId) {
+          console.warn(
+            '[ponto-eletronico] PUT: dia fechado sem obra_id no registro nem obra_atual_id do funcionário — notificações não enviadas'
+          );
+        } else {
+          const temDestinatarios = await obraTemDestinatariosNotificacaoPonto(obraId);
+          const regParaNotif =
+            registroAtualizado.obra_id != null && registroAtualizado.obra_id !== ''
+              ? registroAtualizado
+              : { ...registroAtualizado, obra_id: obraId };
+
+          if (temDestinatarios) {
+            await supabaseAdmin
+              .from('registros_ponto')
+              .update({ status: 'Pendente Assinatura' })
+              .eq('id', id);
+            registroAtualizado.status = 'Pendente Assinatura';
+            regParaNotif.status = 'Pendente Assinatura';
+          }
+
+          notificarResponsaveisObraPontoConcluido(regParaNotif, funcionarioNotif).catch((e) =>
+            console.error('[ponto-eletronico] Erro notificação responsáveis (PUT):', e.message)
+          );
+          console.log(
+            `[ponto-eletronico] PUT — dia fechado, fluxo responsáveis obra ${obraId} (destinatários: ${temDestinatarios ? 'sim' : 'não'})`
+          );
+        }
+      } catch (errNotif) {
+        console.error('[ponto-eletronico] Erro ao notificar responsáveis (PUT):', errNotif);
+      }
+    }
+
     res.json({
       success: true,
       data: registroAtualizado,
