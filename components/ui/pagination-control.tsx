@@ -1,9 +1,9 @@
 "use client"
 
-import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Card, CardContent } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 import { 
   ChevronLeft, 
   ChevronRight, 
@@ -20,6 +20,8 @@ interface PaginationControlProps {
   onItemsPerPageChange: (itemsPerPage: number) => void
   itemsPerPageOptions?: number[]
   className?: string
+  /** Sem Card externo — para usar dentro de outro card (ex.: lista + filtros) */
+  variant?: "card" | "plain"
 }
 
 export function PaginationControl({
@@ -30,7 +32,8 @@ export function PaginationControl({
   onPageChange,
   onItemsPerPageChange,
   itemsPerPageOptions = [9, 15, 30, 50],
-  className = ""
+  className = "",
+  variant = "card",
 }: PaginationControlProps) {
   const startIndex = ((currentPage - 1) * itemsPerPage) + 1
   const endIndex = Math.min(currentPage * itemsPerPage, totalItems)
@@ -67,9 +70,7 @@ export function PaginationControl({
 
   const pageNumbers = getPageNumbers()
 
-  return (
-    <Card className={className}>
-      <CardContent className="p-4">
+  const body = (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
           {/* Informações da paginação */}
           <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
@@ -165,7 +166,15 @@ export function PaginationControl({
             </Button>
           </div>
         </div>
-      </CardContent>
+  )
+
+  if (variant === "plain") {
+    return <div className={cn("w-full px-4 py-4 sm:px-6", className)}>{body}</div>
+  }
+
+  return (
+    <Card className={className}>
+      <CardContent className="p-4">{body}</CardContent>
     </Card>
   )
 }

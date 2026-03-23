@@ -1,28 +1,16 @@
 "use client"
 
 import { useState, useEffect, useRef } from "react"
-import { useToast } from "@/hooks/use-toast"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { useRouter } from "next/navigation"
+import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Alert, AlertDescription } from "@/components/ui/alert"
-import { 
-  BookOpen, 
-  Search, 
-  Wrench, 
-  Building2,
-  Calendar,
-  MapPin,
-  ArrowRight,
-  AlertCircle,
-  Loader2
-} from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { BookOpen, Search, Wrench, Eye, AlertCircle } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
-import { gruasApi } from "@/lib/api-gruas"
-import { obrasApi } from "@/lib/api-obras"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { useCurrentUser } from "@/hooks/use-current-user"
 import { PaginationControl } from "@/components/ui/pagination-control"
@@ -52,8 +40,15 @@ interface GruaObraRelacao {
   }
 }
 
+function formatRelacaoDate(d?: string | null): string {
+  if (!d) return "—"
+  const t = new Date(d).getTime()
+  if (Number.isNaN(t)) return "—"
+  return new Date(d).toLocaleDateString("pt-BR")
+}
+
 export default function LivrosGruasPage() {
-  const { toast } = useToast()
+  const router = useRouter()
   const { user, loading: userLoading, isAdmin } = useCurrentUser()
   
   // Estados principais
@@ -285,185 +280,176 @@ export default function LivrosGruasPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-lg">Filtros</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                <Input
-                  id="search"
-                  placeholder="Grua, modelo, obra..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
+      <Card className="overflow-hidden">
+        <CardContent className="p-0">
+          <div className="border-b px-4 py-4 sm:px-6 sm:py-5">
+            <p className="mb-3 text-sm font-semibold text-foreground">Filtros</p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+              <div>
+                <Label htmlFor="search">Buscar</Label>
+                <div className="relative mt-2">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="search"
+                    placeholder="Grua, modelo, obra..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="obra">Obra</Label>
+                <Select value={filterObra} onValueChange={setFilterObra}>
+                  <SelectTrigger id="obra" className="mt-2">
+                    <SelectValue placeholder="Todas as obras" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as obras</SelectItem>
+                    {obrasUnicas.map((obra) => (
+                      <SelectItem key={obra?.id} value={obra?.id.toString()}>
+                        {obra?.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label htmlFor="status">Status</Label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger id="status" className="mt-2">
+                    <SelectValue placeholder="Todos os status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os status</SelectItem>
+                    {statusUnicos.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex items-end">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setSearchTerm("")
+                    setFilterObra("all")
+                    setFilterStatus("all")
+                  }}
+                  className="mt-6 w-full md:mt-0"
+                >
+                  Limpar filtros
+                </Button>
               </div>
             </div>
-            
-            <div>
-              <Label htmlFor="obra">Obra</Label>
-              <Select value={filterObra} onValueChange={setFilterObra}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as obras" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as obras</SelectItem>
-                  {obrasUnicas.map((obra) => (
-                    <SelectItem key={obra?.id} value={obra?.id.toString()}>
-                      {obra?.nome}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={filterStatus} onValueChange={setFilterStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  {statusUnicos.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchTerm("")
-                  setFilterObra("all")
-                  setFilterStatus("all")
-                }}
-                className="w-full"
-              >
-                Limpar Filtros
-              </Button>
-            </div>
           </div>
+
+          {relacoesFiltradas.length > 0 ? (
+            <>
+              <div className="overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="min-w-[140px]">Grua</TableHead>
+                      <TableHead className="whitespace-nowrap">Status</TableHead>
+                      <TableHead className="min-w-[160px]">Obra</TableHead>
+                      <TableHead className="min-w-[200px] hidden lg:table-cell">Local</TableHead>
+                      <TableHead className="min-w-[200px] whitespace-nowrap">Período</TableHead>
+                      <TableHead className="text-right min-w-[72px]">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {relacoesFiltradas.map((relacao) => {
+                      if (!relacao.grua || !relacao.obra) return null
+                      const localStr = [relacao.obra.endereco, [relacao.obra.cidade, relacao.obra.estado].filter(Boolean).join("/")]
+                        .filter(Boolean)
+                        .join(" · ")
+                      const periodo = `${formatRelacaoDate(relacao.data_inicio_locacao)} — ${relacao.data_fim_locacao ? formatRelacaoDate(relacao.data_fim_locacao) : "Em aberto"}`
+
+                      return (
+                        <TableRow key={relacao.id} className="hover:bg-muted/50">
+                          <TableCell>
+                            <div className="flex items-start gap-2 min-w-0">
+                              <Wrench className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                              <div className="min-w-0">
+                                <p className="font-medium truncate" title={relacao.grua.id}>
+                                  {relacao.grua.id || "—"}
+                                </p>
+                                <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">
+                                  {[relacao.grua.fabricante, relacao.grua.modelo].filter(Boolean).join(" · ") || "—"}
+                                </p>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant={relacao.status === "Ativa" ? "default" : "secondary"} className="whitespace-nowrap">
+                              {relacao.status || "—"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            <span className="line-clamp-2 font-medium" title={relacao.obra.nome}>
+                              {relacao.obra.nome || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
+                            <span className="line-clamp-2" title={localStr || undefined}>
+                              {localStr || "—"}
+                            </span>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-sm text-muted-foreground">{periodo}</TableCell>
+                          <TableCell className="p-2 text-right">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-blue-600 hover:bg-blue-50 hover:text-blue-700"
+                              title="Abrir livro da grua"
+                              onClick={() => router.push(`/dashboard/livros-gruas/${relacao.id}/livro`)}
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {totalPages > 0 ? (
+                <div className="border-t">
+                  <PaginationControl
+                    variant="plain"
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    totalItems={totalItems}
+                    itemsPerPage={itemsPerPage}
+                    onPageChange={handlePageChange}
+                    onItemsPerPageChange={handleItemsPerPageChange}
+                    itemsPerPageOptions={[9, 18, 27, 36]}
+                  />
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <div className="px-6 py-12 text-center text-muted-foreground">
+              <BookOpen className="mx-auto mb-4 h-12 w-12 opacity-40" />
+              <p className="font-medium text-foreground">Nenhuma relação encontrada</p>
+              <p className="mt-1 text-sm">
+                {searchTerm || filterObra !== "all" || filterStatus !== "all"
+                  ? "Tente ajustar os filtros para encontrar o que procura."
+                  : "Não há relações grua-obra cadastradas no momento."}
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
-
-      {/* Lista de Relações */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {relacoesFiltradas.map((relacao) => {
-          // Verificar se os dados necessários existem
-          if (!relacao.grua || !relacao.obra) {
-            return null
-          }
-
-          return (
-            <Card key={relacao.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <Wrench className="w-5 h-5 text-blue-600" />
-                    <span className="font-semibold text-lg">{relacao.grua.id || 'N/A'}</span>
-                  </div>
-                  <Badge 
-                    variant={relacao.status === 'Ativa' ? 'default' : 'secondary'}
-                  >
-                    {relacao.status || 'N/A'}
-                  </Badge>
-                </div>
-                <CardDescription>
-                  {relacao.grua.fabricante || 'N/A'} {relacao.grua.modelo || 'N/A'}
-                </CardDescription>
-              </CardHeader>
-              
-              <CardContent className="space-y-4">
-                {/* Informações da Obra */}
-                <div className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-gray-600" />
-                    <span className="font-medium">{relacao.obra.nome || 'N/A'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MapPin className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-600">
-                      {relacao.obra.endereco || 'N/A'}, {relacao.obra.cidade || 'N/A'}/{relacao.obra.estado || 'N/A'}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-4 h-4 text-gray-600" />
-                    <span className="text-sm text-gray-600">
-                      Início: {relacao.data_inicio_locacao ? new Date(relacao.data_inicio_locacao).toLocaleDateString('pt-BR') : 'N/A'}
-                    </span>
-                  </div>
-                  {relacao.data_fim_locacao && (
-                    <div className="flex items-center gap-2">
-                      <Calendar className="w-4 h-4 text-gray-600" />
-                      <span className="text-sm text-gray-600">
-                        Fim: {new Date(relacao.data_fim_locacao).toLocaleDateString('pt-BR')}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Botão de Acesso */}
-                <Button 
-                  className="w-full"
-                  onClick={() => {
-                    window.location.href = `/dashboard/livros-gruas/${relacao.id}/livro`
-                  }}
-                >
-                  <BookOpen className="w-4 h-4 mr-2" />
-                  Acessar Livro
-                  <ArrowRight className="w-4 h-4 ml-2" />
-                </Button>
-              </CardContent>
-            </Card>
-          )
-        })}
-      </div>
-
-      {/* Mensagem quando não há resultados */}
-      {relacoesFiltradas.length === 0 && !loading && (
-        <Card>
-          <CardContent className="text-center py-8">
-            <BookOpen className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-medium text-gray-700 mb-2">
-              Nenhuma relação encontrada
-            </h3>
-            <p className="text-gray-600">
-              {searchTerm || filterObra !== "all" || filterStatus !== "all"
-                ? "Tente ajustar os filtros para encontrar o que procura."
-                : "Não há relações grua-obra cadastradas no momento."
-              }
-            </p>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Paginação */}
-      {!loading && !error && totalPages > 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <PaginationControl
-              currentPage={currentPage}
-              totalPages={totalPages}
-              totalItems={totalItems}
-              itemsPerPage={itemsPerPage}
-              onPageChange={handlePageChange}
-              onItemsPerPageChange={handleItemsPerPageChange}
-              itemsPerPageOptions={[9, 18, 27, 36]}
-            />
-          </CardContent>
-        </Card>
-      )}
     </div>
   )
 }

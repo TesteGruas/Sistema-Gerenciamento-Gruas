@@ -61,14 +61,15 @@ export default function LivroGruaRelacaoPage() {
 
   // Carregar dados da grua
   const carregarGrua = async () => {
+    // Não entrar no try/finally enquanto o perfil carrega: o `finally` daria setLoading(false)
+    // e a UI caía em "!grua" com "Grua não encontrada" antes da busca real.
+    if (userLoading) {
+      return
+    }
+
     try {
       setLoading(true)
       setError(null)
-
-      // Aguardar carregamento do usuário
-      if (userLoading) {
-        return
-      }
 
       if (!user) {
         setError('Usuário não autenticado. Faça login para acessar esta página.')
@@ -116,8 +117,8 @@ export default function LivroGruaRelacaoPage() {
 
 
 
-  // Tratamento de loading e erro
-  if (loading) {
+  // Tratamento de loading e erro (userLoading evita flash de "não encontrada" antes da API)
+  if (loading || userLoading) {
     return (
       <div className="space-y-6">
         <PageLoader text="Carregando livro da grua..." />
