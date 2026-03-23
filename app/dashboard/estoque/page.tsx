@@ -32,6 +32,10 @@ import { apiComponentes, type ComponenteAgrupadoPorGrua } from "@/lib/api-compon
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ConeIcon as Crane } from "lucide-react"
 
+function formatCurrencyBRL(value: number): string {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0)
+}
+
 export default function EstoquePage() {
   const { toast } = useToast()
   
@@ -452,13 +456,13 @@ export default function EstoquePage() {
         'Categoria': item.categorias?.nome || '',
         'Código de Barras': item.codigo_barras || '',
         'Unidade de Medida': item.unidade_medida || '',
-        'Quantidade Disponível': estoqueData?.quantidade_disponivel || 0,
-        'Quantidade Reservada': estoqueData?.quantidade_reservada || 0,
+        'Disponível': estoqueData?.quantidade_disponivel || 0,
+        'Reservado': estoqueData?.quantidade_reservada || 0,
         'Quantidade Atual': estoqueData?.quantidade_atual || 0,
         'Estoque Mínimo': item.estoque_minimo || 0,
         'Estoque Máximo': item.estoque_maximo || 0,
-        'Valor Unitário': `R$ ${(item.valor_unitario || 0).toFixed(2)}`,
-        'Valor Total': `R$ ${(estoqueData?.valor_total || 0).toFixed(2)}`,
+        'Valor Unitário': formatCurrencyBRL(item.valor_unitario || 0),
+        'Valor Total': formatCurrencyBRL(estoqueData?.valor_total || 0),
         'Localização': item.localizacao || '',
         'Status': item.status || 'Ativo',
         'Última Movimentação': estoqueData?.ultima_movimentacao 
@@ -480,8 +484,8 @@ export default function EstoquePage() {
         'Tipo': mov.tipo,
         'Quantidade': mov.quantidade,
         'Unidade de Medida': (mov as any).produtos?.unidade_medida || '',
-        'Valor Unitário': `R$ ${(mov.valor_unitario || 0).toFixed(2)}`,
-        'Valor Total': `R$ ${(mov.valor_total || 0).toFixed(2)}`,
+        'Valor Unitário': formatCurrencyBRL(mov.valor_unitario || 0),
+        'Valor Total': formatCurrencyBRL(mov.valor_total || 0),
         'Motivo': mov.motivo || '',
         'Responsável ID': mov.responsavel_id || '',
         'Observações': mov.observacoes || '',
@@ -1188,11 +1192,13 @@ export default function EstoquePage() {
     },
     {
       title: "Valor Total",
-      value: `R$ ${estoque.reduce((acc, item) => {
-        const estoqueData = getEstoqueData(item.id)
-        const valorTotal = estoqueData?.valor_total || 0
-        return acc + valorTotal
-      }, 0).toLocaleString()}`,
+      value: formatCurrencyBRL(
+        estoque.reduce((acc, item) => {
+          const estoqueData = getEstoqueData(item.id)
+          const valorTotal = estoqueData?.valor_total || 0
+          return acc + valorTotal
+        }, 0),
+      ),
       icon: BarChart3,
       color: "bg-green-500",
     },
@@ -1818,13 +1824,17 @@ export default function EstoquePage() {
               </div>
 
               <div className="rounded-md border">
-                <Table>
+                <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="text-center">Item</TableHead>
+                      <TableHead className="w-56 text-center whitespace-nowrap">Item</TableHead>
                       <TableHead className="text-center">Categoria</TableHead>
-                      <TableHead className="text-center">Quantidade Disponível</TableHead>
-                      <TableHead className="text-center">Quantidade Reservada</TableHead>
+                      <TableHead className="w-24 px-2 text-center text-xs whitespace-nowrap">
+                        Disponível
+                      </TableHead>
+                      <TableHead className="w-24 px-2 text-center text-xs whitespace-nowrap">
+                        Reservado
+                      </TableHead>
                       <TableHead className="text-center">Status</TableHead>
                       <TableHead className="text-center">Valor Unit.</TableHead>
                       <TableHead className="text-center">Valor Total</TableHead>
@@ -1870,26 +1880,40 @@ export default function EstoquePage() {
                       
                       return (
                         <TableRow key={item.id}>
-                          <TableCell className="text-center">
-                            <div className="flex flex-col items-center">
-                              <p className="font-medium">{item.nome}</p>
-                              <p className="text-sm text-gray-500">{item.id}</p>
+                          <TableCell className="w-56 text-center align-middle">
+                            <div className="flex min-w-0 w-full flex-col items-center gap-0.5">
+                              <p
+                                className="w-full truncate font-medium"
+                                title={item.nome}
+                              >
+                                {item.nome}
+                              </p>
+                              <p className="w-full truncate text-sm text-gray-500" title={item.id}>
+                                {item.id}
+                              </p>
                               {item.codigo_barras && (
-                                <p className="text-xs text-gray-400">Código: {item.codigo_barras}</p>
+                                <p
+                                  className="w-full truncate text-xs text-gray-400"
+                                  title={`Código: ${item.codigo_barras}`}
+                                >
+                                  Código: {item.codigo_barras}
+                                </p>
                               )}
                             </div>
                           </TableCell>
                           <TableCell className="text-center">{item.categorias?.nome || "Sem categoria"}</TableCell>
-                          <TableCell className="text-center">
-                            <div>
-                              <p className="font-medium">{quantidadeDisponivel}</p>
-                              <p className="text-xs text-gray-500">{item.unidade_medida}</p>
+                          <TableCell className="w-24 px-2 text-center align-middle">
+                            <div className="flex flex-col items-center gap-0">
+                              <p className="font-medium tabular-nums leading-none">{quantidadeDisponivel}</p>
+                              <p className="text-[10px] leading-tight text-gray-500">{item.unidade_medida}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">
-                            <div>
-                              <p className="font-medium text-orange-600">{quantidadeReservada}</p>
-                              <p className="text-xs text-gray-500">{item.unidade_medida}</p>
+                          <TableCell className="w-24 px-2 text-center align-middle">
+                            <div className="flex flex-col items-center gap-0">
+                              <p className="font-medium tabular-nums leading-none text-orange-600">
+                                {quantidadeReservada}
+                              </p>
+                              <p className="text-[10px] leading-tight text-gray-500">{item.unidade_medida}</p>
                             </div>
                           </TableCell>
                           <TableCell className="text-center">
@@ -1897,8 +1921,12 @@ export default function EstoquePage() {
                               {getStatusBadge(item)}
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">R$ {(item.valor_unitario || 0).toFixed(2)}</TableCell>
-                          <TableCell className="text-center">R$ {(valorTotal || 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {formatCurrencyBRL(item.valor_unitario || 0)}
+                          </TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {formatCurrencyBRL(valorTotal || 0)}
+                          </TableCell>
                           <TableCell className="text-center">{item.localizacao || "-"}</TableCell>
                           <TableCell className="text-center">
                             <div className="flex gap-1 justify-center">
@@ -2065,8 +2093,8 @@ export default function EstoquePage() {
                               <span>
                                 <strong>{grupo.total_quantidade}</strong> unidade{grupo.total_quantidade !== 1 ? 's' : ''}
                               </span>
-                              <span className="text-green-600 font-semibold">
-                                R$ {grupo.total_valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              <span className="text-green-600 font-semibold tabular-nums">
+                                {formatCurrencyBRL(grupo.total_valor)}
                               </span>
                             </div>
                           </div>
@@ -2126,8 +2154,8 @@ export default function EstoquePage() {
                                     <TableCell>
                                       {componente.localizacao_tipo || componente.localizacao || 'N/A'}
                                     </TableCell>
-                                    <TableCell className="text-right font-semibold">
-                                      R$ {componente.valor_total.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    <TableCell className="text-right font-semibold tabular-nums">
+                                      {formatCurrencyBRL(componente.valor_total)}
                                     </TableCell>
                                   </TableRow>
                                 ))}
@@ -2289,8 +2317,12 @@ export default function EstoquePage() {
                               <p className="text-xs text-gray-500">{(mov as any).produtos?.unidade_medida || ""}</p>
                             </div>
                           </TableCell>
-                          <TableCell className="text-center">R$ {(mov.valor_unitario || 0).toFixed(2)}</TableCell>
-                          <TableCell className="text-center">R$ {(mov.valor_total || 0).toFixed(2)}</TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {formatCurrencyBRL(mov.valor_unitario || 0)}
+                          </TableCell>
+                          <TableCell className="text-center tabular-nums">
+                            {formatCurrencyBRL(mov.valor_total || 0)}
+                          </TableCell>
                           <TableCell className="text-center">
                             <span className="text-sm text-gray-600">{mov.motivo}</span>
                           </TableCell>

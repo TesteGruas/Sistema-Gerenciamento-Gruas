@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo, useCallback } from "react"
 import dynamic from "next/dynamic"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
   Building2, 
@@ -19,14 +20,9 @@ import {
   Search, 
   Edit,
   Eye,
-  CheckCircle,
   XCircle,
-  Phone,
-  Mail,
-  MapPin,
   User,
   FileText,
-  Calendar,
   Trash2,
   Loader2,
   ChevronLeft,
@@ -35,13 +31,18 @@ import {
   ChevronsRight,
   File,
   Image,
-  Zap
+  Bell,
+  X,
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { apiArquivos } from "@/lib/api-arquivos"
 import { buscarEnderecoPorCep as buscarViaCep } from "@/lib/api-cep"
 import { DebugButton } from "@/components/debug-button"
+import { NovaNotificacaoDialog } from "@/components/nova-notificacao-dialog"
+import { ClienteSearch } from "@/components/cliente-search"
+import { NotificarClientesSelecionadosDialog } from "@/components/notificar-clientes-selecionados-dialog"
+import { NotificarUmClienteDialog } from "@/components/notificar-um-cliente-dialog"
 
 const UFS = [
   "AC", "AL", "AP", "AM", "BA", "CE", "DF", "ES", "GO", "MA",
@@ -115,6 +116,15 @@ export default function ClientesPage() {
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [clienteArquivos, setClienteArquivos] = useState<any[]>([])
   const [loadingArquivos, setLoadingArquivos] = useState(false)
+
+  const [destinatariosNotificacaoClientes, setDestinatariosNotificacaoClientes] = useState<
+    Array<{ id: number; nome: string; info?: string }>
+  >([])
+  const [notificarSelecionadosOpen, setNotificarSelecionadosOpen] = useState(false)
+  const [clienteNotificarIndividual, setClienteNotificarIndividual] = useState<Cliente | null>(null)
+  const [notificarIndividualOpen, setNotificarIndividualOpen] = useState(false)
+  const destinatariosNotificacaoClientesRef = useRef(destinatariosNotificacaoClientes)
+  destinatariosNotificacaoClientesRef.current = destinatariosNotificacaoClientes
 
   // Verificar autenticação e carregar dados da API - apenas uma vez
   useEffect(() => {
@@ -806,48 +816,84 @@ export default function ClientesPage() {
     }
   }
 
-  // Calcular estatísticas dos clientes
-  const totalClientes = pagination.total || clientes.length
-  
-  // Qtd de Obras atreladas (total de obras)
-  const qtdObrasAtreladas = obras.length
-  
-  // Total de Novos Clientes do mês atual
-  const mesAtual = new Date().getMonth()
-  const anoAtual = new Date().getFullYear()
-  const novosClientesMes = clientes.filter(cliente => {
-    const dataCriacao = new Date(cliente.created_at)
-    return dataCriacao.getMonth() === mesAtual && dataCriacao.getFullYear() === anoAtual
-  }).length
+  const destinatariosClientesIdSet = useMemo(
+    () => new Set(destinatariosNotificacaoClientes.map((d) => d.id)),
+    [destinatariosNotificacaoClientes],
+  )
 
-  const stats = [
-    { 
-      title: "Total de Clientes", 
-      value: totalClientes, 
-      icon: Building2, 
-      color: "bg-blue-500" 
+  const toggleClienteNotificacao = useCallback((c: Cliente) => {
+    setDestinatariosNotificacaoClientes((prev) => {
+      const exists = prev.some((d) => d.id === c.id)
+      if (exists) return prev.filter((d) => d.id !== c.id)
+      return [...prev, { id: c.id, nome: c.nome, info: c.cnpj || c.email || undefined }]
+    })
+  }, [])
+
+  const abrirNotificarIndividualCliente = useCallback((c: Cliente) => {
+    setClienteNotificarIndividual(c)
+    setNotificarIndividualOpen(true)
+  }, [])
+
+  const onNotificarClienteIndividualOpenChange = useCallback((v: boolean) => {
+    setNotificarIndividualOpen(v)
+    if (!v) setClienteNotificarIndividual(null)
+  }, [])
+
+  const visIdsPaginaClientes = useMemo(() => filteredClientes.map((c) => c.id), [filteredClientes])
+  const nSelecionadosClientesNaPagina = useMemo(
+    () => visIdsPaginaClientes.filter((id) => destinatariosClientesIdSet.has(id)).length,
+    [visIdsPaginaClientes, destinatariosClientesIdSet],
+  )
+  const todosClientesPaginaSelecionados =
+    visIdsPaginaClientes.length > 0 && nSelecionadosClientesNaPagina === visIdsPaginaClientes.length
+  const algunsClientesPaginaSelecionados =
+    nSelecionadosClientesNaPagina > 0 && nSelecionadosClientesNaPagina < visIdsPaginaClientes.length
+
+  const onNotificarSelectAllPaginaClientes = useCallback(
+    (checked: boolean | "indeterminate") => {
+      if (checked === true) {
+        setDestinatariosNotificacaoClientes((prev) => {
+          const map = new Map(prev.map((d) => [d.id, d]))
+          for (const c of filteredClientes) {
+            map.set(c.id, {
+              id: c.id,
+              nome: c.nome,
+              info: c.cnpj || c.email || undefined,
+            })
+          }
+          return Array.from(map.values())
+        })
+        return
+      }
+      const visSet = new Set(visIdsPaginaClientes)
+      setDestinatariosNotificacaoClientes((prev) => prev.filter((d) => !visSet.has(d.id)))
     },
-    { 
-      title: "Qtd de Obras Atreladas", 
-      value: qtdObrasAtreladas, 
-      icon: FileText, 
-      color: "bg-purple-500" 
+    [filteredClientes, visIdsPaginaClientes],
+  )
+
+  const adicionarClienteBuscaNotificacao = useCallback(
+    (raw: unknown) => {
+      if (!raw || typeof raw !== "object") return
+      const obj = raw as Record<string, unknown>
+      const id = Number(obj.id)
+      if (!Number.isFinite(id)) return
+      const nome = String(obj.nome ?? "Cliente")
+      const info =
+        (typeof obj.cnpj === "string" && obj.cnpj) ||
+        (typeof obj.email === "string" && obj.email) ||
+        undefined
+
+      if (destinatariosNotificacaoClientesRef.current.some((d) => d.id === id)) {
+        toast({
+          title: "Já está na lista",
+          description: nome,
+        })
+        return
+      }
+      setDestinatariosNotificacaoClientes((prev) => [...prev, { id, nome, info }])
     },
-    { 
-      title: "Clientes com Obras", 
-      value: clientes.filter(cliente => {
-        return obras.some(obra => obra.cliente_id === cliente.id)
-      }).length, 
-      icon: CheckCircle, 
-      color: "bg-green-500" 
-    },
-    { 
-      title: "Novos Clientes (Mês)", 
-      value: novosClientesMes, 
-      icon: XCircle, 
-      color: "bg-gray-500" 
-    },
-  ]
+    [toast],
+  )
 
   return (
     <ProtectedRoute permission="clientes:visualizar">
@@ -857,89 +903,29 @@ export default function ClientesPage() {
             <h1 className="text-3xl font-bold text-gray-900">Clientes</h1>
             <p className="text-gray-600">Gerenciamento de clientes e suas obras</p>
           </div>
-        <Button 
-          className="flex items-center gap-2"
-          onClick={() => setIsCreateDialogOpen(true)}
-        >
-          <Plus className="w-4 h-4" />
-          Novo Cliente
-        </Button>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="hidden md:grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar clientes</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="search"
-                  placeholder="Nome, email ou CNPJ..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={statusFilter || "todos"} onValueChange={(value) => setStatusFilter(value === "todos" ? "" : value)}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="todos">Todos os status</SelectItem>
-                  <SelectItem value="ativo">Ativo</SelectItem>
-                  <SelectItem value="inativo">Inativo</SelectItem>
-                  <SelectItem value="bloqueado">Bloqueado</SelectItem>
-                  <SelectItem value="pendente">Pendente</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchTerm("")
-                  setStatusFilter("")
-                }}
-                className="w-full"
-              >
-                Limpar Filtros
-              </Button>
-            </div>
+          <div className="flex items-center gap-2">
+            <NovaNotificacaoDialog
+              dialogTitle="Enviar notificação"
+              dialogDescription="A notificação aparece no painel do usuário. Você pode enviar para um funcionário, obra, cliente ou para todos."
+              trigger={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="shrink-0"
+                  aria-label="Enviar notificação a um usuário"
+                  title="Enviar notificação"
+                >
+                  <Bell className="h-5 w-5" />
+                </Button>
+              }
+            />
+            <Button className="flex items-center gap-2" onClick={() => setIsCreateDialogOpen(true)}>
+              <Plus className="w-4 h-4" />
+              Novo Cliente
+            </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Loading State */}
-      {loading && (
-        <div className="flex justify-center items-center py-8">
-          <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
-          <span className="ml-2 text-gray-600">Carregando clientes...</span>
         </div>
-      )}
 
       {/* Error State */}
       {error && (
@@ -978,131 +964,293 @@ export default function ClientesPage() {
         </Card>
       )}
 
-      {/* Lista de Clientes */}
-      {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredClientes.map((cliente) => {
-            return (
-              <Card key={cliente.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
-                  <div className="flex justify-between items-start">
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-5 h-5 text-blue-600" />
-                      <CardTitle className="text-lg">{cliente.nome}</CardTitle>
-                    </div>
-                    <Badge 
-                      variant={
-                        cliente.status === 'ativo' ? 'default' :
-                        cliente.status === 'inativo' ? 'secondary' :
-                        cliente.status === 'bloqueado' ? 'destructive' :
-                        'outline'
-                      }
-                      className="text-xs"
-                    >
-                      {cliente.status === 'ativo' ? 'Ativo' :
-                       cliente.status === 'inativo' ? 'Inativo' :
-                       cliente.status === 'bloqueado' ? 'Bloqueado' :
-                       cliente.status === 'pendente' ? 'Pendente' :
-                       'N/A'}
-                    </Badge>
-                  </div>
-                  <CardDescription>{cliente.cnpj}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3">
-                    {cliente.email && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Mail className="w-4 h-4" />
-                        <span>{cliente.email}</span>
-                      </div>
-                    )}
-                    
-                    {cliente.telefone && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <Phone className="w-4 h-4" />
-                        <span>{cliente.telefone}</span>
-                      </div>
-                    )}
-                    
-                    {(cliente.cidade || cliente.estado) && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <MapPin className="w-4 h-4" />
-                        <span>{formatarLinhaCidadeEstado(cliente.cidade, cliente.estado)}</span>
-                      </div>
-                    )}
-
-                    {cliente.contato && (
-                      <div className="flex items-center gap-2 text-sm text-gray-600">
-                        <User className="w-4 h-4" />
-                        <span>{cliente.contato}</span>
-                      </div>
-                    )}
-                    
-                    <div className="flex gap-2 pt-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(cliente)}
-                        className="flex-1"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Ver Detalhes
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(cliente)}
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteCliente(cliente)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!loading && !error && hasLoadedOnce && filteredClientes.length === 0 && (
+      {/* Clientes: filtros + tabela (ou vazio / carregando) */}
+      {!error && (
         <Card>
-          <CardContent className="p-8 text-center">
-            <Building2 className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">Nenhum cliente encontrado</h3>
-            <p className="text-gray-600 mb-4">
-              {searchTerm ? 'Tente ajustar os filtros de busca.' : 'Comece criando seu primeiro cliente.'}
-            </p>
-            <Button onClick={() => setIsCreateDialogOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              Novo Cliente
-            </Button>
-          </CardContent>
-        </Card>
-      )}
+          <CardHeader>
+            <CardTitle>Clientes</CardTitle>
+            <CardDescription>Visualize e gerencie os cadastros</CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="px-6 pb-6 border-b">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <Label htmlFor="search">Buscar clientes</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="search"
+                      placeholder="Nome, email ou CNPJ..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="status">Status</Label>
+                  <Select value={statusFilter || "todos"} onValueChange={(value) => setStatusFilter(value === "todos" ? "" : value)}>
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Todos os status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="todos">Todos os status</SelectItem>
+                      <SelectItem value="ativo">Ativo</SelectItem>
+                      <SelectItem value="inativo">Inativo</SelectItem>
+                      <SelectItem value="bloqueado">Bloqueado</SelectItem>
+                      <SelectItem value="pendente">Pendente</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setStatusFilter("")
+                    }}
+                    className="w-full"
+                  >
+                    Limpar Filtros
+                  </Button>
+                </div>
+              </div>
+            </div>
 
-      {/* Controles de Paginação */}
-      {!loading && !error && filteredClientes.length > 0 && pagination.pages > 1 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              {/* Informações da paginação */}
+            {loading ? (
+              <div className="flex justify-center items-center py-12 px-6">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+                <span className="ml-2 text-gray-600">Carregando clientes...</span>
+              </div>
+            ) : filteredClientes.length > 0 ? (
+              <div className="p-6 space-y-4">
+                <div className="mb-6 space-y-3">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                    <div className="min-w-0 flex-1 space-y-1.5">
+                      <Label className="text-sm text-muted-foreground">
+                        Selecionar para notificação em massa
+                      </Label>
+                      <ClienteSearch
+                        className="w-full"
+                        placeholder="Digite nome ou CNPJ para incluir na lista…"
+                        onClienteSelect={(c) => c && adicionarClienteBuscaNotificacao(c)}
+                      />
+                    </div>
+                    <div className="flex flex-wrap gap-2 shrink-0 lg:pb-0.5">
+                      <Button
+                        type="button"
+                        disabled={destinatariosNotificacaoClientes.length === 0}
+                        onClick={() => setNotificarSelecionadosOpen(true)}
+                      >
+                        Enviar mensagem em massa
+                        {destinatariosNotificacaoClientes.length > 0
+                          ? ` (${destinatariosNotificacaoClientes.length})`
+                          : ""}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={destinatariosNotificacaoClientes.length === 0}
+                        onClick={() => setDestinatariosNotificacaoClientes([])}
+                      >
+                        Limpar seleção
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Use a caixa <strong className="font-medium">antes do nome</strong> na tabela ou a busca
+                    acima. O <strong className="font-medium">sino em Ações</strong> envia só para aquele
+                    cliente. A lista em massa permanece ao trocar de página.
+                  </p>
+                  {destinatariosNotificacaoClientes.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {destinatariosNotificacaoClientes.map((d) => (
+                        <Badge
+                          key={d.id}
+                          variant="secondary"
+                          className="pl-2 pr-1 py-1 gap-1 max-w-full font-normal"
+                        >
+                          <span className="truncate max-w-[200px]" title={d.nome}>
+                            {d.nome}
+                          </span>
+                          <button
+                            type="button"
+                            className="rounded p-0.5 hover:bg-muted shrink-0"
+                            onClick={() =>
+                              setDestinatariosNotificacaoClientes((prev) =>
+                                prev.filter((x) => x.id !== d.id),
+                              )
+                            }
+                            aria-label={`Remover ${d.nome} da lista`}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+
+            <div className="rounded-md border">
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-11 px-2 text-center">
+                      <div className="flex justify-center py-0.5">
+                        <Checkbox
+                          checked={
+                            todosClientesPaginaSelecionados
+                              ? true
+                              : algunsClientesPaginaSelecionados
+                                ? "indeterminate"
+                                : false
+                          }
+                          onCheckedChange={onNotificarSelectAllPaginaClientes}
+                          disabled={filteredClientes.length === 0}
+                          aria-label="Selecionar ou limpar todos desta página para notificação em massa"
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="w-48 min-w-[12rem] px-3 text-left whitespace-nowrap">
+                      Cliente
+                    </TableHead>
+                    <TableHead className="whitespace-nowrap">CNPJ</TableHead>
+                    <TableHead className="min-w-[140px]">Email</TableHead>
+                    <TableHead className="whitespace-nowrap">Telefone</TableHead>
+                    <TableHead className="min-w-[120px]">Localização</TableHead>
+                    <TableHead className="min-w-[100px]">Contato</TableHead>
+                    <TableHead className="text-center whitespace-nowrap">Status</TableHead>
+                    <TableHead className="text-right w-[168px]">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredClientes.map((cliente) => (
+                    <TableRow key={cliente.id}>
+                      <TableCell className="w-11 px-2 align-middle">
+                        <div className="flex justify-center">
+                          <Checkbox
+                            checked={destinatariosClientesIdSet.has(cliente.id)}
+                            onCheckedChange={() => toggleClienteNotificacao(cliente)}
+                            aria-label={`Incluir ${cliente.nome} na notificação em massa`}
+                          />
+                        </div>
+                      </TableCell>
+                      <TableCell className="w-48 min-w-[12rem] px-3 align-middle">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Building2 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
+                          <span className="truncate text-sm font-medium" title={cliente.nome}>
+                            {cliente.nome}
+                          </span>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground text-sm whitespace-nowrap">
+                        {cliente.cnpj || "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {cliente.email ? (
+                          <span className="truncate block max-w-[200px]" title={cliente.email}>
+                            {cliente.email}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {cliente.telefone || <span className="text-muted-foreground">—</span>}
+                      </TableCell>
+                      <TableCell className="text-sm text-muted-foreground">
+                        {(cliente.cidade || cliente.estado)
+                          ? formatarLinhaCidadeEstado(cliente.cidade, cliente.estado)
+                          : "—"}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {cliente.contato ? (
+                          <span className="truncate block max-w-[140px]" title={cliente.contato}>
+                            {cliente.contato}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant={
+                            cliente.status === "ativo"
+                              ? "default"
+                              : cliente.status === "inativo"
+                                ? "secondary"
+                                : cliente.status === "bloqueado"
+                                  ? "destructive"
+                                  : "outline"
+                          }
+                          className="text-xs whitespace-nowrap"
+                        >
+                          {cliente.status === "ativo"
+                            ? "Ativo"
+                            : cliente.status === "inativo"
+                              ? "Inativo"
+                              : cliente.status === "bloqueado"
+                                ? "Bloqueado"
+                                : cliente.status === "pendente"
+                                  ? "Pendente"
+                                  : "N/A"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            title="Enviar notificação para este cliente"
+                            onClick={() => abrirNotificarIndividualCliente(cliente)}
+                          >
+                            <Bell className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            title="Ver detalhes"
+                            onClick={() => handleViewDetails(cliente)}
+                          >
+                            <Eye className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            title="Editar"
+                            onClick={() => handleEdit(cliente)}
+                          >
+                            <Edit className="w-4 h-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                            title="Excluir"
+                            onClick={() => handleDeleteCliente(cliente)}
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 border-t">
               <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
                 <span>
-                  Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{' '}
-                  {Math.min(pagination.page * pagination.limit, pagination.total)} de{' '}
-                  {pagination.total} clientes
+                  Mostrando {((pagination.page - 1) * pagination.limit) + 1} a{" "}
+                  {Math.min(pagination.page * pagination.limit, pagination.total)} de {pagination.total}{" "}
+                  clientes
                 </span>
-                
-                {/* Seletor de itens por página */}
                 <div className="flex items-center gap-2">
                   <span>Itens por página:</span>
                   <Select value={pagination.limit.toString()} onValueChange={(value) => changePageSize(Number(value))}>
@@ -1123,96 +1271,94 @@ export default function ClientesPage() {
                 </div>
               </div>
 
-              {/* Controles de navegação */}
-              <div className="flex items-center gap-2">
-                {/* Primeira página - Desktop */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToFirstPage}
-                  disabled={pagination.page === 1}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-
-                {/* Página anterior */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToPreviousPage}
-                  disabled={pagination.page === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-
-                {/* Números das páginas - Desktop */}
-                <div className="hidden sm:flex items-center gap-1">
-                  {(() => {
-                    const pages = []
-                    const totalPages = pagination.pages
-                    const currentPage = pagination.page
-                    
-                    // Mostrar até 5 páginas
-                    let startPage = Math.max(1, currentPage - 2)
-                    let endPage = Math.min(totalPages, currentPage + 2)
-                    
-                    // Ajustar se estiver no início ou fim
-                    if (endPage - startPage < 4) {
-                      if (startPage === 1) {
-                        endPage = Math.min(totalPages, startPage + 4)
-                      } else {
-                        startPage = Math.max(1, endPage - 4)
+              {pagination.pages > 1 && (
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToFirstPage}
+                    disabled={pagination.page === 1}
+                    className="hidden sm:flex"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToPreviousPage}
+                    disabled={pagination.page === 1}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <div className="hidden sm:flex items-center gap-1">
+                    {(() => {
+                      const pages = []
+                      const totalPages = pagination.pages
+                      const currentPage = pagination.page
+                      let startPage = Math.max(1, currentPage - 2)
+                      let endPage = Math.min(totalPages, currentPage + 2)
+                      if (endPage - startPage < 4) {
+                        if (startPage === 1) {
+                          endPage = Math.min(totalPages, startPage + 4)
+                        } else {
+                          startPage = Math.max(1, endPage - 4)
+                        }
                       }
-                    }
-                    
-                    for (let i = startPage; i <= endPage; i++) {
-                      pages.push(
-                        <Button
-                          key={i}
-                          variant={i === currentPage ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => goToPage(i)}
-                          className="w-8 h-8 p-0"
-                        >
-                          {i}
-                        </Button>
-                      )
-                    }
-                    
-                    return pages
-                  })()}
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <Button
+                            key={i}
+                            variant={i === currentPage ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(i)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {i}
+                          </Button>,
+                        )
+                      }
+                      return pages
+                    })()}
+                  </div>
+                  <div className="sm:hidden flex items-center gap-2">
+                    <span className="text-sm text-gray-600">
+                      Página {pagination.page} de {pagination.pages}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToNextPage}
+                    disabled={pagination.page === pagination.pages}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToLastPage}
+                    disabled={pagination.page === pagination.pages}
+                    className="hidden sm:flex"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
                 </div>
-
-                {/* Indicador de página atual - Mobile */}
-                <div className="sm:hidden flex items-center gap-2">
-                  <span className="text-sm text-gray-600">
-                    Página {pagination.page} de {pagination.pages}
-                  </span>
-                </div>
-
-                {/* Próxima página */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToNextPage}
-                  disabled={pagination.page === pagination.pages}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-
-                {/* Última página - Desktop */}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToLastPage}
-                  disabled={pagination.page === pagination.pages}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsRight className="w-4 h-4" />
+              )}
+            </div>
+              </div>
+            ) : hasLoadedOnce ? (
+              <div className="px-6 py-10 text-center">
+                <Building2 className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-foreground mb-2">Nenhum cliente encontrado</h3>
+                <p className="text-muted-foreground mb-4">
+                  {searchTerm ? "Tente ajustar os filtros de busca." : "Comece criando seu primeiro cliente."}
+                </p>
+                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Novo Cliente
                 </Button>
               </div>
-            </div>
+            ) : null}
           </CardContent>
         </Card>
       )}
@@ -1333,6 +1479,29 @@ export default function ClientesPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <NotificarClientesSelecionadosDialog
+        open={notificarSelecionadosOpen}
+        onOpenChange={setNotificarSelecionadosOpen}
+        clientes={destinatariosNotificacaoClientes}
+        onEnviado={() => setDestinatariosNotificacaoClientes([])}
+      />
+      <NotificarUmClienteDialog
+        open={notificarIndividualOpen}
+        onOpenChange={onNotificarClienteIndividualOpenChange}
+        cliente={
+          clienteNotificarIndividual
+            ? {
+                id: clienteNotificarIndividual.id,
+                nome: clienteNotificarIndividual.nome,
+                info:
+                  clienteNotificarIndividual.cnpj ||
+                  clienteNotificarIndividual.email ||
+                  undefined,
+              }
+            : null
+        }
+      />
       </div>
     </ProtectedRoute>
   )
