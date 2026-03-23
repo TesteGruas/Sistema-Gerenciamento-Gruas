@@ -23,6 +23,7 @@ import {
 import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { PWANotificationsManager } from "@/components/pwa-notifications-manager"
+import { APP_NAME, APP_VERSION_DATE, APP_VERSION_LABEL } from "@/lib/app-version"
 
 export default function PWAConfiguracoesPage() {
   const router = useRouter()
@@ -295,8 +296,12 @@ export default function PWAConfiguracoesPage() {
         </CardHeader>
         <CardContent className="space-y-3">
           <div className="flex justify-between">
+            <span className="text-gray-600">Sistema</span>
+            <span className="font-medium text-right text-sm">{APP_NAME}</span>
+          </div>
+          <div className="flex justify-between">
             <span className="text-gray-600">Versão</span>
-            <span className="font-medium">1.0.0</span>
+            <span className="font-medium">{APP_VERSION_LABEL}</span>
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Plataforma</span>
@@ -304,7 +309,7 @@ export default function PWAConfiguracoesPage() {
           </div>
           <div className="flex justify-between">
             <span className="text-gray-600">Última atualização</span>
-            <span className="font-medium">{new Date().toLocaleDateString('pt-BR')}</span>
+            <span className="font-medium">{APP_VERSION_DATE}</span>
           </div>
         </CardContent>
       </Card>

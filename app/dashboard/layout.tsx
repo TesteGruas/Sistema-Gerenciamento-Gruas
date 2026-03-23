@@ -43,6 +43,7 @@ import { GlobalLoading, useGlobalLoading } from "@/components/global-loading"
 import { EmpresaProvider, useEmpresa } from "@/hooks/use-empresa"
 import Image from "next/image"
 import { ChatIa } from "@/components/chat-ia"
+import { APP_NAME, APP_VERSION_DATE, APP_VERSION_LABEL } from "@/lib/app-version"
 
 // Dynamic imports para componentes pesados - carregam apenas quando necessário
 const NotificationsDropdown = dynamic(
@@ -813,13 +814,13 @@ function DashboardLayoutContent({
           <div className="mt-4 pt-4 border-t border-gray-200">
             <div className="text-center">
               <div className="text-xs text-gray-500 font-medium">
-                Sistema de Gerenciamento de Gruas
+                {APP_NAME}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                Versão: 1.4
+                Versão: {APP_VERSION_LABEL}
               </div>
               <div className="text-xs text-gray-400 mt-1">
-                29/01/2026
+                {APP_VERSION_DATE}
               </div>
             </div>
           </div>
