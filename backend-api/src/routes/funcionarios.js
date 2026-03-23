@@ -117,6 +117,11 @@ const funcionarioUpdateSchema = Joi.object({
  *         schema:
  *           type: string
  *         description: Buscar por nome, email, telefone, CPF ou cargo (LIKE)
+ *       - in: query
+ *         name: incluir_excluidos
+ *         schema:
+ *           type: boolean
+ *         description: Se true, inclui funcionários com exclusão lógica (deleted_at preenchido)
  *     responses:
  *       200:
  *         description: Lista de funcionários
@@ -157,6 +162,7 @@ router.get('/', authenticateToken, async (req, res) => {
       .trim()
 
     const apenasFuncionarios = ['true', '1', 'sim'].includes(String(req.query.apenas_funcionarios || '').toLowerCase())
+    const incluirExcluidos = ['true', '1', 'sim'].includes(String(req.query.incluir_excluidos || '').toLowerCase())
 
     /** Responsáveis de obra usam perfil Cliente — não entram na lista de funcionários/RH. */
     const usuarioTemPerfilCliente = (usuario) => {
@@ -172,6 +178,11 @@ router.get('/', authenticateToken, async (req, res) => {
       return cargo.length > 0
     }
 
+    /** PostgREST limita linhas por requisição (ex.: 1000); sem range, parte dos registros some. */
+    const TAMANHO_LOTE_SUPABASE = 1000
+
+    const usuarioEmbutido = (u) => (Array.isArray(u) ? u[0] : u) || null
+
     console.log('='.repeat(80))
     console.log('[FUNCIONARIOS] Rota GET / chamada')
     console.log('[FUNCIONARIOS] Query params:', JSON.stringify(req.query, null, 2))
@@ -186,10 +197,7 @@ router.get('/', authenticateToken, async (req, res) => {
     
     console.log('[FUNCIONARIOS] Paginação:', { page, limit, offset })
 
-    // Construir filtros para funcionários
-    let query = supabaseAdmin
-      .from('funcionarios')
-      .select(`
+    const selectFuncionariosComRelacoes = `
         *,
         cargo_info:cargos!cargo_id(
           id,
@@ -201,7 +209,9 @@ router.get('/', authenticateToken, async (req, res) => {
           id,
           nome,
           email,
-          status
+          status,
+          cargo,
+          deleted_at
         ),
         funcionarios_obras(
           id,
@@ -215,65 +225,78 @@ router.get('/', authenticateToken, async (req, res) => {
             status
           )
         )
-      `, { count: 'exact' })
+      `
 
-    // Filtrar apenas funcionários não deletados (soft delete)
-    query = query.is('deleted_at', null)
-
-    // Aplicar filtros
-    if (req.query.status) {
-      query = query.eq('status', req.query.status)
-    }
-    // Não filtrar cargo diretamente no banco aqui.
-    // O cargo real pode vir de cargo_id -> cargos.nome (cargo_info).
-    if (req.query.turno) {
-      query = query.eq('turno', req.query.turno)
-    }
     // Aceitar tanto 'search' quanto 'q' para compatibilidade
-    // Decodificar o termo de busca (pode vir com + ou %20 para espaços)
     let searchTermParam = req.query.search || req.query.q
     console.log('[FUNCIONARIOS] Termo de busca original:', searchTermParam)
-    
+
     if (searchTermParam) {
-      // Decodificar URL (substituir + por espaço e decodificar %20, etc)
       searchTermParam = decodeURIComponent(searchTermParam.replace(/\+/g, ' '))
       console.log(`[FUNCIONARIOS] Termo de busca decodificado: "${searchTermParam}"`)
-      
-      // Remover caracteres não numéricos para busca em CPF e telefone
-      const numerosLimpos = searchTermParam.replace(/\D/g, '')
-      const telefoneLimpo = numerosLimpos
-      const cpfLimpo = numerosLimpos
-      
-      // Construir condições de busca: nome, email, telefone, CPF e cargo
-      const condicoes = [
-        `nome.ilike.%${searchTermParam}%`,
-        `email.ilike.%${searchTermParam}%`,
-        `cargo.ilike.%${searchTermParam}%`
-      ]
-      
-      // Adicionar busca por telefone se tiver pelo menos 3 dígitos
-      if (telefoneLimpo.length >= 3) {
-        condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
-      }
-      
-      // Adicionar busca por CPF se tiver pelo menos 3 dígitos
-      if (cpfLimpo.length >= 3) {
-        condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
-      }
-      
-      // Aplicar busca com OR entre todas as condições
-      query = query.or(condicoes.join(','))
-      console.log(`[FUNCIONARIOS] Query com busca aplicada - condições: ${condicoes.length}`)
     } else {
       console.log('[FUNCIONARIOS] Nenhum termo de busca fornecido')
     }
 
-    // Aplicar ordenação (ID descendente para mostrar os mais recentes primeiro)
-    // NÃO aplicar paginação aqui - será aplicada depois de combinar com usuários
-    query = query.order('id', { ascending: false })
+    const montarQueryFuncionarios = (countOpt) => {
+      let q = supabaseAdmin
+        .from('funcionarios')
+        .select(selectFuncionariosComRelacoes, countOpt || undefined)
+      if (!incluirExcluidos) {
+        q = q.is('deleted_at', null)
+      }
 
-    console.log('[FUNCIONARIOS] Executando query no Supabase...')
-    const { data: funcionariosData, error: funcionariosError, count: funcionariosCount } = await query
+      if (req.query.status) {
+        q = q.eq('status', req.query.status)
+      }
+      if (req.query.turno) {
+        q = q.eq('turno', req.query.turno)
+      }
+
+      if (searchTermParam) {
+        const numerosLimpos = searchTermParam.replace(/\D/g, '')
+        const telefoneLimpo = numerosLimpos
+        const cpfLimpo = numerosLimpos
+        const condicoes = [
+          `nome.ilike.%${searchTermParam}%`,
+          `email.ilike.%${searchTermParam}%`,
+          `cargo.ilike.%${searchTermParam}%`
+        ]
+        if (telefoneLimpo.length >= 3) {
+          condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
+        }
+        if (cpfLimpo.length >= 3) {
+          condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+        }
+        q = q.or(condicoes.join(','))
+      }
+
+      return q.order('id', { ascending: false })
+    }
+
+    console.log('[FUNCIONARIOS] Executando query(ies) no Supabase (lotes para contornar max-rows)...')
+    let funcionariosData = []
+    let funcionariosCount = null
+    let funcionariosError = null
+
+    for (let rangeStart = 0; ; rangeStart += TAMANHO_LOTE_SUPABASE) {
+      const countOpt = rangeStart === 0 ? { count: 'exact' } : undefined
+      const { data: lote, error, count } = await montarQueryFuncionarios(countOpt).range(
+        rangeStart,
+        rangeStart + TAMANHO_LOTE_SUPABASE - 1
+      )
+
+      if (error) {
+        funcionariosError = error
+        break
+      }
+      if (rangeStart === 0 && typeof count === 'number') {
+        funcionariosCount = count
+      }
+      if (!lote?.length) break
+      funcionariosData = funcionariosData.concat(lote)
+      if (lote.length < TAMANHO_LOTE_SUPABASE) break
+    }
 
     if (funcionariosError) {
       console.error('[FUNCIONARIOS] ❌ Erro ao buscar funcionários:', funcionariosError)
@@ -287,8 +310,8 @@ router.get('/', authenticateToken, async (req, res) => {
     console.log(`[FUNCIONARIOS] ✅ Query executada com sucesso`)
     console.log(`[FUNCIONARIOS] Termo de busca: "${searchTermParam || 'nenhum'}"`)
     console.log(`[FUNCIONARIOS] Status filtro: "${req.query.status || 'nenhum'}"`)
-    console.log(`[FUNCIONARIOS] Funcionários encontrados: ${funcionariosData?.length || 0}`)
-    console.log(`[FUNCIONARIOS] Total no banco: ${funcionariosCount || 0}`)
+    console.log(`[FUNCIONARIOS] Funcionários carregados (soma dos lotes): ${funcionariosData?.length || 0}`)
+    console.log(`[FUNCIONARIOS] Total no banco (count): ${funcionariosCount ?? 'n/d'}`)
     
     // Debug: listar IDs dos funcionários encontrados
     if (funcionariosData && funcionariosData.length > 0) {
@@ -311,12 +334,11 @@ router.get('/', authenticateToken, async (req, res) => {
       }
       
       console.log(`[DEBUG] Buscando usuários sem funcionario_id com termo: "${searchTermClean || 'nenhum'}"`)
-      
-      // Fazer a query completa
-      // Usar a relação específica usuario_perfis_usuario_id_fkey para evitar ambiguidade (PGRST201)
-      let usuariosQuery = supabaseAdmin
-        .from('usuarios')
-        .select(`
+
+      const montarQueryUsuariosSemFuncionario = () => {
+        let q = supabaseAdmin
+          .from('usuarios')
+          .select(`
           *,
           usuario_perfis!usuario_perfis_usuario_id_fkey(
             id,
@@ -331,54 +353,44 @@ router.get('/', authenticateToken, async (req, res) => {
             )
           )
         `)
-        .is('funcionario_id', null)
-        .is('deleted_at', null) // Filtrar apenas usuários não deletados (soft delete)
-      
-      // Aplicar filtro de status se fornecido
-      if (req.query.status) {
-        usuariosQuery = usuariosQuery.eq('status', req.query.status)
-        console.log(`[DEBUG] Filtro de status aplicado: ${req.query.status}`)
-      }
-      
-      // Aplicar busca por nome, email, telefone e CPF se houver termo de busca
-      if (searchTermClean) {
-        const numerosLimpos = searchTermClean.replace(/\D/g, '')
-        const telefoneLimpo = numerosLimpos
-        const cpfLimpo = numerosLimpos
-        
-        const condicoes = [
-          `nome.ilike.%${searchTermClean}%`,
-          `email.ilike.%${searchTermClean}%`
-        ]
-        
-        // Adicionar busca por telefone se tiver pelo menos 3 dígitos
-        if (telefoneLimpo.length >= 3) {
-          condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
+          .is('funcionario_id', null)
+          .is('deleted_at', null)
+        if (req.query.status) {
+          q = q.eq('status', req.query.status)
         }
-        
-        // Adicionar busca por CPF se tiver pelo menos 3 dígitos (se o campo existir na tabela usuarios)
-        if (cpfLimpo.length >= 3) {
-          condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+        if (searchTermClean) {
+          const numerosLimpos = searchTermClean.replace(/\D/g, '')
+          const telefoneLimpo = numerosLimpos
+          const cpfLimpo = numerosLimpos
+          const condicoes = [`nome.ilike.%${searchTermClean}%`, `email.ilike.%${searchTermClean}%`]
+          if (telefoneLimpo.length >= 3) condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
+          if (cpfLimpo.length >= 3) condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+          q = q.or(condicoes.join(','))
         }
-        
-        usuariosQuery = usuariosQuery.or(condicoes.join(','))
+        return q.order('created_at', { ascending: false })
       }
-      
-      // NÃO aplicar paginação aqui - será aplicada depois de combinar com funcionários
-      // Apenas aplicar ordenação
-      usuariosQuery = usuariosQuery.order('created_at', { ascending: false })
-      
-      console.log(`[DEBUG] Query final de usuários:`, {
+
+      console.log(`[DEBUG] Query de usuários em lotes de ${TAMANHO_LOTE_SUPABASE}:`, {
         termo: searchTermClean || 'nenhum',
         status: req.query.status || 'nenhum',
-        funcionario_id: 'null',
-        offset: 'não aplicado (paginação será feita depois)',
-        limit: 'não aplicado (paginação será feita depois)'
+        funcionario_id: 'null'
       })
-      
-      console.log(`[DEBUG] Query de usuários construída, executando...`)
 
-      const { data: usuariosData, error: usuariosError } = await usuariosQuery
+      let usuariosData = []
+      let usuariosError = null
+      for (let uStart = 0; ; uStart += TAMANHO_LOTE_SUPABASE) {
+        const { data: loteU, error: errU } = await montarQueryUsuariosSemFuncionario().range(
+          uStart,
+          uStart + TAMANHO_LOTE_SUPABASE - 1
+        )
+        if (errU) {
+          usuariosError = errU
+          break
+        }
+        if (!loteU?.length) break
+        usuariosData = usuariosData.concat(loteU)
+        if (loteU.length < TAMANHO_LOTE_SUPABASE) break
+      }
 
       if (usuariosError) {
         console.error('[DEBUG] Erro ao buscar usuários sem funcionario_id:', usuariosError)
@@ -506,9 +518,13 @@ router.get('/', authenticateToken, async (req, res) => {
       // obras_vinculadas só inclui obras se houver registros de ponto
       const obrasVinculadas = temRegistrosPonto ? alocacoesAtivas : []
       
-      // Popular campo cargo com o nome do cargo do cargo_info
-      if (funcionario.cargo_info && !funcionario.cargo) {
+      // Cargo pode estar em funcionarios.cargo, cargos.nome (FK) ou só em usuarios.cargo
+      if (!normalizarTexto(funcionario.cargo) && funcionario.cargo_info?.nome) {
         funcionario.cargo = funcionario.cargo_info.nome
+      }
+      const uVinc = usuarioEmbutido(funcionario.usuario)
+      if (!normalizarTexto(funcionario.cargo) && uVinc?.cargo) {
+        funcionario.cargo = uVinc.cargo
       }
       
       return {

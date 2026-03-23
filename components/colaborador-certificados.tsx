@@ -12,6 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DocumentoUpload } from "./documento-upload"
 import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Shield } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getApiOrigin } from "@/lib/runtime-config"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 
 export interface CertificadoColaborador {

@@ -46,6 +46,20 @@ interface Holerite {
   updated_at: string
 }
 
+/**
+ * O canvas usa buffer fixo (width/height) mas o CSS estica o elemento (ex.: w-full).
+ * Sem esta conversão, o traço aparece deslocado em relação ao dedo/cursor.
+ */
+function pointerToCanvasCoords(canvas: HTMLCanvasElement, clientX: number, clientY: number) {
+  const rect = canvas.getBoundingClientRect()
+  const rw = rect.width || 1
+  const rh = rect.height || 1
+  return {
+    x: ((clientX - rect.left) / rw) * canvas.width,
+    y: ((clientY - rect.top) / rh) * canvas.height,
+  }
+}
+
 export default function PWAHoleritesPage() {
   const { toast } = useToast()
   const router = useRouter()
@@ -333,9 +347,7 @@ export default function PWAHoleritesPage() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = pointerToCanvasCoords(canvas, e.clientX, e.clientY)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -350,9 +362,7 @@ export default function PWAHoleritesPage() {
     const canvas = canvasRef.current
     if (!canvas) return
 
-    const rect = canvas.getBoundingClientRect()
-    const x = e.clientX - rect.left
-    const y = e.clientY - rect.top
+    const { x, y } = pointerToCanvasCoords(canvas, e.clientX, e.clientY)
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
@@ -955,8 +965,8 @@ export default function PWAHoleritesPage() {
                           ref={canvasRef}
                           width={300}
                           height={150}
-                          className="border border-gray-200 rounded cursor-crosshair w-full max-w-full"
-                          style={{ maxWidth: '100%', height: 'auto' }}
+                          className="border border-gray-200 rounded cursor-crosshair w-full max-w-full touch-none"
+                          style={{ maxWidth: '100%', height: 'auto', touchAction: 'none' }}
                           onMouseDown={iniciarDesenho}
                           onMouseMove={desenhar}
                           onMouseUp={pararDesenho}
@@ -966,9 +976,7 @@ export default function PWAHoleritesPage() {
                             const touch = e.touches[0]
                             const canvas = canvasRef.current
                             if (!canvas) return
-                            const rect = canvas.getBoundingClientRect()
-                            const x = touch.clientX - rect.left
-                            const y = touch.clientY - rect.top
+                            const { x, y } = pointerToCanvasCoords(canvas, touch.clientX, touch.clientY)
                             const ctx = canvas.getContext('2d')
                             if (!ctx) return
                             setIsDrawing(true)
@@ -981,9 +989,7 @@ export default function PWAHoleritesPage() {
                             const canvas = canvasRef.current
                             if (!canvas) return
                             const touch = e.touches[0]
-                            const rect = canvas.getBoundingClientRect()
-                            const x = touch.clientX - rect.left
-                            const y = touch.clientY - rect.top
+                            const { x, y } = pointerToCanvasCoords(canvas, touch.clientX, touch.clientY)
                             const ctx = canvas.getContext('2d')
                             if (!ctx) return
                             ctx.lineWidth = 2
