@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -33,7 +33,6 @@ import {
   Trash2,
   Package,
   Settings,
-  ArrowRight,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
@@ -50,6 +49,18 @@ import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { ValorMonetarioOculto } from "@/components/valor-oculto"
+
+function formatObraPreviewValue(v: unknown): string {
+  if (v === null || v === undefined || v === "") return "—"
+  return String(v)
+}
+
+function safeObraDateLabel(d: string | undefined | null): string {
+  if (!d) return "—"
+  const t = new Date(d).getTime()
+  if (Number.isNaN(t)) return "—"
+  return new Date(d).toLocaleDateString("pt-BR")
+}
 
 export default function ObrasPage() {
   const router = useRouter()
@@ -914,10 +925,6 @@ export default function ObrasPage() {
     }
   }
 
-  const handleViewDetails = (obra: any) => {
-    window.location.href = `/dashboard/obras/${obra.id}`
-  }
-
   const handleDeleteObra = (obra: any) => {
     setObraToDelete(obra)
     setIsDeleteDialogOpen(true)
@@ -1396,26 +1403,6 @@ export default function ObrasPage() {
         </div>
       </div>
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex gap-4">
-            <div className="flex-1">
-              <label className="text-sm font-medium">Buscar obras</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  placeholder="Nome da obra ou descrição..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Indicador de Loading */}
       {loading && (
         <Card>
@@ -1445,280 +1432,234 @@ export default function ObrasPage() {
         </Card>
       )}
 
-      {/* Lista de Obras */}
+      {/* Lista de Obras: busca + tabela no mesmo card */}
       {!loading && !error && (
-        <div className={`grid gap-6 ${
-          paginatedObras.length >= 9 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3' 
-            : paginatedObras.length >= 6 
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-            : paginatedObras.length >= 3
-            ? 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
-            : 'grid-cols-1 md:grid-cols-2'
-        }`}>
-          {paginatedObras.map((obra) => {
-          // A função converterObraBackendParaFrontend já retorna gruasVinculadas e outros campos
-          // Usar os campos que já vêm da conversão
-          const obraComRelacionamentos = obra as any
-          
-          // Debug: verificar se gruasVinculadas está presente
-          if (obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0) {
-            // Renderizando obra com gruas vinculadas
-          }
-          
-          return (
-            <Card key={obra.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-5 h-5 text-blue-600" />
-                  <CardTitle className="text-lg">{obra.name}</CardTitle>
-                </div>
-                <CardDescription>{obra.description}</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm">
-                    <Badge className={getStatusColor(obra.status)}>
-                      {getStatusIcon(obra.status)}
-                      <span className="ml-1 capitalize">{obra.status}</span>
-                    </Badge>
+        <Card className="overflow-hidden">
+          <CardContent className="p-0">
+            <div className="border-b px-4 py-4 sm:px-6 sm:py-5">
+              <Label htmlFor="busca-obras" className="text-sm font-medium">
+                Buscar obras
+              </Label>
+              <div className="relative mt-2">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  id="busca-obras"
+                  placeholder="Nome da obra ou descrição..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="pl-10"
+                />
+              </div>
+            </div>
+
+            {filteredObras.length > 0 ? (
+              <>
+            <div className="overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="min-w-[200px]">Obra</TableHead>
+                    <TableHead className="whitespace-nowrap">Status</TableHead>
+                    <TableHead className="min-w-[160px] whitespace-nowrap">Período</TableHead>
+                    <TableHead className="min-w-[140px]">Cliente</TableHead>
+                    <TableHead className="min-w-[120px] hidden md:table-cell">Responsável</TableHead>
+                    <TableHead className="text-right whitespace-nowrap min-w-[120px]">Orçamento</TableHead>
+                    <TableHead className="text-center whitespace-nowrap w-[88px]">Gruas</TableHead>
+                    <TableHead className="text-right min-w-[140px] whitespace-nowrap">Ações</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {paginatedObras.map((obra) => {
+                    const o = obra as any
+                    const gruasList = o.gruasVinculadas || []
+                    const nGruas = Array.isArray(gruasList) ? gruasList.length : 0
+                    const periodo = `${safeObraDateLabel(obra.startDate)} — ${obra.endDate ? safeObraDateLabel(obra.endDate) : "Em andamento"}`
+                    const budgetNum =
+                      typeof obra.budget === "string" ? parseFloat(obra.budget) || 0 : obra.budget || 0
+
+                    return (
+                      <TableRow key={obra.id} className="hover:bg-muted/50">
+                        <TableCell>
+                          <div className="flex items-start gap-2 min-w-0">
+                            <Building2 className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground truncate" title={obra.name}>
+                                {obra.name}
+                              </p>
+                              {obra.description ? (
+                                <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5" title={obra.description}>
+                                  {obra.description}
+                                </p>
+                              ) : null}
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge className={getStatusColor(obra.status)}>
+                            {getStatusIcon(obra.status)}
+                            <span className="ml-1 capitalize whitespace-nowrap">{obra.status}</span>
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground whitespace-nowrap">{periodo}</TableCell>
+                        <TableCell className="text-sm max-w-[200px]">
+                          <span className="line-clamp-2" title={obra.clienteName || ""}>
+                            {formatObraPreviewValue(obra.clienteName)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground max-w-[160px] hidden md:table-cell">
+                          <span className="line-clamp-2" title={obra.responsavelName || ""}>
+                            {formatObraPreviewValue(obra.responsavelName)}
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-right text-sm whitespace-nowrap">
+                          <ValorMonetarioOculto valor={budgetNum} />
+                        </TableCell>
+                        <TableCell className="text-center">
+                          {nGruas > 0 ? (
+                            <Badge variant="secondary" className="tabular-nums">
+                              {nGruas}
+                            </Badge>
+                          ) : (
+                            <span className="text-muted-foreground text-sm">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right whitespace-nowrap p-2">
+                          <div className="flex flex-nowrap justify-end items-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                              title="Ver obra"
+                              onClick={() => router.push(`/dashboard/obras/${obra.id}`)}
+                            >
+                              <Eye className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                              title="Editar"
+                              disabled={loadingEdit}
+                              onClick={() => handleEditObra(obra)}
+                            >
+                              <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              title="Excluir"
+                              onClick={() => handleDeleteObra(obra)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t">
+                <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
+                  <span>
+                    Mostrando {startIndex} a {endIndex} de {pagination.total || filteredObras.length} obras
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span>Itens por página:</span>
+                    <Select value={itemsPerPage.toString()} onValueChange={(value) => changePageSize(Number(value))}>
+                      <SelectTrigger className="w-20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9">9</SelectItem>
+                        <SelectItem value="12">12</SelectItem>
+                        <SelectItem value="15">15</SelectItem>
+                        <SelectItem value="18">18</SelectItem>
+                        <SelectItem value="21">21</SelectItem>
+                        <SelectItem value="24">24</SelectItem>
+                        <SelectItem value="27">27</SelectItem>
+                        <SelectItem value="30">30</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Calendar className="w-4 h-4" />
-                    <span>
-                      {new Date(obra.startDate).toLocaleDateString('pt-BR')} - 
-                      {obra.endDate ? new Date(obra.endDate).toLocaleDateString('pt-BR') : 'Em andamento'}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToFirstPage}
+                    disabled={currentPage === 1}
+                    className="hidden sm:flex"
+                  >
+                    <ChevronsLeft className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={goToPreviousPage} disabled={currentPage === 1}>
+                    <ChevronLeft className="w-4 h-4" />
+                  </Button>
+                  <div className="hidden sm:flex items-center gap-1">
+                    {(() => {
+                      const pages: ReactNode[] = []
+                      const totalPagesCount = totalPages
+                      const currentPageNum = currentPage
+                      let startPage = Math.max(1, currentPageNum - 2)
+                      let endPage = Math.min(totalPagesCount, startPage + 4)
+                      if (endPage - startPage < 4) {
+                        startPage = Math.max(1, endPage - 4)
+                      }
+                      for (let i = startPage; i <= endPage; i++) {
+                        pages.push(
+                          <Button
+                            key={i}
+                            variant={currentPageNum === i ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => goToPage(i)}
+                            className="w-8 h-8 p-0"
+                          >
+                            {i}
+                          </Button>,
+                        )
+                      }
+                      return pages
+                    })()}
+                  </div>
+                  <div className="sm:hidden flex items-center gap-2">
+                    <span className="text-sm text-gray-600">
+                      Página {currentPage} de {totalPages}
                     </span>
                   </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Users className="w-4 h-4" />
-                    <span>Responsável: {obra.responsavelName}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Building2 className="w-4 h-4" />
-                    <span>Cliente: {obra.clienteName}</span>
-                  </div>
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <DollarSign className="w-4 h-4" />
-                    <span>Orçamento: <ValorMonetarioOculto valor={typeof obra.budget === 'string' ? parseFloat(obra.budget) || 0 : obra.budget || 0} /></span>
-                  </div>
-                  
-                  {/* Gruas Vinculadas */}
-                  {obraComRelacionamentos.gruasVinculadas && obraComRelacionamentos.gruasVinculadas.length > 0 && (
-                    <div className="border-t pt-3">
-                      <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
-                        <Crane className="w-4 h-4 text-blue-600" />
-                        Gruas ({obraComRelacionamentos.gruasVinculadas.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {obraComRelacionamentos.gruasVinculadas.slice(0, 2).map((grua: any) => (
-                          <div key={grua.id} className="text-xs bg-blue-50 p-2 rounded border">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-medium">{grua.gruaId}</span>
-                                {grua.grua && (
-                                  <span className="text-gray-500">
-                                    {grua.grua.modelo} - {grua.grua.fabricante}
-                                  </span>
-                                )}
-                              </div>
-                              <Badge 
-                                variant={grua.status === 'Ativa' ? 'default' : 'secondary'} 
-                                className="text-xs"
-                              >
-                                {grua.status}
-                              </Badge>
-                            </div>
-                            <div className="mt-1 text-gray-600">
-                              <div>Mensalidade: <ValorMonetarioOculto valor={parseFloat(grua.valorLocacaoMensal || 0)} /></div>
-                              <div>Início: {new Date(grua.dataInicioLocacao).toLocaleDateString('pt-BR')}</div>
-                              {grua.dataFimLocacao && (
-                                <div>Fim: {new Date(grua.dataFimLocacao).toLocaleDateString('pt-BR')}</div>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                        {obraComRelacionamentos.gruasVinculadas.length > 2 && (
-                          <div className="text-xs text-gray-500 bg-gray-50 p-2 rounded border">
-                            <div className="flex items-center justify-between">
-                              <span>+{obraComRelacionamentos.gruasVinculadas.length - 2} gruas adicionais</span>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-xs"
-                                onClick={() => window.location.href = `/dashboard/obras/${obra.id}?tab=gruas`}
-                              >
-                                Ver todas
-                              </Button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-                  
-                  
-                  <div className="space-y-2">
-                    {/* Ações Principais */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleViewDetails(obra)}
-                        className="flex-1"
-                      >
-                        <Eye className="w-4 h-4 mr-1" />
-                        Ver Detalhes
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDeleteObra(obra)}
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-        </div>
-      )}
-
-      {/* Controles de Paginação */}
-      {!loading && !error && filteredObras.length > 0 && totalPages > 1 && (
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              {/* Informações da paginação */}
-              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
-                <span>
-                  Mostrando {startIndex} a{' '}
-                  {endIndex} de{' '}
-                  {pagination.total || filteredObras.length} obras
-                </span>
-                
-                {/* Seletor de itens por página */}
-                <div className="flex items-center gap-2">
-                  <span>Itens por página:</span>
-                  <Select value={itemsPerPage.toString()} onValueChange={(value) => changePageSize(Number(value))}>
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="9">9</SelectItem>
-                      <SelectItem value="12">12</SelectItem>
-                      <SelectItem value="15">15</SelectItem>
-                      <SelectItem value="18">18</SelectItem>
-                      <SelectItem value="21">21</SelectItem>
-                      <SelectItem value="24">24</SelectItem>
-                      <SelectItem value="27">27</SelectItem>
-                      <SelectItem value="30">30</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Button variant="outline" size="sm" onClick={goToNextPage} disabled={currentPage === totalPages}>
+                    <ChevronRight className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={goToLastPage}
+                    disabled={currentPage === totalPages}
+                    className="hidden sm:flex"
+                  >
+                    <ChevronsRight className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
-
-              {/* Controles de navegação */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToFirstPage}
-                  disabled={currentPage === 1}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToPreviousPage}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-
-                {/* Números das páginas */}
-                <div className="hidden sm:flex items-center gap-1">
-                  {(() => {
-                    const pages = []
-                    const totalPagesCount = totalPages
-                    const currentPageNum = currentPage
-                    
-                    // Mostrar até 5 páginas
-                    let startPage = Math.max(1, currentPageNum - 2)
-                    let endPage = Math.min(totalPagesCount, startPage + 4)
-                    
-                    // Ajustar se estivermos no final
-                    if (endPage - startPage < 4) {
-                      startPage = Math.max(1, endPage - 4)
-                    }
-                    
-                    for (let i = startPage; i <= endPage; i++) {
-                      pages.push(
-                        <Button
-                          key={i}
-                          variant={currentPageNum === i ? "default" : "outline"}
-                          size="sm"
-                          onClick={() => goToPage(i)}
-                          className="w-8 h-8 p-0"
-                        >
-                          {i}
-                        </Button>
-                      )
-                    }
-                    
-                    return pages
-                  })()}
-                </div>
-
-                {/* Indicador de página atual - Mobile */}
-                <div className="sm:hidden flex items-center gap-2">
-                  <span className="text-sm text-gray-600">
-                    Página {currentPage} de {totalPages}
-                  </span>
-                </div>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToNextPage}
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={goToLastPage}
-                  disabled={currentPage === totalPages}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
+              </>
+            ) : (
+              <div className="px-6 py-12 text-center text-muted-foreground">
+                <Building2 className="mx-auto mb-4 h-12 w-12 opacity-40" />
+                <p className="font-medium text-foreground">Nenhuma obra encontrada</p>
+                {searchTerm ? (
+                  <p className="mt-1 text-sm">Tente ajustar o termo de busca</p>
+                ) : (
+                  <p className="mt-1 text-sm">Cadastre uma nova obra para começar</p>
+                )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Mensagem quando não há obras */}
-      {!loading && !error && filteredObras.length === 0 && (
-        <Card>
-          <CardContent className="p-6">
-            <div className="text-center text-gray-500">
-              <Building2 className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-              <p>Nenhuma obra encontrada</p>
-              {searchTerm && (
-                <p className="text-sm">Tente ajustar os filtros de busca</p>
-              )}
-            </div>
+            )}
           </CardContent>
         </Card>
       )}

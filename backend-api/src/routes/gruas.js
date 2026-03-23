@@ -92,6 +92,15 @@ router.get('/clientes/buscar', async (req, res) => {
   }
 })
 
+/** Obra atual em camelCase a partir das colunas denormalizadas na tabela `gruas`. */
+const obraAtualDasColunas = (grua) => ({
+  currentObraId:
+    grua.current_obra_id != null && grua.current_obra_id !== ''
+      ? String(grua.current_obra_id)
+      : null,
+  currentObraName: grua.current_obra_name ?? null,
+})
+
 // Função auxiliar para enriquecer dados da grua com informações calculadas
 const enriquecerDadosGrua = async (grua) => {
   try {
@@ -107,6 +116,7 @@ const enriquecerDadosGrua = async (grua) => {
       .single()
 
     const obraAtivaValida = obraAtual?.obra?.id ? obraAtual : null
+    const colunasObra = obraAtualDasColunas(grua)
 
     // Enriquecer dados
     const gruaEnriquecida = {
@@ -117,8 +127,11 @@ const enriquecerDadosGrua = async (grua) => {
       fabricante: grua.fabricante, // fabricante -> fabricante para frontend
       tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
-      currentObraId: obraAtivaValida?.obra?.id?.toString() || null,
-      currentObraName: obraAtivaValida?.obra?.nome || null,
+      currentObraId:
+        obraAtivaValida?.obra?.id != null
+          ? String(obraAtivaValida.obra.id)
+          : colunasObra.currentObraId,
+      currentObraName: obraAtivaValida?.obra?.nome ?? colunasObra.currentObraName,
       
       // Campos de compatibilidade com frontend
       alturaTrabalho: grua.altura_trabalho,
@@ -143,8 +156,7 @@ const enriquecerDadosGrua = async (grua) => {
       fabricante: grua.fabricante, // fabricante -> fabricante para frontend
       tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
-      currentObraId: null,
-      currentObraName: null
+      ...obraAtualDasColunas(grua),
     }
   }
 }
@@ -573,9 +585,8 @@ router.get('/', async (req, res) => {
       fabricante: grua.fabricante, // fabricante -> fabricante para frontend
       tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
-      currentObraId: null,
-      currentObraName: null,
-      
+      ...obraAtualDasColunas(grua),
+
       // Campos de compatibilidade com frontend
       alturaTrabalho: grua.altura_trabalho,
       capacidadePonta: grua.capacidade_ponta,
@@ -826,9 +837,8 @@ router.get('/export', async (req, res) => {
       fabricante: grua.fabricante, // fabricante -> fabricante para frontend
       tipo: grua.tipo, // tipo -> tipo para frontend
       capacity: grua.capacidade, // capacidade -> capacity para frontend
-      currentObraId: null,
-      currentObraName: null,
-      
+      ...obraAtualDasColunas(grua),
+
       // Campos de compatibilidade com frontend
       alturaTrabalho: grua.altura_trabalho,
       capacidadePonta: grua.capacidade_ponta,

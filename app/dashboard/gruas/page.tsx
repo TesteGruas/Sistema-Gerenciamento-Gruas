@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, type ReactNode } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
   ConeIcon as Crane, 
   Plus, 
@@ -32,8 +32,10 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  Banknote
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
@@ -56,6 +58,40 @@ interface GruasApiResponse {
     page: number
     limit: number
   }
+}
+
+function PreviewField({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
+  return (
+    <div
+      className={cn(
+        "rounded-lg border border-border/80 bg-muted/25 px-3 py-2.5 transition-colors hover:bg-muted/40",
+        className,
+      )}
+    >
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-1 break-words text-sm font-semibold leading-snug text-foreground">{children}</div>
+    </div>
+  )
+}
+
+function PreviewSection({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string
+  icon?: React.ComponentType<{ className?: string }>
+  children: ReactNode
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border/80 bg-card text-card-foreground shadow-sm">
+      <div className="flex items-center gap-2 border-b border-border/60 bg-muted/30 px-4 py-2.5">
+        {Icon ? <Icon className="h-4 w-4 shrink-0 text-blue-600" /> : null}
+        <h3 className="text-sm font-semibold tracking-tight">{title}</h3>
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  )
 }
 
 export default function GruasPage() {
@@ -1291,33 +1327,6 @@ export default function GruasPage() {
     }
   }
 
-  const stats = [
-    { 
-      title: "Total de Gruas", 
-      value: gruas.length, 
-      icon: Crane, 
-      color: "bg-blue-500" 
-    },
-    { 
-      title: "Em Obra", 
-      value: gruas.filter(g => g.status === 'em_obra').length, 
-      icon: Building2, 
-      color: "bg-green-500" 
-    },
-    { 
-      title: "Em Manutenção", 
-      value: gruas.filter(g => g.status === 'manutencao').length, 
-      icon: Wrench, 
-      color: "bg-yellow-500" 
-    },
-    { 
-      title: "Disponíveis", 
-      value: gruas.filter(g => g.status === 'disponivel').length, 
-      icon: CheckCircle, 
-      color: "bg-purple-500" 
-    },
-  ]
-
   return (
     <ProtectedRoute permission="gruas:visualizar" showAccessDenied={true}>
       <div className="space-y-6">
@@ -1344,109 +1353,14 @@ export default function GruasPage() {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index}>
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                </div>
-                <div className={`p-3 rounded-full ${stat.color}`}>
-                  <stat.icon className="w-6 h-6 text-white" />
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div>
-              <Label htmlFor="search">Buscar gruas</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                <Input
-                  id="search"
-                  placeholder="Nome, modelo ou ID da grua (ex: G001)..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
-            </div>
-            <div>
-              <Label htmlFor="status">Status</Label>
-              <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os status</SelectItem>
-                  <SelectItem value="Disponível">Disponível</SelectItem>
-                  <SelectItem value="Operacional">Operacional</SelectItem>
-                  <SelectItem value="Manutenção">Manutenção</SelectItem>
-                  <SelectItem value="Vendida">Vendida</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <Label htmlFor="tipo">Tipo</Label>
-              <Select value={selectedTipo} onValueChange={setSelectedTipo}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Todos os tipos" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos os tipos</SelectItem>
-                  <SelectItem value="Grua Torre">Grua Torre</SelectItem>
-                  <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
-                  <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                  <SelectItem value="Guincho">Guincho</SelectItem>
-                  <SelectItem value="Outros">Outros</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setSearchTerm("")
-                  setSelectedStatus("all")
-                  setSelectedObra("all")
-                  setSelectedTipo("all")
-                  setCurrentPage(1)
-                }}
-                className="w-full"
-              >
-                Limpar Filtros
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Estados de Loading e Error */}
-      {loading && (
-        <Card>
-          <CardContent className="p-6">
-            <Loading size="lg" text="Carregando gruas..." />
-          </CardContent>
-        </Card>
-      )}
-
       {error && (
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center justify-center text-red-600">
               <span>❌ {error}</span>
-              <Button 
-                variant="outline" 
-                size="sm" 
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={carregarGruas}
                 className="ml-4"
               >
@@ -1457,253 +1371,349 @@ export default function GruasPage() {
         </Card>
       )}
 
-      {/* Descrição das Funcionalidades */}
-      {!loading && !error && (
-        <Card className="mb-6">
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
-                  <Package className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">Componentes</h3>
-                  <p className="text-sm text-gray-600">
-                    Gerencie os componentes e peças da grua, incluindo cabos, ganchos, 
-                    sistemas hidráulicos e outros equipamentos essenciais para o funcionamento.
-                  </p>
-                </div>
-              </div>
-              
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
-                  <Settings className="w-5 h-5 text-purple-600" />
-                </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 mb-1">Configurações</h3>
-                  <p className="text-sm text-gray-600">
-                    Configure parâmetros técnicos, limites de operação, especificações 
-                    de segurança e outras configurações específicas da grua.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Lista de Gruas */}
-      {!loading && !error && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredGruas.map((grua) => {
-          // Nome da obra deve vir da API de gruas
-          const obraNome = grua.currentObraName || 'Sem obra'
-          
-          return (
-            <Card key={grua.id} className="hover:shadow-lg transition-shadow">
-              <CardHeader>
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2">
-                    <Crane className="w-5 h-5 text-blue-600" />
-                    <CardTitle className="text-lg">{grua.name}</CardTitle>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge className={getStatusColor(grua.status)}>
-                      {getStatusIcon(grua.status)}
-                      <span className="ml-1 capitalize">{grua.status.replace('_', ' ')}</span>
-                    </Badge>
-                    
-                    {/* Ações com ícones */}
-                    <div className="flex gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewDetails(grua)}
-                        className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                        title="Ver Detalhes"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEditGrua(grua)}
-                        className="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-                        title="Editar"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDeleteGrua(grua)}
-                        className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                        title="Excluir"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-                <CardDescription>{grua.model} - {grua.capacity}</CardDescription>
-                {grua.tipo && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
-                    <Package className="w-4 h-4" />
-                    <span>Tipo: {grua.tipo}</span>
-                  </div>
-                )}
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {grua.currentObraId && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Building2 className="w-4 h-4" />
-                      <span>Obra: {obraNome}</span>
-                    </div>
-                  )}
-                  
-                  {grua.createdAt && (
-                    <div className="text-sm text-gray-600">
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4" />
-                        <span>Criada em: {new Date(grua.createdAt).toLocaleDateString('pt-BR')}</span>
-                      </div>
-                    </div>
-                  )}
-                  
-                  <div className="space-y-2">
-                    {/* Funcionalidades */}
-                    <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/componentes`}
-                        className="flex-1 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
-                      >
-                        <Package className="w-4 h-4 mr-1" />
-                        Componentes
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = `/dashboard/gruas/${grua.id}/configuracoes`}
-                        className="flex-1 text-purple-600 hover:text-purple-700 hover:bg-purple-50"
-                      >
-                        <Settings className="w-4 h-4 mr-1" />
-                        Especificações Técnicas
-                      </Button>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          )
-        })}
-        </div>
-      )}
-
-
-      {/* Paginação */}
-      {!loading && !error && totalPages > 1 && (
+      {!error && (
         <Card>
-          <CardContent className="p-4">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-              <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
-                <span>
-                  Mostrando {((currentPage - 1) * itemsPerPage) + 1} a {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} gruas
-                </span>
-                <div className="flex items-center gap-2">
-                  <span>Itens por página:</span>
-                  <Select 
-                    value={itemsPerPage.toString()} 
-                    onValueChange={(value) => {
-                      setItemsPerPage(parseInt(value))
-                      setCurrentPage(1)
-                    }}
-                  >
-                    <SelectTrigger className="w-20">
-                      <SelectValue />
+          <CardHeader>
+            <CardTitle>Gruas</CardTitle>
+            <CardDescription>
+              Filtros e lista em formato de tabela
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="px-6 py-4 border-b">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <Label htmlFor="search">Buscar gruas</Label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      id="search"
+                      placeholder="Nome, modelo ou ID da grua (ex: G001)..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="status">Status</Label>
+                  <Select value={selectedStatus} onValueChange={setSelectedStatus}>
+                    <SelectTrigger id="status">
+                      <SelectValue placeholder="Todos os status" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="9">9</SelectItem>
-                      <SelectItem value="18">18</SelectItem>
-                      <SelectItem value="27">27</SelectItem>
-                      <SelectItem value="36">36</SelectItem>
-                      <SelectItem value="45">45</SelectItem>
+                      <SelectItem value="all">Todos os status</SelectItem>
+                      <SelectItem value="Disponível">Disponível</SelectItem>
+                      <SelectItem value="Operacional">Operacional</SelectItem>
+                      <SelectItem value="Manutenção">Manutenção</SelectItem>
+                      <SelectItem value="Vendida">Vendida</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-              </div>
-              
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(1)}
-                  disabled={currentPage === 1}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsLeft className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </Button>
-                
-                <div className="hidden sm:flex items-center gap-1">
-                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                    let pageNum;
-                    if (totalPages <= 5) {
-                      pageNum = i + 1;
-                    } else if (currentPage <= 3) {
-                      pageNum = i + 1;
-                    } else if (currentPage >= totalPages - 2) {
-                      pageNum = totalPages - 4 + i;
-                    } else {
-                      pageNum = currentPage - 2 + i;
-                    }
-                    
-                    return (
-                      <Button
-                        key={pageNum}
-                        variant={currentPage === pageNum ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => setCurrentPage(pageNum)}
-                        className="w-8 h-8 p-0"
-                      >
-                        {pageNum}
-                      </Button>
-                    );
-                  })}
+                <div>
+                  <Label htmlFor="tipo">Tipo</Label>
+                  <Select value={selectedTipo} onValueChange={setSelectedTipo}>
+                    <SelectTrigger id="tipo">
+                      <SelectValue placeholder="Todos os tipos" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos os tipos</SelectItem>
+                      <SelectItem value="Grua Torre">Grua Torre</SelectItem>
+                      <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
+                      <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
+                      <SelectItem value="Guincho">Guincho</SelectItem>
+                      <SelectItem value="Outros">Outros</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-                
-                <div className="sm:hidden flex items-center gap-2">
-                  <span className="text-sm text-gray-600">Página {currentPage} de {totalPages}</span>
+                <div className="flex items-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchTerm("")
+                      setSelectedStatus("all")
+                      setSelectedObra("all")
+                      setSelectedTipo("all")
+                      setCurrentPage(1)
+                    }}
+                    className="w-full"
+                  >
+                    Limpar Filtros
+                  </Button>
                 </div>
-                
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCurrentPage(totalPages)}
-                  disabled={currentPage === totalPages}
-                  className="hidden sm:flex"
-                >
-                  <ChevronsRight className="w-4 h-4" />
-                </Button>
               </div>
             </div>
+
+            <div className="px-6 py-4 border-b">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center">
+                    <Package className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-1">Componentes</h3>
+                    <p className="text-sm text-gray-600">
+                      Gerencie os componentes e peças da grua, incluindo cabos, ganchos,
+                      sistemas hidráulicos e outros equipamentos essenciais para o funcionamento.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-start gap-3">
+                  <div className="flex-shrink-0 w-10 h-10 bg-purple-100 rounded-lg flex items-center justify-center">
+                    <Settings className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900 mb-1">Configurações</h3>
+                    <p className="text-sm text-gray-600">
+                      Configure parâmetros técnicos, limites de operação, especificações
+                      de segurança e outras configurações específicas da grua.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {loading ? (
+              <div className="p-8">
+                <Loading size="lg" text="Carregando gruas..." />
+              </div>
+            ) : filteredGruas.length === 0 ? (
+              <div className="px-6 py-12 text-center text-muted-foreground">
+                <Crane className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <p className="font-medium text-foreground">Nenhuma grua encontrada</p>
+                <p className="text-sm mt-1">Ajuste os filtros ou cadastre uma nova grua.</p>
+              </div>
+            ) : (
+              <>
+                <div className="p-6 space-y-4">
+                  <div className="rounded-md border overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="min-w-[160px]">Nome</TableHead>
+                          <TableHead className="min-w-[120px]">Modelo / Cap.</TableHead>
+                          <TableHead className="min-w-[140px]">Tipo</TableHead>
+                          <TableHead className="min-w-[120px]">Obra</TableHead>
+                          <TableHead className="text-center whitespace-nowrap">Status</TableHead>
+                          <TableHead className="text-right whitespace-nowrap min-w-[420px]">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {filteredGruas.map((grua) => {
+                          const obraNome = grua.currentObraName || "Sem obra"
+                          return (
+                            <TableRow key={grua.id} className="hover:bg-muted/50">
+                              <TableCell className="font-medium">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <Crane className="w-4 h-4 shrink-0 text-blue-600" />
+                                  <span className="truncate" title={grua.name}>
+                                    {grua.name}
+                                  </span>
+                                </div>
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                <span className="whitespace-nowrap">
+                                  {grua.model} — {grua.capacity}
+                                </span>
+                              </TableCell>
+                              <TableCell className="text-sm">
+                                {grua.tipo ? (
+                                  <span className="line-clamp-2" title={grua.tipo}>
+                                    {grua.tipo}
+                                  </span>
+                                ) : (
+                                  <span className="text-muted-foreground">—</span>
+                                )}
+                              </TableCell>
+                              <TableCell className="text-sm text-muted-foreground">
+                                {grua.currentObraId ? (
+                                  <span className="line-clamp-2" title={obraNome}>
+                                    {obraNome}
+                                  </span>
+                                ) : (
+                                  "—"
+                                )}
+                              </TableCell>
+                              <TableCell className="text-center">
+                                <Badge className={getStatusColor(grua.status)}>
+                                  {getStatusIcon(grua.status)}
+                                  <span className="ml-1 capitalize">
+                                    {grua.status.replace("_", " ")}
+                                  </span>
+                                </Badge>
+                              </TableCell>
+                              <TableCell className="text-right whitespace-nowrap p-2 align-middle">
+                                <div className="flex flex-nowrap justify-end items-center gap-1 min-w-max ml-auto w-fit max-w-none">
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+                                    title="Ver detalhes"
+                                    onClick={() => handleViewDetails(grua)}
+                                  >
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
+                                    title="Editar"
+                                    onClick={() => handleEditGrua(grua)}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                    title="Excluir"
+                                    onClick={() => handleDeleteGrua(grua)}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs px-2 text-blue-600 whitespace-nowrap shrink-0"
+                                    onClick={() =>
+                                      (window.location.href = `/dashboard/gruas/${grua.id}/componentes`)
+                                    }
+                                  >
+                                    <Package className="w-3.5 h-3.5 mr-1 shrink-0" />
+                                    Componentes
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs px-2 text-purple-600 whitespace-nowrap shrink-0"
+                                    onClick={() =>
+                                      (window.location.href = `/dashboard/gruas/${grua.id}/configuracoes`)
+                                    }
+                                  >
+                                    <Settings className="w-3.5 h-3.5 mr-1 shrink-0" />
+                                    Especificações
+                                  </Button>
+                                </div>
+                              </TableCell>
+                            </TableRow>
+                          )
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t">
+                  <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
+                    <span>
+                      Mostrando {((currentPage - 1) * itemsPerPage) + 1} a{" "}
+                      {Math.min(currentPage * itemsPerPage, totalItems)} de {totalItems} gruas
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <span>Itens por página:</span>
+                      <Select
+                        value={itemsPerPage.toString()}
+                        onValueChange={(value) => {
+                          setItemsPerPage(parseInt(value, 10))
+                          setCurrentPage(1)
+                        }}
+                      >
+                        <SelectTrigger className="w-20">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="9">9</SelectItem>
+                          <SelectItem value="18">18</SelectItem>
+                          <SelectItem value="27">27</SelectItem>
+                          <SelectItem value="36">36</SelectItem>
+                          <SelectItem value="45">45</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(1)}
+                        disabled={currentPage === 1}
+                        className="hidden sm:flex"
+                      >
+                        <ChevronsLeft className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage - 1)}
+                        disabled={currentPage === 1}
+                      >
+                        <ChevronLeft className="w-4 h-4" />
+                      </Button>
+                      <div className="hidden sm:flex items-center gap-1">
+                        {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                          let pageNum: number
+                          if (totalPages <= 5) {
+                            pageNum = i + 1
+                          } else if (currentPage <= 3) {
+                            pageNum = i + 1
+                          } else if (currentPage >= totalPages - 2) {
+                            pageNum = totalPages - 4 + i
+                          } else {
+                            pageNum = currentPage - 2 + i
+                          }
+                          return (
+                            <Button
+                              key={pageNum}
+                              type="button"
+                              variant={currentPage === pageNum ? "default" : "outline"}
+                              size="sm"
+                              onClick={() => setCurrentPage(pageNum)}
+                              className="w-8 h-8 p-0"
+                            >
+                              {pageNum}
+                            </Button>
+                          )
+                        })}
+                      </div>
+                      <div className="sm:hidden flex items-center gap-2">
+                        <span className="text-sm text-gray-600">
+                          Página {currentPage} de {totalPages}
+                        </span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(currentPage + 1)}
+                        disabled={currentPage === totalPages}
+                      >
+                        <ChevronRight className="w-4 h-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setCurrentPage(totalPages)}
+                        disabled={currentPage === totalPages}
+                        className="hidden sm:flex"
+                      >
+                        <ChevronsRight className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
           </CardContent>
         </Card>
       )}
@@ -2513,263 +2523,196 @@ export default function GruasPage() {
 
       {/* Dialog de Visualização de Detalhes */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="sm:max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Eye className="w-5 h-5 text-blue-600" />
-              Detalhes da Grua
-            </DialogTitle>
-          </DialogHeader>
-          
+        <DialogContent className="flex h-[min(90vh,880px)] max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden p-0 sm:rounded-xl">
           {gruaToView && (() => {
             const grua = gruaToView as any
-            
+            const subtitle = [gruaToView.model || grua.modelo, gruaToView.fabricante].filter(Boolean).join(" · ")
+
             return (
-              <div className="space-y-6">
-                {/* Informações Básicas */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Nome</Label>
-                      <p className="text-lg font-semibold">{gruaToView.name}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Modelo</Label>
-                      <p className="text-base">{formatValue(gruaToView.model || grua.modelo)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Fabricante</Label>
-                      <p className="text-base">{formatValue(gruaToView.fabricante)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade</Label>
-                      <p className="text-base">{formatValue(gruaToView.capacity || grua.capacidade)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade na Ponta</Label>
-                      <p className="text-base">{formatValue(grua.capacidade_ponta || grua.capacidadePonta)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Ano</Label>
-                      <p className="text-base">{formatValue(grua.ano)}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-3">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Status</Label>
-                      <div className="flex items-center gap-2 mt-1">
-                        {getStatusIcon(gruaToView.status)}
-                        <Badge 
-                          variant={gruaToView.status === 'disponivel' ? 'default' : 
-                                  gruaToView.status === 'em_obra' ? 'secondary' :
-                                  gruaToView.status === 'manutencao' ? 'destructive' : 'outline'}
-                          className="text-xs"
-                        >
-                          {gruaToView.status === 'disponivel' ? 'Disponível' :
-                           gruaToView.status === 'em_obra' ? 'Em Obra' :
-                           gruaToView.status === 'manutencao' ? 'Manutenção' : 'Inativa'}
-                        </Badge>
+              <>
+                <DialogHeader className="shrink-0 space-y-1 border-b bg-muted/40 px-5 py-4 pr-14 text-left sm:px-6">
+                  <DialogTitle className="flex items-center gap-2 text-base sm:text-lg">
+                    <Eye className="h-5 w-5 shrink-0 text-blue-600" />
+                    Detalhes da Grua
+                  </DialogTitle>
+                  <DialogDescription className="line-clamp-2 text-left text-sm text-muted-foreground">
+                    {subtitle || gruaToView.name}
+                  </DialogDescription>
+                </DialogHeader>
+
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-5 sm:px-6">
+                  <div className="space-y-5">
+                    <div className="relative overflow-hidden rounded-xl border border-blue-600/15 bg-gradient-to-br from-blue-600/[0.08] via-background to-muted/20 p-5 shadow-sm">
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                        <div className="flex min-w-0 items-start gap-4">
+                          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-blue-600 text-white shadow-md shadow-blue-600/20">
+                            <Crane className="h-7 w-7" />
+                          </div>
+                          <div className="min-w-0 pt-0.5">
+                            <h2 className="truncate text-xl font-bold tracking-tight sm:text-2xl">{gruaToView.name}</h2>
+                            <p className="mt-1 text-sm text-muted-foreground">
+                              {subtitle || "Modelo e fabricante não informados"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex shrink-0 flex-wrap items-center gap-2 sm:flex-col sm:items-end sm:gap-1.5">
+                          <div className="flex items-center gap-2">
+                            {getStatusIcon(gruaToView.status)}
+                            <Badge
+                              variant={
+                                gruaToView.status === "disponivel"
+                                  ? "default"
+                                  : gruaToView.status === "em_obra"
+                                    ? "secondary"
+                                    : gruaToView.status === "manutencao"
+                                      ? "destructive"
+                                      : "outline"
+                              }
+                              className="text-xs font-medium capitalize"
+                            >
+                              {gruaToView.status === "disponivel"
+                                ? "Disponível"
+                                : gruaToView.status === "em_obra"
+                                  ? "Em Obra"
+                                  : gruaToView.status === "manutencao"
+                                    ? "Manutenção"
+                                    : "Inativa"}
+                            </Badge>
+                          </div>
+                        </div>
                       </div>
+                      <dl className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-4">
+                        <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Capacidade</dt>
+                          <dd className="mt-0.5 text-sm font-semibold">{formatValue(gruaToView.capacity || grua.capacidade)}</dd>
+                        </div>
+                        <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm">
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Ano</dt>
+                          <dd className="mt-0.5 text-sm font-semibold">{formatValue(grua.ano)}</dd>
+                        </div>
+                        <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm sm:col-span-1">
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Tipo</dt>
+                          <dd className="mt-0.5 truncate text-sm font-semibold" title={gruaToView.tipo || ""}>
+                            {formatValue(gruaToView.tipo)}
+                          </dd>
+                        </div>
+                        <div className="rounded-lg border border-border/60 bg-background/80 px-3 py-2 backdrop-blur-sm sm:col-span-1">
+                          <dt className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Local</dt>
+                          <dd className="mt-0.5 truncate text-sm font-semibold" title={grua.localizacao || ""}>
+                            {formatValue(grua.localizacao)}
+                          </dd>
+                        </div>
+                      </dl>
                     </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Tipo</Label>
-                      <p className="text-base">{formatValue(gruaToView.tipo)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Localização</Label>
-                      <p className="text-base">{formatValue(grua.localizacao)}</p>
-                    </div>
-                    
-                    {gruaToView.currentObraName && (
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Obra Atual</Label>
-                        <p className="text-base">{gruaToView.currentObraName}</p>
+
+                    <PreviewSection title="Cadastro e operação" icon={Building2}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        <PreviewField label="Modelo">{formatValue(gruaToView.model || grua.modelo)}</PreviewField>
+                        <PreviewField label="Fabricante">{formatValue(gruaToView.fabricante)}</PreviewField>
+                        <PreviewField label="Capacidade na ponta">{formatValue(grua.capacidade_ponta || grua.capacidadePonta)}</PreviewField>
+                        {gruaToView.currentObraName ? (
+                          <PreviewField label="Obra atual" className="sm:col-span-2 lg:col-span-1">
+                            {gruaToView.currentObraName}
+                          </PreviewField>
+                        ) : null}
+                        {gruaToView.createdAt ? (
+                          <PreviewField label="Cadastrada em">
+                            {new Date(gruaToView.createdAt).toLocaleDateString("pt-BR")}
+                          </PreviewField>
+                        ) : null}
                       </div>
-                    )}
-                    
-                    {gruaToView.createdAt && (
-                      <div>
-                        <Label className="text-sm font-medium text-gray-600">Data de Criação</Label>
-                        <p className="text-base">{new Date(gruaToView.createdAt).toLocaleDateString('pt-BR')}</p>
+                    </PreviewSection>
+
+                    <PreviewSection title="Especificações técnicas" icon={Settings}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        <PreviewField label="Lança">{formatValue(grua.lanca)}</PreviewField>
+                        <PreviewField label="Altura final (m)">{formatValue(grua.altura_final)}</PreviewField>
+                        <PreviewField label="Altura de trabalho">{formatValue(grua.altura_trabalho || grua.alturaTrabalho)}</PreviewField>
+                        <PreviewField label="Tipo de base">{formatValue(grua.tipo_base)}</PreviewField>
+                        <PreviewField label="Capacidade 2 cabos (mín.)">{formatValue(grua.capacidade_1_cabo)}</PreviewField>
+                        <PreviewField label="Capacidade 4 cabos (máx.)">{formatValue(grua.capacidade_2_cabos)}</PreviewField>
+                        <PreviewField label="Potência instalada">{formatValue(grua.potencia_instalada)}</PreviewField>
+                        <PreviewField label="Voltagem">{formatValue(grua.voltagem)}</PreviewField>
+                        <PreviewField label="Velocidade de rotação">{formatValue(grua.velocidade_rotacao)}</PreviewField>
+                        <PreviewField label="Velocidade de elevação">{formatValue(grua.velocidade_elevacao)}</PreviewField>
+                        <PreviewField label="Horas de operação">{formatValue(grua.horas_operacao || grua.horasOperacao)}</PreviewField>
                       </div>
-                    )}
+                    </PreviewSection>
+
+                    <PreviewSection title="Valores" icon={Banknote}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                        <PreviewField label="Valor de locação">{formatCurrency(grua.valor_locacao || grua.valorLocacao)}</PreviewField>
+                        <PreviewField label="Valor real">{formatCurrency(grua.valor_real)}</PreviewField>
+                        <PreviewField label="Valor de operação">{formatCurrency(grua.valor_operacao || grua.valorOperacao)}</PreviewField>
+                        <PreviewField label="Valor de sinaleiro">{formatCurrency(grua.valor_sinaleiro || grua.valorSinaleiro)}</PreviewField>
+                        <PreviewField label="Valor de manutenção">{formatCurrency(grua.valor_manutencao || grua.valorManutencao)}</PreviewField>
+                      </div>
+                    </PreviewSection>
+
+                    <PreviewSection title="Manutenção" icon={Wrench}>
+                      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <PreviewField label="Última manutenção">
+                          {grua.ultima_manutencao || grua.ultimaManutencao
+                            ? new Date(grua.ultima_manutencao || grua.ultimaManutencao).toLocaleDateString("pt-BR")
+                            : "Não informado"}
+                        </PreviewField>
+                        <PreviewField label="Próxima manutenção">
+                          {grua.proxima_manutencao || grua.proximaManutencao
+                            ? new Date(grua.proxima_manutencao || grua.proximaManutencao).toLocaleDateString("pt-BR")
+                            : "Não informado"}
+                        </PreviewField>
+                      </div>
+                    </PreviewSection>
+
+                    <section className="overflow-hidden rounded-xl border border-border/80 bg-muted/15">
+                      <div className="border-b border-border/60 bg-muted/25 px-4 py-2.5">
+                        <h3 className="text-sm font-semibold tracking-tight">Observações</h3>
+                      </div>
+                      <p className="p-4 text-sm leading-relaxed text-foreground">
+                        {gruaToView.observacoes || grua.observacoes || "Nenhuma observação registrada."}
+                      </p>
+                    </section>
                   </div>
                 </div>
-                
-                {/* Especificações Técnicas */}
-                <div className="border-t pt-4">
-                  <h3 className="text-lg font-semibold mb-4">Especificações Técnicas</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Lança</Label>
-                      <p className="text-base">{formatValue(grua.lanca)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Altura Final (m)</Label>
-                      <p className="text-base">{formatValue(grua.altura_final)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Altura de Trabalho</Label>
-                      <p className="text-base">{formatValue(grua.altura_trabalho || grua.alturaTrabalho)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Tipo de Base</Label>
-                      <p className="text-base">{formatValue(grua.tipo_base)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade 2 Cabos (mínima)</Label>
-                      <p className="text-base">{formatValue(grua.capacidade_1_cabo)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Capacidade 4 Cabos (máxima)</Label>
-                      <p className="text-base">{formatValue(grua.capacidade_2_cabos)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Potência Instalada</Label>
-                      <p className="text-base">{formatValue(grua.potencia_instalada)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Voltagem</Label>
-                      <p className="text-base">{formatValue(grua.voltagem)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Velocidade de Rotação</Label>
-                      <p className="text-base">{formatValue(grua.velocidade_rotacao)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Velocidade de Elevação</Label>
-                      <p className="text-base">{formatValue(grua.velocidade_elevacao)}</p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Horas de Operação</Label>
-                      <p className="text-base">{formatValue(grua.horas_operacao || grua.horasOperacao)}</p>
-                    </div>
-                  </div>
-                </div>
-              
-                {/* Informações Financeiras */}
-                <div className="border-t pt-4">
-                  <h3 className="text-lg font-semibold mb-4">Informações Financeiras</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor de Locação</Label>
-                      <p className="text-base">
-                        {formatCurrency(grua.valor_locacao || grua.valorLocacao)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor Real</Label>
-                      <p className="text-base">
-                        {formatCurrency(grua.valor_real)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor de Operação</Label>
-                      <p className="text-base">
-                        {formatCurrency(grua.valor_operacao || grua.valorOperacao)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor de Sinaleiro</Label>
-                      <p className="text-base">
-                        {formatCurrency(grua.valor_sinaleiro || grua.valorSinaleiro)}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Valor de Manutenção</Label>
-                      <p className="text-base">
-                        {formatCurrency(grua.valor_manutencao || grua.valorManutencao)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Informações de Manutenção */}
-                <div className="border-t pt-4">
-                  <h3 className="text-lg font-semibold mb-4">Manutenção</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Última Manutenção</Label>
-                      <p className="text-base">
-                        {grua.ultima_manutencao || grua.ultimaManutencao
-                          ? new Date(grua.ultima_manutencao || grua.ultimaManutencao).toLocaleDateString('pt-BR')
-                          : 'Não informado'}
-                      </p>
-                    </div>
-                    
-                    <div>
-                      <Label className="text-sm font-medium text-gray-600">Próxima Manutenção</Label>
-                      <p className="text-base">
-                        {grua.proxima_manutencao || grua.proximaManutencao
-                          ? new Date(grua.proxima_manutencao || grua.proximaManutencao).toLocaleDateString('pt-BR')
-                          : 'Não informado'}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                {/* Observações */}
-                <div className="border-t pt-4">
-                  <Label className="text-sm font-medium text-gray-600">Observações</Label>
-                  <p className="text-base mt-1 p-3 bg-gray-50 rounded-md">
-                    {gruaToView.observacoes || grua.observacoes || 'Nenhuma observação registrada'}
-                  </p>
-                </div>
-                
-                {/* Ações */}
-                <div className="flex gap-3 pt-4 border-t">
-                  <Button
-                    variant="outline"
-                    onClick={() => handleEditGrua(gruaToView)}
-                    className="flex-1"
-                  >
-                    <Edit className="w-4 h-4 mr-2" />
-                    Editar Grua
-                  </Button>
-                  
-                  {gruaToView.currentObraId && gruaToView.currentObraName && (
+
+                <div className="shrink-0 border-t bg-muted/30 px-5 py-3 sm:px-6">
+                  <div className="flex flex-nowrap justify-start gap-2 overflow-x-auto pb-0.5 sm:justify-end">
+                    <Button variant="outline" size="sm" onClick={() => handleEditGrua(gruaToView)} className="shrink-0">
+                      <Edit className="mr-2 h-4 w-4" />
+                      Editar Grua
+                    </Button>
+                    {gruaToView.currentObraId && gruaToView.currentObraName ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => (window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`)}
+                        className="shrink-0"
+                      >
+                        <Building2 className="mr-2 h-4 w-4" />
+                        Ver na Obra
+                      </Button>
+                    ) : null}
                     <Button
                       variant="outline"
-                      onClick={() => window.location.href = `/dashboard/obras/${gruaToView.currentObraId}?tab=livro`}
-                      className="flex-1"
+                      size="sm"
+                      onClick={() => (window.location.href = `/dashboard/gruas/${gruaToView.id}/componentes`)}
+                      className="shrink-0"
                     >
-                      <Building2 className="w-4 h-4 mr-2" />
-                      Ver na Obra
+                      <Package className="mr-2 h-4 w-4" />
+                      Componentes
                     </Button>
-                  )}
-                  
-                  <Button
-                    variant="outline"
-                    onClick={() => window.location.href = `/dashboard/gruas/${gruaToView.id}/componentes`}
-                    className="flex-1"
-                  >
-                    <Package className="w-4 h-4 mr-2" />
-                    Componentes
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => (window.location.href = `/dashboard/gruas/${gruaToView.id}/configuracoes`)}
+                      className="shrink-0 text-purple-600 border-purple-200 hover:bg-purple-50 dark:border-purple-800 dark:hover:bg-purple-950/40"
+                    >
+                      <Settings className="mr-2 h-4 w-4" />
+                      Especificações
+                    </Button>
+                  </div>
                 </div>
-              </div>
+              </>
             )
           })()}
         </DialogContent>
