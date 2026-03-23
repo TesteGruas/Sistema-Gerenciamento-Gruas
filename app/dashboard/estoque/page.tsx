@@ -457,7 +457,7 @@ export default function EstoquePage() {
         'Código de Barras': item.codigo_barras || '',
         'Unidade de Medida': item.unidade_medida || '',
         'Disponível': estoqueData?.quantidade_disponivel || 0,
-        'Reservado': estoqueData?.quantidade_reservada || 0,
+        'Reservada': estoqueData?.quantidade_reservada || 0,
         'Quantidade Atual': estoqueData?.quantidade_atual || 0,
         'Estoque Mínimo': item.estoque_minimo || 0,
         'Estoque Máximo': item.estoque_maximo || 0,
@@ -1833,7 +1833,7 @@ export default function EstoquePage() {
                         Disponível
                       </TableHead>
                       <TableHead className="w-24 px-2 text-center text-xs whitespace-nowrap">
-                        Reservado
+                        Reservada
                       </TableHead>
                       <TableHead className="text-center">Status</TableHead>
                       <TableHead className="text-center">Valor Unit.</TableHead>

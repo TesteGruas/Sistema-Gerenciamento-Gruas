@@ -43,6 +43,7 @@ import { gruasApi } from "@/lib/api-gruas"
 import { obrasApi } from "@/lib/api-obras"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 
 
@@ -353,7 +354,7 @@ export default function MedicoesPage() {
   }
 
   return (
-    <div className="space-y-6 w-full">
+    <div className="space-y-6 w-full min-w-0 max-w-full">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
@@ -575,126 +576,218 @@ export default function MedicoesPage() {
           </Card>
 
           {/* Lista de Medições */}
-          <Card>
+          <Card className="min-w-0">
             <CardHeader>
               <CardTitle>Medições ({filteredMedicoes.length})</CardTitle>
               <CardDescription>Lista de todas as medições registradas</CardDescription>
             </CardHeader>
-            <CardContent>
+            <CardContent className="min-w-0 w-full">
               {isLoading ? (
                 <div className="text-center py-8">Carregando...</div>
               ) : filteredMedicoes.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">Nenhuma medição encontrada</div>
               ) : (
                 <>
-                  <Table>
+                  <Table
+                    className="table-fixed min-w-0 [&_td]:px-2 [&_th]:px-2"
+                    wrapperClassName="w-full max-w-full min-w-0"
+                  >
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Período</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Obra</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Valor Locação</TableHead>
-                        <TableHead>Valor Serviço</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>NF</TableHead>
-                        <TableHead>Ações</TableHead>
+                        <TableHead className="w-[5.5rem] min-w-0 whitespace-nowrap">Período</TableHead>
+                        <TableHead className="min-w-0">Cliente</TableHead>
+                        <TableHead className="min-w-0">Obra</TableHead>
+                        <TableHead className="w-[7.25rem] whitespace-nowrap">Total</TableHead>
+                        <TableHead className="w-[7.25rem] whitespace-nowrap">Locação</TableHead>
+                        <TableHead className="w-[7.25rem] whitespace-nowrap">Serviço</TableHead>
+                        <TableHead className="w-[7rem] whitespace-nowrap">Status</TableHead>
+                        <TableHead className="w-16 min-w-0">NF</TableHead>
+                        <TableHead className="w-[13rem] min-w-[13rem] whitespace-nowrap text-right">
+                          Ações
+                        </TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredMedicoes.map((medicao) => (
+                      {filteredMedicoes.map((medicao) => {
+                        const nfTexto = medicao.numero
+                          ? `NF-${String(medicao.numero).padStart(4, "0")}`
+                          : null
+                        return (
                         <TableRow key={medicao.id}>
-                          <TableCell>{medicao.periodo}</TableCell>
-                          <TableCell>
-                            {medicao.obras?.clientes?.nome || medicao.orcamentos?.clientes?.nome || '-'}
+                          <TableCell className="min-w-0 whitespace-nowrap">{medicao.periodo}</TableCell>
+                          <TableCell className="min-w-0">
+                            <span
+                              className="block truncate"
+                              title={
+                                medicao.obras?.clientes?.nome ||
+                                medicao.orcamentos?.clientes?.nome ||
+                                undefined
+                              }
+                            >
+                              {medicao.obras?.clientes?.nome || medicao.orcamentos?.clientes?.nome || "-"}
+                            </span>
                           </TableCell>
-                          <TableCell>
-                            {medicao.obras?.nome || '-'}
+                          <TableCell className="min-w-0">
+                            <span className="block truncate" title={medicao.obras?.nome || undefined}>
+                              {medicao.obras?.nome || "-"}
+                            </span>
                           </TableCell>
-                          <TableCell className="font-semibold">{formatCurrency(medicao.valor_total || 0)}</TableCell>
-                          <TableCell>{formatCurrency(medicao.valor_mensal_bruto || 0)}</TableCell>
-                          <TableCell>{formatCurrency(Math.max(0, (medicao.valor_total || 0) - (medicao.valor_mensal_bruto || 0)))}</TableCell>
-                          <TableCell>{getStatusBadge(medicao.status)}</TableCell>
-                          <TableCell>
-                            {medicao.numero ? (
-                              <span className="text-blue-700 font-medium">NF-{String(medicao.numero).padStart(4, '0')}</span>
-                            ) : '-'}
+                          <TableCell className="min-w-0 whitespace-nowrap font-semibold tabular-nums">
+                            {formatCurrency(medicao.valor_total || 0)}
                           </TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  router.push(`/dashboard/medicoes/${medicao.id}`)
-                                }}
-                                title="Ver detalhes"
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleEditar(medicao)}
-                                title="Editar medição"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setSelectedMedicao(medicao)
-                                  setIsEnviarDialogOpen(true)
-                                }}
-                                title={medicao.status === 'enviada' ? 'Reenviar medição' : 'Enviar medição'}
-                              >
-                                <Send className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="px-1.5"
-                                disabled={medicao.status_aprovacao !== "aprovada"}
-                                title={
-                                  medicao.status_aprovacao !== "aprovada"
-                                    ? "Só é possível gerar nota fiscal após a medição ser aprovada."
-                                    : "Abrir nota fiscal de saída a partir desta medição"
-                                }
-                                onClick={() => {
-                                  if (medicao.status_aprovacao !== "aprovada") return
-                                  try {
-                                    sessionStorage.setItem(
-                                      "sgg_nf_prefill_medicao_id",
-                                      String(medicao.id)
-                                    )
-                                  } catch {
-                                    /* ignore */
-                                  }
-                                  router.push(
-                                    `/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`
-                                  )
-                                }}
-                              >
-                                <FileText
-                                  className={`w-4 h-4 ${medicao.status_aprovacao === "aprovada" ? "text-emerald-700" : "text-muted-foreground opacity-50"}`}
-                                />
-                              </Button>
-                              <AlertDialog>
-                                <AlertDialogTrigger asChild>
+                          <TableCell className="min-w-0 whitespace-nowrap tabular-nums">
+                            {formatCurrency(medicao.valor_mensal_bruto || 0)}
+                          </TableCell>
+                          <TableCell className="min-w-0 whitespace-nowrap tabular-nums">
+                            {formatCurrency(Math.max(0, (medicao.valor_total || 0) - (medicao.valor_mensal_bruto || 0)))}
+                          </TableCell>
+                          <TableCell className="w-[7rem] min-w-0 whitespace-nowrap">
+                            {getStatusBadge(medicao.status)}
+                          </TableCell>
+                          <TableCell className="w-16 max-w-16 min-w-0 align-middle">
+                            {nfTexto ? (
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span
+                                    tabIndex={0}
+                                    className="block max-w-full cursor-default truncate text-left text-blue-700 font-medium"
+                                  >
+                                    {nfTexto}
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent
+                                  side="top"
+                                  className="max-w-xs break-all text-left font-mono text-xs"
+                                >
+                                  {nfTexto}
+                                </TooltipContent>
+                              </Tooltip>
+                            ) : (
+                              "-"
+                            )}
+                          </TableCell>
+                          <TableCell className="w-[13rem] min-w-[13rem] whitespace-nowrap align-middle text-right">
+                            <div className="flex flex-nowrap items-center justify-end gap-0.5">
+                              <Tooltip>
+                                <TooltipTrigger asChild>
                                   <Button
                                     variant="ghost"
                                     size="sm"
-                                    disabled={excluindoId === medicao.id || medicao.status === 'finalizada'}
-                                    title={
-                                      medicao.status === 'finalizada'
-                                        ? 'Medições finalizadas não podem ser excluídas'
-                                        : 'Excluir medição'
-                                    }
+                                    aria-label="Ver detalhes da medição"
+                                    onClick={() => {
+                                      router.push(`/dashboard/medicoes/${medicao.id}`)
+                                    }}
                                   >
-                                    <Trash2 className="w-4 h-4 text-red-600" />
+                                    <Eye className="w-4 h-4" />
                                   </Button>
-                                </AlertDialogTrigger>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">Ver detalhes da medição</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label="Editar medição"
+                                    onClick={() => handleEditar(medicao)}
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">Editar medição</TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label={
+                                      medicao.status === "enviada"
+                                        ? "Reenviar medição ao cliente"
+                                        : "Enviar medição ao cliente"
+                                    }
+                                    onClick={() => {
+                                      setSelectedMedicao(medicao)
+                                      setIsEnviarDialogOpen(true)
+                                    }}
+                                  >
+                                    <Send className="w-4 h-4" />
+                                  </Button>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {medicao.status === "enviada"
+                                    ? "Reenviar medição ao cliente"
+                                    : "Enviar medição ao cliente"}
+                                </TooltipContent>
+                              </Tooltip>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <span className="inline-flex">
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="px-1.5"
+                                      disabled={medicao.status_aprovacao !== "aprovada"}
+                                      aria-label={
+                                        medicao.status_aprovacao !== "aprovada"
+                                          ? "Nota fiscal: aguarde aprovação da medição"
+                                          : "Abrir nota fiscal de saída a partir desta medição"
+                                      }
+                                      onClick={() => {
+                                        if (medicao.status_aprovacao !== "aprovada") return
+                                        try {
+                                          sessionStorage.setItem(
+                                            "sgg_nf_prefill_medicao_id",
+                                            String(medicao.id)
+                                          )
+                                        } catch {
+                                          /* ignore */
+                                        }
+                                        router.push(
+                                          `/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`
+                                        )
+                                      }}
+                                    >
+                                      <FileText
+                                        className={`w-4 h-4 ${medicao.status_aprovacao === "aprovada" ? "text-emerald-700" : "text-muted-foreground opacity-50"}`}
+                                      />
+                                    </Button>
+                                  </span>
+                                </TooltipTrigger>
+                                <TooltipContent side="top">
+                                  {medicao.status_aprovacao !== "aprovada"
+                                    ? "Só é possível gerar nota fiscal após a medição ser aprovada."
+                                    : "Abrir nota fiscal de saída a partir desta medição"}
+                                </TooltipContent>
+                              </Tooltip>
+                              <AlertDialog>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="inline-flex">
+                                      <AlertDialogTrigger asChild>
+                                        <Button
+                                          variant="ghost"
+                                          size="sm"
+                                          disabled={
+                                            excluindoId === medicao.id || medicao.status === "finalizada"
+                                          }
+                                          aria-label={
+                                            medicao.status === "finalizada"
+                                              ? "Exclusão indisponível: medição finalizada"
+                                              : "Excluir medição"
+                                          }
+                                        >
+                                          <Trash2 className="w-4 h-4 text-red-600" />
+                                        </Button>
+                                      </AlertDialogTrigger>
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top">
+                                    {medicao.status === "finalizada"
+                                      ? "Medições finalizadas não podem ser excluídas"
+                                      : "Excluir medição"}
+                                  </TooltipContent>
+                                </Tooltip>
                                 <AlertDialogContent>
                                   <AlertDialogHeader>
                                     <AlertDialogTitle>Excluir medição</AlertDialogTitle>
@@ -716,7 +809,8 @@ export default function MedicoesPage() {
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                        )
+                      })}
                     </TableBody>
                   </Table>
                   

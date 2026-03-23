@@ -34,13 +34,16 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
-  ChevronsRight
+  ChevronsRight,
+  ChevronDown
 } from "lucide-react"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
 import { obrasApi } from "@/lib/api-obras"
 import api from "@/lib/api"
 import { isAdmin } from "@/lib/user-utils"
 import { getResumoMensalAssinaturas } from "@/lib/api-assinaturas"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
 
 export default function AssinaturaPage() {
   const { toast } = useToast()
@@ -67,6 +70,14 @@ export default function AssinaturaPage() {
   const [anoResumoAssinaturas, setAnoResumoAssinaturas] = useState(new Date().getFullYear())
   const [resumoAssinaturas, setResumoAssinaturas] = useState<any>(null)
   const [loadingResumoAssinaturas, setLoadingResumoAssinaturas] = useState(false)
+  const [resumoAssinaturasAberto, setResumoAssinaturasAberto] = useState(true)
+
+  const anosResumoSelect = (() => {
+    const y = new Date().getFullYear()
+    const inicio = Math.min(2020, y - 2)
+    const fim = Math.max(y + 2, 2025)
+    return Array.from({ length: fim - inicio + 1 }, (_, i) => inicio + i)
+  })()
 
   // Função para carregar documentos do backend
   const carregarDocumentos = async () => {
@@ -141,8 +152,8 @@ export default function AssinaturaPage() {
       const headers = ['Data', 'Documento', 'Tipo', 'Obra']
       const rows = resumoAssinaturas.assinaturas.map((assinatura: any) => [
         new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR'),
-        assinatura.documento?.nome || 'Documento não encontrado',
-        assinatura.documento?.tipo || '-',
+        assinatura.documento?.titulo || assinatura.documento?.nome || 'Documento não encontrado',
+        assinatura.tipo || assinatura.documento?.tipo || '-',
         assinatura.documento?.obra?.nome || '-'
       ])
 
@@ -487,166 +498,166 @@ export default function AssinaturaPage() {
         ))}
       </div>
 
-      {/* Informações do Admin */}
-      {isAdmin(currentUser) && (
-        <Card className="bg-blue-50 border-blue-200">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-blue-100 rounded-full">
-                <Users className="w-5 h-5 text-blue-600" />
-              </div>
-              <div>
-                <h3 className="font-medium text-blue-900">Acesso Administrativo</h3>
-                <p className="text-sm text-blue-700">
-                  Como administrador, você pode ver todos os {documentos.length} documentos do sistema.
-                  {filteredDocumentos.length !== documentos.length && 
-                    ` ${filteredDocumentos.length} documentos visíveis com os filtros aplicados.`
-                  }
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Resumo Mensal de Assinaturas */}
       {currentUser && (
-        <Card>
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle>Resumo de Assinaturas do Mês</CardTitle>
-                <CardDescription>Visualize todas as assinaturas realizadas no mês</CardDescription>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Label htmlFor="mes-resumo-assinaturas">Mês:</Label>
-                <Select value={mesResumoAssinaturas.toString()} onValueChange={(value) => setMesResumoAssinaturas(parseInt(value))}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="1">Janeiro</SelectItem>
-                    <SelectItem value="2">Fevereiro</SelectItem>
-                    <SelectItem value="3">Março</SelectItem>
-                    <SelectItem value="4">Abril</SelectItem>
-                    <SelectItem value="5">Maio</SelectItem>
-                    <SelectItem value="6">Junho</SelectItem>
-                    <SelectItem value="7">Julho</SelectItem>
-                    <SelectItem value="8">Agosto</SelectItem>
-                    <SelectItem value="9">Setembro</SelectItem>
-                    <SelectItem value="10">Outubro</SelectItem>
-                    <SelectItem value="11">Novembro</SelectItem>
-                    <SelectItem value="12">Dezembro</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex items-center gap-2">
-                <Label htmlFor="ano-resumo-assinaturas">Ano:</Label>
-                <Select value={anoResumoAssinaturas.toString()} onValueChange={(value) => setAnoResumoAssinaturas(parseInt(value))}>
-                  <SelectTrigger className="w-24">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2023">2023</SelectItem>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2025">2025</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={carregarResumoAssinaturas} variant="outline" size="sm" disabled={loadingResumoAssinaturas}>
-                  <Calendar className="w-4 h-4 mr-2" />
-                  {loadingResumoAssinaturas ? "Carregando..." : "Carregar Resumo"}
-                </Button>
-                {resumoAssinaturas && resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 && (
-                  <Button onClick={exportarResumoAssinaturasCSV} variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar CSV
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {loadingResumoAssinaturas ? (
-              <div className="flex items-center justify-center h-32">
-                <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
-              </div>
-            ) : resumoAssinaturas ? (
-              <div className="space-y-4">
-                <div className="p-4 bg-blue-50 rounded-lg">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-gray-600">Total de Assinaturas</p>
-                      <p className="text-3xl font-bold text-blue-600">{resumoAssinaturas.total_assinaturas}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-sm text-gray-600">Período</p>
-                      <p className="text-sm font-medium">
-                        {new Date(resumoAssinaturas.periodo.data_inicio).toLocaleDateString('pt-BR')} - {new Date(resumoAssinaturas.periodo.data_fim).toLocaleDateString('pt-BR')}
-                      </p>
-                    </div>
-                  </div>
+        <Collapsible open={resumoAssinaturasAberto} onOpenChange={setResumoAssinaturasAberto}>
+          <Card>
+            <CardHeader className="space-y-0">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <CardTitle>Resumo de Assinaturas do Mês</CardTitle>
+                  <CardDescription>Visualize todas as assinaturas realizadas no mês</CardDescription>
                 </div>
+                <CollapsibleTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0"
+                    aria-label={resumoAssinaturasAberto ? "Recolher resumo de assinaturas" : "Expandir resumo de assinaturas"}
+                  >
+                    <ChevronDown
+                      className={cn(
+                        "h-4 w-4 transition-transform duration-200",
+                        resumoAssinaturasAberto && "rotate-180"
+                      )}
+                    />
+                  </Button>
+                </CollapsibleTrigger>
+              </div>
+            </CardHeader>
+            <CollapsibleContent>
+              <div className="flex flex-wrap items-center gap-4 border-t px-6 pt-4 pb-4">
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="mes-resumo-assinaturas">Mês:</Label>
+                  <Select value={mesResumoAssinaturas.toString()} onValueChange={(value) => setMesResumoAssinaturas(parseInt(value))}>
+                    <SelectTrigger id="mes-resumo-assinaturas" className="w-32">
+                      <SelectValue placeholder="Mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">Janeiro</SelectItem>
+                      <SelectItem value="2">Fevereiro</SelectItem>
+                      <SelectItem value="3">Março</SelectItem>
+                      <SelectItem value="4">Abril</SelectItem>
+                      <SelectItem value="5">Maio</SelectItem>
+                      <SelectItem value="6">Junho</SelectItem>
+                      <SelectItem value="7">Julho</SelectItem>
+                      <SelectItem value="8">Agosto</SelectItem>
+                      <SelectItem value="9">Setembro</SelectItem>
+                      <SelectItem value="10">Outubro</SelectItem>
+                      <SelectItem value="11">Novembro</SelectItem>
+                      <SelectItem value="12">Dezembro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Label htmlFor="ano-resumo-assinaturas">Ano:</Label>
+                  <Select value={anoResumoAssinaturas.toString()} onValueChange={(value) => setAnoResumoAssinaturas(parseInt(value))}>
+                    <SelectTrigger id="ano-resumo-assinaturas" className="w-24">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {anosResumoSelect.map((ano) => (
+                        <SelectItem key={ano} value={String(ano)}>
+                          {ano}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button onClick={carregarResumoAssinaturas} variant="outline" size="sm" disabled={loadingResumoAssinaturas}>
+                    <Calendar className="w-4 h-4 mr-2" />
+                    {loadingResumoAssinaturas ? "Carregando..." : "Carregar Resumo"}
+                  </Button>
+                  {resumoAssinaturas && resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 && (
+                    <Button onClick={exportarResumoAssinaturasCSV} variant="outline" size="sm">
+                      <Download className="w-4 h-4 mr-2" />
+                      Exportar CSV
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <CardContent className="pt-0">
+                {loadingResumoAssinaturas ? (
+                  <div className="flex items-center justify-center h-32">
+                    <RefreshCw className="w-6 h-6 animate-spin text-gray-400" />
+                  </div>
+                ) : resumoAssinaturas ? (
+                  <div className="space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-sm text-gray-600">Total de Assinaturas</p>
+                          <p className="text-3xl font-bold text-blue-600">{resumoAssinaturas.total_assinaturas}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-600">Período</p>
+                          <p className="text-sm font-medium">
+                            {new Date(resumoAssinaturas.periodo.data_inicio).toLocaleDateString('pt-BR')} - {new Date(resumoAssinaturas.periodo.data_fim).toLocaleDateString('pt-BR')}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
 
-                {resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 ? (
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-gray-700">Lista de Assinaturas</h4>
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Data</TableHead>
-                          <TableHead>Documento</TableHead>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Obra</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {resumoAssinaturas.assinaturas.map((assinatura: any) => (
-                          <TableRow key={assinatura.id}>
-                            <TableCell>
-                              {new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR')}
-                            </TableCell>
-                            <TableCell className="font-medium">
-                              {assinatura.documento?.nome || 'Documento não encontrado'}
-                            </TableCell>
-                            <TableCell>
-                              <Badge variant="outline">{assinatura.documento?.tipo || '-'}</Badge>
-                            </TableCell>
-                            <TableCell>
-                              {assinatura.documento?.obra?.nome || '-'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                    {resumoAssinaturas.assinaturas && resumoAssinaturas.assinaturas.length > 0 ? (
+                      <div className="space-y-2">
+                        <h4 className="font-semibold text-gray-700">Lista de Assinaturas</h4>
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Data</TableHead>
+                              <TableHead>Documento</TableHead>
+                              <TableHead>Tipo</TableHead>
+                              <TableHead>Obra</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {resumoAssinaturas.assinaturas.map((assinatura: any) => (
+                              <TableRow key={assinatura.id}>
+                                <TableCell>
+                                  {new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR')}
+                                </TableCell>
+                                <TableCell className="font-medium">
+                                  {assinatura.documento?.titulo || assinatura.documento?.nome || 'Documento não encontrado'}
+                                </TableCell>
+                                <TableCell>
+                                  <Badge variant="outline">{assinatura.tipo || assinatura.documento?.tipo || '-'}</Badge>
+                                </TableCell>
+                                <TableCell>
+                                  {assinatura.documento?.obra?.nome || '-'}
+                                </TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </div>
+                    ) : (
+                      <div className="text-center py-8 text-gray-500">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
+                        <p>Nenhuma assinatura encontrada para este período</p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
-                    <FileText className="w-12 h-12 mx-auto mb-4 text-gray-300" />
-                    <p>Nenhuma assinatura encontrada para este período</p>
+                    Selecione um mês e ano e clique em "Carregar Resumo" para visualizar suas assinaturas
                   </div>
                 )}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-gray-500">
-                Selecione um mês e ano e clique em "Carregar Resumo" para visualizar suas assinaturas
-              </div>
-            )}
-          </CardContent>
-        </Card>
+              </CardContent>
+            </CollapsibleContent>
+          </Card>
+        </Collapsible>
       )}
 
-      {/* Filtros */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      {/* Filtros + lista (loading / erro / vazio / tabela) no mesmo card */}
+      <Card className="overflow-hidden">
+        <CardContent className="border-b p-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
             <div>
               <Label htmlFor="search">Buscar documentos</Label>
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 transform text-gray-400" />
                 <Input
                   id="search"
                   placeholder="Título ou descrição..."
@@ -680,7 +691,7 @@ export default function AssinaturaPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Todas as obras</SelectItem>
-                  {obras.map(obra => (
+                  {obras.map((obra) => (
                     <SelectItem key={obra.id} value={obra.id.toString()}>
                       {obra.name}
                     </SelectItem>
@@ -689,8 +700,8 @@ export default function AssinaturaPage() {
               </Select>
             </div>
             <div className="flex items-end">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 onClick={() => {
                   setSearchTerm("")
                   setSelectedStatus("all")
@@ -703,84 +714,79 @@ export default function AssinaturaPage() {
             </div>
           </div>
         </CardContent>
-      </Card>
 
-      {/* Loading State */}
-      {(loading || !currentUser) && (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <RefreshCw className="w-8 h-8 mx-auto mb-4 text-blue-600 animate-spin" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {!currentUser ? 'Carregando informações do usuário...' : 'Carregando documentos...'}
+        {(loading || !currentUser) && (
+          <CardContent className="border-t p-8 text-center">
+            <RefreshCw className="mx-auto mb-4 h-8 w-8 animate-spin text-blue-600" />
+            <h3 className="mb-2 text-lg font-medium text-gray-900">
+              {!currentUser ? "Carregando informações do usuário..." : "Carregando documentos..."}
             </h3>
             <p className="text-gray-600">
-              {!currentUser ? 'Aguarde enquanto verificamos suas credenciais.' : 'Aguarde enquanto buscamos os documentos do sistema.'}
+              {!currentUser
+                ? "Aguarde enquanto verificamos suas credenciais."
+                : "Aguarde enquanto buscamos os documentos do sistema."}
             </p>
           </CardContent>
-        </Card>
-      )}
+        )}
 
-      {/* Error State */}
-      {error && !loading && (
-        <Card className="border-red-200 bg-red-50">
-          <CardContent className="p-6">
+        {error && !loading && (
+          <CardContent className="border-t bg-red-50/90 p-6">
             <div className="flex items-center gap-3">
-              <AlertCircle className="w-6 h-6 text-red-600" />
+              <AlertCircle className="h-6 w-6 shrink-0 text-red-600" />
               <div>
                 <h3 className="font-medium text-red-900">Erro ao carregar documentos</h3>
-                <p className="text-sm text-red-700 mt-1">{error}</p>
-                <Button 
-                  variant="outline" 
-                  size="sm" 
+                <p className="mt-1 text-sm text-red-700">{error}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={carregarDocumentos}
-                  className="mt-2 text-red-600 border-red-300 hover:bg-red-100"
+                  className="mt-2 border-red-300 text-red-600 hover:bg-red-100"
                 >
-                  <RefreshCw className="w-4 h-4 mr-2" />
+                  <RefreshCw className="mr-2 h-4 w-4" />
                   Tentar Novamente
                 </Button>
               </div>
             </div>
           </CardContent>
-        </Card>
-      )}
+        )}
 
-      {/* Lista de Documentos */}
-      {!loading && !error && filteredDocumentos.length === 0 ? (
-        <Card>
-          <CardContent className="p-8 text-center">
-            <FileSignature className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-              {!currentUser ? 'Faça login para ver os documentos' : 'Nenhum documento encontrado'}
+        {!loading && !error && filteredDocumentos.length === 0 ? (
+          <CardContent className="border-t p-8 text-center">
+            <FileSignature className="mx-auto mb-4 h-16 w-16 text-gray-400" />
+            <h3 className="mb-2 text-lg font-medium text-gray-900">
+              {!currentUser ? "Faça login para ver os documentos" : "Nenhum documento encontrado"}
             </h3>
-            <p className="text-gray-600 mb-4">
-              {!currentUser 
-                ? 'Você precisa fazer login para acessar os documentos de assinatura.'
-                : 'Não há documentos disponíveis com os filtros aplicados.'
-              }
+            <p className="mb-4 text-gray-600">
+              {!currentUser
+                ? "Você precisa fazer login para acessar os documentos de assinatura."
+                : "Não há documentos disponíveis com os filtros aplicados."}
             </p>
             {!currentUser && (
               <Button onClick={() => setIsLoginDialogOpen(true)}>
-                <Users className="w-4 h-4 mr-2" />
+                <Users className="mr-2 h-4 w-4" />
                 Fazer Login
               </Button>
             )}
           </CardContent>
-        </Card>
-      ) : !loading && !error ? (
-        <div className="space-y-4">
-          {/* Controles de Paginação Superior */}
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-4">
+        ) : !loading && !error ? (
+          <>
+            <div className="flex flex-col gap-3 border-t px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-gray-600">
-                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredDocumentos.length)} de {filteredDocumentos.length} documentos
+                Mostrando {startIndex + 1} a {Math.min(endIndex, filteredDocumentos.length)} de{" "}
+                {filteredDocumentos.length} documentos
               </div>
               <div className="flex items-center gap-2">
-                <Label htmlFor="items-per-page" className="text-sm">Itens por página:</Label>
-                <Select value={itemsPerPage.toString()} onValueChange={(value) => {
-                  setItemsPerPage(parseInt(value))
-                  setCurrentPage(1)
-                }}>
-                  <SelectTrigger className="w-20">
+                <Label htmlFor="items-per-page" className="text-sm whitespace-nowrap">
+                  Itens por página:
+                </Label>
+                <Select
+                  value={itemsPerPage.toString()}
+                  onValueChange={(value) => {
+                    setItemsPerPage(parseInt(value))
+                    setCurrentPage(1)
+                  }}
+                >
+                  <SelectTrigger id="items-per-page" className="w-20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -792,11 +798,8 @@ export default function AssinaturaPage() {
                 </Select>
               </div>
             </div>
-          </div>
 
-          {/* Lista de Documentos em Formato de Tabela */}
-          <Card>
-            <CardContent className="p-0">
+            <div className="overflow-x-auto border-t">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -880,12 +883,10 @@ export default function AssinaturaPage() {
                   })}
                 </TableBody>
               </Table>
-            </CardContent>
-          </Card>
+            </div>
 
-          {/* Controles de Paginação Inferior */}
           {totalPages > 1 && (
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col gap-3 border-t px-6 py-3 sm:flex-row sm:items-center sm:justify-between">
               <div className="text-sm text-gray-600">
                 Página {currentPage} de {totalPages}
               </div>
@@ -954,8 +955,9 @@ export default function AssinaturaPage() {
               </div>
             </div>
           )}
-        </div>
+          </>
       ) : null}
+      </Card>
 
       {/* Dialog de Criação */}
       {isCreateDialogOpen && (

@@ -447,8 +447,8 @@ export default function FinanceiroLayout({
       </header>
 
       {/* Conteúdo Principal */}
-      <main className="flex-1 overflow-auto">
-        <div>
+      <main className="min-w-0 flex-1 overflow-auto">
+        <div className="min-w-0 max-w-full">
           {children}
         </div>
       </main>

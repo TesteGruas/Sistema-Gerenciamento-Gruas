@@ -199,8 +199,7 @@ router.get('/resumo-mensal', authenticateToken, async (req, res) => {
         *,
         documento:obras_documentos(
           id,
-          nome,
-          tipo,
+          titulo,
           obra_id,
           obra:obras(nome)
         )
@@ -208,7 +207,7 @@ router.get('/resumo-mensal', authenticateToken, async (req, res) => {
       .eq('user_id', userId)
       .gte('data_assinatura', dataInicio)
       .lte('data_assinatura', dataFim)
-      .eq('status', 'assinada')
+      .eq('status', 'assinado')
       .order('data_assinatura', { ascending: false })
 
     if (error) {
