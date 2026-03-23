@@ -59,6 +59,35 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+
+/** Status na tabela: só ícone; texto completo no tooltip (hover). */
+function RegistroStatusIconBadge({
+  label,
+  icon,
+  className,
+}: {
+  label: string
+  icon: React.ReactNode
+  className: string
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Badge
+          tabIndex={0}
+          className={`inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border p-0 cursor-default shadow-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${className}`}
+          aria-label={label}
+        >
+          <span className="text-base leading-none select-none" aria-hidden>
+            {icon}
+          </span>
+        </Badge>
+      </TooltipTrigger>
+      <TooltipContent side="top">{label}</TooltipContent>
+    </Tooltip>
+  )
+}
 
 // Estado inicial dos dados
 const estadoInicial = {
@@ -1268,10 +1297,13 @@ export default function PontoPage() {
       return {
         status: 'aprovado',
         cor: 'green',
-        badge: <Badge className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 transition-colors whitespace-nowrap flex items-center gap-1">
-          <span className="text-xs">✓</span>
-          <span>Aprovado</span>
-        </Badge>,
+        badge: (
+          <RegistroStatusIconBadge
+            label="Aprovado"
+            icon={<span className="text-xs">✓</span>}
+            className="bg-green-50 text-green-700 border-green-200 hover:bg-green-100 transition-colors"
+          />
+        ),
         acoes: [
           <Button
             key="info"
@@ -1291,10 +1323,13 @@ export default function PontoPage() {
       return {
         status: 'pendente_aprovacao',
         cor: 'orange',
-        badge: <Badge className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 transition-colors whitespace-nowrap flex items-center gap-1">
-          <span className="text-xs">⏳</span>
-          <span>Pendente</span>
-        </Badge>,
+        badge: (
+          <RegistroStatusIconBadge
+            label="Pendente de aprovação"
+            icon={<span className="text-xs">⏳</span>}
+            className="bg-orange-50 text-orange-700 border-orange-200 hover:bg-orange-100 transition-colors"
+          />
+        ),
         acoes: [
           <Button
             key="aprovar"
@@ -1322,10 +1357,13 @@ export default function PontoPage() {
       return {
         status: 'normal',
         cor: 'gray',
-        badge: <Badge className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors whitespace-nowrap flex items-center gap-1">
-          <span className="text-xs">📋</span>
-          <span>Normal</span>
-        </Badge>,
+        badge: (
+          <RegistroStatusIconBadge
+            label="Normal"
+            icon={<span className="text-xs">📋</span>}
+            className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+          />
+        ),
         acoes: [
           <Button
             key="info"
@@ -1345,10 +1383,13 @@ export default function PontoPage() {
       return {
         status: 'horas_negativas',
         cor: 'red',
-        badge: <Badge className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors whitespace-nowrap flex items-center gap-1">
-          <span className="text-xs">⚠️</span>
-          <span>Insuficiente</span>
-        </Badge>,
+        badge: (
+          <RegistroStatusIconBadge
+            label="Insuficiente"
+            icon={<span className="text-xs">⚠️</span>}
+            className="bg-red-50 text-red-700 border-red-200 hover:bg-red-100 transition-colors"
+          />
+        ),
         acoes: [
           <Button
             key="justificar"
@@ -1367,10 +1408,13 @@ export default function PontoPage() {
       return {
         status: 'incompleto',
         cor: 'yellow',
-        badge: <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors whitespace-nowrap flex items-center gap-1">
-          <span className="text-xs">⚠️</span>
-          <span>Incompleto</span>
-        </Badge>,
+        badge: (
+          <RegistroStatusIconBadge
+            label="Incompleto"
+            icon={<span className="text-xs">⚠️</span>}
+            className="bg-yellow-50 text-yellow-700 border-yellow-200 hover:bg-yellow-100 transition-colors"
+          />
+        ),
         acoes: [
           <Button
             key="info"
@@ -1389,10 +1433,13 @@ export default function PontoPage() {
     return {
       status: 'indefinido',
       cor: 'gray',
-      badge: <Badge className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors whitespace-nowrap flex items-center gap-1">
-        <span className="text-xs">❓</span>
-        <span>{status || 'Indefinido'}</span>
-      </Badge>,
+      badge: (
+        <RegistroStatusIconBadge
+          label={status || 'Indefinido'}
+          icon={<span className="text-xs">❓</span>}
+          className="bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100 transition-colors"
+        />
+      ),
       acoes: [
         <Button
           key="info"
@@ -2766,37 +2813,24 @@ export default function PontoPage() {
                       <TableHead>Tipo Dia</TableHead>
                       <TableHead>Entrada</TableHead>
                       <TableHead>Saída</TableHead>
-                      <TableHead>Horas Trabalhadas</TableHead>
-                      <TableHead>Horas Extras</TableHead>
-                      <TableHead>Horas Negativas</TableHead>
-                      <TableHead>Status</TableHead>
+                      <TableHead>Horas</TableHead>
+                      <TableHead>Horas +</TableHead>
+                      <TableHead>Horas -</TableHead>
+                      <TableHead className="w-12 max-w-12 min-w-12 text-center">Status</TableHead>
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {loadingTabela ? (
                       <TableRow>
-                        <TableCell colSpan={10} className="h-32">
+                        <TableCell colSpan={11} className="h-32">
                           <TableLoading />
                         </TableCell>
                       </TableRow>
                     ) : (
                       sortedRegistros.map((registro) => {
-                      // Verificar se está em atraso (múltiplas variações do status)
-                      const isAtraso = registro.status === 'Atraso' || 
-                                      registro.status === 'atraso' || 
-                                      registro.status?.toLowerCase().includes('atraso') ||
-                                      registro.status === 'Atrasado' ||
-                                      registro.status === 'atrasado'
-                      
-                      // Verificar se tem registros incompletos (sem saída do almoço, volta do almoço ou saída)
-                      const isIncompleto = (!registro.saida_almoco && registro.entrada) || 
-                                         (!registro.volta_almoco && registro.saida_almoco) || 
-                                         (!registro.saida && registro.volta_almoco)
-                      
                       // Aplicar cores condicionais (removidas para manter texto preto)
                       const nomeColor = ''
-                      const dataColor = ''
                       
                       return (
                         <TableRow key={registro.id}>
@@ -2818,8 +2852,6 @@ export default function PontoPage() {
                               </button>
                             )}
                             <span>{registro.funcionario?.nome || 'Funcionário não encontrado'}</span>
-                            {isAtraso && <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">ATRASO</span>}
-                            {isIncompleto && !isAtraso && <span className="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">INCOMPLETO</span>}
                           </div>
                         </TableCell>
                         <TableCell>{utilsPonto.formatarData(registro.data)}</TableCell>
@@ -2832,25 +2864,52 @@ export default function PontoPage() {
                             // Se for facultativo, mostrar como Facultativo
                             if (isFacultativo) {
                               return (
-                                <Badge className="bg-pink-100 text-pink-800">
+                                <Badge
+                                  variant="outline"
+                                  className="border-transparent bg-pink-100 text-pink-800 hover:bg-pink-100 hover:text-pink-800"
+                                >
                                   Facultativo
                                 </Badge>
                               )
                             }
                             
                             const tipoDiaMap: Record<string, { label: string; color: string }> = {
-                              'normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },
-                              'sabado': { label: 'Sábado', color: 'bg-blue-100 text-blue-800' },
-                              'domingo': { label: 'Domingo', color: 'bg-purple-100 text-purple-800' },
-                              'feriado_nacional': { label: 'Feriado Nacional', color: 'bg-red-100 text-red-800' },
-                              'feriado_estadual': { label: 'Feriado Estadual', color: 'bg-orange-100 text-orange-800' },
-                              'feriado_local': { label: 'Feriado Local', color: 'bg-yellow-100 text-yellow-800' }
+                              'normal': {
+                                label: 'Normal',
+                                color:
+                                  'border-transparent bg-gray-100 text-gray-800 hover:bg-gray-100 hover:text-gray-800',
+                              },
+                              'sabado': {
+                                label: 'Sábado',
+                                color:
+                                  'border-transparent bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800',
+                              },
+                              'domingo': {
+                                label: 'Domingo',
+                                color:
+                                  'border-transparent bg-purple-100 text-purple-800 hover:bg-purple-100 hover:text-purple-800',
+                              },
+                              'feriado_nacional': {
+                                label: 'Feriado Nacional',
+                                color:
+                                  'border-transparent bg-red-100 text-red-800 hover:bg-red-100 hover:text-red-800',
+                              },
+                              'feriado_estadual': {
+                                label: 'Feriado Estadual',
+                                color:
+                                  'border-transparent bg-orange-100 text-orange-800 hover:bg-orange-100 hover:text-orange-800',
+                              },
+                              'feriado_local': {
+                                label: 'Feriado Local',
+                                color:
+                                  'border-transparent bg-yellow-100 text-yellow-800 hover:bg-yellow-100 hover:text-yellow-800',
+                              },
                             }
                             
                             const tipo = tipoDiaMap[tipoDia] || tipoDiaMap['normal']
                             
                             return (
-                              <Badge className={tipo.color}>
+                              <Badge variant="outline" className={tipo.color}>
                                 {tipo.label}
                               </Badge>
                             )
@@ -2872,13 +2931,19 @@ export default function PontoPage() {
                             const horasExtras = registro.horas_extras || 0;
                             if (horasExtras > 0) {
                               return (
-                                <Badge className="bg-orange-100 text-orange-800">
+                                <Badge
+                                  variant="outline"
+                                  className="border-transparent bg-orange-100 text-orange-800 hover:bg-orange-100 hover:text-orange-800"
+                                >
                                   +{horasExtras}h
                                 </Badge>
                               );
                             } else if (horasExtras < 0) {
                               return (
-                                <Badge className="bg-red-100 text-red-800">
+                                <Badge
+                                  variant="outline"
+                                  className="border-transparent bg-red-100 text-red-800 hover:bg-red-100 hover:text-red-800"
+                                >
                                   {horasExtras}h
                                 </Badge>
                               );
@@ -2900,7 +2965,10 @@ export default function PontoPage() {
                             
                             if (horasNegativas > 0) {
                               return (
-                                <Badge className="bg-red-50 text-red-700 border-red-200">
+                                <Badge
+                                  variant="outline"
+                                  className="border-red-200 bg-red-50 text-red-700 hover:bg-red-50 hover:text-red-700"
+                                >
                                   -{horasNegativas.toFixed(1)}h
                                 </Badge>
                               );
@@ -2909,7 +2977,7 @@ export default function PontoPage() {
                             }
                           })()}
                         </TableCell>
-                        <TableCell>
+                        <TableCell className="w-12 max-w-12 min-w-0 align-middle py-2 px-1 text-center">
                           {(() => {
                             const statusInfo = getRegistroStatusInfo(registro)
                             return statusInfo.badge
@@ -3108,8 +3176,8 @@ export default function PontoPage() {
                           </TableHead>
                           <TableHead>Funcionário</TableHead>
                           <TableHead>Data</TableHead>
-                          <TableHead>Horas Trabalhadas</TableHead>
-                          <TableHead>Horas Extras</TableHead>
+                          <TableHead>Horas</TableHead>
+                          <TableHead>Horas +</TableHead>
                           <TableHead>Status</TableHead>
                           <TableHead>Observações</TableHead>
                           <TableHead>Ações</TableHead>
@@ -3529,7 +3597,7 @@ export default function PontoPage() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Funcionário</TableHead>
-                          <TableHead className="text-center">Horas Trabalhadas</TableHead>
+                          <TableHead className="text-center">Horas</TableHead>
                           <TableHead className="text-center">Dias Presentes</TableHead>
                           <TableHead className="text-center">Atrasos</TableHead>
                           <TableHead className="text-center">Faltas</TableHead>
@@ -3735,7 +3803,7 @@ export default function PontoPage() {
                           <TableHeader>
                             <TableRow>
                               <TableHead>Dia</TableHead>
-                              <TableHead className="text-center">Horas Extras</TableHead>
+                              <TableHead className="text-center">Horas +</TableHead>
                               <TableHead className="text-center">Acréscimo</TableHead>
                               <TableHead className="text-center">Total com Acréscimo</TableHead>
                               <TableHead className="text-center">Registros</TableHead>

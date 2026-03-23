@@ -3,6 +3,7 @@
 import { memo, useCallback, useMemo } from "react"
 import { TableRow, TableCell } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
@@ -11,7 +12,8 @@ import {
   Trash2, 
   Phone, 
   UserCheck, 
-  UserX 
+  UserX,
+  Bell
 } from "lucide-react"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 
@@ -55,13 +57,21 @@ interface FuncionarioRowProps {
   onView: (id: number) => void
   onEdit: (funcionario: FuncionarioRH) => void
   onDelete: (id: number) => void
+  /** Checkbox antes do nome: inclusão na lista de notificação em massa (RH) */
+  selecionadoMassa?: boolean
+  onToggleSelecaoMassa?: (funcionario: FuncionarioRH) => void
+  /** Sino em Ações: abre modal de notificação só para este colaborador (RH) */
+  onNotificarIndividual?: (funcionario: FuncionarioRH) => void
 }
 
 const FuncionarioRow = memo(function FuncionarioRow({ 
   funcionario, 
   onView, 
   onEdit, 
-  onDelete 
+  onDelete,
+  selecionadoMassa = false,
+  onToggleSelecaoMassa,
+  onNotificarIndividual,
 }: FuncionarioRowProps) {
   // Memoizar cálculos pesados
   const avatarInitials = useMemo(() => {
@@ -92,6 +102,17 @@ const FuncionarioRow = memo(function FuncionarioRow({
 
   return (
     <TableRow className="hover:bg-gray-50">
+      {onToggleSelecaoMassa ? (
+        <TableCell className="w-11 px-2 align-middle">
+          <div className="flex justify-center">
+            <Checkbox
+              checked={selecionadoMassa}
+              onCheckedChange={() => onToggleSelecaoMassa(funcionario)}
+              aria-label={`Incluir ${funcionario.nome} na notificação em massa`}
+            />
+          </div>
+        </TableCell>
+      ) : null}
       <TableCell className="w-[200px] max-w-[200px]">
         <div className="flex items-center gap-2">
           <Avatar className="h-8 w-8 flex-shrink-0">
@@ -133,6 +154,18 @@ const FuncionarioRow = memo(function FuncionarioRow({
       </TableCell>
       <TableCell className="w-[10%] text-right">
         <div className="flex items-center justify-end gap-1">
+          {onNotificarIndividual ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => onNotificarIndividual(funcionario)}
+              title="Enviar notificação para este colaborador"
+              className="h-8 w-8 p-0"
+            >
+              <Bell className="w-4 h-4" />
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             size="sm"

@@ -158,13 +158,16 @@ router.get('/', authenticateToken, async (req, res) => {
 
     const apenasFuncionarios = ['true', '1', 'sim'].includes(String(req.query.apenas_funcionarios || '').toLowerCase())
 
+    /** Responsáveis de obra usam perfil Cliente — não entram na lista de funcionários/RH. */
+    const usuarioTemPerfilCliente = (usuario) => {
+      const vinculos = usuario?.usuario_perfis
+      if (!Array.isArray(vinculos)) return false
+      return vinculos.some((up) => normalizarTexto(up?.perfis?.nome || '') === 'cliente')
+    }
+
     const isUsuarioElegivelComoFuncionario = (usuario) => {
-      const perfilNome = normalizarTexto(usuario?.usuario_perfis?.[0]?.perfis?.nome || '')
+      if (usuarioTemPerfilCliente(usuario)) return false
       const cargo = normalizarTexto(usuario?.cargo || '')
-
-      // Não considerar perfis de cliente/responsável de obra como funcionário.
-      if (perfilNome === 'cliente') return false
-
       // Para usuários sem funcionario_id, exigir ao menos um cargo definido.
       return cargo.length > 0
     }
@@ -399,13 +402,13 @@ router.get('/', authenticateToken, async (req, res) => {
           }
         
           // Converter usuários para formato de funcionário.
-          // Quando solicitado, filtrar fora perfis de cliente/responsável de obra.
+          // Sempre excluir perfil Cliente (responsáveis de obra). Com apenas_funcionarios, exige cargo no usuário.
           const usuariosElegiveis = apenasFuncionarios
             ? usuariosData.filter(isUsuarioElegivelComoFuncionario)
-            : usuariosData
+            : usuariosData.filter((u) => !usuarioTemPerfilCliente(u))
 
           console.log(
-            `[DEBUG] Usuários elegíveis para lista de funcionários: ${usuariosElegiveis.length}/${usuariosData.length} (apenas_funcionarios=${apenasFuncionarios})`
+            `[DEBUG] Usuários elegíveis para lista de funcionários: ${usuariosElegiveis.length}/${usuariosData.length} (apenas_funcionarios=${apenasFuncionarios}, exclui_cliente=sempre)`
           )
 
           usuariosSemFuncionario = usuariosElegiveis

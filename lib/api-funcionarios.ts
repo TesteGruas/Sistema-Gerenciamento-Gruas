@@ -206,6 +206,8 @@ export const funcionariosApi = {
     status?: string
     turno?: string
     search?: string
+    /** Exclui usuários só com login (sem registro em funcionarios) que não têm cargo — útil no RH */
+    apenasFuncionarios?: boolean
   }): Promise<FuncionariosResponse> {
     const searchParams = new URLSearchParams()
     
@@ -215,6 +217,7 @@ export const funcionariosApi = {
     if (params?.status) searchParams.append('status', params.status)
     if (params?.turno) searchParams.append('turno', params.turno)
     if (params?.search) searchParams.append('search', params.search)
+    if (params?.apenasFuncionarios) searchParams.append('apenas_funcionarios', 'true')
 
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
     return apiRequest(url)

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback, useMemo, useDeferredValue } from "react"
+import { useState, useEffect, useCallback, useMemo, useDeferredValue, useRef } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -28,7 +28,9 @@ import {
   User,
   Briefcase,
   Edit,
-  Trash2
+  Trash2,
+  Bell,
+  X
 } from "lucide-react"
 import { apiRH } from "@/lib/api-rh"
 import { funcionariosApi, type FuncionarioCreateData } from "@/lib/api-funcionarios"
@@ -45,6 +47,11 @@ import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useCargos } from "@/hooks/use-cargos"
 import { PaginationControl } from "@/components/ui/pagination-control"
 import { cargosApi, type Cargo } from "@/lib/api/cargos-api"
+import { NovaNotificacaoDialog } from "@/components/nova-notificacao-dialog"
+import { FuncionarioSearch } from "@/components/funcionario-search"
+import { NotificarFuncionariosSelecionadosDialog } from "@/components/notificar-funcionarios-selecionados-dialog"
+import { NotificarUmFuncionarioRhDialog } from "@/components/notificar-um-funcionario-rh-dialog"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface FuncionarioRH {
   id: number
@@ -109,6 +116,17 @@ export default function RHPage() {
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
 
+  /** Funcionários escolhidos para uma mesma notificação em lote (persiste ao mudar página/filtro) */
+  const [destinatariosNotificacaoRh, setDestinatariosNotificacaoRh] = useState<
+    Array<{ id: number; nome: string; cargo?: string }>
+  >([])
+  const [notificarSelecionadosOpen, setNotificarSelecionadosOpen] = useState(false)
+  const [funcionarioNotificarIndividual, setFuncionarioNotificarIndividual] =
+    useState<FuncionarioRH | null>(null)
+  const [notificarIndividualOpen, setNotificarIndividualOpen] = useState(false)
+  const destinatariosNotificacaoRhRef = useRef(destinatariosNotificacaoRh)
+  destinatariosNotificacaoRhRef.current = destinatariosNotificacaoRh
+
   // Debounce do termo de busca
   const debouncedQuery = useDebouncedValue(query, 500)
 
@@ -124,9 +142,11 @@ export default function RHPage() {
         cargo?: string
         status?: string
         search?: string
+        apenasFuncionarios: boolean
       } = {
         page: currentPage,
-        limit: itemsPerPage
+        limit: itemsPerPage,
+        apenasFuncionarios: true
       }
 
       // Adicionar filtros se não forem "all"
@@ -493,6 +513,78 @@ export default function RHPage() {
     setCurrentPage(1)
   }, [debouncedQuery, filtroCargo, filtroStatus])
 
+  const destinatariosRhIdSet = useMemo(
+    () => new Set(destinatariosNotificacaoRh.map((d) => d.id)),
+    [destinatariosNotificacaoRh]
+  )
+
+  const toggleFuncionarioNotificacao = useCallback((f: FuncionarioRH) => {
+    setDestinatariosNotificacaoRh((prev) => {
+      const exists = prev.some((d) => d.id === f.id)
+      if (exists) return prev.filter((d) => d.id !== f.id)
+      return [...prev, { id: f.id, nome: f.nome, cargo: f.cargo || undefined }]
+    })
+  }, [])
+
+  const abrirNotificarIndividual = useCallback((f: FuncionarioRH) => {
+    setFuncionarioNotificarIndividual(f)
+    setNotificarIndividualOpen(true)
+  }, [])
+
+  const onNotificarIndividualOpenChange = useCallback((v: boolean) => {
+    setNotificarIndividualOpen(v)
+    if (!v) setFuncionarioNotificarIndividual(null)
+  }, [])
+
+  const visIdsPagina = useMemo(() => funcionarios.map((f) => f.id), [funcionarios])
+  const nSelecionadosNaPagina = useMemo(
+    () => visIdsPagina.filter((id) => destinatariosRhIdSet.has(id)).length,
+    [visIdsPagina, destinatariosRhIdSet]
+  )
+  const todosDaPaginaSelecionados =
+    visIdsPagina.length > 0 && nSelecionadosNaPagina === visIdsPagina.length
+  const algunsDaPaginaSelecionados =
+    nSelecionadosNaPagina > 0 && nSelecionadosNaPagina < visIdsPagina.length
+
+  const onNotificarSelectAllPagina = useCallback(
+    (checked: boolean | "indeterminate") => {
+      if (checked === true) {
+        setDestinatariosNotificacaoRh((prev) => {
+          const map = new Map(prev.map((d) => [d.id, d]))
+          for (const f of funcionarios) {
+            map.set(f.id, { id: f.id, nome: f.nome, cargo: f.cargo || undefined })
+          }
+          return Array.from(map.values())
+        })
+        return
+      }
+      const visSet = new Set(visIdsPagina)
+      setDestinatariosNotificacaoRh((prev) => prev.filter((d) => !visSet.has(d.id)))
+    },
+    [funcionarios, visIdsPagina]
+  )
+
+  const adicionarFuncionarioBuscaNotificacao = useCallback(
+    (raw: Record<string, unknown> | null | undefined) => {
+      if (!raw || typeof raw !== "object") return
+      const id = Number(raw.id)
+      if (!Number.isFinite(id)) return
+      const nome = String(raw.nome ?? raw.name ?? "Funcionário")
+      const cargoInfo = raw.cargo_info as { nome?: string } | undefined
+      const cargoRaw = raw.cargo ?? cargoInfo?.nome
+      const cargo = cargoRaw != null ? String(cargoRaw) : undefined
+
+      if (destinatariosNotificacaoRhRef.current.some((d) => d.id === id)) {
+        toast({
+          title: "Já está na lista",
+          description: nome,
+        })
+        return
+      }
+      setDestinatariosNotificacaoRh((prev) => [...prev, { id, nome, cargo }])
+    },
+    [toast]
+  )
 
   return (
     <div className="space-y-6">
@@ -502,7 +594,23 @@ export default function RHPage() {
           <h1 className="text-3xl font-bold text-gray-900">Recursos Humanos</h1>
           <p className="text-gray-600 mt-1">Gerencie os funcionários e cargos da empresa</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <NovaNotificacaoDialog
+            dialogTitle="Enviar notificação"
+            dialogDescription="A notificação aparece no painel do usuário. Você pode enviar para um funcionário, obra, cliente ou para todos."
+            trigger={
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="shrink-0"
+                aria-label="Enviar notificação a um usuário"
+                title="Enviar notificação"
+              >
+                <Bell className="h-5 w-5" />
+              </Button>
+            }
+          />
           {activeTab === 'cargos' ? (
             <Button onClick={() => setIsCreateCargoDialogOpen(true)}>
               <Plus className="w-4 h-4 mr-2" />
@@ -659,6 +767,77 @@ export default function RHPage() {
                 </Select>
               </div>
 
+              {/* Mensagem em massa: busca ao lado do botão (lista persiste ao mudar página/filtro) */}
+              <div className="mb-6 space-y-3">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <Label className="text-sm text-muted-foreground">
+                      Selecionar para notificação em massa
+                    </Label>
+                    <div className="w-full">
+                      <FuncionarioSearch
+                        className="w-full"
+                        placeholder="Digite o nome ou cargo para incluir na lista…"
+                        onlyRealEmployees
+                        onFuncionarioSelect={(f) =>
+                          adicionarFuncionarioBuscaNotificacao(f as Record<string, unknown>)
+                        }
+                      />
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 shrink-0 lg:pb-0.5">
+                    <Button
+                      type="button"
+                      disabled={destinatariosNotificacaoRh.length === 0}
+                      onClick={() => setNotificarSelecionadosOpen(true)}
+                    >
+                      Enviar mensagem em massa
+                      {destinatariosNotificacaoRh.length > 0
+                        ? ` (${destinatariosNotificacaoRh.length})`
+                        : ""}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={destinatariosNotificacaoRh.length === 0}
+                      onClick={() => setDestinatariosNotificacaoRh([])}
+                    >
+                      Limpar seleção
+                    </Button>
+                  </div>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Use a caixa de seleção <strong className="font-medium">antes do nome</strong> na tabela ou a busca
+                  acima. O <strong className="font-medium">sino em Ações</strong> abre o envio só para aquele
+                  colaborador. A lista em massa não some ao trocar de página.
+                </p>
+                {destinatariosNotificacaoRh.length > 0 ? (
+                  <div className="flex flex-wrap gap-2">
+                    {destinatariosNotificacaoRh.map((d) => (
+                      <Badge
+                        key={d.id}
+                        variant="secondary"
+                        className="pl-2 pr-1 py-1 gap-1 max-w-full font-normal"
+                      >
+                        <span className="truncate max-w-[200px]" title={d.nome}>
+                          {d.nome}
+                        </span>
+                        <button
+                          type="button"
+                          className="rounded p-0.5 hover:bg-muted shrink-0"
+                          onClick={() =>
+                            setDestinatariosNotificacaoRh((prev) => prev.filter((x) => x.id !== d.id))
+                          }
+                          aria-label={`Remover ${d.nome} da lista`}
+                        >
+                          <X className="h-3.5 w-3.5" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
               {/* Tabela */}
               {loading ? (
                 <div className="flex items-center justify-center py-12">
@@ -675,11 +854,27 @@ export default function RHPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
+                          <TableHead className="w-11 px-2 text-center">
+                            <div className="flex justify-center py-0.5">
+                              <Checkbox
+                                checked={
+                                  todosDaPaginaSelecionados
+                                    ? true
+                                    : algunsDaPaginaSelecionados
+                                      ? "indeterminate"
+                                      : false
+                                }
+                                onCheckedChange={onNotificarSelectAllPagina}
+                                disabled={funcionarios.length === 0}
+                                aria-label="Selecionar ou limpar todos desta página para notificação em massa"
+                              />
+                            </div>
+                          </TableHead>
                           <TableHead className="w-[200px] max-w-[200px]">Nome</TableHead>
                           <TableHead className="w-[180px]">CPF</TableHead>
                           <TableHead className="w-[180px]">Telefone</TableHead>
                           <TableHead className="flex-1">Cargo</TableHead>
-                          <TableHead className="w-[120px] text-right">Ações</TableHead>
+                          <TableHead className="w-[168px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
@@ -690,6 +885,9 @@ export default function RHPage() {
                             onView={handleViewDetails}
                             onEdit={handleEditClick}
                             onDelete={handleDeleteFuncionario}
+                            selecionadoMassa={destinatariosRhIdSet.has(funcionario.id)}
+                            onToggleSelecaoMassa={toggleFuncionarioNotificacao}
+                            onNotificarIndividual={abrirNotificarIndividual}
                           />
                         ))}
                       </TableBody>
@@ -838,6 +1036,27 @@ export default function RHPage() {
           cargo={selectedCargo}
         />
       )}
+
+      <NotificarFuncionariosSelecionadosDialog
+        open={notificarSelecionadosOpen}
+        onOpenChange={setNotificarSelecionadosOpen}
+        funcionarios={destinatariosNotificacaoRh}
+        onEnviado={() => setDestinatariosNotificacaoRh([])}
+      />
+
+      <NotificarUmFuncionarioRhDialog
+        open={notificarIndividualOpen}
+        onOpenChange={onNotificarIndividualOpenChange}
+        funcionario={
+          funcionarioNotificarIndividual
+            ? {
+                id: funcionarioNotificarIndividual.id,
+                nome: funcionarioNotificarIndividual.nome,
+                cargo: funcionarioNotificarIndividual.cargo || undefined,
+              }
+            : null
+        }
+      />
     </div>
   )
 }

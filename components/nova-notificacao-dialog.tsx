@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, type ReactNode } from 'react'
 import { Plus, Send, X, User, Building2, Users, UserPlus } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -30,9 +30,18 @@ import { useAuth } from '@/hooks/use-auth'
 
 interface NovaNotificacaoDialogProps {
   onNotificacaoCriada?: () => void
+  /** Substitui o botão padrão (ex.: ícone de sino). Use com `asChild` via elemento único filho. */
+  trigger?: ReactNode
+  dialogTitle?: string
+  dialogDescription?: string
 }
 
-export function NovaNotificacaoDialog({ onNotificacaoCriada }: NovaNotificacaoDialogProps) {
+export function NovaNotificacaoDialog({
+  onNotificacaoCriada,
+  trigger,
+  dialogTitle = 'Criar Nova Notificação',
+  dialogDescription = 'Envie notificações para todos os usuários ou para destinatários específicos',
+}: NovaNotificacaoDialogProps) {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
@@ -129,10 +138,15 @@ export function NovaNotificacaoDialog({ onNotificacaoCriada }: NovaNotificacaoDi
       if (onNotificacaoCriada) {
         onNotificacaoCriada()
       }
-    } catch (error) {
+    } catch (error: unknown) {
+      const data =
+        error && typeof error === 'object' && 'response' in error
+          ? (error as { response?: { data?: { message?: string; details?: string } } }).response?.data
+          : undefined
+      const msg = data?.message || data?.details || 'Não foi possível criar a notificação.'
       toast({
         title: 'Erro ao criar notificação',
-        description: 'Não foi possível criar a notificação.',
+        description: msg,
         variant: 'destructive',
       })
     } finally {
@@ -143,17 +157,17 @@ export function NovaNotificacaoDialog({ onNotificacaoCriada }: NovaNotificacaoDi
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button>
-          <Plus className="h-4 w-4 mr-2" />
-          Nova Notificação
-        </Button>
+        {trigger ?? (
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Nova Notificação
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Criar Nova Notificação</DialogTitle>
-          <DialogDescription>
-            Envie notificações para todos os usuários ou para destinatários específicos
-          </DialogDescription>
+          <DialogTitle>{dialogTitle}</DialogTitle>
+          <DialogDescription>{dialogDescription}</DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6 mt-4">
