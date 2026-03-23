@@ -88,11 +88,11 @@ export async function adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, optio
 }
 
 /**
- * Adiciona uma assinatura em todas as páginas do PDF
+ * Adiciona uma assinatura em uma ou mais páginas do PDF
  * @param {Buffer} pdfBuffer - Buffer do PDF original
  * @param {string} signatureBase64 - Assinatura em base64 (data URL)
- * @param {Object} options - Opções de posicionamento
- * @returns {Promise<Buffer>} - Buffer do PDF com assinatura em todas as páginas
+ * @param {Object} options - height, marginBottom, opacity, horizontalAlign ('left'|'right'), marginLeft, marginRight, pages ('all'|'last')
+ * @returns {Promise<Buffer>} - Buffer do PDF com assinatura
  */
 export async function adicionarAssinaturaEmTodasPaginas(pdfBuffer, signatureBase64, options = {}) {
   try {
@@ -137,10 +137,15 @@ export async function adicionarAssinaturaEmTodasPaginas(pdfBuffer, signatureBase
     }
 
     // Opções padrão
+    // horizontalAlign: 'right' (legado) | 'left' (ex.: holerite — acima do rótulo "Assinatura")
+    // pages: 'all' | 'last' — em qual(is) página(s) desenhar
     const {
-      height = 100, // Altura fixa de 100px
-      marginRight = 20, // Margem direita
-      marginBottom = 20, // Margem inferior
+      height = 100,
+      marginRight = 20,
+      marginLeft = 48,
+      marginBottom = 20,
+      horizontalAlign = 'right',
+      pages: pagesOption = 'all',
       opacity = 1.0
     } = options;
 
@@ -149,20 +154,27 @@ export async function adicionarAssinaturaEmTodasPaginas(pdfBuffer, signatureBase
     const aspectRatio = imageDims.width / imageDims.height;
     const signatureWidth = height * aspectRatio;
 
-    // Obter todas as páginas (já obtido acima)
-    
-    // Adicionar assinatura em todas as páginas
-    pages.forEach((page, index) => {
+    const indicesToDraw =
+      pagesOption === 'last' && pages.length > 0
+        ? [pages.length - 1]
+        : pages.map((_, i) => i);
+
+    indicesToDraw.forEach((pageIndex) => {
+      const page = pages[pageIndex];
+      if (!page) return;
+
       const pageWidth = page.getWidth();
-      const pageHeight = page.getHeight();
-      
-      // Calcular posição no canto inferior direito
-      const x = pageWidth - signatureWidth - marginRight;
+
+      let x;
+      if (horizontalAlign === 'left') {
+        x = marginLeft;
+      } else {
+        x = pageWidth - signatureWidth - marginRight;
+      }
       const y = marginBottom;
 
-      console.log(`🎨 [PDF Signature] Adicionando assinatura na página ${index + 1}/${pages.length} - Posição: x=${x.toFixed(2)}, y=${y.toFixed(2)}, width=${signatureWidth.toFixed(2)}, height=${height.toFixed(2)}`)
+      console.log(`🎨 [PDF Signature] Adicionando assinatura na página ${pageIndex + 1}/${pages.length} (align=${horizontalAlign}) - Posição: x=${x.toFixed(2)}, y=${y.toFixed(2)}, width=${signatureWidth.toFixed(2)}, height=${height.toFixed(2)}`)
 
-      // Adicionar a assinatura na página
       page.drawImage(image, {
         x: x,
         y: y,
@@ -172,7 +184,7 @@ export async function adicionarAssinaturaEmTodasPaginas(pdfBuffer, signatureBase
       });
     });
 
-    console.log(`🎨 [PDF Signature] Assinatura adicionada em ${pages.length} página(s)`)
+    console.log(`🎨 [PDF Signature] Assinatura adicionada em ${indicesToDraw.length} página(s)`)
     
     // Salvar o PDF modificado
     const pdfBytes = await pdfDoc.save();

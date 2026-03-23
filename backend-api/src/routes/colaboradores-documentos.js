@@ -860,17 +860,20 @@ router.get('/holerites/:id/download', authenticateToken, async (req, res) => {
 
     let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
 
-    // Se comAssinatura=true e holerite tem assinatura, adicionar no PDF em todas as páginas
+    // Se comAssinatura=true e holerite tem assinatura, compor no PDF (última página, rodapé esquerdo)
     if ((comAssinatura === 'true' || comAssinatura === '1') && holerite.assinatura_digital) {
       try {
-        console.log('📥 [HOLERITE] Adicionando assinatura em todas as páginas do PDF...')
+        console.log('📥 [HOLERITE] Compondo assinatura no PDF (padrão holerite)...')
         pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, holerite.assinatura_digital, {
-          height: 100, // Altura fixa de 100px
-          marginRight: 20, // Margem direita de 20px
-          marginBottom: 20, // Margem inferior de 20px
+          // Padrão holerite: canto inferior esquerdo, acima do rótulo/linha "Assinatura", só na última página
+          horizontalAlign: 'left',
+          marginLeft: 56,
+          marginBottom: 52,
+          height: 88,
+          pages: 'last',
           opacity: 1.0
         })
-        console.log('✅ [HOLERITE] Assinatura adicionada em todas as páginas do PDF')
+        console.log('✅ [HOLERITE] Assinatura composta no PDF')
       } catch (signatureError) {
         console.error('❌ [HOLERITE] Erro ao adicionar assinatura no PDF:', signatureError)
         // Continuar mesmo se houver erro - retornar PDF original
