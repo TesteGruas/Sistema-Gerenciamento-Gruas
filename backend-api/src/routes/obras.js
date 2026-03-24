@@ -1980,11 +1980,43 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('  - Length:', value.sinaleiros?.length || 0)
     console.log('  - Conteúdo:', JSON.stringify(value.sinaleiros, null, 2))
     
-    // NOTA: Sinaleiros não são mais processados aqui durante a criação da obra
-    // Eles devem ser salvos separadamente via endpoint POST /api/obras/:id/sinaleiros
-    // Isso evita duplicação e permite validação adequada de documentos
-    if (value.sinaleiros && Array.isArray(value.sinaleiros) && value.sinaleiros.length > 0) {
-      console.log('ℹ️ Sinaleiros fornecidos na criação da obra serão processados separadamente via endpoint específico')
+    // Sinaleiros: persistir aqui na mesma requisição (obras:criar) para não depender só de
+    // POST /api/obras/:id/sinaleiros (exige obras:editar — usuários só com criar perderiam o vínculo).
+    if (value.sinaleiros && Array.isArray(value.sinaleiros) && value.sinaleiros.length > 0 && data?.id) {
+      const obraIdNovo = data.id
+      const rows = value.sinaleiros
+        .map((s) => {
+          const nome = (s.nome || '').trim()
+          const rg_cpf = String(s.rg_cpf || '').trim()
+          const tipo = s.tipo === 'reserva' ? 'reserva' : 'principal'
+          const tel = s.telefone != null && String(s.telefone).trim() !== '' ? String(s.telefone).trim() : null
+          const em = s.email != null && String(s.email).trim() !== '' ? String(s.email).trim() : null
+          return { nome, rg_cpf, tipo, telefone: tel, email: em }
+        })
+        .filter((r) => {
+          const d = r.rg_cpf.replace(/\D/g, '')
+          return r.nome.length >= 2 && d.length >= 7 && d.length <= 11
+        })
+        .slice(0, 2)
+
+      if (rows.length > 0) {
+        const insertPayload = rows.map((r) => ({
+          obra_id: obraIdNovo,
+          nome: r.nome,
+          rg_cpf: r.rg_cpf,
+          tipo: r.tipo,
+          telefone: r.telefone,
+          email: r.email
+        }))
+        const { error: sinInsErr } = await supabaseAdmin.from('sinaleiros_obra').insert(insertPayload)
+        if (sinInsErr) {
+          console.error('⚠️ [OBRAS POST] Falha ao gravar sinaleiros na criação (obra já criada):', sinInsErr.message)
+        } else {
+          console.log(`✅ [OBRAS POST] ${insertPayload.length} sinaleiro(s) gravado(s) na obra ${obraIdNovo}`)
+        }
+      } else {
+        console.log('ℹ️ [OBRAS POST] Sinaleiros no payload sem linhas válidas (nome/documento) — nada inserido')
+      }
     }
 
     // Processar dados das gruas se fornecidos

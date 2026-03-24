@@ -28,6 +28,7 @@ import {
   Loader2
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend } from "@/lib/api-obras"
+import { sinaleirosApi } from "@/lib/api-sinaleiros"
 import { obrasDocumentosApi } from "@/lib/api-obras-documentos"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 import api from "@/lib/api"
@@ -38,6 +39,75 @@ import { useToast } from "@/hooks/use-toast"
 import { Upload } from "lucide-react"
 
 // Nota: Este componente usa gruaObraApi (não obraGruasApi) para buscar relacionamentos grua-obra
+
+/** RT da empresa locadora (Irbana — equipamentos). `responsavel_tecnico` na obra é o RT do cliente (tipo "obra"). */
+function responsavelTecnicoEmpresaLocadora(obra: any) {
+  const list = obra?.responsaveis_tecnicos
+  if (!Array.isArray(list)) return null
+  return list.find((r: any) => r.tipo === "irbana_equipamentos") || null
+}
+
+/** Sinaleiros: evita `[]` truthy em `a || b` e unifica embed + lista dedicada. */
+function listaSinaleirosNaObra(obra: any): any[] {
+  const a = obra?.sinaleiros_obra
+  const b = obra?.sinaleiros
+  if (Array.isArray(a) && a.length > 0) return a
+  if (Array.isArray(b) && b.length > 0) return b
+  return []
+}
+
+/** Normaliza corpo da API (fetch/axios, com ou sem `success`). */
+function extrairListaSinaleirosResposta(raw: any): any[] {
+  if (raw == null) return []
+  if (Array.isArray(raw)) return raw
+  if (Array.isArray(raw.data)) return raw.data
+  if (raw.data != null && typeof raw.data === "object" && Array.isArray((raw.data as any).data)) {
+    return (raw.data as any).data
+  }
+  return []
+}
+
+async function buscarSinaleirosObraPorId(obraIdNum: number): Promise<any[]> {
+  let lista: any[] = []
+  try {
+    const res = await sinaleirosApi.listarPorObra(obraIdNum)
+    lista = extrairListaSinaleirosResposta(res)
+  } catch {
+    /* tenta axios abaixo */
+  }
+  if (lista.length > 0) return lista
+  try {
+    const r = await api.get(`/obras/${obraIdNum}/sinaleiros`)
+    lista = extrairListaSinaleirosResposta(r?.data)
+  } catch {
+    /* ignora */
+  }
+  return lista
+}
+
+function cargoFuncionarioGrua(f: any): string {
+  return String(f?.funcionario?.cargo || "").toLowerCase()
+}
+
+function primeiroOperadorGruaNaEquipe(funcionariosGrua: any[]) {
+  return funcionariosGrua.find((f) => {
+    const c = cargoFuncionarioGrua(f)
+    if (c.includes("operador")) return true
+    if (c.includes("auxiliar operacional")) return true
+    if (c.includes("auxiliar") && (c.includes("grua") || c.includes("guind"))) return true
+    return false
+  })
+}
+
+function primeiroTecnicoManutencaoNaEquipe(funcionariosGrua: any[]) {
+  return funcionariosGrua.find((f) => {
+    const c = cargoFuncionarioGrua(f)
+    if (c.includes("manuten")) return true
+    if (c.includes("mecânico") || c.includes("mecanico")) return true
+    if ((c.includes("técnico") || c.includes("tecnico")) && !c.includes("operador")) return true
+    return false
+  })
+}
 
 interface LivroGruaObraProps {
   obraId: string
@@ -56,13 +126,24 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   const [savingLivro, setSavingLivro] = useState(false)
   const [exportandoPdf, setExportandoPdf] = useState(false)
   const [livroForm, setLivroForm] = useState<any>({})
+  /** Lista própria: não depender só do merge em `obra` (evita perda entre setObra / embed vazio). */
+  const [sinaleirosObraLivro, setSinaleirosObraLivro] = useState<any[]>(() =>
+    listaSinaleirosNaObra(cachedData?.obra || null)
+  )
 
   useEffect(() => {
+    setSinaleirosObraLivro([])
     // Só carregar se não houver dados em cache
     if (!cachedData) {
       carregarDados()
     } else {
       setLoading(false)
+      const idNum = parseInt(String(obraId), 10)
+      if (!Number.isNaN(idNum)) {
+        buscarSinaleirosObraPorId(idNum).then((lista) => {
+          if (lista.length > 0) setSinaleirosObraLivro(lista)
+        })
+      }
     }
   }, [obraId])
 
@@ -178,10 +259,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         throw new Error('gruaObraApi não está disponível')
       }
       
-      // Carregar obra e gruas em paralelo
+      const idNum = parseInt(String(obraId), 10)
+
       const [obraResponse, gruasResponse] = await Promise.all([
-        obrasApi.obterObra(parseInt(obraId)),
-        gruaObraApi.buscarGruasPorObra(parseInt(obraId))
+        obrasApi.obterObra(idNum),
+        gruaObraApi.buscarGruasPorObra(idNum)
       ])
       
       const obraData = obraResponse.data || obraResponse
@@ -191,16 +273,16 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         gruasVinculadas: [],
         funcionariosVinculados: obraData.grua_funcionario || []
       })
-      
-      // Garantir que sinaleiros sejam carregados (pode vir como sinaleiros_obra ou sinaleiros)
-      if (obraData.sinaleiros_obra && !obraConvertida.sinaleiros) {
-        obraConvertida.sinaleiros = obraData.sinaleiros_obra
-      }
-      
-      setObra(obraConvertida)
+
+      const sinaleirosViaEndpoint = await buscarSinaleirosObraPorId(idNum)
+      const sinaleirosEmbed = obraConvertida.sinaleiros_obra || obraData.sinaleiros_obra || []
+      const sinaleirosFinais = sinaleirosViaEndpoint.length > 0 ? sinaleirosViaEndpoint : sinaleirosEmbed
+      obraConvertida.sinaleiros_obra = sinaleirosFinais
+      obraConvertida.sinaleiros = sinaleirosFinais
+      setSinaleirosObraLivro(sinaleirosFinais)
 
       // Carregar documentos
-      const docsResponse = await obrasDocumentosApi.listarPorObra(parseInt(obraId))
+      const docsResponse = await obrasDocumentosApi.listarPorObra(idNum)
       let documentosData: any[] = []
       if (docsResponse.success && docsResponse.data) {
         documentosData = Array.isArray(docsResponse.data) ? docsResponse.data : [docsResponse.data]
@@ -208,7 +290,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       // Carregar arquivos também e converter para formato de documentos
       try {
-        const arquivosResponse = await obrasArquivosApi.listarPorObra(parseInt(obraId))
+        const arquivosResponse = await obrasArquivosApi.listarPorObra(idNum)
         if (arquivosResponse.success && arquivosResponse.data) {
           const arquivosComoDocumentos = arquivosResponse.data.map((arquivo: any) => {
             const categoriaLivro = mapCategoriaLivroArquivo(arquivo)
@@ -263,7 +345,11 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       // Salvar dados em cache via callback
       if (onDataLoaded) {
         onDataLoaded({
-          obra: obraConvertida,
+          obra: {
+            ...obraConvertida,
+            sinaleiros_obra: sinaleirosFinais,
+            sinaleiros: sinaleirosFinais
+          },
           documentos: documentosData,
           gruaSelecionada: null // Será definida pelo useEffect abaixo
         })
@@ -431,17 +517,16 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         })
       }
       
-      // Atualizar obra com as gruas encontradas
-      if (gruasDisponiveis.length > 0) {
-        setObra({
-          ...obraConvertida,
-          gruasVinculadas: gruasDisponiveis
-        })
-        
-        // Selecionar primeira grua se não houver nenhuma selecionada
-        if (!gruaSelecionada) {
+      const obraFinal = {
+        ...obraConvertida,
+        sinaleiros_obra: sinaleirosFinais,
+        sinaleiros: sinaleirosFinais,
+        ...(gruasDisponiveis.length > 0 ? { gruasVinculadas: gruasDisponiveis } : {})
+      }
+      setObra(obraFinal)
+
+      if (gruasDisponiveis.length > 0 && !gruaSelecionada) {
         setGruaSelecionada(gruasDisponiveis[0])
-        }
       }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
@@ -1387,14 +1472,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       yPos += 6
       doc.setFont('helvetica', 'normal')
 
-      if (obra.responsavelTecnico || obra.responsavel_nome) {
-        const responsavel = obra.responsavelTecnico || {}
+      const rtLocadoraPdf = responsavelTecnicoEmpresaLocadora(obra)
+      if (rtLocadoraPdf?.nome) {
         const dadosResponsavel = [
-          [`Nome:`, responsavel.nome || obra.responsavel_nome || 'N/A'],
-          [`CPF/CNPJ:`, responsavel.cpf_cnpj || 'N/A'],
-          [`CREA:`, responsavel.crea || 'N/A'],
-          [`Email:`, responsavel.email || 'N/A'],
-          [`Telefone:`, responsavel.telefone || 'N/A']
+          [`Nome:`, rtLocadoraPdf.nome || 'N/A'],
+          [`CPF/CNPJ:`, rtLocadoraPdf.cpf_cnpj || 'N/A'],
+          [`CREA:`, rtLocadoraPdf.crea || rtLocadoraPdf.crea_empresa || 'N/A'],
+          [`Email:`, rtLocadoraPdf.email || 'N/A'],
+          [`Telefone:`, rtLocadoraPdf.telefone || 'N/A']
         ]
         renderTabelaPares(dadosResponsavel, true)
       } else {
@@ -1420,7 +1505,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       yPos = secao4Y + 12
 
       doc.setTextColor(0, 0, 0)
-      const sinaleiros = obra.sinaleiros || []
+      const sinaleiros = listaSinaleirosNaObra(obra)
       if (sinaleiros && sinaleiros.length > 0) {
         const sinaleirosData = sinaleiros.map((s: any, index: number) => [
           `${index + 1}`,
@@ -2300,8 +2385,15 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     valor_locacao: relacaoGruaBase?.valor_locacao || relacaoGruaBase?.valor_locacao_mensal || valoresPadrao.valor_locacao
   }
   
-  // Usar sinaleiros reais da obra (pode vir como sinaleiros_obra ou sinaleiros)
-  const sinaleirosDisponiveis = obra?.sinaleiros || obra?.sinaleiros_obra || []
+  const sinaleirosDisponiveis =
+    sinaleirosObraLivro.length > 0 ? sinaleirosObraLivro : listaSinaleirosNaObra(obra)
+
+  const rtManutencoesIrbana = Array.isArray(obra?.responsaveis_tecnicos)
+    ? obra.responsaveis_tecnicos.find((r: any) => r.tipo === "irbana_manutencoes")
+    : null
+
+  const rtLocadoraObra = responsavelTecnicoEmpresaLocadora(obra)
+  const creaLocadoraObra = rtLocadoraObra?.crea || rtLocadoraObra?.crea_empresa
   
   // Buscar funcionários vinculados à grua
   const funcionariosGrua = (obra.funcionariosVinculados || obra.grua_funcionario || []).filter((f: any) => {
@@ -2309,6 +2401,9 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     const sGruaId = gruaSelecionada?.id
     return fGruaId === sGruaId || fGruaId?.toString() === sGruaId?.toString()
   }) || []
+
+  const operadorGruaEquipe = primeiroOperadorGruaNaEquipe(funcionariosGrua)
+  const tecnicoManutencaoFunc = primeiroTecnicoManutencaoNaEquipe(funcionariosGrua)
 
   const iniciarEdicaoLivro = () => {
     const dadosMontagemObra = obra?.dados_montagem_equipamento || {}
@@ -2751,32 +2846,32 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 </div>
               </div>
               
-              {/* Responsável Técnico da Empresa que está Locando a Grua */}
+              {/* Responsável Técnico da Empresa que está Locando a Grua (cadastro Irbana equipamentos) */}
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-xs text-gray-500 mb-3 font-semibold">Responsável Técnico da Empresa Locadora</p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                   <div>
                     <p className="text-xs text-gray-500">Responsável Técnico</p>
                     <p className="font-medium">
-                      {obra.responsavel_tecnico?.nome || obra.responsavelTecnico?.nome || 'Não informado'}
+                      {rtLocadoraObra?.nome || 'Não informado'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">E-mail</p>
                     <p className="font-medium">
-                      {obra.responsavel_tecnico?.email || obra.responsavelTecnico?.email || 'Não informado'}
+                      {rtLocadoraObra?.email || 'Não informado'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">Celular</p>
                     <p className="font-medium">
-                      {obra.responsavel_tecnico?.telefone || obra.responsavelTecnico?.telefone || 'Não informado'}
+                      {rtLocadoraObra?.telefone || 'Não informado'}
                     </p>
                   </div>
                   <div>
                     <p className="text-xs text-gray-500">CREA</p>
                     <p className="font-medium">
-                      {obra.responsavel_tecnico?.crea || obra.responsavelTecnico?.crea || 'Não informado'}
+                      {creaLocadoraObra || 'Não informado'}
                     </p>
                   </div>
                 </div>
@@ -2934,13 +3029,13 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Operador da Grua</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador')) ? (
+                    {operadorGruaEquipe ? (
                       <>
                         <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.nome}
+                          {operadorGruaEquipe.funcionario?.nome}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.cargo}
+                          {operadorGruaEquipe.funcionario?.cargo}
                         </p>
                       </>
                     ) : (
@@ -2954,7 +3049,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                   <div className="space-y-3">
                     {sinaleirosDisponiveis.length > 0 ? (
                       sinaleirosDisponiveis.map((s: any, idx: number) => (
-                        <div key={idx} className="p-4 bg-gray-50 rounded-md border border-gray-200">
+                        <div key={s.id || `sinaleiro-${idx}`} className="p-4 bg-gray-50 rounded-md border border-gray-200">
                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                               <p className="text-xs text-gray-500 mb-1">Nome</p>
@@ -3036,14 +3131,22 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Técnico de Manutenção</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico')) ? (
+                    {tecnicoManutencaoFunc ? (
                       <>
                         <p className="font-medium">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico'))?.funcionario?.nome}
+                          {tecnicoManutencaoFunc.funcionario?.nome}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('manutenção') || f.funcionario?.cargo?.toLowerCase().includes('técnico'))?.funcionario?.cargo}
+                          {tecnicoManutencaoFunc.funcionario?.cargo}
                         </p>
+                      </>
+                    ) : rtManutencoesIrbana?.nome ? (
+                      <>
+                        <p className="font-medium">{rtManutencoesIrbana.nome}</p>
+                        <p className="text-sm text-gray-600">Responsável técnico (manutenções — Irbana)</p>
+                        {rtManutencoesIrbana.telefone && (
+                          <p className="text-sm text-gray-600">Telefone: {rtManutencoesIrbana.telefone}</p>
+                        )}
                       </>
                     ) : (
                       <p className="text-gray-500">Não informado</p>

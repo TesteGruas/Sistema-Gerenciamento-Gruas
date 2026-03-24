@@ -994,6 +994,20 @@ export default function NovaObraPage() {
         complemento: obraFormData.endereco_complemento
       })
 
+      // Sinaleiros: o estado React pode ficar vazio se só o SinaleirosForm (filho) foi preenchido — priorizar ref antes do payload e do POST.
+      const sinaleirosConsolidadosParaObra = (() => {
+        try {
+          const doRef = sinaleirosFormRef.current?.getSinaleiros?.()
+          if (Array.isArray(doRef) && doRef.length > 0) return doRef
+        } catch {
+          /* ignore */
+        }
+        return sinaleiros
+      })()
+      if (sinaleirosConsolidadosParaObra.length > 0) {
+        setSinaleiros(sinaleirosConsolidadosParaObra)
+      }
+
       // Preparar dados para o backend
       const obraData = {
         name: obraFormData.name,
@@ -1024,7 +1038,7 @@ export default function NovaObraPage() {
         apolice_numero: apoliceNumero,
         apolice_arquivo: apoliceArquivo,
         responsavel_tecnico: responsavelTecnico,
-        sinaleiros: sinaleiros,
+        sinaleiros: sinaleirosConsolidadosParaObra,
         // Dados das gruas - usar a primeira grua selecionada (compatibilidade)
         gruaId: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].id : '',
         gruaValue: gruasSelecionadas.length > 0 ? gruasSelecionadas[0].valor_locacao?.toString() || '' : '',
@@ -1154,7 +1168,7 @@ export default function NovaObraPage() {
         abaFuncionarios: {
           responsaveis_obra: responsaveisObra,
           funcionarios: funcionariosSelecionados,
-          sinaleiros
+          sinaleiros: sinaleirosConsolidadosParaObra
         },
         payloadCriacaoObra: obraData
       }
@@ -1703,8 +1717,8 @@ export default function NovaObraPage() {
       console.debug('═══════════════════════════════════════════════════════════')
       console.debug('🔍 DEBUG - Obra ID:', obraId)
       
-      // Tentar obter sinaleiros do componente via ref (estado mais atualizado)
-      let sinaleirosParaProcessar = sinaleiros
+      // Base: consolidado no envio (ref + estado); depois tenta ref de novo por segurança
+      let sinaleirosParaProcessar = sinaleirosConsolidadosParaObra
       console.debug('🔍 Tentando obter sinaleiros via ref...')
       console.debug('   - Estado atual:', sinaleiros.length)
       console.debug('   - Ref existe?', !!sinaleirosFormRef.current)

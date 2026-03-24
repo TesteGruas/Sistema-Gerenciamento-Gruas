@@ -19,6 +19,8 @@ export interface ObraBackend {
   contato_obra?: string
   telefone_obra?: string
   email_obra?: string
+  responsavel_id?: number | null
+  responsavel_nome?: string | null
   status: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   // Novos campos adicionados
   descricao?: string
@@ -800,6 +802,9 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     contato_obra: obraBackend.contato_obra,
     telefone_obra: obraBackend.telefone_obra,
     email_obra: obraBackend.email_obra,
+    responsavel_id: obraBackend.responsavel_id ?? null,
+    responsavel_nome: obraBackend.responsavel_nome ?? null,
+    responsavelName: obraBackend.responsavel_nome ?? null,
     // Campos obrigatórios (CNO, ART, Apólice)
     cno: obraBackend.cno,
     cno_arquivo: obraBackend.cno_arquivo,
