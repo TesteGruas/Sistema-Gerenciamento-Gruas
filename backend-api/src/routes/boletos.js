@@ -16,10 +16,10 @@ const TIPOS_DOCUMENTO_BOLETO_MEDICAO = [
 
 function labelBoletoMedicaoDocumento(tipo) {
   const map = {
-    boleto_nf_servico_1: 'Boleto (NF Serviço) 1',
-    boleto_nf_servico_2: 'Boleto (NF Serviço) 2',
-    boleto_nf_locacao_1: 'Boleto (Locação) 1',
-    boleto_nf_locacao_2: 'Boleto (Locação) 2'
+    boleto_nf_servico_1: 'Boleto (NF Serviço)',
+    boleto_nf_servico_2: 'Boleto (NF Serviço)',
+    boleto_nf_locacao_1: 'Boleto (Locação)',
+    boleto_nf_locacao_2: 'Boleto (Locação)'
   };
   return map[tipo] || 'Boleto';
 }

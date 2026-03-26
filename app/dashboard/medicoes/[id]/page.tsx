@@ -544,6 +544,13 @@ export default function MedicaoDetalhesPage() {
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
     })
 
+  const documentoBoletoNfServico =
+    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_1') ||
+    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_2')
+  const documentoBoletoLocacao =
+    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_1') ||
+    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_2')
+
   const emailClientePadrao =
     medicao.obras?.clientes?.contato_email ||
     medicao.obras?.clientes?.email ||
@@ -1065,21 +1072,12 @@ export default function MedicaoDetalhesPage() {
                     documentosNfServico.slice(1)
                   )}
                   {renderDocumentoArquivo(
-                    'boleto_nf_servico_1',
-                    'Boleto 1 (NF Serviço)',
+                    'boleto_nf_servico',
+                    'Boleto (NF Serviço)',
                     FileText,
                     'text-orange-600',
-                    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_1'),
+                    documentoBoletoNfServico,
                     'boleto_nf_servico_1',
-                    []
-                  )}
-                  {renderDocumentoArquivo(
-                    'boleto_nf_servico_2',
-                    'Boleto 2 (NF Serviço)',
-                    FileText,
-                    'text-orange-600',
-                    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_2'),
-                    'boleto_nf_servico_2',
                     []
                   )}
                   {renderDocumentoArquivo(
@@ -1092,21 +1090,12 @@ export default function MedicaoDetalhesPage() {
                     documentosLocacao.slice(1)
                   )}
                   {renderDocumentoArquivo(
-                    'boleto_nf_locacao_1',
-                    'Boleto 1 (Locação)',
+                    'boleto_nf_locacao',
+                    'Boleto (Locação)',
                     FileText,
                     'text-amber-600',
-                    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_1'),
+                    documentoBoletoLocacao,
                     'boleto_nf_locacao_1',
-                    []
-                  )}
-                  {renderDocumentoArquivo(
-                    'boleto_nf_locacao_2',
-                    'Boleto 2 (Locação)',
-                    FileText,
-                    'text-amber-600',
-                    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_2'),
-                    'boleto_nf_locacao_2',
                     []
                   )}
 
@@ -1190,10 +1179,8 @@ export default function MedicaoDetalhesPage() {
             <DialogTitle>
               {tipoDocumentoUpload === 'nf_servico' && 'Enviar Nota Fiscal de Serviço'}
               {tipoDocumentoUpload === 'nf_locacao' && 'Enviar documento de Locação'}
-              {tipoDocumentoUpload === 'boleto_nf_servico_1' && 'Enviar Boleto 1 (NF Serviço)'}
-              {tipoDocumentoUpload === 'boleto_nf_servico_2' && 'Enviar Boleto 2 (NF Serviço)'}
-              {tipoDocumentoUpload === 'boleto_nf_locacao_1' && 'Enviar Boleto 1 (Locação)'}
-              {tipoDocumentoUpload === 'boleto_nf_locacao_2' && 'Enviar Boleto 2 (Locação)'}
+              {tipoDocumentoUpload === 'boleto_nf_servico_1' && 'Enviar Boleto (NF Serviço)'}
+              {tipoDocumentoUpload === 'boleto_nf_locacao_1' && 'Enviar Boleto (Locação)'}
               {tipoDocumentoUpload === 'medicao_pdf' && (uploadEhAnexoAdicional ? 'Enviar Anexo Adicional' : 'Enviar PDF da Medição')}
             </DialogTitle>
             <DialogDescription>
