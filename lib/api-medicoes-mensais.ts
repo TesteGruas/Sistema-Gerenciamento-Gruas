@@ -80,7 +80,15 @@ export interface MedicaoMensal {
 export interface MedicaoDocumento {
   id: number;
   medicao_id: number;
-  tipo_documento: 'nf_servico' | 'nf_produto' | 'nf_locacao' | 'boleto' | 'medicao_pdf';
+  tipo_documento:
+    | 'nf_servico'
+    | 'nf_produto'
+    | 'nf_locacao'
+    | 'boleto_nf_servico_1'
+    | 'boleto_nf_servico_2'
+    | 'boleto_nf_locacao_1'
+    | 'boleto_nf_locacao_2'
+    | 'medicao_pdf';
   numero_documento?: string | null;
   caminho_arquivo?: string | null;
   data_emissao?: string | null;

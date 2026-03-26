@@ -41,8 +41,11 @@ const getDocumentoLabel = (tipo) => {
     medicao_pdf: 'PDF da Medição',
     nf_servico: 'NF de Serviço',
     nf_produto: 'NF de Produto',
-    nf_locacao: 'NF de Locação',
-    boleto: 'Boleto'
+    nf_locacao: 'Locação',
+    boleto_nf_servico_1: 'Boleto (NF Serviço) 1',
+    boleto_nf_servico_2: 'Boleto (NF Serviço) 2',
+    boleto_nf_locacao_1: 'Boleto (Locação) 1',
+    boleto_nf_locacao_2: 'Boleto (Locação) 2'
   };
   return labels[tipo] || tipo;
 };

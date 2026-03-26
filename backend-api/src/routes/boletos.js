@@ -6,6 +6,24 @@ import { authenticateToken } from '../middleware/auth.js';
 
 const router = express.Router();
 
+/** Documentos de medição que são arquivos de boleto (dois por NF de serviço e dois por NF de locação). */
+const TIPOS_DOCUMENTO_BOLETO_MEDICAO = [
+  'boleto_nf_servico_1',
+  'boleto_nf_servico_2',
+  'boleto_nf_locacao_1',
+  'boleto_nf_locacao_2'
+];
+
+function labelBoletoMedicaoDocumento(tipo) {
+  const map = {
+    boleto_nf_servico_1: 'Boleto (NF Serviço) 1',
+    boleto_nf_servico_2: 'Boleto (NF Serviço) 2',
+    boleto_nf_locacao_1: 'Boleto (Locação) 1',
+    boleto_nf_locacao_2: 'Boleto (Locação) 2'
+  };
+  return map[tipo] || 'Boleto';
+}
+
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
 const upload = multer({
@@ -167,7 +185,7 @@ router.get('/', authenticateToken, async (req, res) => {
             )
           )
         `)
-        .eq('tipo_documento', 'boleto');
+        .in('tipo_documento', TIPOS_DOCUMENTO_BOLETO_MEDICAO);
 
       if (docError) {
         console.error('Erro ao buscar boletos de medições:', docError);
@@ -185,7 +203,7 @@ router.get('/', authenticateToken, async (req, res) => {
             id: `medicao_${doc.id}`,
             numero_boleto: doc.numero_documento || `MED-${doc.medicao_id}-${doc.id}`,
             medicao_id: doc.medicao_id,
-            descricao: `Boleto - Medição ${medicao?.numero || doc.medicao_id}`,
+            descricao: `${labelBoletoMedicaoDocumento(doc.tipo_documento)} — Medição ${medicao?.numero || doc.medicao_id}`,
             valor: doc.valor || 0,
             data_emissao: doc.data_emissao || doc.created_at,
             data_vencimento: doc.data_vencimento || doc.created_at,
@@ -294,7 +312,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
           )
         `)
         .eq('id', docId)
-        .eq('tipo_documento', 'boleto')
+        .in('tipo_documento', TIPOS_DOCUMENTO_BOLETO_MEDICAO)
         .single();
 
       if (error) throw error;
@@ -310,7 +328,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
         id: `medicao_${data.id}`,
         numero_boleto: data.numero_documento || `MED-${data.medicao_id}-${data.id}`,
         medicao_id: data.medicao_id,
-        descricao: `Boleto - Medição ${data.medicoes_mensais?.numero || data.medicao_id}`,
+        descricao: `${labelBoletoMedicaoDocumento(data.tipo_documento)} — Medição ${data.medicoes_mensais?.numero || data.medicao_id}`,
         valor: data.valor || 0,
         data_emissao: data.data_emissao || data.created_at,
         data_vencimento: data.data_vencimento || data.created_at,
@@ -527,7 +545,7 @@ router.post('/:id/pagar', authenticateToken, async (req, res) => {
           updated_at: new Date().toISOString()
         })
         .eq('id', docId)
-        .eq('tipo_documento', 'boleto')
+        .in('tipo_documento', TIPOS_DOCUMENTO_BOLETO_MEDICAO)
         .select()
         .single();
 

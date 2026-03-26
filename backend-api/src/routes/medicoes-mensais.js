@@ -1416,10 +1416,16 @@ router.post('/:id/documentos', authenticateToken, requirePermission('obras:edita
     const { tipo_documento, numero_documento, caminho_arquivo, data_emissao, data_vencimento, valor, status, observacoes } = req.body;
     const file = req.file;
 
-    if (!tipo_documento || !['nf_servico', 'nf_produto', 'nf_locacao', 'boleto', 'medicao_pdf'].includes(tipo_documento)) {
+    const tiposDocumentoValidos = [
+      'nf_servico', 'nf_produto', 'nf_locacao',
+      'boleto_nf_servico_1', 'boleto_nf_servico_2',
+      'boleto_nf_locacao_1', 'boleto_nf_locacao_2',
+      'medicao_pdf'
+    ];
+    if (!tipo_documento || !tiposDocumentoValidos.includes(tipo_documento)) {
       return res.status(400).json({
         error: 'Tipo de documento inválido',
-        message: 'Tipo deve ser: nf_servico, nf_produto, nf_locacao, boleto ou medicao_pdf'
+        message: `Tipo deve ser um de: ${tiposDocumentoValidos.join(', ')}`
       });
     }
 

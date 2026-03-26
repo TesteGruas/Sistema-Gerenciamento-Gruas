@@ -30,6 +30,8 @@ import {
   Copy
 } from "lucide-react"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
+
+type TipoDocumentoMedicaoUpload = MedicaoDocumento["tipo_documento"]
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 
@@ -45,7 +47,7 @@ export default function MedicaoDetalhesPage() {
   
   // Estados para upload de documentos
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false)
-  const [tipoDocumentoUpload, setTipoDocumentoUpload] = useState<'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf' | null>(null)
+  const [tipoDocumentoUpload, setTipoDocumentoUpload] = useState<TipoDocumentoMedicaoUpload | null>(null)
   const [uploadEhAnexoAdicional, setUploadEhAnexoAdicional] = useState(false)
   const [arquivoUpload, setArquivoUpload] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -156,7 +158,7 @@ export default function MedicaoDetalhesPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
-  const handleUploadDocumento = (tipo: 'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf') => {
+  const handleUploadDocumento = (tipo: TipoDocumentoMedicaoUpload) => {
     if (!medicao) return
     setUploadEhAnexoAdicional(false)
     setTipoDocumentoUpload(tipo)
@@ -529,6 +531,19 @@ export default function MedicaoDetalhesPage() {
   const documentosPdf = documentos.filter((d) => d.tipo_documento === 'medicao_pdf')
   const documentoPrincipalPdf = documentosPdf.find((d) => !(d.observacoes || '').toLowerCase().includes('anexo adicional')) || documentosPdf[0]
   const anexosAdicionais = documentosPdf.filter((d) => d.id !== documentoPrincipalPdf?.id)
+
+  const documentosNfServico = documentos
+    .filter((d) => d.tipo_documento === 'nf_servico')
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+  const documentosLocacao = documentos
+    .filter((d) => d.tipo_documento === 'nf_locacao' || d.tipo_documento === 'nf_produto')
+    .sort((a, b) => {
+      const pref = (t: string) => (t === 'nf_locacao' ? 0 : 1)
+      const c = pref(a.tipo_documento) - pref(b.tipo_documento)
+      if (c !== 0) return c
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    })
+
   const emailClientePadrao =
     medicao.obras?.clientes?.contato_email ||
     medicao.obras?.clientes?.email ||
@@ -557,6 +572,107 @@ export default function MedicaoDetalhesPage() {
     setTelefonesEnvio([""])
     setIsEnviarDialogOpen(true)
   }
+
+  const renderDocumentoArquivo = (
+    key: string,
+    label: string,
+    Icon: typeof FileText,
+    color: string,
+    documento: MedicaoDocumento | undefined,
+    tipoUpload: TipoDocumentoMedicaoUpload,
+    extras: MedicaoDocumento[] = []
+  ) => (
+    <div key={key} className={`border rounded-lg p-3 ${documento ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
+      <div className="flex items-start justify-between mb-2">
+        <div className="flex items-center gap-2">
+          <Icon className={`w-5 h-5 ${color}`} />
+          <div>
+            <p className="font-semibold text-sm">{label}</p>
+            {documento ? (
+              <>
+                {documento.numero_documento && (
+                  <p className="text-xs text-gray-600">Nº {documento.numero_documento}</p>
+                )}
+                {extras.length > 0 && (
+                  <p className="text-xs text-gray-500">{extras.length} anexo(s) adicional(is)</p>
+                )}
+                <p className="text-xs text-gray-500">
+                  Status:{' '}
+                  {documento.status === 'gerado'
+                    ? 'Gerado'
+                    : documento.status === 'enviado'
+                      ? 'Enviado'
+                      : documento.status === 'pago'
+                        ? 'Pago'
+                        : 'Pendente'}
+                </p>
+              </>
+            ) : (
+              <p className="text-xs text-gray-500">Nenhum arquivo</p>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-2">
+        {documento?.caminho_arquivo && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="flex-1 h-8 text-xs"
+            onClick={() => window.open(documento.caminho_arquivo || '', '_blank')}
+          >
+            <Download className="w-3 h-3 mr-1" />
+            Baixar
+          </Button>
+        )}
+        <Button
+          variant={documento ? 'outline' : 'default'}
+          size="sm"
+          className="flex-1 h-8 text-xs"
+          onClick={() => handleUploadDocumento(tipoUpload)}
+        >
+          <Upload className="w-3 h-3 mr-1" />
+          {documento ? 'Substituir' : 'Enviar'}
+        </Button>
+        {documento && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-8 text-xs text-red-600 border-red-300 hover:bg-red-50"
+            onClick={() => handleRemoverDocumento(documento.id)}
+            disabled={uploading}
+          >
+            <Trash2 className="w-3 h-3 mr-1" />
+            Remover
+          </Button>
+        )}
+      </div>
+      {extras.length > 0 && (
+        <div className="mt-2 space-y-1">
+          {extras.map((docExtra, index) => (
+            <div key={docExtra.id} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
+              <div className="min-w-0">
+                <p className="text-xs font-medium truncate">
+                  Anexo {index + 1}: {docExtra.observacoes || docExtra.numero_documento || `Documento #${docExtra.id}`}
+                </p>
+              </div>
+              {docExtra.caminho_arquivo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => window.open(docExtra.caminho_arquivo || '', '_blank')}
+                >
+                  <Download className="w-3 h-3 mr-1" />
+                  Abrir
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <div className="space-y-4 p-4">
@@ -872,108 +988,128 @@ export default function MedicaoDetalhesPage() {
                 </div>
               ) : (
                 <>
-                  {['medicao_pdf', 'nf_servico', 'nf_produto', 'boleto'].map((tipo) => {
-                    const documentosDoTipo = tipo === 'medicao_pdf'
-                      ? (documentoPrincipalPdf ? [documentoPrincipalPdf] : [])
-                      : documentos.filter(d => d.tipo_documento === tipo)
-                    const documento = documentosDoTipo[0]
-                    const labels: Record<string, { label: string; icon: any; color: string }> = {
-                      medicao_pdf: { label: 'PDF da Medição', icon: FileText, color: 'text-purple-600' },
-                      nf_servico: { label: 'NF de Serviço', icon: Receipt, color: 'text-blue-600' },
-                      nf_produto: { label: 'NF de Produto', icon: FileCheck, color: 'text-green-600' },
-                      boleto: { label: 'Boleto', icon: FileText, color: 'text-orange-600' }
-                    }
-                    const info = labels[tipo]
-                    const Icon = info.icon
-                    
-                    return (
-                      <div key={tipo} className={`border rounded-lg p-3 ${documento ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-                        <div className="flex items-start justify-between mb-2">
-                          <div className="flex items-center gap-2">
-                            <Icon className={`w-5 h-5 ${info.color}`} />
-                            <div>
-                              <p className="font-semibold text-sm">{info.label}</p>
-                              {documento ? (
-                                <>
-                                  {documento.numero_documento && (
-                                    <p className="text-xs text-gray-600">Nº {documento.numero_documento}</p>
-                                  )}
-                                  {tipo !== 'medicao_pdf' && documentosDoTipo.length > 1 && (
-                                    <p className="text-xs text-gray-500">
-                                      {documentosDoTipo.length - 1} anexo(s) adicional(is)
-                                    </p>
-                                  )}
-                                  <p className="text-xs text-gray-500">
-                                    Status: {documento.status === 'gerado' ? 'Gerado' : documento.status === 'enviado' ? 'Enviado' : documento.status === 'pago' ? 'Pago' : 'Pendente'}
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="text-xs text-gray-500">Nenhum arquivo</p>
+                  {/* PDF da medição */}
+                  <div
+                    className={`border rounded-lg p-3 ${documentoPrincipalPdf ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-5 h-5 text-purple-600" />
+                        <div>
+                          <p className="font-semibold text-sm">PDF da Medição</p>
+                          {documentoPrincipalPdf ? (
+                            <>
+                              {documentoPrincipalPdf.numero_documento && (
+                                <p className="text-xs text-gray-600">Nº {documentoPrincipalPdf.numero_documento}</p>
                               )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex gap-2">
-                          {documento?.caminho_arquivo && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="flex-1 h-8 text-xs"
-                              onClick={() => window.open(documento.caminho_arquivo || '', '_blank')}
-                            >
-                              <Download className="w-3 h-3 mr-1" />
-                              Baixar
-                            </Button>
-                          )}
-                          <Button
-                            variant={documento ? "outline" : "default"}
-                            size="sm"
-                            className="flex-1 h-8 text-xs"
-                            onClick={() => handleUploadDocumento(tipo as 'nf_servico' | 'nf_produto' | 'boleto' | 'medicao_pdf')}
-                          >
-                            <Upload className="w-3 h-3 mr-1" />
-                            {documento ? 'Substituir' : 'Enviar'}
-                          </Button>
-                          {documento && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              className="h-8 text-xs text-red-600 border-red-300 hover:bg-red-50"
-                              onClick={() => handleRemoverDocumento(documento.id)}
-                              disabled={uploading}
-                            >
-                              <Trash2 className="w-3 h-3 mr-1" />
-                              Remover
-                            </Button>
+                              <p className="text-xs text-gray-500">
+                                Status:{' '}
+                                {documentoPrincipalPdf.status === 'gerado'
+                                  ? 'Gerado'
+                                  : documentoPrincipalPdf.status === 'enviado'
+                                    ? 'Enviado'
+                                    : documentoPrincipalPdf.status === 'pago'
+                                      ? 'Pago'
+                                      : 'Pendente'}
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-xs text-gray-500">Nenhum arquivo</p>
                           )}
                         </div>
-                        {tipo !== 'medicao_pdf' && documentosDoTipo.length > 1 && (
-                          <div className="mt-2 space-y-1">
-                            {documentosDoTipo.slice(1).map((docExtra, index) => (
-                              <div key={docExtra.id} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
-                                <div className="min-w-0">
-                                  <p className="text-xs font-medium truncate">
-                                    Anexo {index + 1}: {docExtra.observacoes || docExtra.numero_documento || `Documento #${docExtra.id}`}
-                                  </p>
-                                </div>
-                                {docExtra.caminho_arquivo && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="h-7 text-xs"
-                                    onClick={() => window.open(docExtra.caminho_arquivo || '', '_blank')}
-                                  >
-                                    <Download className="w-3 h-3 mr-1" />
-                                    Abrir
-                                  </Button>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
-                    )
-                  })}
+                    </div>
+                    <div className="flex gap-2">
+                      {documentoPrincipalPdf?.caminho_arquivo && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="flex-1 h-8 text-xs"
+                          onClick={() => window.open(documentoPrincipalPdf.caminho_arquivo || '', '_blank')}
+                        >
+                          <Download className="w-3 h-3 mr-1" />
+                          Baixar
+                        </Button>
+                      )}
+                      <Button
+                        variant={documentoPrincipalPdf ? 'outline' : 'default'}
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={() => handleUploadDocumento('medicao_pdf')}
+                      >
+                        <Upload className="w-3 h-3 mr-1" />
+                        {documentoPrincipalPdf ? 'Substituir' : 'Enviar'}
+                      </Button>
+                      {documentoPrincipalPdf && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs text-red-600 border-red-300 hover:bg-red-50"
+                          onClick={() => handleRemoverDocumento(documentoPrincipalPdf.id)}
+                          disabled={uploading}
+                        >
+                          <Trash2 className="w-3 h-3 mr-1" />
+                          Remover
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {renderDocumentoArquivo(
+                    'nf_servico',
+                    'NF de Serviço',
+                    Receipt,
+                    'text-blue-600',
+                    documentosNfServico[0],
+                    'nf_servico',
+                    documentosNfServico.slice(1)
+                  )}
+                  {renderDocumentoArquivo(
+                    'boleto_nf_servico_1',
+                    'Boleto 1 (NF Serviço)',
+                    FileText,
+                    'text-orange-600',
+                    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_1'),
+                    'boleto_nf_servico_1',
+                    []
+                  )}
+                  {renderDocumentoArquivo(
+                    'boleto_nf_servico_2',
+                    'Boleto 2 (NF Serviço)',
+                    FileText,
+                    'text-orange-600',
+                    documentos.find((d) => d.tipo_documento === 'boleto_nf_servico_2'),
+                    'boleto_nf_servico_2',
+                    []
+                  )}
+                  {renderDocumentoArquivo(
+                    'nf_locacao',
+                    'Locação',
+                    FileCheck,
+                    'text-green-600',
+                    documentosLocacao[0],
+                    'nf_locacao',
+                    documentosLocacao.slice(1)
+                  )}
+                  {renderDocumentoArquivo(
+                    'boleto_nf_locacao_1',
+                    'Boleto 1 (Locação)',
+                    FileText,
+                    'text-amber-600',
+                    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_1'),
+                    'boleto_nf_locacao_1',
+                    []
+                  )}
+                  {renderDocumentoArquivo(
+                    'boleto_nf_locacao_2',
+                    'Boleto 2 (Locação)',
+                    FileText,
+                    'text-amber-600',
+                    documentos.find((d) => d.tipo_documento === 'boleto_nf_locacao_2'),
+                    'boleto_nf_locacao_2',
+                    []
+                  )}
+
                   <div className={`border rounded-lg p-3 ${anexosAdicionais.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
                     <div className="flex items-start justify-between mb-2">
                       <div className="flex items-center gap-2">
@@ -1053,8 +1189,11 @@ export default function MedicaoDetalhesPage() {
           <DialogHeader>
             <DialogTitle>
               {tipoDocumentoUpload === 'nf_servico' && 'Enviar Nota Fiscal de Serviço'}
-              {tipoDocumentoUpload === 'nf_produto' && 'Enviar Nota Fiscal de Produto'}
-              {tipoDocumentoUpload === 'boleto' && 'Enviar Boleto'}
+              {tipoDocumentoUpload === 'nf_locacao' && 'Enviar documento de Locação'}
+              {tipoDocumentoUpload === 'boleto_nf_servico_1' && 'Enviar Boleto 1 (NF Serviço)'}
+              {tipoDocumentoUpload === 'boleto_nf_servico_2' && 'Enviar Boleto 2 (NF Serviço)'}
+              {tipoDocumentoUpload === 'boleto_nf_locacao_1' && 'Enviar Boleto 1 (Locação)'}
+              {tipoDocumentoUpload === 'boleto_nf_locacao_2' && 'Enviar Boleto 2 (Locação)'}
               {tipoDocumentoUpload === 'medicao_pdf' && (uploadEhAnexoAdicional ? 'Enviar Anexo Adicional' : 'Enviar PDF da Medição')}
             </DialogTitle>
             <DialogDescription>
