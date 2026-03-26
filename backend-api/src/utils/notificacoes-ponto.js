@@ -1,6 +1,6 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
-import { sendEmail } from '../services/email.service.js';
+import { sendEmail, getActiveTemplateRow, replaceVariables } from '../services/email.service.js';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
@@ -66,6 +66,21 @@ function formatarData(dataStr) {
 function formatarHoras(valor) {
   if (valor === null || valor === undefined) return '0';
   return Number(valor).toFixed(1);
+}
+
+/**
+ * E-mail de notificações de ponto: usa template ativo em email_templates ou HTML gerado no código.
+ */
+async function sendPontoEmail(to, tipo, { assuntoDefault, vars, buildHtml }) {
+  const row = await getActiveTemplateRow(tipo);
+  if (row) {
+    const subject = row.assunto?.trim()
+      ? replaceVariables(row.assunto, vars)
+      : assuntoDefault;
+    const html = replaceVariables(row.html_template, vars);
+    return sendEmail({ to, subject, html, tipo });
+  }
+  return sendEmail({ to, subject: assuntoDefault, html: buildHtml(), tipo });
 }
 
 function normalizarTelefoneWhatsapp(telefone) {
@@ -504,23 +519,35 @@ async function enviarPacoteNotificacaoResponsavelPonto({
   // 2) E-mail e WhatsApp em background (SMTP/webhook podem travar → não bloqueiam a resposta HTTP)
   if (email) {
     void withTimeout(
-      sendEmail({
-        to: email,
-        subject: `Registro de ponto concluído — ${funcionario.nome || 'Funcionário'} — ${formatarData(registro.data)}`,
-        html: templateEmailResponsavel({
-          funcionarioNome: funcionario.nome || 'Funcionário',
-          funcionarioCargo: funcionario.cargo || '',
-          obraNome,
-          data: registro.data,
-          entrada: registro.entrada,
-          saidaAlmoco: registro.saida_almoco,
-          voltaAlmoco: registro.volta_almoco,
-          saida: registro.saida,
-          horasTrabalhadas: registro.horas_trabalhadas,
-          horasExtras: registro.horas_extras,
-          linkAssinar
-        }),
-        tipo: 'notificacao_ponto_responsavel'
+      sendPontoEmail(email, 'notificacao_ponto_responsavel', {
+        assuntoDefault: `Registro de ponto concluído — ${funcionario.nome || 'Funcionário'} — ${formatarData(registro.data)}`,
+        vars: {
+          funcionario_nome: funcionario.nome || 'Funcionário',
+          funcionario_cargo: funcionario.cargo || '',
+          obra_nome: obraNome || 'N/A',
+          data_formatada: formatarData(registro.data),
+          entrada: registro.entrada || '-',
+          saida_almoco: registro.saida_almoco || '-',
+          volta_almoco: registro.volta_almoco || '-',
+          saida: registro.saida || '-',
+          horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
+          horas_extras: formatarHoras(registro.horas_extras),
+          link_assinar: linkAssinar
+        },
+        buildHtml: () =>
+          templateEmailResponsavel({
+            funcionarioNome: funcionario.nome || 'Funcionário',
+            funcionarioCargo: funcionario.cargo || '',
+            obraNome,
+            data: registro.data,
+            entrada: registro.entrada,
+            saidaAlmoco: registro.saida_almoco,
+            voltaAlmoco: registro.volta_almoco,
+            saida: registro.saida,
+            horasTrabalhadas: registro.horas_trabalhadas,
+            horasExtras: registro.horas_extras,
+            linkAssinar
+          })
       }),
       MS_TIMEOUT_EMAIL,
       'email'
@@ -957,13 +984,17 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
     for (const resp of lista) {
       try {
         if (resp.email) {
-          await sendEmail({
-            to: resp.email,
-            subject: `Existem pontos pendentes de aprovação — ${obraNome}`,
-            html: `<p>Olá ${resp.nome || 'responsável'},</p>
+          await sendPontoEmail(resp.email, 'notificacao_ponto_pendente_generica', {
+            assuntoDefault: `Existem pontos pendentes de aprovação — ${obraNome}`,
+            vars: {
+              responsavel_nome: resp.nome || 'responsável',
+              obra_nome: obraNome,
+              link_aprovacoes: linkAprovacoes
+            },
+            buildHtml: () =>
+              `<p>Olá ${resp.nome || 'responsável'},</p>
                    <p>Existem registros de ponto pendentes de aprovação na obra <strong>${obraNome}</strong>.</p>
-                   <p><a href="${linkAprovacoes}">Acessar aprovações</a></p>`,
-            tipo: 'notificacao_ponto_pendente_generica'
+                   <p><a href="${linkAprovacoes}">Acessar aprovações</a></p>`
           }).catch(e => console.error('[notificacoes-ponto] Erro email pendência genérica:', e.message));
         }
 
@@ -1076,17 +1107,23 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
 
     // 1) Email
     if (emailFunc) {
-      await sendEmail({
-        to: emailFunc,
-        subject: `Ponto assinado pelo responsável — ${formatarData(registro.data)}`,
-        html: templateEmailFuncionario({
-          responsavelNome,
-          data: registro.data,
-          horasTrabalhadas: registro.horas_trabalhadas,
-          horasExtras: registro.horas_extras,
-          linkAssinar
-        }),
-        tipo: 'notificacao_ponto_funcionario'
+      await sendPontoEmail(emailFunc, 'notificacao_ponto_funcionario', {
+        assuntoDefault: `Ponto assinado pelo responsável — ${formatarData(registro.data)}`,
+        vars: {
+          responsavel_nome: responsavelNome,
+          data_formatada: formatarData(registro.data),
+          horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
+          horas_extras: formatarHoras(registro.horas_extras),
+          link_assinar: linkAssinar
+        },
+        buildHtml: () =>
+          templateEmailFuncionario({
+            responsavelNome,
+            data: registro.data,
+            horasTrabalhadas: registro.horas_trabalhadas,
+            horasExtras: registro.horas_extras,
+            linkAssinar
+          })
       }).catch(e => console.error('[notificacoes-ponto] Erro email funcionário:', e.message));
     }
 
@@ -1221,22 +1258,33 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
 
     // 1) Email
     if (emailFunc) {
-      await sendEmail({
-        to: emailFunc,
-        subject: `Registro de ponto não aprovado — ${formatarData(registro.data)}`,
-        html: templateEmailRejeicao({
-          responsavelNome,
+      await sendPontoEmail(emailFunc, 'notificacao_ponto_rejeicao', {
+        assuntoDefault: `Registro de ponto não aprovado — ${formatarData(registro.data)}`,
+        vars: {
+          responsavel_nome: responsavelNome,
           comentario: comentario || 'Sem comentário',
-          data: registro.data,
-          entrada: registro.entrada,
-          saidaAlmoco: registro.saida_almoco,
-          voltaAlmoco: registro.volta_almoco,
-          saida: registro.saida,
-          horasTrabalhadas: registro.horas_trabalhadas,
-          horasExtras: registro.horas_extras,
-          linkCorrigir
-        }),
-        tipo: 'notificacao_ponto_rejeicao'
+          data_formatada: formatarData(registro.data),
+          entrada: registro.entrada || '-',
+          saida_almoco: registro.saida_almoco || '-',
+          volta_almoco: registro.volta_almoco || '-',
+          saida: registro.saida || '-',
+          horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
+          horas_extras: formatarHoras(registro.horas_extras),
+          link_corrigir: linkCorrigir
+        },
+        buildHtml: () =>
+          templateEmailRejeicao({
+            responsavelNome,
+            comentario: comentario || 'Sem comentário',
+            data: registro.data,
+            entrada: registro.entrada,
+            saidaAlmoco: registro.saida_almoco,
+            voltaAlmoco: registro.volta_almoco,
+            saida: registro.saida,
+            horasTrabalhadas: registro.horas_trabalhadas,
+            horasExtras: registro.horas_extras,
+            linkCorrigir
+          })
       })
         .then(() => {
           resumoCanais.email = true;

@@ -25,6 +25,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
 import { 
   Loader2, 
   Save, 
@@ -71,8 +78,8 @@ interface EmailTemplate {
   tipo: string
   nome: string
   assunto: string
-  html_template: string
-  variaveis: string[]
+  html_template?: string
+  variaveis: string[] | string
   ativo: boolean
   updated_at: string
 }
@@ -108,7 +115,7 @@ export default function EmailConfigPage() {
   // Templates state
   const [templates, setTemplates] = useState<EmailTemplate[]>([])
   const [selectedTemplate, setSelectedTemplate] = useState<EmailTemplate | null>(null)
-  const [loadingTemplates, setLoadingTemplates] = useState(false)
+  const [loadingTemplates, setLoadingTemplates] = useState(true)
   const [savingTemplate, setSavingTemplate] = useState(false)
 
   // Test email state
@@ -126,17 +133,28 @@ export default function EmailConfigPage() {
   const [stats, setStats] = useState<EmailStats | null>(null)
   const [loadingStats, setLoadingStats] = useState(false)
 
+  // Preview template (medicao_enviada)
+  const [previewOpen, setPreviewOpen] = useState(false)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [previewAssunto, setPreviewAssunto] = useState('')
+  const [previewHtml, setPreviewHtml] = useState('')
+
   // Load config
   useEffect(() => {
     loadConfig()
   }, [])
 
-  // Load templates
+  // Templates: carrega ao abrir o painel (aba config precisa da lista para teste por tipo)
   useEffect(() => {
-    if (activeTab === 'templates') {
-      loadTemplates()
+    loadTemplates()
+  }, [])
+
+  useEffect(() => {
+    if (!templates.length) return
+    if (!templates.some((t) => t.tipo === testType)) {
+      setTestType(templates[0].tipo)
     }
-  }, [activeTab])
+  }, [templates, testType])
 
   // Load logs
   useEffect(() => {
@@ -207,10 +225,15 @@ export default function EmailConfigPage() {
     setLoadingTemplates(true)
     try {
       const response = await api.get('/email-config/templates')
-      setTemplates(response.data.data)
-      if (response.data.data.length > 0) {
-        setSelectedTemplate(response.data.data[0])
-      }
+      const list: EmailTemplate[] = response.data.data || []
+      setTemplates(list)
+      setSelectedTemplate((prev) => {
+        if (!list.length) return null
+        if (prev && list.some((t) => t.tipo === prev.tipo)) {
+          return list.find((t) => t.tipo === prev.tipo) ?? list[0]
+        }
+        return list[0]
+      })
     } catch (error: any) {
       console.error('Erro ao carregar templates:', error)
       toast({
@@ -247,6 +270,42 @@ export default function EmailConfigPage() {
       })
     } finally {
       setSavingTemplate(false)
+    }
+  }
+
+  const abrirPreviewTemplate = async () => {
+    if (!selectedTemplate) {
+      toast({
+        title: 'Visualizar',
+        description: 'Selecione um template na lista.',
+      })
+      return
+    }
+    setPreviewOpen(true)
+    setPreviewLoading(true)
+    setPreviewAssunto('')
+    setPreviewHtml('')
+    try {
+      const res = await api.post(
+        `/email-config/templates/${encodeURIComponent(selectedTemplate.tipo)}/preview`,
+        {
+          assunto: selectedTemplate.assunto,
+          html_template: selectedTemplate.html_template || '',
+        }
+      )
+      const data = res.data?.data
+      if (data?.assunto != null) setPreviewAssunto(data.assunto)
+      if (data?.html != null) setPreviewHtml(data.html)
+    } catch (error: unknown) {
+      console.error(error)
+      setPreviewOpen(false)
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível gerar o preview do e-mail.',
+        variant: 'destructive',
+      })
+    } finally {
+      setPreviewLoading(false)
     }
   }
 
@@ -344,6 +403,7 @@ export default function EmailConfigPage() {
       welcome: { label: 'Boas-vindas', color: 'bg-blue-500' },
       reset_password: { label: 'Redefinição', color: 'bg-orange-500' },
       password_changed: { label: 'Senha Alterada', color: 'bg-green-500' },
+      medicao_enviada: { label: 'Medição', color: 'bg-cyan-600' },
       test: { label: 'Teste', color: 'bg-purple-500' },
       custom: { label: 'Personalizado', color: 'bg-gray-500' }
     }
@@ -529,14 +589,31 @@ export default function EmailConfigPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="test_type">Tipo de Email</Label>
-                  <Select value={testType} onValueChange={setTestType}>
+                  <Select
+                    value={
+                      templates.length > 0 &&
+                      templates.some((t) => t.tipo === testType)
+                        ? testType
+                        : templates[0]?.tipo ?? ''
+                    }
+                    onValueChange={setTestType}
+                    disabled={loadingTemplates || templates.length === 0}
+                  >
                     <SelectTrigger>
-                      <SelectValue />
+                      <SelectValue
+                        placeholder={
+                          loadingTemplates
+                            ? 'Carregando templates…'
+                            : 'Nenhum template'
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="welcome">Boas-vindas</SelectItem>
-                      <SelectItem value="reset_password">Redefinição de Senha</SelectItem>
-                      <SelectItem value="password_changed">Senha Alterada</SelectItem>
+                      {templates.map((t) => (
+                        <SelectItem key={t.tipo} value={t.tipo}>
+                          {t.nome}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -553,7 +630,15 @@ export default function EmailConfigPage() {
                 </div>
               </div>
 
-              <Button onClick={sendTestEmail} disabled={sendingTest || !testEmail}>
+              <Button
+                onClick={sendTestEmail}
+                disabled={
+                  sendingTest ||
+                  !testEmail ||
+                  loadingTemplates ||
+                  templates.length === 0
+                }
+              >
                 {sendingTest ? (
                   <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Enviando...</>
                 ) : (
@@ -595,13 +680,31 @@ export default function EmailConfigPage() {
 
             {/* Editor de template */}
             <Card className="col-span-2">
-              <CardHeader>
-                <CardTitle>
-                  {selectedTemplate?.nome || 'Selecione um template'}
-                </CardTitle>
-                <CardDescription>
-                  Variáveis disponíveis: {selectedTemplate?.variaveis.join(', ')}
-                </CardDescription>
+              <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-4 space-y-0">
+                <div className="min-w-0 flex-1">
+                  <CardTitle>
+                    {selectedTemplate?.nome || 'Selecione um template'}
+                  </CardTitle>
+                  <CardDescription className="mt-1.5">
+                    Variáveis disponíveis:{' '}
+                    {Array.isArray(selectedTemplate?.variaveis)
+                      ? selectedTemplate.variaveis.join(', ')
+                      : '—'}
+                  </CardDescription>
+                </div>
+                {selectedTemplate ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0 gap-2"
+                    title="Visualizar com dados fictícios"
+                    onClick={abrirPreviewTemplate}
+                  >
+                    <Eye className="h-4 w-4" />
+                    Visualizar
+                  </Button>
+                ) : null}
               </CardHeader>
               {selectedTemplate && (
                 <CardContent className="space-y-4">
@@ -908,6 +1011,44 @@ export default function EmailConfigPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col gap-0 p-0">
+          <div className="p-6 pb-4 border-b shrink-0">
+            <DialogHeader>
+              <DialogTitle>Preview do e-mail</DialogTitle>
+              <DialogDescription>
+                Dados fictícios — mesmo processamento do envio real (template Medição).
+              </DialogDescription>
+              {previewAssunto ? (
+                <p className="text-sm text-left pt-2">
+                  <span className="font-medium text-foreground">Assunto:</span>{' '}
+                  <span className="break-all text-muted-foreground">{previewAssunto}</span>
+                </p>
+              ) : null}
+            </DialogHeader>
+          </div>
+          <div className="flex-1 min-h-0 px-6 pb-6 overflow-hidden flex flex-col">
+            {previewLoading ? (
+              <div className="flex items-center justify-center py-16 gap-2 text-muted-foreground">
+                <Loader2 className="h-6 w-6 animate-spin" />
+                <span>Gerando preview…</span>
+              </div>
+            ) : previewHtml ? (
+              <iframe
+                title="Preview do e-mail"
+                className="w-full flex-1 min-h-[60vh] rounded-md border bg-white"
+                sandbox="allow-same-origin"
+                srcDoc={previewHtml}
+              />
+            ) : (
+              <p className="text-sm text-muted-foreground py-8 text-center">
+                Nenhum conteúdo para exibir.
+              </p>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

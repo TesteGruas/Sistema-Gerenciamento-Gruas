@@ -10,8 +10,7 @@ import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
-import { encrypt, decrypt, sendEmail, getEmailConfig, getTemplate, replaceVariables } from '../services/email.service.js'
-import { getPublicFrontendUrl } from '../config/public-frontend-url.js'
+import { encrypt, decrypt, sendEmail, getEmailConfig, previewEmailTemplateByType, buildTestEmailContent } from '../services/email.service.js'
 
 const router = express.Router()
 
@@ -39,8 +38,31 @@ const updateTemplateSchema = Joi.object({
   ativo: Joi.boolean().required()
 })
 
+const previewTemplateSchema = Joi.object({
+  assunto: Joi.string().allow('', null),
+  html_template: Joi.string().allow('', null)
+})
+
+const createTemplateSchema = Joi.object({
+  tipo: Joi.string()
+    .pattern(/^[a-z0-9_]+$/)
+    .min(3)
+    .max(50)
+    .required(),
+  nome: Joi.string().max(255).required(),
+  clone_from: Joi.string().max(50).allow('', null),
+  assunto: Joi.string().max(500).allow('', null),
+  html_template: Joi.string().allow('', null),
+  variaveis: Joi.array().items(Joi.string()).default([]),
+  ativo: Joi.boolean().default(true)
+})
+
 const testEmailSchema = Joi.object({
-  tipo: Joi.string().valid('welcome', 'reset_password', 'password_changed').required(),
+  tipo: Joi.string()
+    .pattern(/^[a-z0-9_]+$/)
+    .min(3)
+    .max(50)
+    .required(),
   destinatario: Joi.string().email().required(),
   dados_teste: Joi.object().optional()
 })
@@ -203,7 +225,7 @@ router.get('/templates', async (req, res) => {
   try {
     const { data, error } = await supabaseAdmin
       .from('email_templates')
-      .select('id, tipo, nome, assunto, variaveis, ativo, updated_at')
+      .select('id, tipo, nome, assunto, html_template, variaveis, ativo, updated_at')
       .order('tipo', { ascending: true })
 
     if (error) throw error
@@ -273,6 +295,113 @@ router.get('/templates/:type', async (req, res) => {
   }
 })
 
+// ==================== POST - Criar Template ====================
+
+router.post('/templates', async (req, res) => {
+  try {
+    const { error, value } = createTemplateSchema.validate(req.body, { stripUnknown: true })
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const { tipo, nome, clone_from, assunto, html_template, variaveis, ativo } = value
+
+    const TIPOS_RESERVADOS_SISTEMA = [
+      'welcome',
+      'reset_password',
+      'password_changed',
+      'medicao_enviada',
+      'notificacao_ponto_responsavel',
+      'notificacao_ponto_pendente_generica',
+      'notificacao_ponto_funcionario',
+      'notificacao_ponto_rejeicao'
+    ]
+    if (TIPOS_RESERVADOS_SISTEMA.includes(tipo)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Este identificador é reservado aos templates internos do sistema'
+      })
+    }
+
+    const { data: existing } = await supabaseAdmin
+      .from('email_templates')
+      .select('id')
+      .eq('tipo', tipo)
+      .maybeSingle()
+
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        error: 'Já existe um template com este identificador (tipo)'
+      })
+    }
+
+    let assuntoVal = assunto ?? ''
+    let htmlVal = html_template ?? ''
+    let variaveisVal = Array.isArray(variaveis) ? variaveis : []
+
+    if (clone_from && String(clone_from).trim()) {
+      const { data: src, error: srcErr } = await supabaseAdmin
+        .from('email_templates')
+        .select('assunto, html_template, variaveis')
+        .eq('tipo', clone_from.trim())
+        .single()
+
+      if (!srcErr && src) {
+        if (!assuntoVal) assuntoVal = src.assunto || ''
+        if (!htmlVal) htmlVal = src.html_template || ''
+        if (!variaveisVal.length && src.variaveis) {
+          variaveisVal = Array.isArray(src.variaveis) ? src.variaveis : []
+        }
+      }
+    }
+
+    if (!htmlVal.trim()) {
+      htmlVal = `<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;padding:24px;"><p>Olá, <strong>{{cliente_nome}}</strong>.</p><p>Edite este HTML e use variáveis entre chaves duplas.</p><p>— {{empresa}}</p></body></html>`
+    }
+    if (!assuntoVal.trim()) {
+      assuntoVal = 'Novo template — {{empresa}}'
+    }
+    if (!variaveisVal.length) {
+      variaveisVal = ['cliente_nome', 'empresa']
+    }
+
+    const { data, error: insertError } = await supabaseAdmin
+      .from('email_templates')
+      .insert({
+        tipo,
+        nome,
+        assunto: assuntoVal,
+        html_template: htmlVal,
+        variaveis: variaveisVal,
+        ativo,
+        updated_by: req.user.id,
+        updated_at: new Date().toISOString()
+      })
+      .select()
+      .single()
+
+    if (insertError) throw insertError
+
+    res.status(201).json({
+      success: true,
+      data,
+      message: 'Template criado com sucesso'
+    })
+  } catch (error) {
+    console.error('Erro ao criar template:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao criar template',
+      details: error.message
+    })
+  }
+})
+
 // ==================== PUT - Atualizar Template ====================
 
 /**
@@ -338,6 +467,41 @@ router.put('/templates/:type', async (req, res) => {
   }
 })
 
+// ==================== POST - Preview do template (HTML renderizado, dados fictícios) ====================
+
+router.post('/templates/:type/preview', async (req, res) => {
+  try {
+    const { type } = req.params
+
+    const { error, value } = previewTemplateSchema.validate(req.body || {}, { stripUnknown: true })
+    if (error) {
+      return res.status(400).json({
+        success: false,
+        error: 'Dados inválidos',
+        details: error.details[0].message
+      })
+    }
+
+    const { assunto, html } = await previewEmailTemplateByType({
+      tipo: type,
+      assuntoDraft: value.assunto,
+      htmlDraft: value.html_template
+    })
+
+    res.json({
+      success: true,
+      data: { assunto, html }
+    })
+  } catch (err) {
+    console.error('Erro no preview do template:', err)
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao gerar preview',
+      details: err.message
+    })
+  }
+})
+
 // ==================== POST - Enviar Email de Teste ====================
 
 /**
@@ -368,32 +532,16 @@ router.post('/test', async (req, res) => {
 
     const { tipo, destinatario, dados_teste } = value
 
-    // Buscar template
-    const template = await getTemplate(tipo)
+    const { assunto, html } = await buildTestEmailContent({
+      tipo,
+      destinatario,
+      dados_teste
+    })
 
-    // Dados de teste padrão
-    const defaultData = {
-      nome: dados_teste?.nome || 'Usuário Teste',
-      email: destinatario,
-      senha_temporaria: dados_teste?.senha_temporaria || 'Teste@123',
-      link_login: `${getPublicFrontendUrl()}/login`,
-      reset_link: `${getPublicFrontendUrl()}/auth/reset-password/token-teste`,
-      expiry_time: '1 hora',
-      data_alteracao: new Date().toLocaleString('pt-BR'),
-      empresa: 'Sistema de Gerenciamento de Gruas',
-      ano: new Date().getFullYear(),
-      ...dados_teste
-    }
-
-    // Substituir variáveis
-    const html = replaceVariables(template.html_template, defaultData)
-    const assunto = replaceVariables(template.assunto, defaultData)
-
-    // Enviar email
     await sendEmail({
       to: destinatario,
       subject: `[TESTE] ${assunto}`,
-      html: html,
+      html,
       tipo: 'test'
     })
 

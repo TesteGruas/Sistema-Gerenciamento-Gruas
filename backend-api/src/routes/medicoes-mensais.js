@@ -1149,24 +1149,34 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
           const tokenPublicoPdf = gerarTokenLinkPublicoMedicao(medicao.id, '7d');
           const linkPdfPublico = `${getPublicFrontendUrl()}/api/relatorios/medicao/publico/pdf/${tokenPublicoPdf}`;
 
-          // Enviar e-mail
+          const { data: documentosEmail } = await supabaseAdmin
+            .from('medicao_documentos')
+            .select('*')
+            .eq('medicao_id', medicao.id)
+            .order('created_at', { ascending: false });
+
+          const medicaoParaEmail = {
+            ...medicao,
+            ...medicaoAtualizada,
+            obras: medicao.obras,
+            orcamentos: medicao.orcamentos,
+            gruas: medicao.gruas
+          };
+
+          // Enviar e-mail (HTML/assunto via template em email_templates.tipo = medicao_enviada)
           for (const emailDestino of emailsUnicos) {
             try {
-              const { sendEmail } = await import('../services/email.service.js');
+              const { sendEmail, buildMedicaoClienteEmail } = await import('../services/email.service.js');
+              const { assunto, html } = await buildMedicaoClienteEmail({
+                medicao: medicaoParaEmail,
+                linkPdfPublico,
+                cliente,
+                documentos: documentosEmail || []
+              });
               await sendEmail({
                 to: emailDestino,
-                subject: `Medição ${medicao.numero} - ${medicao.periodo}`,
-                html: `
-                  <h2>Nova Medição Disponível</h2>
-                  <p>Uma nova medição foi enviada para sua aprovação:</p>
-                  <ul>
-                    <li><strong>Número:</strong> ${medicao.numero}</li>
-                    <li><strong>Período:</strong> ${medicao.periodo}</li>
-                    <li><strong>Valor Total:</strong> R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}</li>
-                    ${medicao.gruas ? `<li><strong>Grua:</strong> ${medicao.gruas.name}</li>` : ''}
-                  </ul>
-                  <p><a href="${linkPdfPublico}">Abrir PDF da Medição (link público)</a></p>
-                `,
+                subject: assunto,
+                html,
                 tipo: 'medicao_enviada'
               });
             } catch (emailErr) {

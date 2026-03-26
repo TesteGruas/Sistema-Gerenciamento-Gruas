@@ -36,6 +36,7 @@ import {
   MessageSquare,
   Calculator,
   Smartphone,
+  LayoutTemplate,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname, useRouter } from "next/navigation"
@@ -134,6 +135,7 @@ const adminNavigation: NavigationItemWithPermission[] = [
   { name: "Usuários", href: "/dashboard/usuarios", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
   { name: "Perfis e Permissões", href: "/dashboard/perfis-permissoes", icon: Shield, category: "admin", permission: "usuarios:visualizar" },
   { name: "Configurações de Email", href: "/dashboard/configuracoes/email", icon: Mail, category: "admin", permission: "email:configurar" },
+  { name: "Templates de e-mail", href: "/dashboard/configuracoes/templates-email", icon: LayoutTemplate, category: "admin", permission: "email:configurar" },
   { name: "Configuração da Empresa", href: "/dashboard/configuracoes/empresa", icon: Building2, category: "admin", permission: "admin:configurar" },
   { name: "Configurações do Sistema", href: "/dashboard/configuracoes/sistema", icon: Settings, category: "admin", permission: "usuarios:gerenciar" },
 ]
@@ -292,9 +294,9 @@ function DashboardLayoutContent({
         return isAdminFromPermissions()
       }
       
-      // Configurações de Email - apenas Admin
-      if (item.href === '/dashboard/configuracoes/email') {
-        return isAdminFromPermissions()
+      // Configurações de Email e templates — permissão explícita
+      if (item.href === '/dashboard/configuracoes/email' || item.href === '/dashboard/configuracoes/templates-email') {
+        return hasPermission('email:configurar')
       }
       
       return true
@@ -311,7 +313,8 @@ function DashboardLayoutContent({
     canAccessRH,
     canAccessFinanceiro,
     canAccessRelatorios,
-    canAccessUsuarios
+    canAccessUsuarios,
+    hasPermission
   ])
 
   // Navegação filtrada por permissões - memoizado
