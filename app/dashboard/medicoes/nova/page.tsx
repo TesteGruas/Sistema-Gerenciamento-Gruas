@@ -650,15 +650,20 @@ trailer<</Size 4/Root 1 0 R>>
       
       const numero = medicaoForm.numero.trim()
 
-      // Converter custos mensais para o formato da API
-      const custosMensaisApi = custosMensais.map(custo => ({
-        tipo: custo.tipo,
-        descricao: `${custo.item} - ${custo.descricao}`,
-        valor_mensal: custo.valor_unitario,
-        quantidade_meses: custo.quantidade_orcamento,
-        valor_total: calcularTotalOrcamento(),
-        observacoes: `Unidade: ${custo.unidade} | Quantidade Realizada: ${custo.quantidade_realizada} | Quantidade Acumulada: ${custo.quantidade_acumulada} | Valor Acumulado: ${formatCurrency(custo.valor_acumulado)}`
-      }))
+      // Converter custos mensais para o formato da API (total por linha, não o formulário de novo custo)
+      const custosMensaisApi = custosMensais.map(custo => {
+        const totalLinha =
+          custo.valor_total ||
+          custo.quantidade_orcamento * custo.valor_unitario
+        return {
+          tipo: custo.tipo,
+          descricao: `${custo.item} - ${custo.descricao}`,
+          valor_mensal: custo.valor_unitario,
+          quantidade_meses: custo.quantidade_orcamento,
+          valor_total: totalLinha,
+          observacoes: `Unidade: ${custo.unidade} | Quantidade (orçamento): ${custo.quantidade_orcamento} | Valor unitário: ${formatCurrency(custo.valor_unitario)} | Total linha: ${formatCurrency(totalLinha)}`
+        }
+      })
 
       // Calcular valor total
       const valorTotal = medicaoForm.valor_mensal_bruto + 

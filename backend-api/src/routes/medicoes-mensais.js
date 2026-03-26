@@ -14,6 +14,18 @@ import {
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+/** Quando valor_total vem 0 ou omitido, deriva de valor_mensal × quantidade_meses (evita soma 0 no recálculo). */
+function normalizarCustoMensalParaInsert(item) {
+  const valorMensal = Number(item.valor_mensal) || 0;
+  const qm = Number(item.quantidade_meses);
+  const quantidadeMeses = Number.isFinite(qm) && qm >= 0 ? qm : 1;
+  let valorTotal = item.valor_total;
+  if (valorTotal == null || Number(valorTotal) === 0) {
+    valorTotal = valorMensal * quantidadeMeses;
+  }
+  return { ...item, valor_mensal: valorMensal, quantidade_meses: quantidadeMeses, valor_total: valorTotal };
+}
+
 const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
   return jwt.sign(
     {
@@ -457,7 +469,7 @@ router.post('/', authenticateToken, requirePermission('obras:editar'), async (re
     if (custos_mensais && custos_mensais.length > 0) {
       promises.push(
         supabaseAdmin.from('medicao_custos_mensais')
-          .insert(custos_mensais.map(item => ({ ...item, medicao_id: medicao.id })))
+          .insert(custos_mensais.map(item => ({ ...normalizarCustoMensalParaInsert(item), medicao_id: medicao.id })))
       );
     }
 
@@ -731,7 +743,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       await supabaseAdmin.from('medicao_custos_mensais').delete().eq('medicao_id', id);
       if (custos_mensais.length > 0) {
         await supabaseAdmin.from('medicao_custos_mensais')
-          .insert(custos_mensais.map(item => ({ ...item, medicao_id: id })));
+          .insert(custos_mensais.map(item => ({ ...normalizarCustoMensalParaInsert(item), medicao_id: id })));
       }
     }
 
