@@ -95,3 +95,37 @@ export const medicoesUtils = {
     return periodos;
   }
 };
+
+/** Moeda pt-BR em input: só dígitos; os dois últimos são centavos (ex.: digitar 100022 → 1.000,22). */
+export function parseBrlMoneyDigitsInput(raw: string): number {
+  const digits = raw.replace(/\D/g, '');
+  if (!digits) return 0;
+  return parseInt(digits, 10) / 100;
+}
+
+export function formatBrlMoneyInputValue(n: number, emptyWhenZero?: boolean): string {
+  if (emptyWhenZero && n === 0) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(n);
+}
+
+/** Quantidade / decimal: aceita vírgula decimal e ponto como milhar (1.234,56). */
+export function parseBrlDecimalFlexible(raw: string): number {
+  const s = raw.trim().replace(/\s/g, '');
+  if (!s || s === ',' || s === '.') return 0;
+  const normalized = s.includes(',')
+    ? s.replace(/\./g, '').replace(',', '.')
+    : s.replace(/,/g, '');
+  const n = parseFloat(normalized);
+  return Number.isFinite(n) ? n : 0;
+}
+
+export function formatBrlDecimalFlexible(n: number, emptyWhenZero?: boolean): string {
+  if (emptyWhenZero && n === 0) return '';
+  return new Intl.NumberFormat('pt-BR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 6,
+  }).format(n);
+}

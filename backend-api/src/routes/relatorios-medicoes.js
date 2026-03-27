@@ -643,5 +643,6 @@ router.get('/medicao/publico/pdf/:token', async (req, res) => {
   }
 });
 
+export { buscarMedicaoCompleta, gerarPdfCompletoMedicao };
 export default router;
 

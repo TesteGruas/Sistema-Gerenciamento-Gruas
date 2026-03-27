@@ -25,9 +25,7 @@ import {
   Building2,
   Forklift,
   Plus,
-  Edit,
-  Link2,
-  Copy
+  Edit
 } from "lucide-react"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 
@@ -73,9 +71,6 @@ export default function MedicaoDetalhesPage() {
   const [enviarContatosExtras, setEnviarContatosExtras] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [exportandoPdfCompleto, setExportandoPdfCompleto] = useState(false)
-  const [isLinkPublicoDialogOpen, setIsLinkPublicoDialogOpen] = useState(false)
-  const [gerandoLinkPublico, setGerandoLinkPublico] = useState(false)
-  const [linkPublicoPdf, setLinkPublicoPdf] = useState("")
   const [isAprovarDialogOpen, setIsAprovarDialogOpen] = useState(false)
   const [isRejeitarDialogOpen, setIsRejeitarDialogOpen] = useState(false)
   const [observacoesAprovacao, setObservacoesAprovacao] = useState("")
@@ -348,44 +343,6 @@ export default function MedicaoDetalhesPage() {
     const novosTelefones = [...telefonesEnvio]
     novosTelefones[index] = valor
     setTelefonesEnvio(novosTelefones)
-  }
-
-  const abrirDialogLinkPublico = async () => {
-    if (!medicao) return
-    try {
-      setGerandoLinkPublico(true)
-      const response = await medicoesMensaisApi.gerarLinkPublicoPdf(medicao.id)
-      if (response.success && response.data?.url) {
-        const origem = typeof window !== 'undefined' ? window.location.origin : ''
-        setLinkPublicoPdf(`${origem}${response.data.url}`)
-        setIsLinkPublicoDialogOpen(true)
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Não foi possível gerar o link público",
-        variant: "destructive"
-      })
-    } finally {
-      setGerandoLinkPublico(false)
-    }
-  }
-
-  const copiarLinkPublico = async () => {
-    if (!linkPublicoPdf) return
-    try {
-      await navigator.clipboard.writeText(linkPublicoPdf)
-      toast({
-        title: "Link copiado",
-        description: "Link público copiado para a área de transferência"
-      })
-    } catch {
-      toast({
-        title: "Atenção",
-        description: "Não foi possível copiar automaticamente. Copie manualmente.",
-        variant: "destructive"
-      })
-    }
   }
 
   const exportarPdfCompleto = async () => {
@@ -705,21 +662,25 @@ export default function MedicaoDetalhesPage() {
           {getStatusBadge(medicao.status)}
           {getAprovacaoBadge(medicao.status_aprovacao)}
           <Button
-            variant="default"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-border font-normal text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground disabled:opacity-50"
             onClick={() => setIsAprovarDialogOpen(true)}
             disabled={!podeAprovarNoDashboard}
             title={!podeAprovarNoDashboard ? motivoBloqueioAprovacao : "Aprovar medição"}
           >
-            <CheckCircle className="w-4 h-4 mr-2" />
+            <CheckCircle className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
             Aprovar
           </Button>
           <Button
-            variant="destructive"
+            variant="outline"
+            size="sm"
+            className="h-8 gap-1.5 border-border font-normal text-muted-foreground shadow-none hover:bg-muted/70 hover:text-foreground disabled:opacity-50"
             onClick={() => setIsRejeitarDialogOpen(true)}
             disabled={!podeAprovarNoDashboard}
             title={!podeAprovarNoDashboard ? motivoBloqueioAprovacao : "Rejeitar medição"}
           >
-            <XCircle className="w-4 h-4 mr-2" />
+            <XCircle className="h-3.5 w-3.5 shrink-0 text-red-600" />
             Rejeitar
           </Button>
           <Button
@@ -762,14 +723,6 @@ export default function MedicaoDetalhesPage() {
           >
             <Download className="w-4 h-4 mr-2" />
             {exportandoPdfCompleto ? "Exportando..." : "Exportar PDF Completo"}
-          </Button>
-          <Button
-            variant="outline"
-            onClick={abrirDialogLinkPublico}
-            disabled={gerandoLinkPublico}
-          >
-            <Link2 className="w-4 h-4 mr-2" />
-            {gerandoLinkPublico ? "Gerando..." : "Link Público PDF"}
           </Button>
           <Button
             variant="outline"
@@ -1470,40 +1423,6 @@ export default function MedicaoDetalhesPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Dialog Link Publico PDF */}
-      <Dialog open={isLinkPublicoDialogOpen} onOpenChange={setIsLinkPublicoDialogOpen}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader>
-            <DialogTitle>Link Público do PDF da Medição</DialogTitle>
-            <DialogDescription>
-              Compartilhe este link para acesso público ao PDF principal da medição.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2 py-2">
-            <Label htmlFor="link-publico-medicao">Link</Label>
-            <div className="flex gap-2">
-              <Input
-                id="link-publico-medicao"
-                value={linkPublicoPdf}
-                readOnly
-                className="bg-white"
-              />
-              <Button type="button" variant="outline" onClick={copiarLinkPublico}>
-                <Copy className="w-4 h-4 mr-2" />
-                Copiar
-              </Button>
-            </div>
-            <p className="text-xs text-gray-500">
-              O link é temporário e pode expirar automaticamente por segurança.
-            </p>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsLinkPublicoDialogOpen(false)}>
-              Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

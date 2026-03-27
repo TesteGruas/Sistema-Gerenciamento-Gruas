@@ -14,6 +14,52 @@ import {
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
+async function fetchUrlBufferForEmail(url) {
+  const res = await fetch(String(url || '').trim());
+  if (!res.ok) {
+    throw new Error(`Falha ao baixar arquivo (${res.status})`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+function filenameFromStorageUrl(url, fallback) {
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    if (seg && seg.includes('.')) return decodeURIComponent(seg);
+  } catch (_) {
+    /* ignore */
+  }
+  return fallback;
+}
+
+const LABEL_ARQUIVO_TIPO_DOCUMENTO_MEDICAO = {
+  medicao_pdf: 'PDF_Medicao',
+  nf_servico: 'NF_Servico',
+  nf_produto: 'NF_Produto',
+  nf_locacao: 'NF_Locacao',
+  boleto_nf_servico_1: 'Boleto_NF_Servico',
+  boleto_nf_servico_2: 'Boleto_NF_Servico_2',
+  boleto_nf_locacao_1: 'Boleto_Locacao',
+  boleto_nf_locacao_2: 'Boleto_Locacao_2'
+};
+
+/**
+ * Baixa URL pública/privada acessível pelo servidor e monta anexo; evita duplicar a mesma URL.
+ */
+async function tryEmailAttachmentFromUrl(url, fallbackFilename, seenUrls) {
+  const u = String(url || '').trim();
+  if (!u || seenUrls.has(u)) return null;
+  try {
+    const buf = await fetchUrlBufferForEmail(u);
+    seenUrls.add(u);
+    return { filename: filenameFromStorageUrl(u, fallbackFilename), content: buf };
+  } catch (e) {
+    console.error('[medicoes-mensais/enviar] Falha ao obter anexo:', u.substring(0, 96), e.message);
+    return null;
+  }
+}
+
 /** Quando valor_total vem 0 ou omitido, deriva de valor_mensal × quantidade_meses (evita soma 0 no recálculo). */
 function normalizarCustoMensalParaInsert(item) {
   const valorMensal = Number(item.valor_mensal) || 0;
@@ -1163,6 +1209,54 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             gruas: medicao.gruas
           };
 
+          /** PDF único (link público) + cada arquivo em documentos/NF/boletos vinculados à medição. */
+          const attachments = [];
+          const seenAttachmentUrls = new Set();
+
+          try {
+            const { buscarMedicaoCompleta, gerarPdfCompletoMedicao } = await import('./relatorios-medicoes.js');
+            const medicaoCompleta = await buscarMedicaoCompleta(medicao.id);
+            const { pdfBytes, nomeArquivo } = await gerarPdfCompletoMedicao(medicaoCompleta, medicao.id);
+            attachments.push({ filename: nomeArquivo, content: Buffer.from(pdfBytes) });
+          } catch (pdfErr) {
+            console.error('[medicoes-mensais/enviar] Erro ao gerar PDF da medição para anexo:', pdfErr);
+          }
+
+          for (const doc of documentosEmail || []) {
+            if (!doc.caminho_arquivo) continue;
+            const prefix = LABEL_ARQUIVO_TIPO_DOCUMENTO_MEDICAO[doc.tipo_documento] || doc.tipo_documento || 'documento';
+            const fallback = `${prefix}_${doc.numero_documento || doc.id}.pdf`;
+            const att = await tryEmailAttachmentFromUrl(doc.caminho_arquivo, fallback, seenAttachmentUrls);
+            if (att) attachments.push(att);
+          }
+
+          const { data: notasMedicao } = await supabaseAdmin
+            .from('notas_fiscais')
+            .select('id, numero_nf, nome_arquivo, arquivo_nf')
+            .eq('medicao_id', medicao.id);
+
+          for (const nota of notasMedicao || []) {
+            if (!nota.arquivo_nf) continue;
+            const fallback =
+              nota.nome_arquivo && String(nota.nome_arquivo).trim()
+                ? String(nota.nome_arquivo).trim()
+                : `NotaFiscal_medicao_${medicao.id}_${nota.numero_nf || nota.id}.pdf`;
+            const att = await tryEmailAttachmentFromUrl(nota.arquivo_nf, fallback, seenAttachmentUrls);
+            if (att) attachments.push(att);
+          }
+
+          const { data: boletosMedicao } = await supabaseAdmin
+            .from('boletos')
+            .select('id, numero_boleto, arquivo_boleto')
+            .eq('medicao_id', medicao.id);
+
+          for (const bol of boletosMedicao || []) {
+            if (!bol.arquivo_boleto) continue;
+            const fallback = `Boleto_medicao_${medicao.id}_${String(bol.numero_boleto || bol.id).replace(/[^\w.-]+/g, '_')}.pdf`;
+            const att = await tryEmailAttachmentFromUrl(bol.arquivo_boleto, fallback, seenAttachmentUrls);
+            if (att) attachments.push(att);
+          }
+
           // Enviar e-mail (HTML/assunto via template em email_templates.tipo = medicao_enviada)
           for (const emailDestino of emailsUnicos) {
             try {
@@ -1177,7 +1271,8 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
                 to: emailDestino,
                 subject: assunto,
                 html,
-                tipo: 'medicao_enviada'
+                tipo: 'medicao_enviada',
+                ...(attachments.length > 0 ? { attachments } : {}),
               });
             } catch (emailErr) {
               console.error('Erro ao enviar e-mail:', emailErr);

@@ -205,7 +205,10 @@ export const notasFiscaisApi = {
       anexar_boleto?: boolean
     }
   ) {
-    const response = await api.post(`/notas-fiscais/${id}/enviar-email`, body ?? {})
+    // Download de NF/boleto + SMTP pode exceder o timeout global (10s) do axios.
+    const response = await api.post(`/notas-fiscais/${id}/enviar-email`, body ?? {}, {
+      timeout: 120_000,
+    })
     return response.data
   },
 }

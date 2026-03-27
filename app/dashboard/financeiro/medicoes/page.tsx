@@ -5,9 +5,7 @@ import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
@@ -34,7 +32,6 @@ import {
   XCircle,
   Clock,
   Forklift,
-  Send,
   FileText
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
@@ -90,11 +87,6 @@ export default function MedicoesPage() {
   const itemsPerPage = 100
   
   // Estados de diálogos
-  const [selectedMedicao, setSelectedMedicao] = useState<MedicaoMensal | null>(null)
-  const [isEnviarDialogOpen, setIsEnviarDialogOpen] = useState(false)
-  const [emailEnvio, setEmailEnvio] = useState("")
-  const [telefoneEnvio, setTelefoneEnvio] = useState("")
-  const [enviando, setEnviando] = useState(false)
   const [excluindoId, setExcluindoId] = useState<number | null>(null)
 
 
@@ -268,33 +260,6 @@ export default function MedicoesPage() {
 
   const handleEditar = (medicao: MedicaoMensal) => {
     router.push(`/dashboard/medicoes/${medicao.id}/editar`)
-  }
-
-  const handleEnviar = async () => {
-    if (!selectedMedicao) return
-
-    try {
-      setEnviando(true)
-      const response = await medicoesMensaisApi.enviar(selectedMedicao.id, emailEnvio || undefined, telefoneEnvio || undefined)
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: "Medição enviada ao cliente com sucesso"
-        })
-        setIsEnviarDialogOpen(false)
-        setEmailEnvio("")
-        setTelefoneEnvio("")
-        await carregarMedicoes()
-      }
-    } catch (error: any) {
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao enviar medição",
-        variant: "destructive"
-      })
-    } finally {
-      setEnviando(false)
-    }
   }
 
   const handleExcluir = async (medicao: MedicaoMensal) => {
@@ -698,30 +663,6 @@ export default function MedicoesPage() {
                               </Tooltip>
                               <Tooltip>
                                 <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    aria-label={
-                                      medicao.status === "enviada"
-                                        ? "Reenviar medição ao cliente"
-                                        : "Enviar medição ao cliente"
-                                    }
-                                    onClick={() => {
-                                      setSelectedMedicao(medicao)
-                                      setIsEnviarDialogOpen(true)
-                                    }}
-                                  >
-                                    <Send className="w-4 h-4" />
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  {medicao.status === "enviada"
-                                    ? "Reenviar medição ao cliente"
-                                    : "Enviar medição ao cliente"}
-                                </TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
                                   <span className="inline-flex">
                                     <Button
                                       variant="ghost"
@@ -848,47 +789,6 @@ export default function MedicoesPage() {
             </CardContent>
           </Card>
       </div>
-
-      {/* Dialog de Envio */}
-      <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Enviar Medição ao Cliente</DialogTitle>
-            <DialogDescription>
-              Informe o e-mail e telefone para envio das notificações
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                value={emailEnvio}
-                onChange={(e) => setEmailEnvio(e.target.value)}
-                placeholder="email@exemplo.com"
-              />
-            </div>
-            <div>
-              <Label htmlFor="telefone">Telefone (WhatsApp)</Label>
-              <Input
-                id="telefone"
-                value={telefoneEnvio}
-                onChange={(e) => setTelefoneEnvio(e.target.value)}
-                placeholder="5511999999999"
-              />
-            </div>
-          </div>
-          <div className="flex justify-end gap-2 mt-4">
-            <Button variant="outline" onClick={() => setIsEnviarDialogOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={handleEnviar} disabled={enviando}>
-              {enviando ? "Enviando..." : "Enviar"}
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
 
     </div>
   )

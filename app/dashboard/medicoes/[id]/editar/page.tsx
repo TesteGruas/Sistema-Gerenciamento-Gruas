@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,19 +12,30 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { 
-  ArrowLeft, 
+import {
+  ArrowLeft,
   Save,
   Plus,
   Trash2,
   Calculator,
   Check,
-  ChevronsUpDown
+  ChevronsUpDown,
+  Building2,
+  Calendar,
+  CalendarDays,
+  Forklift,
+  Hash,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoMensalUpdate, MedicaoCustoMensal } from "@/lib/api-medicoes-mensais"
 import { itensCustosMensaisApi, ItemCustoMensal } from "@/lib/api-itens-custos-mensais"
-import { medicoesUtils } from "@/lib/medicoes-utils"
+import {
+  medicoesUtils,
+  formatBrlMoneyInputValue,
+  parseBrlMoneyDigitsInput,
+  formatBrlDecimalFlexible,
+  parseBrlDecimalFlexible,
+} from "@/lib/medicoes-utils"
 
 interface CustoMensalForm {
   item: string
@@ -357,38 +368,90 @@ export default function EditarMedicaoPage() {
 
       <form onSubmit={handleSubmit} className="space-y-3">
         {/* Informações Básicas da Medição */}
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="overflow-hidden">
+          <CardHeader className="space-y-1 border-b bg-muted/30 pb-4">
             <CardTitle className="text-base">Informações da Medição</CardTitle>
+            <CardDescription>
+              Número, período, obra e grua vêm do cadastro da medição. Ajuste abaixo apenas a data de referência.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm text-gray-600">
-              <div>
-                <span className="font-medium">Número:</span> {medicao.numero}
+          <CardContent className="space-y-6 pt-6">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="flex gap-3 rounded-lg border bg-card p-3 shadow-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground">
+                  <Hash className="h-4 w-4" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Número
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-foreground">{medicao.numero}</p>
+                </div>
               </div>
-              <div>
-                <span className="font-medium">Período:</span> {medicoesUtils.formatPeriodo(medicao.periodo)}
+              <div className="flex gap-3 rounded-lg border bg-card p-3 shadow-xs">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground">
+                  <CalendarDays className="h-4 w-4" aria-hidden />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    Período
+                  </p>
+                  <p className="mt-0.5 truncate text-sm font-semibold text-foreground">
+                    {medicoesUtils.formatPeriodo(medicao.periodo)}
+                  </p>
+                </div>
               </div>
               {medicao.obras && (
-                <div>
-                  <span className="font-medium">Obra:</span> {medicao.obras.nome}
+                <div className="flex gap-3 rounded-lg border bg-card p-3 shadow-xs sm:col-span-2">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground">
+                    <Building2 className="h-4 w-4" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Obra
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold leading-snug text-foreground">
+                      {medicao.obras.nome}
+                    </p>
+                  </div>
                 </div>
               )}
               {medicao.gruas && (
-                <div>
-                  <span className="font-medium">Grua:</span> {medicao.gruas.name || medicao.gruas.nome}
+                <div className="flex gap-3 rounded-lg border bg-card p-3 shadow-xs sm:col-span-2">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border bg-muted/50 text-muted-foreground">
+                    <Forklift className="h-4 w-4" aria-hidden />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      Grua
+                    </p>
+                    <p className="mt-0.5 text-sm font-semibold leading-snug text-foreground">
+                      {medicao.gruas.name || medicao.gruas.nome}
+                    </p>
+                  </div>
                 </div>
               )}
             </div>
-            <div>
-              <Label htmlFor="data_medicao">Data da Medição</Label>
-              <Input
-                id="data_medicao"
-                type="date"
-                value={editForm.data_medicao}
-                onChange={(e) => setEditForm({ ...editForm, data_medicao: e.target.value })}
-                className="bg-white"
-              />
+
+            <div className="rounded-lg border border-dashed border-primary/25 bg-primary/[0.03] p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+                <div className="space-y-1.5">
+                  <Label htmlFor="data_medicao" className="flex items-center gap-2 text-sm font-medium">
+                    <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    Data da medição
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    Data em que a medição foi registrada ou referenciada no campo.
+                  </p>
+                </div>
+                <Input
+                  id="data_medicao"
+                  type="date"
+                  value={editForm.data_medicao}
+                  onChange={(e) => setEditForm({ ...editForm, data_medicao: e.target.value })}
+                  className="h-10 w-full max-w-[220px] bg-white sm:shrink-0"
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -404,52 +467,72 @@ export default function EditarMedicaoPage() {
                 <Label htmlFor="valor_mensal_bruto">Valor Mensal Bruto (R$)</Label>
                 <Input
                   id="valor_mensal_bruto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editForm.valor_mensal_bruto === 0 ? '' : editForm.valor_mensal_bruto}
-                  onChange={(e) => setEditForm({ ...editForm, valor_mensal_bruto: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={formatBrlMoneyInputValue(editForm.valor_mensal_bruto, true)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      valor_mensal_bruto: parseBrlMoneyDigitsInput(e.target.value),
+                    })
+                  }
+                  placeholder="0,00"
+                  className="bg-white tabular-nums"
                 />
               </div>
               <div>
                 <Label htmlFor="valor_aditivos">Valor Aditivos (R$)</Label>
                 <Input
                   id="valor_aditivos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editForm.valor_aditivos === 0 ? '' : editForm.valor_aditivos}
-                  onChange={(e) => setEditForm({ ...editForm, valor_aditivos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={formatBrlMoneyInputValue(editForm.valor_aditivos, true)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      valor_aditivos: parseBrlMoneyDigitsInput(e.target.value),
+                    })
+                  }
+                  placeholder="0,00"
+                  className="bg-white tabular-nums"
                 />
               </div>
               <div>
                 <Label htmlFor="valor_custos_extras">Custos Extras (R$)</Label>
                 <Input
                   id="valor_custos_extras"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editForm.valor_custos_extras === 0 ? '' : editForm.valor_custos_extras}
-                  onChange={(e) => setEditForm({ ...editForm, valor_custos_extras: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={formatBrlMoneyInputValue(editForm.valor_custos_extras, true)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      valor_custos_extras: parseBrlMoneyDigitsInput(e.target.value),
+                    })
+                  }
+                  placeholder="0,00"
+                  className="bg-white tabular-nums"
                 />
               </div>
               <div>
                 <Label htmlFor="valor_descontos">Descontos (R$)</Label>
                 <Input
                   id="valor_descontos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={editForm.valor_descontos === 0 ? '' : editForm.valor_descontos}
-                  onChange={(e) => setEditForm({ ...editForm, valor_descontos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white"
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  value={formatBrlMoneyInputValue(editForm.valor_descontos, true)}
+                  onChange={(e) =>
+                    setEditForm({
+                      ...editForm,
+                      valor_descontos: parseBrlMoneyDigitsInput(e.target.value),
+                    })
+                  }
+                  placeholder="0,00"
+                  className="bg-white tabular-nums"
                 />
               </div>
             </div>
@@ -723,38 +806,36 @@ export default function EditarMedicaoPage() {
                     <Label htmlFor="custo_quantidade_orcamento" className="text-xs">Qtd. Orç. *</Label>
                     <Input
                       id="custo_quantidade_orcamento"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoForm.quantidade_orcamento === 0 ? '' : custoForm.quantidade_orcamento}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                        setCustoForm({ 
-                          ...custoForm, 
-                          quantidade_orcamento: value
+                      type="text"
+                      inputMode="decimal"
+                      autoComplete="off"
+                      value={formatBrlDecimalFlexible(custoForm.quantidade_orcamento, true)}
+                      onChange={(e) =>
+                        setCustoForm({
+                          ...custoForm,
+                          quantidade_orcamento: parseBrlDecimalFlexible(e.target.value),
                         })
-                      }}
-                      placeholder="0.00"
-                      className="h-8 text-sm bg-white"
+                      }
+                      placeholder="0"
+                      className="h-8 text-sm bg-white tabular-nums"
                     />
                   </div>
                   <div>
                     <Label htmlFor="custo_valor_unitario" className="text-xs">Valor Unit. *</Label>
                     <Input
                       id="custo_valor_unitario"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={custoForm.valor_unitario === 0 ? '' : custoForm.valor_unitario}
-                      onChange={(e) => {
-                        const value = e.target.value === '' ? 0 : parseFloat(e.target.value) || 0
-                        setCustoForm({ 
-                          ...custoForm, 
-                          valor_unitario: value
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatBrlMoneyInputValue(custoForm.valor_unitario, true)}
+                      onChange={(e) =>
+                        setCustoForm({
+                          ...custoForm,
+                          valor_unitario: parseBrlMoneyDigitsInput(e.target.value),
                         })
-                      }}
-                      placeholder="0.00"
-                      className="h-8 text-sm bg-white"
+                      }
+                      placeholder="0,00"
+                      className="h-8 text-sm bg-white tabular-nums"
                     />
                   </div>
                   <div>

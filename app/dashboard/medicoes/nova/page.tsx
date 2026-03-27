@@ -81,6 +81,7 @@ export default function NovaMedicaoPage() {
   const [error, setError] = useState<string | null>(null)
   const [arquivoPdfMedicao, setArquivoPdfMedicao] = useState<File | null>(null)
   const [arquivosAdicionaisMedicao, setArquivosAdicionaisMedicao] = useState<File[]>([])
+  const pdfMedicaoInputRef = useRef<HTMLInputElement | null>(null)
   const anexosAdicionaisInputRef = useRef<HTMLInputElement | null>(null)
 
   const tiposArquivoPermitidos = [
@@ -427,6 +428,13 @@ export default function NovaMedicaoPage() {
     const url = URL.createObjectURL(file)
     window.open(url, '_blank')
     setTimeout(() => URL.revokeObjectURL(url), 10000)
+  }
+
+  const limparPdfMedicao = () => {
+    setArquivoPdfMedicao(null)
+    if (pdfMedicaoInputRef.current) {
+      pdfMedicaoInputRef.current.value = ''
+    }
   }
 
   /** PDF mínimo para testes (upload do documento obrigatório) */
@@ -825,13 +833,16 @@ trailer<</Size 4/Root 1 0 R>>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-3">
-        {/* Informações Básicas da Medição */}
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">Informações Básicas</CardTitle>
+        {/* Dados da medição (sem arquivos) */}
+        <Card className="overflow-hidden">
+          <CardHeader className="space-y-1 border-b bg-muted/30 pb-4">
+            <CardTitle className="text-base">Informações da medição</CardTitle>
+            <CardDescription>
+              Obra, grua, identificação, período de emissão, valores e observações. Os documentos ficam no bloco seguinte.
+            </CardDescription>
           </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <CardContent className="space-y-6 pt-6">
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
               <div>
                 <Label htmlFor="obra_id" className="text-xs">Medição da Obra *</Label>
                 <Popover open={obraSearchOpen} onOpenChange={setObraSearchOpen}>
@@ -910,7 +921,12 @@ trailer<</Size 4/Root 1 0 R>>
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+
+            <div className="border-t pt-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Identificação e período de emissão
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
               <div>
                 <Label htmlFor="numero" className="text-xs">Número da Medição *</Label>
                 <Input
@@ -961,9 +977,14 @@ trailer<</Size 4/Root 1 0 R>>
                   className="bg-gray-100 h-8 text-sm"
                 />
               </div>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="border-t pt-5">
+              <p className="mb-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Valores (R$)
+              </p>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               <div>
                 <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor de Locação (R$)</Label>
                 <Input
@@ -1016,9 +1037,8 @@ trailer<</Size 4/Root 1 0 R>>
                   className="bg-white h-8 text-sm"
                 />
               </div>
-            </div>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
-              <div>
+              </div>
+              <div className="mt-4 max-w-md">
                 <Label htmlFor="valor_total_medicao" className="text-xs">Valor Total da Medição</Label>
                 <Input
                   id="valor_total_medicao"
@@ -1029,59 +1049,151 @@ trailer<</Size 4/Root 1 0 R>>
                     medicaoForm.valor_descontos
                   )}
                   readOnly
-                  className="bg-gray-100 h-8 text-sm"
-                />
-              </div>
-              <div className="lg:col-span-2">
-                <Label htmlFor="pdf_medicao" className="text-xs">Documento da Medição *</Label>
-                <Input
-                  id="pdf_medicao"
-                  type="file"
-                  accept={acceptArquivosMedicao}
-                  onChange={(e) => {
-                    const file = e.target.files?.[0] || null
-                    if (file && !tiposArquivoPermitidos.includes(file.type)) {
-                      toast({
-                        title: "Erro",
-                        description: "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG ou GIF.",
-                        variant: "destructive"
-                      })
-                      setArquivoPdfMedicao(null)
-                      return
-                    }
-                    setArquivoPdfMedicao(file)
-                  }}
-                  className="bg-white text-sm"
+                  className="h-9 bg-muted/50 text-sm font-semibold tabular-nums"
                 />
               </div>
             </div>
-            <div className={`border rounded-lg p-3 ${arquivosAdicionaisMedicao.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}>
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-purple-600" />
-                  <div>
-                    <p className="font-semibold text-sm">Anexos Adicionais</p>
-                    {arquivosAdicionaisMedicao.length > 0 ? (
-                      <>
-                        <p className="text-xs text-gray-600">{arquivosAdicionaisMedicao.length} arquivo(s)</p>
-                        <p className="text-xs text-gray-500">Status: Pendente</p>
-                      </>
-                    ) : (
-                      <p className="text-xs text-gray-500">Nenhum arquivo</p>
-                    )}
-                  </div>
+
+            <div className="border-t pt-5">
+              <Label htmlFor="observacoes" className="text-xs">
+                Observações
+              </Label>
+              <Textarea
+                id="observacoes"
+                value={medicaoForm.observacoes}
+                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
+                placeholder="Observações sobre a medição..."
+                rows={3}
+                className="mt-1.5 bg-white text-sm"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Documentos — mesmo padrão visual da tela de detalhes da medição */}
+        <Card className="overflow-hidden">
+          <CardHeader className="space-y-1 border-b bg-muted/30 pb-4">
+            <CardTitle className="text-base">Documentos</CardTitle>
+            <CardDescription>
+              O documento principal é obrigatório (PDF, Word, Excel ou imagem). Anexos adicionais são opcionais.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4 pt-6">
+            <div
+              className={`rounded-lg border p-3 ${arquivoPdfMedicao ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+            >
+              <div className="mb-3 flex items-start gap-2">
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-purple-600" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Documento da medição</p>
+                  {arquivoPdfMedicao ? (
+                    <>
+                      <p className="truncate text-xs text-gray-600" title={arquivoPdfMedicao.name}>
+                        {arquivoPdfMedicao.name}
+                      </p>
+                      <p className="text-xs text-gray-500">Pronto para envio ao salvar</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500">Nenhum arquivo selecionado</p>
+                      <p className="text-xs text-muted-foreground">
+                        Formatos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG ou GIF
+                      </p>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                {arquivoPdfMedicao && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-full text-xs sm:flex-1 sm:min-w-[6.5rem]"
+                    onClick={() => abrirArquivoAdicional(arquivoPdfMedicao)}
+                  >
+                    <Download className="mr-1 h-3 w-3" />
+                    Abrir
+                  </Button>
+                )}
                 <Button
                   type="button"
-                  variant={arquivosAdicionaisMedicao.length > 0 ? "outline" : "default"}
+                  variant={arquivoPdfMedicao ? 'outline' : 'default'}
                   size="sm"
-                  className="flex-1 h-8 text-xs"
+                  className="h-8 w-full text-xs sm:flex-1 sm:min-w-[6.5rem]"
+                  onClick={() => pdfMedicaoInputRef.current?.click()}
+                >
+                  <Upload className="mr-1 h-3 w-3" />
+                  {arquivoPdfMedicao ? 'Substituir' : 'Enviar arquivo'}
+                </Button>
+                {arquivoPdfMedicao && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 w-full text-xs text-red-600 border-red-300 hover:bg-red-50 sm:w-auto sm:min-w-[6.5rem]"
+                    onClick={limparPdfMedicao}
+                  >
+                    <Trash2 className="mr-1 h-3 w-3" />
+                    Remover
+                  </Button>
+                )}
+              </div>
+              <Input
+                ref={pdfMedicaoInputRef}
+                id="pdf_medicao"
+                type="file"
+                accept={acceptArquivosMedicao}
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0] || null
+                  if (file && !tiposArquivoPermitidos.includes(file.type)) {
+                    toast({
+                      title: "Erro",
+                      description:
+                        "Tipo de arquivo não permitido. Use PDF, DOC, DOCX, XLS, XLSX, JPG, JPEG, PNG ou GIF.",
+                      variant: "destructive",
+                    })
+                    limparPdfMedicao()
+                    return
+                  }
+                  setArquivoPdfMedicao(file)
+                }}
+              />
+            </div>
+
+            <div
+              className={`rounded-lg border p-3 ${arquivosAdicionaisMedicao.length > 0 ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+            >
+              <div className="mb-3 flex items-start gap-2">
+                <FileText className="mt-0.5 h-5 w-5 shrink-0 text-purple-600" aria-hidden />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">Anexos adicionais</p>
+                  {arquivosAdicionaisMedicao.length > 0 ? (
+                    <>
+                      <p className="text-xs text-gray-600">{arquivosAdicionaisMedicao.length} arquivo(s)</p>
+                      <p className="text-xs text-gray-500">Serão enviados ao salvar a medição</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500">Nenhum arquivo selecionado</p>
+                      <p className="text-xs text-muted-foreground">
+                        Formatos: PDF, DOC, DOCX, XLS, XLSX, JPG, PNG ou GIF (múltiplos arquivos)
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+                <Button
+                  type="button"
+                  variant={arquivosAdicionaisMedicao.length > 0 ? 'outline' : 'default'}
+                  size="sm"
+                  className="h-8 w-full text-xs sm:flex-1 sm:min-w-[6.5rem]"
                   onClick={() => anexosAdicionaisInputRef.current?.click()}
                 >
-                  <Upload className="w-3 h-3 mr-1" />
-                  {arquivosAdicionaisMedicao.length > 0 ? 'Adicionar' : 'Enviar'}
+                  <Upload className="mr-1 h-3 w-3" />
+                  {arquivosAdicionaisMedicao.length > 0 ? 'Adicionar arquivo' : 'Enviar arquivo'}
                 </Button>
               </div>
               <Input
@@ -1102,13 +1214,16 @@ trailer<</Size 4/Root 1 0 R>>
               {arquivosAdicionaisMedicao.length > 0 && (
                 <div className="mt-2 space-y-1">
                   {arquivosAdicionaisMedicao.map((arquivo, index) => (
-                    <div key={`${arquivo.name}-${arquivo.size}-${arquivo.lastModified}-${index}`} className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1">
+                    <div
+                      key={`${arquivo.name}-${arquivo.size}-${arquivo.lastModified}-${index}`}
+                      className="flex items-center justify-between rounded border border-gray-200 bg-white px-2 py-1"
+                    >
                       <div className="min-w-0">
-                        <p className="text-xs font-medium truncate">
+                        <p className="truncate text-xs font-medium">
                           Anexo {index + 1}: {arquivo.name}
                         </p>
                       </div>
-                      <div className="flex items-center gap-1">
+                      <div className="flex shrink-0 items-center gap-1">
                         <Button
                           type="button"
                           variant="ghost"
@@ -1116,7 +1231,7 @@ trailer<</Size 4/Root 1 0 R>>
                           className="h-7 text-xs"
                           onClick={() => abrirArquivoAdicional(arquivo)}
                         >
-                          <Download className="w-3 h-3 mr-1" />
+                          <Download className="mr-1 h-3 w-3" />
                           Abrir
                         </Button>
                         <Button
@@ -1126,7 +1241,7 @@ trailer<</Size 4/Root 1 0 R>>
                           className="h-7 text-xs text-red-600 hover:bg-red-50"
                           onClick={() => removerArquivoAdicional(index)}
                         >
-                          <Trash2 className="w-3 h-3 mr-1" />
+                          <Trash2 className="mr-1 h-3 w-3" />
                           Remover
                         </Button>
                       </div>
@@ -1134,17 +1249,6 @@ trailer<</Size 4/Root 1 0 R>>
                   ))}
                 </div>
               )}
-            </div>
-            <div>
-              <Label htmlFor="observacoes" className="text-xs">Observações</Label>
-              <Textarea
-                id="observacoes"
-                value={medicaoForm.observacoes}
-                onChange={(e) => setMedicaoForm({ ...medicaoForm, observacoes: e.target.value })}
-                placeholder="Observações sobre a medição..."
-                rows={2}
-                className="bg-white text-sm"
-              />
             </div>
           </CardContent>
         </Card>
