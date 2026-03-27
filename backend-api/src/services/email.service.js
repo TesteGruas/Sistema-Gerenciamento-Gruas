@@ -276,6 +276,24 @@ function buildFakeVarsForTemplatePreview(tipo, variaveisJson, publicUrl, destina
       horas_trabalhadas: '8.0',
       horas_extras: '2.0',
       link_corrigir: `${baseUrl}/pwa/aprovacao-assinatura?id=0`
+    },
+    nota_fiscal_enviada: {
+      cliente_nome: 'Cliente Exemplo LTDA',
+      empresa,
+      numero_nf: 'ND20261466',
+      serie: 'NFS-e',
+      tipo_nota_label: 'NF de locação',
+      data_emissao_fmt: '17/03/2026',
+      data_vencimento_fmt: '08/04/2026',
+      valor_liquido_fmt: '115.380,90',
+      valor_total_fmt: '115.380,90',
+      boleto_numero: 'Boleto NF-6-ND20261466',
+      boleto_vencimento_fmt: '08/04/2026',
+      boleto_valor_fmt: '115.380,90',
+      tem_boleto: 'Sim',
+      texto_anexos: 'Seguem em anexo o arquivo da nota fiscal e o boleto para pagamento.',
+      observacoes_html: '',
+      ano: year
     }
   };
 
@@ -295,6 +313,9 @@ function buildFakeVarsForTemplatePreview(tipo, variaveisJson, publicUrl, destina
 async function previewEmailTemplateByType({ tipo, assuntoDraft, htmlDraft }) {
   if (tipo === 'medicao_enviada') {
     return previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlDraft });
+  }
+  if (tipo === 'nota_fiscal_enviada') {
+    return previewNotaFiscalEmail({ assunto: assuntoDraft, html_template: htmlDraft });
   }
   const row = await getTemplateRowAny(tipo);
   if (!row) {
@@ -352,6 +373,34 @@ async function buildTestEmailContent({ tipo, destinatario, dados_teste: dadosTes
       cliente: clienteFake,
       empresaNome: dt.empresa || 'Sistema de Gerenciamento de Gruas',
       documentos: documentosTeste
+    });
+  }
+
+  if (tipo === 'nota_fiscal_enviada') {
+    const notaFake = {
+      numero_nf: dt.numero_nf ?? 'ND20261466',
+      serie: dt.serie ?? 'NFS-e',
+      tipo_nota: dt.tipo_nota ?? 'nf_locacao',
+      data_emissao: dt.data_emissao || new Date().toISOString(),
+      data_vencimento: dt.data_vencimento || new Date().toISOString(),
+      valor_liquido: dt.valor_liquido ?? 115380.9,
+      valor_total: dt.valor_total ?? 115380.9,
+      observacoes: dt.observacoes ?? ''
+    };
+    const clienteFake = {
+      nome: dt.cliente_nome || 'Cliente Exemplo LTDA'
+    };
+    const boletoFake = {
+      numero_boleto: dt.boleto_numero || 'Boleto NF-6-ND20261466',
+      data_vencimento: dt.boleto_vencimento || new Date().toISOString(),
+      valor: dt.boleto_valor ?? 115380.9,
+      arquivo_boleto: 'https://exemplo.invalido/boleto.pdf'
+    };
+    return buildNotaFiscalClienteEmail({
+      nota: notaFake,
+      cliente: clienteFake,
+      boleto: boletoFake,
+      empresaNome: dt.empresa || 'Sistema de Gerenciamento de Gruas'
     });
   }
 
@@ -910,6 +959,232 @@ async function buildMedicaoClienteEmail({ medicao, linkPdfPublico, cliente, empr
   };
 }
 
+function labelTipoNotaFiscal(tipoNota) {
+  const m = {
+    nf_servico: 'NF de serviço',
+    nf_locacao: 'NF de locação',
+    fatura: 'Fatura',
+    nfe_eletronica: 'NF-e'
+  };
+  return m[tipoNota] || (tipoNota ? String(tipoNota) : '-');
+}
+
+/**
+ * Variáveis {{...}} para template de nota fiscal enviada ao cliente.
+ */
+function buildNotaFiscalEmailVars({ nota, cliente, boleto, empresaNome }) {
+  const empresa = empresaNome || 'Sistema de Gerenciamento de Gruas';
+  const fmtDate = (d) => {
+    if (!d) return '-';
+    const x = new Date(d);
+    return Number.isNaN(x.getTime()) ? '-' : x.toLocaleDateString('pt-BR');
+  };
+  const vl = parseFloat(nota.valor_liquido != null ? nota.valor_liquido : nota.valor_total || 0);
+  const vt = parseFloat(nota.valor_total || 0);
+  const valorLiquidoFmt = fmtMoneyBrlMedicao(vl);
+  const valorTotalFmt = fmtMoneyBrlMedicao(vt);
+  const temBoleto = Boolean(boleto && boleto.arquivo_boleto);
+  const textoAnexos = temBoleto
+    ? 'Seguem em anexo o arquivo da nota fiscal e o boleto para pagamento.'
+    : 'Segue em anexo o arquivo da nota fiscal.';
+  const observacoesHtml = (nota.observacoes && String(nota.observacoes).trim())
+    ? `<p style="margin:16px 0 0;font-size:13px;color:#374151;"><strong>Observações:</strong><br/>${escapeHtmlMedicao(nota.observacoes)}</p>`
+    : '';
+
+  let boletoNumero = '-';
+  let boletoVenc = '-';
+  let boletoValor = '-';
+  if (boleto) {
+    boletoNumero = String(boleto.numero_boleto || '-');
+    boletoVenc = fmtDate(boleto.data_vencimento);
+    boletoValor = fmtMoneyBrlMedicao(boleto.valor);
+  }
+
+  return {
+    cliente_nome: cliente?.nome || '-',
+    empresa,
+    numero_nf: String(nota.numero_nf || ''),
+    serie: nota.serie && String(nota.serie).trim() ? String(nota.serie) : '-',
+    tipo_nota_label: labelTipoNotaFiscal(nota.tipo_nota),
+    data_emissao_fmt: fmtDate(nota.data_emissao),
+    data_vencimento_fmt: fmtDate(nota.data_vencimento),
+    valor_liquido_fmt: valorLiquidoFmt,
+    valor_total_fmt: valorTotalFmt,
+    boleto_numero: boletoNumero,
+    boleto_vencimento_fmt: boletoVenc,
+    boleto_valor_fmt: boletoValor,
+    tem_boleto: temBoleto ? 'Sim' : 'Não',
+    texto_anexos: textoAnexos,
+    observacoes_html: observacoesHtml,
+    ano: new Date().getFullYear()
+  };
+}
+
+function getDefaultNotaFiscalEnviadaTemplateHtml() {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nota fiscal</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:16px 8px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="padding:20px 24px;border-bottom:2px solid #0d9488;text-align:center;">
+              <p style="margin:0;font-size:20px;font-weight:bold;color:#134e4a;">{{empresa}}</p>
+              <p style="margin:10px 0 0;font-size:14px;color:#4b5563;">Nota fiscal e cobrança</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 24px;">
+              <p style="margin:0 0 12px;font-size:15px;color:#111827;">Olá, <strong>{{cliente_nome}}</strong>,</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.5;">{{texto_anexos}}</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:12px;">
+                <tr>
+                  <td width="50%" style="padding:6px 8px 6px 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Número</p>
+                    <p style="margin:4px 0 0;font-size:15px;font-weight:600;">{{numero_nf}}</p>
+                  </td>
+                  <td width="50%" style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Série</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{serie}}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 8px 6px 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Tipo</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{tipo_nota_label}}</p>
+                  </td>
+                  <td style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor líquido</p>
+                    <p style="margin:4px 0 0;font-size:16px;font-weight:700;color:#0d9488;">R$ {{valor_liquido_fmt}}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td colspan="2" style="padding:8px 0 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Emissão · Vencimento</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{data_emissao_fmt}} · {{data_vencimento_fmt}}</p>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:16px 0 8px;font-size:12px;font-weight:600;color:#6b7280;text-transform:uppercase;">Boleto vinculado</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="background:#f9fafb;border-radius:8px;padding:12px;">
+                <tr>
+                  <td style="padding:4px 0;">
+                    <span style="font-size:12px;color:#6b7280;">Referência:</span>
+                    <span style="font-size:13px;font-weight:600;margin-left:6px;">{{boleto_numero}}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:4px 0;">
+                    <span style="font-size:12px;color:#6b7280;">Vencimento:</span>
+                    <span style="font-size:13px;margin-left:6px;">{{boleto_vencimento_fmt}}</span>
+                    <span style="font-size:12px;color:#6b7280;margin-left:16px;">Valor:</span>
+                    <span style="font-size:13px;font-weight:600;margin-left:6px;">R$ {{boleto_valor_fmt}}</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:8px 0 0;font-size:12px;color:#6b7280;">Há boleto em anexo: {{tem_boleto}}</td>
+                </tr>
+              </table>
+              {{observacoes_html}}
+              <p style="margin:24px 0 0;font-size:12px;color:#9ca3af;">© {{ano}} {{empresa}}</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+function getFakeNotaFiscalPreviewPayload() {
+  const agora = new Date().toISOString();
+  return {
+    nota: {
+      numero_nf: 'ND20261466',
+      serie: 'NFS-e',
+      tipo_nota: 'nf_locacao',
+      data_emissao: agora,
+      data_vencimento: agora,
+      valor_liquido: 115380.9,
+      valor_total: 115380.9,
+      observacoes: ''
+    },
+    cliente: { nome: 'Cliente Exemplo LTDA' },
+    boleto: {
+      numero_boleto: 'Boleto NF-6-ND20261466',
+      data_vencimento: agora,
+      valor: 115380.9,
+      arquivo_boleto: 'https://exemplo.invalido/boleto.pdf'
+    },
+    empresaNome: 'Sistema de Gerenciamento de Gruas'
+  };
+}
+
+/**
+ * Preview do e-mail de nota fiscal (dados fictícios ou rascunho do editor).
+ */
+async function previewNotaFiscalEmail({ assunto: assuntoDraft, html_template: htmlDraft } = {}) {
+  const { nota, cliente, boleto, empresaNome } = getFakeNotaFiscalPreviewPayload();
+  const vars = buildNotaFiscalEmailVars({ nota, cliente, boleto, empresaNome });
+
+  const hasDraft =
+    typeof assuntoDraft === 'string' &&
+    typeof htmlDraft === 'string' &&
+    assuntoDraft.trim() !== '' &&
+    htmlDraft.trim() !== '';
+
+  if (hasDraft) {
+    return {
+      assunto: replaceVariables(assuntoDraft, vars),
+      html: replaceVariables(htmlDraft, vars)
+    };
+  }
+
+  const tpl = await getActiveTemplateRow('nota_fiscal_enviada');
+  if (tpl) {
+    return {
+      assunto: replaceVariables(tpl.assunto, vars),
+      html: replaceVariables(tpl.html_template, vars)
+    };
+  }
+
+  return {
+    assunto: `Nota fiscal ${vars.numero_nf} — ${vars.empresa}`,
+    html: replaceVariables(getDefaultNotaFiscalEnviadaTemplateHtml(), vars)
+  };
+}
+
+/**
+ * Monta assunto e HTML do e-mail de nota fiscal (template DB ou padrão).
+ * @param {Object} params.nota
+ * @param {Object} params.cliente
+ * @param {Object} [params.boleto] — boleto com arquivo_boleto quando houver
+ * @param {string} [params.empresaNome]
+ */
+async function buildNotaFiscalClienteEmail({ nota, cliente, boleto, empresaNome }) {
+  const vars = buildNotaFiscalEmailVars({ nota, cliente, boleto, empresaNome });
+
+  const tpl = await getActiveTemplateRow('nota_fiscal_enviada');
+  if (tpl) {
+    return {
+      assunto: replaceVariables(tpl.assunto, vars),
+      html: replaceVariables(tpl.html_template, vars)
+    };
+  }
+
+  return {
+    assunto: `Nota fiscal ${vars.numero_nf} — ${vars.empresa}`,
+    html: replaceVariables(getDefaultNotaFiscalEnviadaTemplateHtml(), vars)
+  };
+}
+
 /**
  * Registra log de email no banco
  * @param {Object} logData - Dados do log
@@ -952,12 +1227,17 @@ async function sendEmail(options) {
       subject: options.subject,
       html: options.html
     };
+
+    if (Array.isArray(options.attachments) && options.attachments.length > 0) {
+      mailOptions.attachments = options.attachments;
+    }
     
     console.log('[sendEmail] Opções do email:', {
       from: mailOptions.from,
       to: mailOptions.to,
       subject: mailOptions.subject,
-      html_length: mailOptions.html?.length
+      html_length: mailOptions.html?.length,
+      attachments_count: mailOptions.attachments?.length || 0
     });
     
     const info = await transporter.sendMail(mailOptions);
@@ -1320,6 +1600,7 @@ export {
   replaceVariables,
   logEmail,
   buildMedicaoClienteEmail,
+  buildNotaFiscalClienteEmail,
   previewMedicaoEmail,
   previewEmailTemplateByType,
   buildTestEmailContent

@@ -404,6 +404,7 @@ export default function EmailConfigPage() {
       reset_password: { label: 'Redefinição', color: 'bg-orange-500' },
       password_changed: { label: 'Senha Alterada', color: 'bg-green-500' },
       medicao_enviada: { label: 'Medição', color: 'bg-cyan-600' },
+      nota_fiscal_enviada: { label: 'Nota fiscal', color: 'bg-teal-600' },
       test: { label: 'Teste', color: 'bg-purple-500' },
       custom: { label: 'Personalizado', color: 'bg-gray-500' }
     }

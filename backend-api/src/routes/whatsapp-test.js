@@ -21,6 +21,129 @@ function gerarIdRegistro(prefix = 'REG') {
 const router = express.Router();
 
 const WHATSAPP_WEBHOOK_URL = process.env.WHATSAPP_WEBHOOK_URL || 'https://gsouzabd.app.n8n.cloud/webhook/irbana-notify';
+
+function replaceTemplateVars(template, data = {}) {
+  let out = String(template || '');
+  Object.keys(data || {}).forEach((key) => {
+    out = out.replace(new RegExp(`{{${key}}}`, 'g'), data[key] == null ? '' : String(data[key]));
+  });
+  return out.replace(/\|/g, '\n');
+}
+
+function normalizarNumeroWhatsApp(valor) {
+  const digits = String(valor || '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('55')) return digits;
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  return digits;
+}
+
+router.get('/templates', authenticateToken, async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('whatsapp_templates')
+      .select('id, tipo, nome, texto_template, variaveis, ativo, updated_at')
+      .order('tipo', { ascending: true });
+
+    if (error) throw error;
+    return res.json({ success: true, data: data || [] });
+  } catch (error) {
+    console.error('[whatsapp-templates] Erro ao listar templates:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao listar templates de WhatsApp' });
+  }
+});
+
+router.get('/templates/:type', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { data, error } = await supabaseAdmin
+      .from('whatsapp_templates')
+      .select('*')
+      .eq('tipo', type)
+      .single();
+
+    if (error || !data) {
+      return res.status(404).json({ success: false, message: 'Template de WhatsApp não encontrado' });
+    }
+    return res.json({ success: true, data });
+  } catch (error) {
+    console.error('[whatsapp-templates] Erro ao buscar template:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao buscar template de WhatsApp' });
+  }
+});
+
+router.put('/templates/:type', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { nome, texto_template, ativo } = req.body || {};
+
+    if (!nome || typeof nome !== 'string' || !String(nome).trim()) {
+      return res.status(400).json({ success: false, message: 'Nome é obrigatório' });
+    }
+    if (!texto_template || typeof texto_template !== 'string' || !String(texto_template).trim()) {
+      return res.status(400).json({ success: false, message: 'Texto do template é obrigatório' });
+    }
+    if (typeof ativo !== 'boolean') {
+      return res.status(400).json({ success: false, message: 'Campo ativo deve ser booleano' });
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('whatsapp_templates')
+      .update({
+        nome: String(nome).trim(),
+        texto_template: String(texto_template),
+        ativo,
+        updated_at: new Date().toISOString(),
+        updated_by: req.user?.id || null
+      })
+      .eq('tipo', type)
+      .select('*')
+      .single();
+
+    if (error) throw error;
+    return res.json({ success: true, data, message: 'Template de WhatsApp atualizado com sucesso' });
+  } catch (error) {
+    console.error('[whatsapp-templates] Erro ao atualizar template:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao atualizar template de WhatsApp' });
+  }
+});
+
+router.post('/templates/:type/preview', authenticateToken, async (req, res) => {
+  try {
+    const { type } = req.params;
+    const { texto_template: textoDraft, dados_teste } = req.body || {};
+
+    const { data: row, error } = await supabaseAdmin
+      .from('whatsapp_templates')
+      .select('tipo, texto_template, variaveis')
+      .eq('tipo', type)
+      .single();
+
+    if (error || !row) {
+      return res.status(404).json({ success: false, message: 'Template de WhatsApp não encontrado' });
+    }
+
+    const template = typeof textoDraft === 'string' && textoDraft.trim()
+      ? textoDraft
+      : row.texto_template;
+    const vars = Array.isArray(row.variaveis) ? row.variaveis : [];
+    const dados = (dados_teste && typeof dados_teste === 'object') ? { ...dados_teste } : {};
+    vars.forEach((v) => {
+      if (dados[v] == null) dados[v] = `(${v})`;
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        tipo: type,
+        mensagem: replaceTemplateVars(template, dados)
+      }
+    });
+  } catch (error) {
+    console.error('[whatsapp-templates] Erro ao gerar preview:', error);
+    return res.status(500).json({ success: false, message: 'Erro ao gerar preview do template' });
+  }
+});
 /**
  * POST /api/whatsapp/test
  * Envia mensagem de teste via webhook n8n
@@ -39,11 +162,11 @@ router.post('/test', authenticateToken, async (req, res) => {
     }
 
     // Validar formato do número (apenas dígitos)
-    const numeroLimpo = String(number).replace(/\D/g, '');
+    const numeroLimpo = normalizarNumeroWhatsApp(number);
     if (numeroLimpo.length < 10) {
       return res.status(400).json({
         success: false,
-        message: 'Número inválido. Deve conter código do país + DDD + número'
+        message: 'Número inválido. Informe DDD + número (ex.: 81987440990)'
       });
     }
 

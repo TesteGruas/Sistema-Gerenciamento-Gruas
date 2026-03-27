@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Loader2, Plus, Pencil, LayoutTemplate, Sparkles, BookOpen } from "lucide-react"
+import { Loader2, Plus, Pencil, LayoutTemplate, Sparkles, BookOpen, MessageCircle } from "lucide-react"
 import api from "@/lib/api"
 import { useToast } from "@/hooks/use-toast"
 import {
@@ -154,6 +154,7 @@ export default function TemplatesEmailOverviewPage() {
 
   const categoryOrder: EmailTemplateCatalogItem["categoria"][] = [
     "medicao",
+    "financeiro",
     "conta",
     "ponto",
     "sistema",
@@ -177,10 +178,18 @@ export default function TemplatesEmailOverviewPage() {
             fluxo (medição, nova obra, ponto, conta, etc.) conforme o código atual.
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
-          <Plus className="h-4 w-4" />
-          Novo template
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" asChild className="shrink-0 gap-2">
+            <Link href="/dashboard/configuracoes/templates-whatsapp">
+              <MessageCircle className="h-4 w-4" />
+              Templates WhatsApp
+            </Link>
+          </Button>
+          <Button onClick={() => setCreateOpen(true)} className="shrink-0 gap-2">
+            <Plus className="h-4 w-4" />
+            Novo template
+          </Button>
+        </div>
       </div>
 
       <Tabs defaultValue="templates" className="space-y-6">

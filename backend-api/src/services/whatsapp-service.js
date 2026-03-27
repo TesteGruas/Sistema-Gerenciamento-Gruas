@@ -249,6 +249,31 @@ function formatarTelefone(telefone) {
   return normalizarTelefoneBrasilParaWhatsApp(telefone);
 }
 
+async function getActiveWhatsAppTemplateRow(tipo) {
+  const { data, error } = await supabaseAdmin
+    .from('whatsapp_templates')
+    .select('tipo, texto_template, ativo')
+    .eq('tipo', tipo)
+    .eq('ativo', true)
+    .maybeSingle();
+  if (error || !data) return null;
+  return data;
+}
+
+function replaceWhatsAppTemplateVars(template, data = {}) {
+  let out = String(template || '');
+  Object.keys(data || {}).forEach((k) => {
+    out = out.replace(new RegExp(`{{${k}}}`, 'g'), data[k] == null ? '' : String(data[k]));
+  });
+  return out.replace(/\|/g, '\n');
+}
+
+async function renderWhatsAppMessage({ tipo, fallbackText, vars = {} }) {
+  const tpl = await getActiveWhatsAppTemplateRow(tipo);
+  if (!tpl?.texto_template) return fallbackText;
+  return replaceWhatsAppTemplateVars(tpl.texto_template, vars);
+}
+
 /**
  * Busca telefone WhatsApp do cliente
  * @param {number} cliente_id - ID do cliente
@@ -628,7 +653,7 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
       if (!response.ok) {
         const errorText = await response.text().catch(() => '');
         console.error(`[whatsapp-service] ❌ Erro HTTP: ${response.status} - ${errorText}`);
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        throw new Error(`HTTP ${response.status}: ${response.statusText}${errorText ? ` - ${errorText}` : ''}`);
       }
       
       const responseData = await response.json().catch(() => ({}));
@@ -663,6 +688,47 @@ export async function enviarMensagemWebhook(telefone, mensagem, link = null, opc
     }
   }
   
+  // Fallback extra: se envio direto na Evolution falhar, tentar webhook n8n uma vez.
+  if (usarEvolutionDireto && WHATSAPP_WEBHOOK_URL) {
+    try {
+      console.warn('[whatsapp-service] ⚠️ Falha no envio direto. Tentando fallback webhook n8n...');
+      const payloadFallback = { number: telefone, text: mensagem };
+      if (link) payloadFallback.link = link;
+      if (evolutionConfig?.instance_name) payloadFallback.instance_name = evolutionConfig.instance_name;
+      if (evolutionConfig?.apikey) payloadFallback.apikey = evolutionConfig.apikey;
+
+      const responseFallback = await fetch(WHATSAPP_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payloadFallback)
+      });
+
+      if (!responseFallback.ok) {
+        const fallbackTxt = await responseFallback.text().catch(() => '');
+        throw new Error(`Webhook fallback HTTP ${responseFallback.status}${fallbackTxt ? ` - ${fallbackTxt}` : ''}`);
+      }
+
+      logId = await registrarLogWhatsApp({
+        tipo: tipoNotificacao,
+        telefone_destino: telefone,
+        mensagem: mensagem,
+        aprovacao_id: opcoesLog.aprovacao_id || null,
+        status: 'enviado',
+        tentativas: tentativas + 1
+      });
+
+      return {
+        sucesso: true,
+        erro: null,
+        telefone: telefone,
+        log_id: logId
+      };
+    } catch (fallbackError) {
+      ultimoErro = fallbackError;
+      console.error('[whatsapp-service] ❌ Fallback webhook também falhou:', fallbackError?.message || fallbackError);
+    }
+  }
+
   console.error(`[whatsapp-service] ❌ Falha após ${maxTentativas} tentativas para ${telefone}`);
   
   logId = await registrarLogWhatsApp({
@@ -862,9 +928,27 @@ export async function enviarMensagemNovaObra(obra) {
       resultados.erros.push('Cliente: Obra não possui cliente associado');
     }
     
-    // Formatar mensagem usando obra completa
-    const mensagem = formatarMensagemNovaObra(obraCompleta, cliente);
     const linkObra = `${getPublicFrontendUrl()}/dashboard/obras/${obraCompleta.id}`;
+    const dataInicioFmt = obraCompleta?.data_inicio
+      ? new Date(obraCompleta.data_inicio).toLocaleDateString('pt-BR')
+      : 'Não informada';
+    const enderecoCompleto = [obraCompleta?.endereco, obraCompleta?.cidade, obraCompleta?.estado]
+      .filter(Boolean)
+      .join(', ');
+    const mensagemPadrao = formatarMensagemNovaObra(obraCompleta, cliente);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'nova_obra',
+      fallbackText: mensagemPadrao,
+      vars: {
+        obra_nome: obraCompleta?.nome || 'Sem nome',
+        cliente_nome: cliente?.nome || 'Não informado',
+        endereco_completo: enderecoCompleto || 'Não informado',
+        responsavel_nome: obraCompleta?.responsavel_nome || 'Não informado',
+        data_inicio: dataInicioFmt,
+        status_obra: obraCompleta?.status || 'Não informado',
+        link_obra: linkObra
+      }
+    });
     
     // Lista de destinatários (cliente + responsável/gestores)
     const destinatarios = [];
@@ -1046,9 +1130,18 @@ export async function enviarMensagemNovoUsuarioFuncionario(funcionario, email, s
       };
     }
     
-    // Formatar mensagem
-    const mensagem = formatarMensagemNovoUsuarioFuncionario(funcionario, email, senhaTemporaria);
     const linkLogin = `${getPublicFrontendUrl()}/login`;
+    const mensagemPadrao = formatarMensagemNovoUsuarioFuncionario(funcionario, email, senhaTemporaria);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'novo_usuario_funcionario',
+      fallbackText: mensagemPadrao,
+      vars: {
+        nome: funcionario?.nome || 'Funcionário',
+        email,
+        senha_temporaria: senhaTemporaria,
+        link_login: linkLogin
+      }
+    });
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1119,9 +1212,19 @@ export async function enviarMensagemNovoUsuarioCliente(cliente, email, senhaTemp
       };
     }
     
-    // Formatar mensagem
-    const mensagem = formatarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria);
     const linkLogin = `${getPublicFrontendUrl()}/login`;
+    const mensagemPadrao = formatarMensagemNovoUsuarioCliente(cliente, email, senhaTemporaria);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'novo_usuario_cliente',
+      fallbackText: mensagemPadrao,
+      vars: {
+        contato_nome: cliente?.contato || cliente?.nome || 'Cliente',
+        empresa_nome: cliente?.nome || 'Empresa',
+        email,
+        senha_temporaria: senhaTemporaria,
+        link_login: linkLogin
+      }
+    });
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1192,9 +1295,18 @@ export async function enviarMensagemResetSenhaFuncionario(funcionario, email, se
       };
     }
     
-    // Formatar mensagem de reset de senha
-    const mensagem = formatarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria);
     const linkLogin = `${getPublicFrontendUrl()}/login`;
+    const mensagemPadrao = formatarMensagemResetSenhaFuncionario(funcionario, email, senhaTemporaria);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'reset_senha_funcionario',
+      fallbackText: mensagemPadrao,
+      vars: {
+        nome: funcionario?.nome || 'Funcionário',
+        email,
+        senha_temporaria: senhaTemporaria,
+        link_login: linkLogin
+      }
+    });
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1329,9 +1441,17 @@ export async function enviarMensagemForgotPassword(usuario, token) {
       };
     }
     
-    // Formatar mensagem
-    const mensagem = formatarMensagemForgotPassword(usuario, token);
     const resetLink = `${getPublicFrontendUrl()}/auth/reset-password/${token}`;
+    const mensagemPadrao = formatarMensagemForgotPassword(usuario, token);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'forgot_password',
+      fallbackText: mensagemPadrao,
+      vars: {
+        nome: usuario?.nome || 'Usuário',
+        reset_link: resetLink,
+        tempo_expiracao: '1 hora'
+      }
+    });
     
     // Enviar mensagem
     const resultado = await enviarMensagemWebhook(
@@ -1409,8 +1529,19 @@ export async function enviarMensagemAprovacao(aprovacao, supervisor = null) {
     // Gerar link de aprovação
     const linkAprovacao = `${getPublicFrontendUrl()}/aprovacaop/${aprovacao.id}?token=${token}`;
     
-    // Formatar mensagem
-    const mensagem = formatarMensagemAprovacao(aprovacao, funcionario, linkAprovacao);
+    const dataTrabalho = new Date(aprovacao.data_trabalho).toLocaleDateString('pt-BR');
+    const horasExtras = parseFloat(aprovacao.horas_extras).toFixed(2);
+    const mensagemPadrao = formatarMensagemAprovacao(aprovacao, funcionario, linkAprovacao);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'aprovacao_horas_extras',
+      fallbackText: mensagemPadrao,
+      vars: {
+        funcionario_nome: funcionario?.nome || `Funcionário #${aprovacao.funcionario_id}`,
+        data_trabalho: dataTrabalho,
+        horas_extras: horasExtras,
+        link_aprovacao: linkAprovacao
+      }
+    });
     
     // Enviar mensagem usando função auxiliar (que já registra logs)
     const resultado = await enviarMensagemWebhook(

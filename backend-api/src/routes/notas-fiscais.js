@@ -5,6 +5,30 @@ import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import Joi from 'joi';
 import { XMLParser } from 'fast-xml-parser';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
+import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { sendEmail, buildNotaFiscalClienteEmail } from '../services/email.service.js';
+
+async function fetchUrlBufferForEmail(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    throw new Error(`Falha ao baixar arquivo (${res.status})`);
+  }
+  return Buffer.from(await res.arrayBuffer());
+}
+
+function filenameFromStorageUrl(url, fallback) {
+  try {
+    const u = new URL(url);
+    const seg = u.pathname.split('/').filter(Boolean).pop();
+    if (seg && seg.includes('.')) return decodeURIComponent(seg);
+  } catch (_) {}
+  return fallback;
+}
+
+function normalizarEmailLista(v) {
+  if (!v || typeof v !== 'string') return '';
+  return v.trim().toLowerCase();
+}
 
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
@@ -2670,6 +2694,166 @@ router.get('/:id/boletos', async (req, res) => {
     });
   } catch (error) {
     console.error('Erro ao listar boletos da nota fiscal:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+const enviarNotaEmailSchema = Joi.object({
+  email: Joi.string().email().allow('', null).optional(),
+  incluir_contato_cliente: Joi.boolean().optional().default(true),
+  anexar_boleto: Joi.boolean().optional().default(true)
+});
+
+/**
+ * POST /api/notas-fiscais/:id/enviar-email
+ * Envia nota fiscal por e-mail (template nota_fiscal_enviada) com anexos da NF e do boleto quando houver.
+ */
+router.post('/:id/enviar-email', authenticateToken, requirePermission('financeiro:editar'), async (req, res) => {
+  try {
+    const { id } = req.params;
+    const notaId = parseInt(id, 10);
+    if (Number.isNaN(notaId)) {
+      return res.status(400).json({ success: false, message: 'ID inválido' });
+    }
+
+    const { error: joiErr, value: body } = enviarNotaEmailSchema.validate(req.body || {}, { stripUnknown: true });
+    if (joiErr) {
+      return res.status(400).json({ success: false, message: joiErr.details[0]?.message || 'Dados inválidos' });
+    }
+
+    const { email: emailManual, incluir_contato_cliente: incluirContato, anexar_boleto: anexarBoleto } = body;
+
+    const { data: nota, error: notaErr } = await supabaseAdmin
+      .from('notas_fiscais')
+      .select(`
+        *,
+        clientes(id, nome, email, contato_email)
+      `)
+      .eq('id', notaId)
+      .single();
+
+    if (notaErr || !nota) {
+      return res.status(404).json({ success: false, message: 'Nota fiscal não encontrada' });
+    }
+
+    if (nota.tipo !== 'saida') {
+      return res.status(400).json({
+        success: false,
+        message: 'Envio por e-mail disponível apenas para notas de saída'
+      });
+    }
+
+    if (!nota.arquivo_nf || !String(nota.arquivo_nf).trim()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cadastre o arquivo da nota fiscal antes de enviar por e-mail'
+      });
+    }
+
+    if (!nota.cliente_id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Nota sem cliente vinculado'
+      });
+    }
+
+    const { data: boletosNota, error: bolErr } = await supabaseAdmin
+      .from('boletos')
+      .select('id, numero_boleto, valor, data_vencimento, arquivo_boleto')
+      .eq('nota_fiscal_id', notaId)
+      .order('data_vencimento', { ascending: true });
+
+    if (bolErr) throw bolErr;
+
+    const boletoComArquivo = (boletosNota || []).find((b) => Boolean(b.arquivo_boleto));
+
+    const cliente = nota.clientes || {};
+    const destinos = [];
+    if (emailManual && String(emailManual).trim()) {
+      destinos.push(normalizarEmailLista(emailManual));
+    }
+    if (incluirContato) {
+      if (cliente.contato_email) destinos.push(normalizarEmailLista(cliente.contato_email));
+      if (cliente.email) destinos.push(normalizarEmailLista(cliente.email));
+    }
+    const emailsUnicos = [...new Set(destinos.filter(Boolean))];
+
+    if (emailsUnicos.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Informe um e-mail ou cadastre e-mail/contato no cliente'
+      });
+    }
+
+    const avisos = [];
+
+    const attachments = [];
+    try {
+      const nfBuf = await fetchUrlBufferForEmail(nota.arquivo_nf);
+      const nfName =
+        nota.nome_arquivo && String(nota.nome_arquivo).trim()
+          ? String(nota.nome_arquivo).trim()
+          : filenameFromStorageUrl(nota.arquivo_nf, `NotaFiscal_${nota.numero_nf || notaId}.pdf`);
+      attachments.push({ filename: nfName, content: nfBuf });
+    } catch (e) {
+      console.error('[notas-fiscais/enviar-email] Erro ao baixar arquivo da NF:', e);
+      return res.status(500).json({
+        success: false,
+        message: 'Não foi possível obter o arquivo da nota fiscal para anexar. Verifique o link do arquivo.',
+        error: e.message
+      });
+    }
+
+    if (anexarBoleto && boletoComArquivo?.arquivo_boleto) {
+      try {
+        const bBuf = await fetchUrlBufferForEmail(boletoComArquivo.arquivo_boleto);
+        const bName = filenameFromStorageUrl(
+          boletoComArquivo.arquivo_boleto,
+          `Boleto_${String(boletoComArquivo.numero_boleto || 'cobranca').replace(/[^\w.-]+/g, '_')}.pdf`
+        );
+        attachments.push({ filename: bName, content: bBuf });
+      } catch (e) {
+        console.error('[notas-fiscais/enviar-email] Erro ao baixar boleto:', e);
+        avisos.push('O boleto não foi anexado: falha ao baixar o arquivo. O e-mail foi enviado apenas com a nota fiscal.');
+      }
+    } else if (anexarBoleto && (boletosNota || []).length > 0 && !boletoComArquivo) {
+      avisos.push('Nenhum arquivo de boleto disponível; enviado apenas o arquivo da nota fiscal.');
+    }
+
+    const { assunto, html } = await buildNotaFiscalClienteEmail({
+      nota,
+      cliente: { nome: cliente.nome, id: cliente.id },
+      boleto: boletoComArquivo || null
+    });
+
+    for (const to of emailsUnicos) {
+      await sendEmail({
+        to,
+        subject: assunto,
+        html,
+        tipo: 'nota_fiscal_enviada',
+        attachments
+      });
+    }
+
+    res.json({
+      success: true,
+      message:
+        emailsUnicos.length > 1
+          ? `Nota fiscal enviada por e-mail para ${emailsUnicos.length} destinatários`
+          : 'Nota fiscal enviada por e-mail com sucesso',
+      data: {
+        destinatarios: emailsUnicos,
+        anexos: attachments.map((a) => a.filename),
+        avisos
+      }
+    });
+  } catch (error) {
+    console.error('Erro ao enviar nota fiscal por e-mail:', error);
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',

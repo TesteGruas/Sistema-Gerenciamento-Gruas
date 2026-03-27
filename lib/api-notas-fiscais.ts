@@ -194,6 +194,19 @@ export const notasFiscaisApi = {
   async deletarItem(itemId: number) {
     const response = await api.delete(`/notas-fiscais/itens/${itemId}`)
     return response.data
-  }
+  },
+
+  /** Envia nota de saída por e-mail (NF + boleto em anexo quando existir). Requer permissão financeiro:editar. */
+  async enviarPorEmail(
+    id: number,
+    body?: {
+      email?: string
+      incluir_contato_cliente?: boolean
+      anexar_boleto?: boolean
+    }
+  ) {
+    const response = await api.post(`/notas-fiscais/${id}/enviar-email`, body ?? {})
+    return response.data
+  },
 }
 

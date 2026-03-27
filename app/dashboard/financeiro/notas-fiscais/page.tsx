@@ -42,7 +42,8 @@ import {
   XCircle,
   Clock,
   AlertTriangle,
-  Zap
+  Zap,
+  Mail,
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 import { clientesApi } from "@/lib/api-clientes"
@@ -118,6 +119,13 @@ export default function NotasFiscaisPage() {
   const [isImportDialogOpen, setIsImportDialogOpen] = useState(false)
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importing, setImporting] = useState(false)
+
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false)
+  const [emailNota, setEmailNota] = useState<NotaFiscal | null>(null)
+  const [emailExtra, setEmailExtra] = useState("")
+  const [incluirEmailsCliente, setIncluirEmailsCliente] = useState(true)
+  const [anexarBoletoEmail, setAnexarBoletoEmail] = useState(true)
+  const [emailSending, setEmailSending] = useState(false)
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -1643,6 +1651,64 @@ export default function NotasFiscaisPage() {
     }
   }
 
+  const handleOpenEnviarEmail = (nota: NotaFiscal) => {
+    if (!nota.cliente_id) {
+      toast({
+        title: "Aviso",
+        description: "Associe um cliente à nota para enviar por e-mail",
+        variant: "destructive"
+      })
+      return
+    }
+    if (!nota.arquivo_nf) {
+      toast({
+        title: "Aviso",
+        description: "Faça o upload do arquivo da nota fiscal antes de enviar por e-mail",
+        variant: "destructive"
+      })
+      return
+    }
+    setEmailNota(nota)
+    setEmailExtra("")
+    setIncluirEmailsCliente(true)
+    setAnexarBoletoEmail(true)
+    setEmailDialogOpen(true)
+  }
+
+  const handleConfirmEnviarEmail = async () => {
+    if (!emailNota) return
+    setEmailSending(true)
+    try {
+      const res = await notasFiscaisApi.enviarPorEmail(emailNota.id, {
+        email: emailExtra.trim() || undefined,
+        incluir_contato_cliente: incluirEmailsCliente,
+        anexar_boleto: anexarBoletoEmail,
+      })
+      const avisos = res?.data?.avisos as string[] | undefined
+      toast({
+        title: "E-mail enviado",
+        description: avisos?.length
+          ? `${res?.message || "Enviado com sucesso"} ${avisos.join(" ")}`
+          : res?.message || "Nota fiscal enviada por e-mail",
+      })
+      setEmailDialogOpen(false)
+      setEmailNota(null)
+    } catch (error: any) {
+      const msg =
+        error?.response?.data?.message ||
+        error?.response?.data?.error ||
+        error?.message ||
+        "Erro ao enviar e-mail"
+      toast({
+        title: "Erro",
+        description: typeof msg === "string" ? msg : "Erro ao enviar e-mail",
+        variant: "destructive",
+      })
+    } finally {
+      setEmailSending(false)
+    }
+  }
+
   const handleImportXML = async () => {
     if (!importFile) return
 
@@ -2668,6 +2734,23 @@ export default function NotasFiscaisPage() {
                                 disabled={!getBoletoComArquivo(nota)}
                               >
                                 <Receipt className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleOpenEnviarEmail(nota)}
+                                title={
+                                  !nota.cliente_id
+                                    ? "Nota sem cliente"
+                                    : !nota.arquivo_nf
+                                      ? "Cadastre o arquivo da nota fiscal"
+                                      : "Enviar nota e boleto por e-mail"
+                                }
+                                aria-label="Enviar nota fiscal por e-mail"
+                                className="text-violet-600 hover:text-violet-700"
+                                disabled={!nota.cliente_id || !nota.arquivo_nf}
+                              >
+                                <Mail className="w-4 h-4" />
                               </Button>
                               <Button
                                 variant="ghost"
@@ -4129,6 +4212,74 @@ export default function NotasFiscaisPage() {
               disabled={!uploadFile || uploading}
             >
               {uploading ? 'Enviando...' : 'Enviar Arquivo'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Enviar nota fiscal por e-mail */}
+      <Dialog open={emailDialogOpen} onOpenChange={(open) => {
+        setEmailDialogOpen(open)
+        if (!open) setEmailNota(null)
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar por e-mail</DialogTitle>
+            <DialogDescription>
+              O sistema envia o modelo <strong>nota_fiscal_enviada</strong> com o arquivo da nota em anexo
+              {anexarBoletoEmail ? " e o boleto, quando houver arquivo disponível" : ""}.
+              Requer permissão de edição no financeiro.
+            </DialogDescription>
+          </DialogHeader>
+          {emailNota && (
+            <div className="space-y-4">
+              <div>
+                <Label>Nota</Label>
+                <p className="text-sm text-muted-foreground">
+                  {emailNota.numero_nf}
+                  {emailNota.serie ? ` · ${emailNota.serie}` : ""}
+                  {emailNota.clientes?.nome ? ` · ${emailNota.clientes.nome}` : ""}
+                </p>
+              </div>
+              <div>
+                <Label htmlFor="email-extra">E-mail adicional (opcional)</Label>
+                <Input
+                  id="email-extra"
+                  type="email"
+                  placeholder="outro@empresa.com.br"
+                  value={emailExtra}
+                  onChange={(e) => setEmailExtra(e.target.value)}
+                  autoComplete="email"
+                />
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="incluir-cliente-email"
+                  checked={incluirEmailsCliente}
+                  onCheckedChange={(v) => setIncluirEmailsCliente(v === true)}
+                />
+                <label htmlFor="incluir-cliente-email" className="text-sm leading-none cursor-pointer">
+                  Incluir e-mails do cadastro do cliente (contato e principal)
+                </label>
+              </div>
+              <div className="flex items-center space-x-2">
+                <Checkbox
+                  id="anexar-boleto-email"
+                  checked={anexarBoletoEmail}
+                  onCheckedChange={(v) => setAnexarBoletoEmail(v === true)}
+                />
+                <label htmlFor="anexar-boleto-email" className="text-sm leading-none cursor-pointer">
+                  Anexar arquivo do boleto (se existir)
+                </label>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEmailDialogOpen(false)} disabled={emailSending}>
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmEnviarEmail} disabled={emailSending || !emailNota}>
+              {emailSending ? "Enviando…" : "Enviar"}
             </Button>
           </DialogFooter>
         </DialogContent>

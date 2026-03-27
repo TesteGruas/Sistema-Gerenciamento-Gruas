@@ -9,7 +9,7 @@ export type EmailTemplateCatalogItem = {
   /** Nome amigável */
   nome: string
   /** Área funcional */
-  categoria: "conta" | "medicao" | "ponto" | "sistema"
+  categoria: "conta" | "medicao" | "ponto" | "sistema" | "financeiro"
   /** Quando dispara */
   gatilho: string
   /** Rotas / arquivos principais */
@@ -63,6 +63,18 @@ export const EMAIL_TEMPLATES_CATALOG: EmailTemplateCatalogItem[] = [
     onde: [
       "backend-api/src/routes/medicoes-mensais.js",
       "backend-api/src/services/email.service.js (buildMedicaoClienteEmail)",
+    ],
+    editavelNoPainel: true,
+  },
+  {
+    tipo: "nota_fiscal_enviada",
+    nome: "Nota fiscal e boleto enviados ao cliente",
+    categoria: "financeiro",
+    gatilho:
+      "Envio manual a partir da lista de notas fiscais de saída; anexa o arquivo da NF e o boleto (quando existir).",
+    onde: [
+      "backend-api/src/routes/notas-fiscais.js (POST …/enviar-email)",
+      "backend-api/src/services/email.service.js (buildNotaFiscalClienteEmail)",
     ],
     editavelNoPainel: true,
   },
@@ -121,4 +133,5 @@ export const EMAIL_CATALOG_CATEGORIES: Record<
   medicao: "Medição",
   ponto: "Ponto eletrônico",
   sistema: "Sistema / diagnóstico",
+  financeiro: "Financeiro",
 }
