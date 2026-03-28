@@ -5,7 +5,7 @@
 # ou, após chmod +x:
 #   ./scripts/deploy-pull-build-pm2.sh
 #
-# Executa: git pull → npm run build → pm2 restart all --update-env
+# Executa: git pull → npm install → npm run build → pm2 restart all --update-env
 #
 
 set -euo pipefail
@@ -21,6 +21,9 @@ fi
 echo "==> Diretório: $ROOT"
 echo "==> git pull"
 git pull
+
+echo "==> npm install (atualiza node_modules após mudanças no package.json)"
+npm install
 
 echo "==> npm run build"
 npm run build
