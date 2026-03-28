@@ -22,6 +22,8 @@ import {
   FileSignature,
   Bell,
   Loader2,
+  ChevronDown,
+  LogOut,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
@@ -39,6 +41,8 @@ import { SignaturePad } from "@/components/signature-pad"
 import { getApiBasePath } from "@/lib/runtime-config"
 import { PontoMapa } from "@/components/pwa-ponto-mapa"
 import { responsaveisObraApi } from "@/lib/api-responsaveis-obra"
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
+import { cn } from "@/lib/utils"
 
 export default function PWAPontoPage() {
   const obterDataLocalISO = () => {
@@ -1229,42 +1233,52 @@ export default function PWAPontoPage() {
   const raioPermitidoAtual = obra?.raio_permitido ?? 5000
   const raioPermitidoFormatado = formatarDistancia(raioPermitidoAtual)
 
+  const statusBadgeClass =
+    status.cor === "green"
+      ? "bg-emerald-100 text-emerald-800 border-emerald-200/80"
+      : status.cor === "yellow"
+        ? "bg-amber-100 text-amber-900 border-amber-200/80"
+        : status.cor === "blue"
+          ? "bg-sky-100 text-sky-900 border-sky-200/80"
+          : status.cor === "orange"
+            ? "bg-orange-100 text-orange-900 border-orange-200/80"
+            : "bg-slate-100 text-slate-700 border-slate-200/80"
+
   // Mostrar loading enquanto carrega os registros
   if (isLoadingRegistros) {
     return (
       <ProtectedRoute permission="ponto_eletronico:visualizar">
-        <div className="space-y-4">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Ponto Eletrônico</h1>
-              <p className="text-gray-600">Registre sua entrada e saída</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-                isOnline 
-                  ? "bg-green-100 text-green-700" 
-                  : "bg-red-100 text-red-700"
-              }`}>
-                {isOnline ? (
-                  <Wifi className="w-3 h-3" />
-                ) : (
-                  <WifiOff className="w-3 h-3" />
+        <div className="space-y-5">
+          <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50 via-blue-50/70 to-indigo-50/50 p-5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                  Ponto Eletrônico
+                </h1>
+                <p className="mt-0.5 text-sm text-slate-600">Registre sua entrada e saída</p>
+              </div>
+              <div
+                className={cn(
+                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium",
+                  isOnline
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-red-200 bg-red-50 text-red-800"
                 )}
-                <span>{isOnline ? "Online" : "Offline"}</span>
+              >
+                {isOnline ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+                {isOnline ? "Online" : "Offline"}
               </div>
             </div>
           </div>
 
-          {/* Loading State */}
-          <Card>
-            <CardContent className="p-12">
-              <div className="flex flex-col items-center justify-center space-y-4">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-                <div className="text-center">
-                  <p className="text-lg font-medium text-gray-900">Carregando registros...</p>
-                  <p className="text-sm text-gray-600 mt-1">Aguarde enquanto buscamos seus registros do dia</p>
-                </div>
+          <Card className="border-slate-200/90 shadow-sm">
+            <CardContent className="flex flex-col items-center justify-center gap-4 py-14">
+              <div className="h-12 w-12 animate-spin rounded-full border-2 border-slate-200 border-t-blue-600" />
+              <div className="text-center">
+                <p className="text-base font-semibold text-slate-900">Carregando registros</p>
+                <p className="mt-1 max-w-xs text-sm text-slate-600">
+                  Buscando seus horários de hoje…
+                </p>
               </div>
             </CardContent>
           </Card>
@@ -1275,206 +1289,269 @@ export default function PWAPontoPage() {
 
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
-      <div className="space-y-4">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Ponto Eletrônico</h1>
-          <p className="text-gray-600">Registre sua entrada e saída</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
-            isOnline 
-              ? "bg-green-100 text-green-700" 
-              : "bg-red-100 text-red-700"
-          }`}>
-            {isOnline ? (
-              <Wifi className="w-3 h-3" />
-            ) : (
-              <WifiOff className="w-3 h-3" />
-            )}
-            <span>{isOnline ? "Online" : "Offline"}</span>
+      <div className="space-y-5">
+      {/* Hero: título, conexão, relógio e status */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50 via-blue-50/70 to-indigo-50/50 shadow-sm">
+        <div className="relative p-5 sm:p-6">
+          <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-blue-400/10 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 left-1/4 h-24 w-24 rounded-full bg-indigo-400/10 blur-2xl" />
+
+          <div className="relative flex flex-row items-start justify-between gap-4 sm:gap-6">
+            <div className="min-w-0 flex-1 pr-1">
+              <h1 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                Ponto Eletrônico
+              </h1>
+              <p className="mt-0.5 text-sm text-slate-600">
+                Registre sua entrada e saída
+              </p>
+              {obra?.nome && (
+                <p className="mt-2 flex items-start gap-2 text-xs text-slate-600">
+                  <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
+                  <span className="line-clamp-2">
+                    <span className="font-medium text-slate-700">Obra: </span>
+                    {obra.nome}
+                  </span>
+                </p>
+              )}
+            </div>
+
+            <div className="flex max-w-[min(100%,14rem)] shrink-0 flex-col items-end gap-2 text-right sm:max-w-none">
+              <div className="font-mono text-2xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-3xl md:text-4xl">
+                {currentTime ? currentTime.toTimeString().slice(0, 8) : "--:--:--"}
+              </div>
+              <p className="text-xs capitalize leading-snug text-slate-600 sm:text-sm">
+                {currentTime
+                  ? currentTime.toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : "Carregando..."}
+              </p>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Badge
+                  variant="outline"
+                  className={cn("border px-2.5 py-0.5 text-[11px] font-semibold sm:text-xs", statusBadgeClass)}
+                >
+                  {status.status}
+                </Badge>
+                <div
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:text-xs",
+                    isOnline
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-red-200 bg-red-50 text-red-800"
+                  )}
+                >
+                  {isOnline ? <Wifi className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <WifiOff className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
+                  {isOnline ? "Online" : "Offline"}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Relógio e data */}
-      <Card className="gap-3 py-4">
-        <CardContent className="p-4">
-          <div className="text-center">
-            <div className="text-3xl md:text-4xl font-bold text-blue-600 mb-1">
-              {currentTime ? currentTime.toTimeString().slice(0, 8) : '--:--:--'}
-            </div>
-            <div className="text-sm md:text-base text-gray-600 mb-2">
-              {currentTime ? currentTime.toLocaleDateString("pt-BR", {
-                weekday: "long",
-                year: "numeric",
-                month: "long",
-                day: "numeric",
-              }) : 'Carregando...'}
-            </div>
-            <Badge
-              className={`text-[11px] px-2 py-0.5 ${
-                status.cor === 'green' ? 'bg-green-100 text-green-800' :
-                status.cor === 'yellow' ? 'bg-yellow-100 text-yellow-800' :
-                status.cor === 'blue' ? 'bg-blue-100 text-blue-800' :
-                status.cor === 'orange' ? 'bg-orange-100 text-orange-800' :
-                'bg-gray-100 text-gray-800'
-              }`}
-            >
-              {status.status}
-            </Badge>
+      {/* Validação de local (resumo) */}
+      {validacaoLocalizacao && obra?.coordenadas && (
+        <div
+          className={cn(
+            "flex items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-sm",
+            validacaoLocalizacao.valido
+              ? "border-emerald-200 bg-emerald-50/90 text-emerald-900"
+              : "border-amber-200 bg-amber-50/90 text-amber-950"
+          )}
+        >
+          <MapPin
+            className={cn(
+              "mt-0.5 h-5 w-5 shrink-0",
+              validacaoLocalizacao.valido ? "text-emerald-600" : "text-amber-600"
+            )}
+          />
+          <div className="min-w-0 flex-1">
+            <p className="font-semibold leading-tight">
+              {validacaoLocalizacao.valido ? "Localização válida para o ponto" : "Atenção à distância"}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed opacity-90">
+              {validacaoLocalizacao.valido
+                ? `Você está a ${formatarDistancia(validacaoLocalizacao.distancia)} da obra (dentro do raio de ${raioPermitidoFormatado}).`
+                : validacaoLocalizacao.mensagem}
+            </p>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      )}
 
       {/* Botões de registro */}
-      <Card className="bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-200 shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Clock className="w-5 h-5 text-blue-600" />
-            Registrar Ponto
+      <Card className="overflow-hidden border-slate-200/90 shadow-md">
+        <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-violet-500" />
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100 text-blue-700">
+              <Clock className="h-5 w-5" />
+            </span>
+            Registrar ponto
           </CardTitle>
-          <CardDescription>
-            {proximoRegistro 
-              ? `Próximo: ${proximoRegistro.label} - ${proximoRegistro.descricao}`
-              : "Jornada completa - Todos os registros foram feitos hoje"
-            }
+          <CardDescription className="text-sm leading-relaxed">
+            {proximoRegistro
+              ? `Próximo passo: ${proximoRegistro.label} — ${proximoRegistro.descricao}`
+              : "Jornada completa: todos os registros de hoje foram feitos."}
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-0">
           <div className="space-y-4">
             {registrosHoje.trabalho_corrido && (
-              <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-semibold text-emerald-700">Dia corrido ativo</p>
-                <p className="text-xs text-emerald-700/90">
-                  Você optou por trabalho corrido hoje (sem pausa automática de almoço).
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/80 px-4 py-3">
+                <p className="text-sm font-semibold text-emerald-800">Dia corrido ativo</p>
+                <p className="mt-0.5 text-xs text-emerald-800/90">
+                  Trabalho corrido hoje (sem pausa automática de almoço).
                 </p>
               </div>
             )}
 
             {podeSelecionarTrabalhoCorrido() && !registrosHoje.trabalho_corrido && (
-              <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-2">
-                <p className="text-sm font-semibold text-amber-800">Opção de almoço disponível</p>
-                <p className="text-xs text-amber-800/90">
-                  Você pode escolher Dia corrido entre 11:30 e 12:00.
+              <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/80 px-4 py-3">
+                <p className="text-sm font-semibold text-amber-900">Opção de almoço</p>
+                <p className="text-xs text-amber-900/90">
+                  Você pode marcar Dia corrido entre 11:30 e 12:00.
                 </p>
                 <Button
                   onClick={marcarTrabalhoCorrido}
                   disabled={isLoading}
                   variant="outline"
-                  className="w-full border-amber-300 text-amber-900 hover:bg-amber-100"
+                  className="w-full border-amber-300 text-amber-950 hover:bg-amber-100"
                 >
-                  Marcar Dia corrido
+                  Marcar dia corrido
                 </Button>
               </div>
             )}
 
-            {/* Botão único baseado no próximo registro */}
             {proximoRegistro ? (
-              <div className="flex justify-center">
+              <div className="flex justify-center pt-1">
                 <Button
                   onClick={() => registrarPonto(proximoRegistro.tipo)}
                   disabled={isLoading}
-                  className={`h-24 w-full max-w-sm flex flex-col gap-3 text-white font-semibold transition-all duration-200 bg-gradient-to-br ${proximoRegistro.cor} shadow-lg hover:shadow-xl active:scale-95`}
+                  className={cn(
+                    "flex h-auto min-h-[6.5rem] w-full max-w-md flex-col gap-3 rounded-2xl px-6 py-5 text-white shadow-lg transition-all duration-200",
+                    "bg-gradient-to-br hover:shadow-xl active:scale-[0.98]",
+                    proximoRegistro.cor
+                  )}
                 >
-                  <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center shadow-md">
-                    <proximoRegistro.icone className="w-6 h-6" />
+                  <div className="flex h-14 w-14 items-center justify-center rounded-full bg-white/20 shadow-inner">
+                    <proximoRegistro.icone className="h-7 w-7" />
                   </div>
                   <div className="text-center">
-                    <div className="text-xl font-bold">{proximoRegistro.label}</div>
-                    <div className="text-sm opacity-90">{proximoRegistro.descricao}</div>
+                    <div className="text-xl font-bold tracking-tight">{proximoRegistro.label}</div>
+                    <div className="mt-0.5 text-sm font-medium opacity-95">
+                      {proximoRegistro.descricao}
+                    </div>
                   </div>
                 </Button>
               </div>
             ) : (
-              <div className="text-center py-8">
-                <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <CheckCircle className="w-8 h-8 text-green-600" />
+              <div className="py-8 text-center">
+                <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 ring-4 ring-emerald-50">
+                  <CheckCircle className="h-9 w-9 text-emerald-600" />
                 </div>
-                <h3 className="text-lg font-semibold text-gray-900 mb-2">Jornada Completa</h3>
-                <p className="text-gray-600">Você já registrou todos os pontos do dia</p>
+                <h3 className="text-lg font-semibold text-slate-900">Jornada completa</h3>
+                <p className="mt-1 max-w-xs mx-auto text-sm text-slate-600">
+                  Você já registrou os pontos necessários para hoje.
+                </p>
               </div>
             )}
-
           </div>
         </CardContent>
       </Card>
 
-      {/* Status dos registros */}
-      <Card className="shadow-lg">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Calendar className="w-5 h-5" />
-            Registros de Hoje
+      {/* Registros do dia — linha do tempo */}
+      <Card className="border-slate-200/90 shadow-sm">
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-lg">
+            <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-slate-100 text-slate-700">
+              <Calendar className="h-5 w-5" />
+            </span>
+            Registros de hoje
           </CardTitle>
         </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full shadow-sm ${
-                  registrosHoje.entrada ? 'bg-green-500' : 'bg-gray-300'
-                }`} />
-                <div>
-                  <p className="font-medium text-sm">Entrada</p>
-                  <p className="text-lg font-bold">
-                    {registrosHoje.entrada || '--:--'}
+        <CardContent className="space-y-1">
+          <div className="relative pl-2">
+            <div
+              className="absolute bottom-3 left-[26px] top-3 w-px bg-slate-200"
+              aria-hidden
+            />
+            {(
+              [
+                {
+                  label: "Entrada",
+                  time: registrosHoje.entrada,
+                  done: Boolean(registrosHoje.entrada),
+                  tone: "emerald" as const,
+                  Icon: Play,
+                },
+                {
+                  label: "Saída",
+                  time: registrosHoje.saida,
+                  done: Boolean(registrosHoje.saida),
+                  tone: "rose" as const,
+                  Icon: LogOut,
+                },
+              ] as const
+            ).map((row) => (
+              <div key={row.label} className="relative flex gap-3 py-2.5">
+                <div
+                  className={cn(
+                    "relative z-[1] mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border-2 border-white shadow-sm",
+                    row.done
+                      ? row.tone === "emerald"
+                        ? "bg-emerald-500 text-white"
+                        : row.tone === "amber"
+                          ? "bg-amber-500 text-white"
+                          : "bg-rose-500 text-white"
+                      : "bg-slate-100 text-slate-400"
+                  )}
+                >
+                  <row.Icon className="h-4 w-4" strokeWidth={2.25} />
+                </div>
+                <div className="min-w-0 flex-1 pt-0.5">
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    {row.label}
+                  </p>
+                  <p
+                    className={cn(
+                      "font-mono text-lg font-semibold tabular-nums",
+                      row.done ? "text-slate-900" : "text-slate-400"
+                    )}
+                  >
+                    {row.time || "—:—"}
                   </p>
                 </div>
               </div>
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full shadow-sm ${
-                  registrosHoje.saida_almoco ? 'bg-yellow-500' : 'bg-gray-300'
-                }`} />
-                <div>
-                  <p className="font-medium text-sm">Saída Almoço</p>
-                  <p className="text-lg font-bold">
-                    {registrosHoje.saida_almoco || '--:--'}
-                  </p>
-                </div>
-              </div>
+            ))}
+          </div>
+
+          <div className="mt-2 flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3">
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  "h-2.5 w-2.5 rounded-full",
+                  registrosHoje.trabalho_corrido ? "bg-emerald-500" : "bg-slate-300"
+                )}
+              />
+              <span className="text-sm font-medium text-slate-700">Dia corrido</span>
             </div>
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full shadow-sm ${
-                  registrosHoje.volta_almoco ? 'bg-yellow-500' : 'bg-gray-300'
-                }`} />
-                <div>
-                  <p className="font-medium text-sm">Volta Almoço</p>
-                  <p className="text-lg font-bold">
-                    {registrosHoje.volta_almoco || '--:--'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full shadow-sm ${
-                  registrosHoje.saida ? 'bg-red-500' : 'bg-gray-300'
-                }`} />
-                <div>
-                  <p className="font-medium text-sm">Saída</p>
-                  <p className="text-lg font-bold">
-                    {registrosHoje.saida || '--:--'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className={`w-3 h-3 rounded-full shadow-sm ${
-                  registrosHoje.trabalho_corrido ? 'bg-emerald-500' : 'bg-gray-300'
-                }`} />
-                <div>
-                  <p className="font-medium text-sm">Dia Corrido</p>
-                  <p className="text-lg font-bold">
-                    {registrosHoje.trabalho_corrido ? 'Sim' : 'Não'}
-                  </p>
-                </div>
-              </div>
-            </div>
+            <span
+              className={cn(
+                "text-sm font-semibold tabular-nums",
+                registrosHoje.trabalho_corrido ? "text-emerald-700" : "text-slate-500"
+              )}
+            >
+              {registrosHoje.trabalho_corrido ? "Sim" : "Não"}
+            </span>
           </div>
 
           {registrosHoje.entrada && registrosHoje.saida && (
-            <div className="mt-4 pt-4 border-t border-gray-100">
-              <p className="text-xs text-muted-foreground mb-2">
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
                 Reenviar e-mail, WhatsApp e aviso no app para os responsáveis da obra assinarem o dia.
               </p>
               <Button
@@ -1485,14 +1562,16 @@ export default function PWAPontoPage() {
                 onClick={enviarNotificacaoResponsaveisHoje}
               >
                 {notificandoResponsaveis ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 ) : (
-                  <Bell className="w-4 h-4 mr-2" />
+                  <Bell className="mr-2 h-4 w-4" />
                 )}
                 Enviar notificação
               </Button>
               {!registroIdHoje && isOnline && (
-                <p className="text-[11px] text-amber-700 mt-1">Recarregue a página para obter o ID do registro.</p>
+                <p className="mt-1.5 text-[11px] text-amber-700">
+                  Recarregue a página para obter o ID do registro.
+                </p>
               )}
             </div>
           )}
@@ -1501,199 +1580,234 @@ export default function PWAPontoPage() {
 
       {/* Status de conexão */}
       {!isOnline && (
-        <Card className="bg-yellow-50 border-yellow-200">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-2 text-yellow-800">
-              <WifiOff className="w-5 h-5" />
-              <div>
-                <p className="font-medium">Modo Offline</p>
-                <p className="text-sm">Seus registros serão sincronizados quando a conexão for restabelecida.</p>
-              </div>
+        <Card className="border-amber-200 bg-amber-50/90 shadow-sm">
+          <CardContent className="flex gap-3 p-4">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-amber-100">
+              <WifiOff className="h-5 w-5 text-amber-800" />
+            </div>
+            <div className="min-w-0">
+              <p className="font-semibold text-amber-950">Modo offline</p>
+              <p className="mt-0.5 text-sm leading-relaxed text-amber-900/90">
+                Seus registros serão sincronizados quando a conexão voltar.
+              </p>
             </div>
           </CardContent>
         </Card>
       )}
 
-      {/* Debug - Disparo manual da notificação de almoço */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-medium text-sm">Debug de almoço</p>
-              <p className="text-xs text-muted-foreground">
-                Dispara agora notificação no app e WhatsApp para teste
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={dispararNotificacaoAlmocoDebug}
-              disabled={isDisparandoDebugAlmoco}
-            >
-              {isDisparandoDebugAlmoco ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Disparando...
-                </>
-              ) : (
-                'Disparar agora'
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Debug - Disparo manual da notificação para responsável assinar */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-medium text-sm">Debug de assinatura do responsável</p>
-              <p className="text-xs text-muted-foreground">
-                Dispara agora WhatsApp + push para responsável da obra assinar o ponto
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={dispararNotificacaoResponsavelDebug}
-              disabled={isDisparandoDebugResponsavel}
-            >
-              {isDisparandoDebugResponsavel ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Disparando...
-                </>
-              ) : (
-                'Disparar agora'
-              )}
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Debug - Localização da obra x localização atual do usuário */}
-      <Card className="bg-slate-50 border-slate-200">
-        <CardContent className="p-4 space-y-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="font-medium text-sm">Debug de localização</p>
-              <p className="text-xs text-muted-foreground">
-                Mostra obra atual, localização do usuário e distância para validação de ponto
-              </p>
-            </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={obterLocalizacao}
-              disabled={isGettingLocation}
-            >
-              {isGettingLocation ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Atualizando...
-                </>
-              ) : (
-                'Atualizar local'
-              )}
-            </Button>
-          </div>
-
-          <div className="space-y-1">
-            <p className="text-xs font-semibold text-slate-700">Mapa (GPS × obra)</p>
-            <p className="text-[11px] text-muted-foreground">
-              Azul = você · Laranja = obra · verde = raio permitido. Se estiver longe, o mapa mostra o Brasil inteiro.
-            </p>
-            <PontoMapa
-              usuario={
-                location
-                  ? {
-                      lat: location.lat,
-                      lng: location.lng,
-                      endereco: location.address,
-                    }
-                  : null
-              }
-              obra={
-                obra?.coordenadas
-                  ? {
-                      lat: obra.coordenadas.lat,
-                      lng: obra.coordenadas.lng,
-                      nome: obra.nome,
-                      enderecoTexto: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(" · "),
-                    }
-                  : null
-              }
-              raioObraMetros={obra?.coordenadas ? raioPermitidoAtual : 0}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-            <div className="rounded-md border bg-white p-3 space-y-1">
-              <p className="font-semibold text-slate-700">Obra atual</p>
-              {obra ? (
-                <>
-                  <p><span className="text-muted-foreground">Nome:</span> {obra.nome}</p>
-                  <p><span className="text-muted-foreground">Endereço:</span> {obra.endereco || 'N/A'}</p>
-                  <p><span className="text-muted-foreground">Cidade/UF:</span> {[obra.cidade, obra.estado].filter(Boolean).join('/') || 'N/A'}</p>
-                  {obra.coordenadas ? (
+      {/* Diagnóstico e testes (recolhível para não poluir o fluxo principal) */}
+      <Collapsible className="rounded-lg border border-dashed border-slate-200 bg-slate-50/50">
+        <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 rounded-lg px-4 py-3 text-left text-sm font-medium text-slate-700 transition-colors hover:bg-slate-100/80">
+          <span className="flex items-center gap-2">
+            <Shield className="h-4 w-4 text-slate-500" />
+            Diagnóstico e testes
+          </span>
+          <ChevronDown className="h-4 w-4 shrink-0 text-slate-500 transition-transform duration-200 group-data-[state=open]:rotate-180" />
+        </CollapsibleTrigger>
+        <CollapsibleContent className="space-y-3 px-3 pb-3">
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-sm">Debug de almoço</p>
+                  <p className="text-xs text-muted-foreground">
+                    Dispara notificação no app e WhatsApp para teste
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={dispararNotificacaoAlmocoDebug}
+                  disabled={isDisparandoDebugAlmoco}
+                >
+                  {isDisparandoDebugAlmoco ? (
                     <>
-                      <p><span className="text-muted-foreground">Latitude:</span> {obra.coordenadas.lat}</p>
-                      <p><span className="text-muted-foreground">Longitude:</span> {obra.coordenadas.lng}</p>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Disparando…
                     </>
                   ) : (
-                    <p className="text-amber-700">Obra carregada, mas sem latitude/longitude configuradas.</p>
+                    "Disparar agora"
                   )}
-                  {obra.geocoding_status && (
-                    <p className="text-muted-foreground">{obra.geocoding_status}</p>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-sm">Debug de assinatura do responsável</p>
+                  <p className="text-xs text-muted-foreground">
+                    WhatsApp + push para o responsável assinar o ponto
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={dispararNotificacaoResponsavelDebug}
+                  disabled={isDisparandoDebugResponsavel}
+                >
+                  {isDisparandoDebugResponsavel ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Disparando…
+                    </>
+                  ) : (
+                    "Disparar agora"
                   )}
-                  <p><span className="text-muted-foreground">Raio configurado:</span> {raioPermitidoFormatado} ({raioPermitidoAtual}m)</p>
-                </>
-              ) : (
-                <p className="text-amber-700">Nenhuma obra ativa carregada.</p>
-              )}
-            </div>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
 
-            <div className="rounded-md border bg-white p-3 space-y-1">
-              <p className="font-semibold text-slate-700">Usuário (GPS atual)</p>
-              {location ? (
-                <>
-                  <p><span className="text-muted-foreground">Latitude:</span> {location.lat}</p>
-                  <p><span className="text-muted-foreground">Longitude:</span> {location.lng}</p>
-                </>
-              ) : (
-                <p className="text-amber-700">Localização ainda não capturada.</p>
-              )}
+          <Card className="border-slate-200 bg-white shadow-sm">
+            <CardContent className="space-y-3 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium text-sm">Debug de localização</p>
+                  <p className="text-xs text-muted-foreground">
+                    Obra, GPS e distância para validação do ponto
+                  </p>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={obterLocalizacao}
+                  disabled={isGettingLocation}
+                >
+                  {isGettingLocation ? (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                      Atualizando…
+                    </>
+                  ) : (
+                    "Atualizar local"
+                  )}
+                </Button>
+              </div>
 
-              {locationError && (
-                <p className="text-red-600">{locationError}</p>
-              )}
-            </div>
-          </div>
-
-          <div className="rounded-md border bg-white p-3 text-xs space-y-1">
-            <p className="font-semibold text-slate-700">Resultado da validação</p>
-            {validacaoLocalizacao ? (
-              <>
-                <p>
-                  <span className="text-muted-foreground">Distância:</span> {formatarDistancia(validacaoLocalizacao.distancia)}
+              <div className="space-y-1">
+                <p className="text-xs font-semibold text-slate-700">Mapa (GPS × obra)</p>
+                <p className="text-[11px] leading-snug text-muted-foreground">
+                  Azul = você · Laranja = obra · verde = raio permitido. Se estiver longe, o mapa pode mostrar uma área ampla.
                 </p>
-                <p>
-                  <span className="text-muted-foreground">Status:</span>{' '}
-                  <span className={validacaoLocalizacao.valido ? 'text-green-700 font-medium' : 'text-red-700 font-medium'}>
-                    {validacaoLocalizacao.valido
-                      ? `Dentro do raio (${raioPermitidoFormatado})`
-                      : `Fora do raio (${raioPermitidoFormatado})`}
-                  </span>
-                </p>
-                <p className="text-muted-foreground">{validacaoLocalizacao.mensagem}</p>
-              </>
-            ) : (
-              <p className="text-muted-foreground">Clique em "Atualizar local" para executar a validação.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                <PontoMapa
+                  usuario={
+                    location
+                      ? {
+                          lat: location.lat,
+                          lng: location.lng,
+                          endereco: location.address,
+                        }
+                      : null
+                  }
+                  obra={
+                    obra?.coordenadas
+                      ? {
+                          lat: obra.coordenadas.lat,
+                          lng: obra.coordenadas.lng,
+                          nome: obra.nome,
+                          enderecoTexto: [obra.endereco, obra.cidade, obra.estado].filter(Boolean).join(" · "),
+                        }
+                      : null
+                  }
+                  raioObraMetros={obra?.coordenadas ? raioPermitidoAtual : 0}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 text-xs md:grid-cols-2">
+                <div className="space-y-1 rounded-md border bg-slate-50/80 p-3">
+                  <p className="font-semibold text-slate-700">Obra atual</p>
+                  {obra ? (
+                    <>
+                      <p>
+                        <span className="text-muted-foreground">Nome:</span> {obra.nome}
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Endereço:</span> {obra.endereco || "N/A"}
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Cidade/UF:</span>{" "}
+                        {[obra.cidade, obra.estado].filter(Boolean).join("/") || "N/A"}
+                      </p>
+                      {obra.coordenadas ? (
+                        <>
+                          <p>
+                            <span className="text-muted-foreground">Latitude:</span> {obra.coordenadas.lat}
+                          </p>
+                          <p>
+                            <span className="text-muted-foreground">Longitude:</span> {obra.coordenadas.lng}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-amber-700">Obra sem latitude/longitude configuradas.</p>
+                      )}
+                      {obra.geocoding_status && (
+                        <p className="text-muted-foreground">{obra.geocoding_status}</p>
+                      )}
+                      <p>
+                        <span className="text-muted-foreground">Raio configurado:</span> {raioPermitidoFormatado}{" "}
+                        ({raioPermitidoAtual}m)
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-amber-700">Nenhuma obra ativa carregada.</p>
+                  )}
+                </div>
+
+                <div className="space-y-1 rounded-md border bg-slate-50/80 p-3">
+                  <p className="font-semibold text-slate-700">Usuário (GPS atual)</p>
+                  {location ? (
+                    <>
+                      <p>
+                        <span className="text-muted-foreground">Latitude:</span> {location.lat}
+                      </p>
+                      <p>
+                        <span className="text-muted-foreground">Longitude:</span> {location.lng}
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-amber-700">Localização ainda não capturada.</p>
+                  )}
+
+                  {locationError && <p className="text-red-600">{locationError}</p>}
+                </div>
+              </div>
+
+              <div className="space-y-1 rounded-md border bg-slate-50/80 p-3 text-xs">
+                <p className="font-semibold text-slate-700">Resultado da validação</p>
+                {validacaoLocalizacao ? (
+                  <>
+                    <p>
+                      <span className="text-muted-foreground">Distância:</span>{" "}
+                      {formatarDistancia(validacaoLocalizacao.distancia)}
+                    </p>
+                    <p>
+                      <span className="text-muted-foreground">Status:</span>{" "}
+                      <span
+                        className={
+                          validacaoLocalizacao.valido ? "font-medium text-green-700" : "font-medium text-red-700"
+                        }
+                      >
+                        {validacaoLocalizacao.valido
+                          ? `Dentro do raio (${raioPermitidoFormatado})`
+                          : `Fora do raio (${raioPermitidoFormatado})`}
+                      </span>
+                    </p>
+                    <p className="text-muted-foreground">{validacaoLocalizacao.mensagem}</p>
+                  </>
+                ) : (
+                  <p className="text-muted-foreground">Use &quot;Atualizar local&quot; para validar.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        </CollapsibleContent>
+      </Collapsible>
 
       {/* Diálogo de Pergunta sobre Feriado */}
       <Dialog open={showFeriadoDialog} onOpenChange={setShowFeriadoDialog}>

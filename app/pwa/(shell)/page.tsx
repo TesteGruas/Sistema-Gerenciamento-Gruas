@@ -42,6 +42,7 @@ import { funcionariosApi } from "@/lib/api-funcionarios"
 import { medicoesMensaisApi, type MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { obterLocalizacaoAtual } from "@/lib/geolocation-validator"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 
 interface MedicaoResumoHome {
   id: number
@@ -919,6 +920,21 @@ export default function PWAMainPage() {
     
   ]
 
+  /** Resumo da jornada para o hero (mesma ideia da página /pwa/ponto) */
+  const getStatusJornadaHome = () => {
+    const r = pwaUserData.pontoHoje || {}
+    const { entrada, saida_almoco, volta_almoco, saida } = r
+    if (!entrada) return { label: "Não iniciado", tone: "neutral" as const }
+    if (entrada && !saida_almoco && !volta_almoco && !saida)
+      return { label: "Trabalhando", tone: "green" as const }
+    if (entrada && saida_almoco && !volta_almoco && !saida)
+      return { label: "Almoço", tone: "amber" as const }
+    if (entrada && saida_almoco && volta_almoco && !saida)
+      return { label: "Trabalhando", tone: "green" as const }
+    if (entrada && saida) return { label: "Finalizado", tone: "blue" as const }
+    return { label: "Em andamento", tone: "orange" as const }
+  }
+
   // Função auxiliar para formatar hora do ponto
   const formatarHoraPonto = (hora: string | Date | null | undefined): string => {
     if (!hora) return '--:--'
@@ -1244,98 +1260,92 @@ export default function PWAMainPage() {
     )
   }
 
+  const user = pwaUserData.user
+  const nomeCompleto =
+    user?.nome ||
+    user?.name ||
+    user?.user_metadata?.nome ||
+    user?.user_metadata?.name ||
+    user?.profile?.nome ||
+    user?.profile?.name ||
+    "Usuário"
+  const primeiroNome = nomeCompleto.split(" ")[0]
+
+  const statusJornada = getStatusJornadaHome()
+  const statusJornadaBadgeClass =
+    statusJornada.tone === "green"
+      ? "border-emerald-200/90 bg-emerald-50 text-emerald-800"
+      : statusJornada.tone === "amber"
+        ? "border-amber-200/90 bg-amber-50 text-amber-900"
+        : statusJornada.tone === "blue"
+          ? "border-sky-200/90 bg-sky-50 text-sky-900"
+          : statusJornada.tone === "orange"
+            ? "border-orange-200/90 bg-orange-50 text-orange-900"
+            : "border-slate-200/90 bg-slate-100 text-slate-700"
+
+  const mostrarChipJornadaNoHero =
+    !loadingObra && temObraAtiva !== false && !isClientRole()
+
   return (
-    <div className="space-y-4 animate-in fade-in duration-500">
-      {/* Card de Boas-vindas com Relógio */}
-      <div className="relative bg-gradient-to-br from-[#871b0b] via-[#6b1509] to-[#4d0f06] text-white rounded-3xl p-6 shadow-xl overflow-hidden">
-        {/* Padrão decorativo */}
-        <div className="absolute top-0 right-0 w-40 h-40 bg-white/10 rounded-full blur-3xl -mr-20 -mt-20" />
-        <div className="absolute bottom-0 left-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -ml-16 -mb-16" />
-        <div className="absolute top-1/2 right-1/4 w-24 h-24 bg-white/5 rounded-full blur-xl" />
-        
-        <div className="relative z-10">
-          <div className="flex items-start justify-between mb-6">
-            <div>
-              <p className="text-sm font-medium text-red-100 mb-1">Bem-vindo(a),</p>
-              <h2 className="text-2xl font-bold">
-                {(() => {
-                  // Buscar nome em diferentes locais possíveis
-                  const user = pwaUserData.user
-                  const nome = user?.nome || 
-                              user?.name || 
-                              user?.user_metadata?.nome || 
-                              user?.user_metadata?.name ||
-                              user?.profile?.nome ||
-                              user?.profile?.name ||
-                              'Usuário'
-                  // Pegar apenas o primeiro nome
-                  return nome.split(' ')[0]
-                })()}!
+    <div className="space-y-5 animate-in fade-in duration-500">
+      {/* Hero: boas-vindas + data/hora — paleta clara + faixa da marca */}
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/90 bg-gradient-to-br from-slate-50 via-white to-blue-50/70 text-slate-900 shadow-sm ring-1 ring-slate-900/5">
+        <div className="pointer-events-none absolute -right-8 -top-4 h-32 w-32 rounded-full bg-blue-400/15 blur-2xl" />
+        <div className="pointer-events-none absolute -bottom-10 left-1/4 h-28 w-28 rounded-full bg-indigo-400/10 blur-2xl" />
+        <div className="pointer-events-none absolute right-1/4 top-1/3 h-20 w-20 rounded-full bg-[#871b0b]/5 blur-xl" />
+
+        <div className="relative p-5 sm:p-6">
+          <div className="relative flex flex-row items-start justify-between gap-4 sm:gap-6">
+            <div className="min-w-0 flex-1 pr-1">
+              <p className="text-sm font-medium text-slate-500">Bem-vindo(a),</p>
+              <h2 className="text-xl font-bold tracking-tight text-slate-900 sm:text-2xl">
+                {primeiroNome}!
               </h2>
+              <p className="mt-1 text-xs leading-relaxed text-slate-600 sm:text-sm">
+                Registre seu ponto e acompanhe sua jornada.
+              </p>
+            </div>
+
+            <div className="flex max-w-[min(100%,14rem)] shrink-0 flex-col items-end gap-2 text-right sm:max-w-none">
+              <div className="font-mono text-2xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-3xl md:text-4xl">
+                {currentTime ? currentTime.toTimeString().slice(0, 8) : "--:--:--"}
+              </div>
+              <p className="text-xs capitalize leading-snug text-slate-600 sm:text-sm">
+                {currentTime
+                  ? currentTime.toLocaleDateString("pt-BR", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : ""}
+              </p>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {mostrarChipJornadaNoHero && (
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "border px-2.5 py-0.5 text-[11px] font-semibold sm:text-xs",
+                      statusJornadaBadgeClass
+                    )}
+                  >
+                    {statusJornada.label}
+                  </Badge>
+                )}
+                <div
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium sm:text-xs",
+                    isOnline
+                      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      : "border-red-200 bg-red-50 text-red-800"
+                  )}
+                >
+                  {isOnline ? <Wifi className="h-3 w-3 sm:h-3.5 sm:w-3.5" /> : <WifiOff className="h-3 w-3 sm:h-3.5 sm:w-3.5" />}
+                  {isOnline ? "Online" : "Offline"}
+                </div>
+              </div>
             </div>
           </div>
-          
-          <div className="space-y-1 mb-4">
-            <p className="text-5xl font-bold tracking-tight">
-              {currentTime ? currentTime.toLocaleTimeString('pt-BR', { 
-                hour: '2-digit', 
-                minute: '2-digit' 
-              }) : '--:--'}
-            </p>
-            <p className="text-sm text-red-100 capitalize">
-              {currentTime ? currentTime.toLocaleDateString('pt-BR', { 
-                weekday: 'long', 
-                day: '2-digit', 
-                month: 'long' 
-              }) : ''}
-            </p>
-          </div>
-
-          {/* Mini stats - Ocultar para clientes e funcionários sem obra ativa */}
-          {(() => {
-            // Se não tiver obra ativa, não renderizar o bloco
-            if (temObraAtiva === false) {
-              return null
-            }
-            
-            // Verificar se é cliente
-            const isClient = (() => {
-              if (isClientRole()) return true
-              try {
-                const userDataStr = localStorage.getItem('user_data')
-                if (userDataStr) {
-                  const userData = JSON.parse(userDataStr)
-                  const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-                  if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
-                }
-              } catch (error) {
-                // Ignorar erro
-              }
-              if (userRole === 'Clientes' || userRole === 'cliente') return true
-              return false
-            })()
-            
-            // Se for cliente, não renderizar o bloco
-            if (isClient) {
-              return null
-            }
-            
-            // Verificação inline para garantir que funcione
-            let cargoCheck: string | null = null
-            if (typeof window !== 'undefined') {
-              try {
-                const userDataStr = localStorage.getItem('user_data')
-                if (userDataStr) {
-                  const userData = JSON.parse(userDataStr)
-                  cargoCheck = userData?.user_metadata?.cargo || userData?.cargo || null
-                }
-              } catch (e) {
-                // Ignorar erro
-              }
-            }
-            // Grid removido - não deve haver barramento de ponto na home do app
-            return null
-          })()}
         </div>
       </div>
 
@@ -1394,20 +1404,9 @@ export default function PWAMainPage() {
                       <Clock className="w-6 h-6 text-[#871b0b]" />
                     </div>
                     <p className="text-base font-bold text-gray-900">
-                      {pwaUserData.pontoHoje?.saida
-                        ? formatarHoraPonto(pwaUserData.pontoHoje.saida)
-                        : pwaUserData.pontoHoje?.volta_almoco
-                        ? formatarHoraPonto(pwaUserData.pontoHoje.volta_almoco)
-                        : pwaUserData.pontoHoje?.saida_almoco
-                        ? formatarHoraPonto(pwaUserData.pontoHoje.saida_almoco)
-                        : '--:--'}
+                      {formatarHoraPonto(pwaUserData.pontoHoje?.saida)}
                     </p>
-                    <p className="text-[10px] text-gray-500 font-medium">
-                      {pwaUserData.pontoHoje?.saida ? 'Última Saída' : 
-                       pwaUserData.pontoHoje?.volta_almoco ? 'Volta Almoço' :
-                       pwaUserData.pontoHoje?.saida_almoco ? 'Saída Almoço' :
-                       'Saída'}
-                    </p>
+                    <p className="text-[10px] text-gray-500 font-medium">Saída</p>
                   </div>
                 </div>
               </>
