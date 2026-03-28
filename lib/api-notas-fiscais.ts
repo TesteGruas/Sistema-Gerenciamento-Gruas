@@ -126,6 +126,29 @@ export const notasFiscaisApi = {
     return response.data
   },
 
+  /**
+   * Notas com itens e totais agregados por linha (impostos/custos nos itens).
+   * Mesmos filtros da listagem; sem paginação no servidor.
+   */
+  async exportacaoCompleta(params?: {
+    tipo?: 'entrada' | 'saida'
+    status?: string
+    search?: string
+    tipo_nota?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.tipo) searchParams.append('tipo', params.tipo)
+    if (params?.status) searchParams.append('status', params.status)
+    if (params?.search) searchParams.append('search', params.search)
+    if (params?.tipo_nota && params.tipo_nota !== 'all') {
+      searchParams.append('tipo_nota', params.tipo_nota)
+    }
+    const response = await api.get(
+      `/notas-fiscais/exportacao-completa?${searchParams.toString()}`
+    )
+    return response.data
+  },
+
   async getById(id: number) {
     const response = await api.get(`/notas-fiscais/${id}`)
     return response.data

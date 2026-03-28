@@ -16,7 +16,9 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle,
-  Clock
+  Clock,
+  Download,
+  Loader2
 } from "lucide-react"
 import { notasFiscaisApi, type NotaFiscal } from "@/lib/api-notas-fiscais"
 import { apiContasBancarias, type ContaBancaria } from "@/lib/api-contas-bancarias"
@@ -58,6 +60,159 @@ export default function FinanceiroPage() {
     saldoTotal: 0,
     contas: []
   })
+  /** Listas completas para exportação CSV (resumo na UI continua com até 10 linhas). */
+  const [notasSaidaCompleta, setNotasSaidaCompleta] = useState<NotaFiscal[]>([])
+  const [notasEntradaCompleta, setNotasEntradaCompleta] = useState<NotaFiscal[]>([])
+  const [contasBancariasCompleta, setContasBancariasCompleta] = useState<ContaBancaria[]>([])
+  const [exportandoCsv, setExportandoCsv] = useState<string | null>(null)
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const baixarCsv = (nomeArquivo: string, linhas: string[][]) => {
+    const bom = "\ufeff"
+    const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+    const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = nomeArquivo
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const formatarMoeda = (valor: number) => {
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(valor)
+  }
+
+  const formatarData = (data: string) => {
+    return new Date(data).toLocaleDateString('pt-BR')
+  }
+
+  const calcularValorSaidaSemImpostos = (nota: NotaFiscal) => {
+    const totalImpostos = (
+      (nota.valor_icms || 0) +
+      (nota.valor_icms_st || 0) +
+      (nota.valor_fcp_st || 0) +
+      (nota.valor_ipi || 0) +
+      (nota.valor_pis || 0) +
+      (nota.valor_cofins || 0) +
+      (nota.valor_inss || 0) +
+      (nota.valor_ir || 0) +
+      (nota.valor_csll || 0) +
+      (nota.valor_issqn || 0) +
+      (nota.retencoes_federais || 0) +
+      (nota.outras_retencoes || 0)
+    )
+    return Math.max((nota.valor_total || 0) - totalImpostos, 0)
+  }
+
+  const getValorFinanceiroNota = (nota: NotaFiscal) => {
+    if (nota.tipo === 'saida') {
+      return nota.valor_liquido ?? calcularValorSaidaSemImpostos(nota)
+    }
+    return nota.valor_total || 0
+  }
+
+  const cobrancaTextoCsv = (nota: NotaFiscal) => {
+    const b = nota.boletos?.[0]
+    return b ? `${b.numero_boleto} (${b.status})` : "Sem boleto"
+  }
+
+  const statusNotaTexto = (status: string) => {
+    const map: Record<string, string> = {
+      pendente: "Pendente",
+      paga: "Paga",
+      pago: "Pago",
+      vencida: "Vencida",
+      vencido: "Vencido",
+      cancelada: "Cancelada",
+      cancelado: "Cancelado"
+    }
+    return map[status] || status
+  }
+
+  const exportarCsvNotasReceber = () => {
+    setExportandoCsv("receber")
+    try {
+      const linhas: string[][] = [
+        ["Número NF", "Cliente", "Vencimento", "Valor", "Cobrança", "Status"],
+        ...notasSaidaCompleta.map((nota) => [
+          nota.numero_nf,
+          nota.clientes?.nome || "-",
+          nota.data_vencimento ? formatarData(nota.data_vencimento) : "-",
+          formatarMoeda(nota.tipo === "saida" ? (nota.valor_liquido ?? getValorFinanceiroNota(nota)) : (nota.valor_total || 0)),
+          cobrancaTextoCsv(nota),
+          statusNotaTexto(nota.status)
+        ])
+      ]
+      baixarCsv(`financeiro-dashboard-notas-a-receber-${new Date().toISOString().slice(0, 10)}.csv`, linhas)
+      toast({ title: "CSV exportado", description: `${notasSaidaCompleta.length} registro(s).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
+  const exportarCsvNotasPagar = () => {
+    setExportandoCsv("pagar")
+    try {
+      const linhas: string[][] = [
+        ["Número NF", "Fornecedor", "Vencimento", "Valor", "Cobrança", "Status"],
+        ...notasEntradaCompleta.map((nota) => [
+          nota.numero_nf,
+          nota.fornecedores?.nome || "-",
+          nota.data_vencimento ? formatarData(nota.data_vencimento) : "-",
+          formatarMoeda(nota.valor_total || 0),
+          cobrancaTextoCsv(nota),
+          statusNotaTexto(nota.status)
+        ])
+      ]
+      baixarCsv(`financeiro-dashboard-notas-a-pagar-${new Date().toISOString().slice(0, 10)}.csv`, linhas)
+      toast({ title: "CSV exportado", description: `${notasEntradaCompleta.length} registro(s).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
+  const tipoContaTexto = (conta: ContaBancaria) => {
+    const t = (conta as any).tipo_conta ?? conta.tipo
+    if (t === "corrente") return "Corrente"
+    if (t === "poupanca") return "Poupança"
+    return "Investimento"
+  }
+
+  const statusContaTexto = (conta: ContaBancaria) => {
+    if (conta.status === "ativa" || (conta as any).ativa === true) return "Ativa"
+    if (conta.status === "bloqueada") return "Bloqueada"
+    return "Inativa"
+  }
+
+  const exportarCsvContasBancarias = () => {
+    setExportandoCsv("contas")
+    try {
+      const linhas: string[][] = [
+        ["Banco", "Agência", "Conta", "Tipo", "Saldo", "Status"],
+        ...contasBancariasCompleta.map((conta) => [
+          conta.banco,
+          String(conta.agencia ?? ""),
+          String(conta.conta ?? ""),
+          tipoContaTexto(conta),
+          formatarMoeda(conta.saldo_atual ?? 0),
+          statusContaTexto(conta)
+        ])
+      ]
+      baixarCsv(`financeiro-dashboard-contas-bancarias-${new Date().toISOString().slice(0, 10)}.csv`, linhas)
+      toast({ title: "CSV exportado", description: `${contasBancariasCompleta.length} conta(s).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
 
   const carregarDados = async () => {
     try {
@@ -72,33 +227,11 @@ export default function FinanceiroPage() {
       const notasReceber = (notasSaidaResponse.data || notasSaidaResponse || []) as NotaFiscal[]
       const notasPagar = (notasEntradaResponse.data || notasEntradaResponse || []) as NotaFiscal[]
 
+      setNotasSaidaCompleta(notasReceber)
+      setNotasEntradaCompleta(notasPagar)
+
       const hoje = new Date()
       hoje.setHours(0, 0, 0, 0)
-
-      const calcularValorSaidaSemImpostos = (nota: NotaFiscal) => {
-        const totalImpostos = (
-          (nota.valor_icms || 0) +
-          (nota.valor_icms_st || 0) +
-          (nota.valor_fcp_st || 0) +
-          (nota.valor_ipi || 0) +
-          (nota.valor_pis || 0) +
-          (nota.valor_cofins || 0) +
-          (nota.valor_inss || 0) +
-          (nota.valor_ir || 0) +
-          (nota.valor_csll || 0) +
-          (nota.valor_issqn || 0) +
-          (nota.retencoes_federais || 0) +
-          (nota.outras_retencoes || 0)
-        )
-        return Math.max((nota.valor_total || 0) - totalImpostos, 0)
-      }
-
-      const getValorFinanceiroNota = (nota: NotaFiscal) => {
-        if (nota.tipo === 'saida') {
-          return nota.valor_liquido ?? calcularValorSaidaSemImpostos(nota)
-        }
-        return nota.valor_total || 0
-      }
 
       const calcularResumoNotas = (notas: NotaFiscal[]) => {
         const pendentes = notas.filter(n => n.status === 'pendente')
@@ -133,6 +266,8 @@ export default function FinanceiroPage() {
       const contas = todasContas.filter((c: any) => (c.status === 'ativa' || c.ativa === true))
       const saldoTotal = contas.reduce((sum: number, c: any) => sum + (c.saldo_atual || 0), 0)
 
+      setContasBancariasCompleta(contas as ContaBancaria[])
+
       setBancosResumo({
         totalContas: contas.length,
         saldoTotal,
@@ -154,17 +289,6 @@ export default function FinanceiroPage() {
   useEffect(() => {
     carregarDados()
   }, [])
-
-  const formatarMoeda = (valor: number) => {
-    return new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(valor)
-  }
-
-  const formatarData = (data: string) => {
-    return new Date(data).toLocaleDateString('pt-BR')
-  }
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
@@ -361,6 +485,23 @@ export default function FinanceiroPage() {
                 <TabsTrigger value="pagar">A Pagar</TabsTrigger>
               </TabsList>
               <TabsContent value="receber" className="mt-4">
+                <div className="flex justify-end mb-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-2"
+                    onClick={exportarCsvNotasReceber}
+                    disabled={exportandoCsv !== null || notasSaidaCompleta.length === 0}
+                  >
+                    {exportandoCsv === "receber" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Exportar CSV
+                  </Button>
+                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -397,6 +538,23 @@ export default function FinanceiroPage() {
                 </div>
               </TabsContent>
               <TabsContent value="pagar" className="mt-4">
+                <div className="flex justify-end mb-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="gap-2"
+                    onClick={exportarCsvNotasPagar}
+                    disabled={exportandoCsv !== null || notasEntradaCompleta.length === 0}
+                  >
+                    {exportandoCsv === "pagar" ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4" />
+                    )}
+                    Exportar CSV
+                  </Button>
+                </div>
                 <div className="rounded-md border">
                   <Table>
                     <TableHeader>
@@ -444,14 +602,31 @@ export default function FinanceiroPage() {
                 <Building2 className="w-5 h-5 text-blue-600" />
                 <CardTitle>Contas Bancárias</CardTitle>
               </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => router.push('/dashboard/financeiro/bancos')}
-              >
-                <Eye className="w-4 h-4 mr-2" />
-                Ver Todas
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="gap-2"
+                  onClick={exportarCsvContasBancarias}
+                  disabled={exportandoCsv !== null || contasBancariasCompleta.length === 0}
+                >
+                  {exportandoCsv === "contas" ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Download className="h-4 w-4" />
+                  )}
+                  Exportar CSV
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => router.push('/dashboard/financeiro/bancos')}
+                >
+                  <Eye className="w-4 h-4 mr-2" />
+                  Ver Todas
+                </Button>
+              </div>
             </div>
             <CardDescription>Resumo das contas bancárias e saldos</CardDescription>
           </CardHeader>

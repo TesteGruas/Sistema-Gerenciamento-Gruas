@@ -127,8 +127,40 @@ export default function RHPage() {
   const destinatariosNotificacaoRhRef = useRef(destinatariosNotificacaoRh)
   destinatariosNotificacaoRhRef.current = destinatariosNotificacaoRh
 
+  const [exportandoCsv, setExportandoCsv] = useState(false)
+
   // Debounce do termo de busca
   const debouncedQuery = useDebouncedValue(query, 500)
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const mapearFuncionarioApiParaRH = (func: any): FuncionarioRH => ({
+    id: func.id,
+    nome: func.nome,
+    cpf: func.cpf || "",
+    cargo: func.cargo_info?.nome || func.cargo,
+    cargo_id: func.cargo_id,
+    departamento: "",
+    salario: func.salario || 0,
+    data_admissao: func.data_admissao || "",
+    telefone: func.telefone,
+    email: func.email,
+    endereco: "",
+    cidade: "",
+    estado: "",
+    cep: "",
+    status: func.status as FuncionarioRH["status"],
+    turno: func.turno as FuncionarioRH["turno"],
+    observacoes: func.observacoes,
+    created_at: func.created_at,
+    updated_at: func.updated_at,
+    usuario: Array.isArray(func.usuario) && func.usuario.length > 0 ? func.usuario[0] : undefined,
+    obra_atual: undefined,
+  })
 
   // Função para carregar funcionários
   const carregarFuncionarios = useCallback(async () => {
@@ -164,31 +196,7 @@ export default function RHPage() {
       const response = await funcionariosApi.listarFuncionarios(params)
       
       if (response.success && response.data) {
-        // Mapear dados do backend para o formato esperado
-        const funcionariosMapeados: FuncionarioRH[] = response.data.map(func => ({
-          id: func.id,
-          nome: func.nome,
-          cpf: func.cpf || '',
-          cargo: func.cargo_info?.nome || func.cargo, // Priorizar JOIN, fallback para string
-          cargo_id: func.cargo_id, // Adicionar ID do cargo
-          departamento: '',
-          salario: func.salario || 0,
-          data_admissao: func.data_admissao || '',
-          telefone: func.telefone,
-          email: func.email,
-          endereco: '',
-          cidade: '',
-          estado: '',
-          cep: '',
-          status: func.status as any,
-          turno: func.turno as any,
-          observacoes: func.observacoes,
-          created_at: func.created_at,
-          updated_at: func.updated_at,
-          usuario: Array.isArray(func.usuario) && func.usuario.length > 0 ? func.usuario[0] : undefined,
-          obra_atual: undefined
-        }))
-        
+        const funcionariosMapeados: FuncionarioRH[] = response.data.map(mapearFuncionarioApiParaRH)
         setFuncionarios(funcionariosMapeados)
         
         // Atualizar informações de paginação
@@ -208,6 +216,93 @@ export default function RHPage() {
       setLoading(false)
     }
   }, [currentPage, itemsPerPage, debouncedQuery, filtroCargo, filtroStatus, toast])
+
+  const buscarTodosFuncionariosParaExport = async (): Promise<FuncionarioRH[]> => {
+    const PAGE_SIZE = 100
+    const todos: FuncionarioRH[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const response = await funcionariosApi.listarFuncionarios({
+        page,
+        limit: PAGE_SIZE,
+        apenasFuncionarios: true,
+        cargo: filtroCargo !== "all" ? filtroCargo : undefined,
+        status: filtroStatus !== "all" ? filtroStatus : undefined,
+        search: debouncedQuery.trim() ? debouncedQuery.trim() : undefined,
+      })
+      const lote = (response.data || []).map(mapearFuncionarioApiParaRH)
+      todos.push(...lote)
+      totalPaginas = response.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return todos
+  }
+
+  const exportarFuncionariosCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodosFuncionariosParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há funcionários com os filtros atuais.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Nome",
+        "CPF",
+        "Cargo",
+        "Email",
+        "Telefone",
+        "Status",
+        "Turno",
+        "Data admissão",
+        "Salário",
+      ]
+      const linhas = lista.map((f) =>
+        [
+          f.id,
+          f.nome,
+          f.cpf,
+          f.cargo,
+          f.email ?? "",
+          f.telefone ?? "",
+          f.status,
+          f.turno ?? "",
+          f.data_admissao,
+          Number(f.salario).toFixed(2),
+        ]
+          .map(escapeCsvCelula)
+          .join(","),
+      )
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `funcionarios_rh_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} funcionário(s) exportado(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar RH CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   // Carregar funcionários quando mudar página, itens por página, busca ou filtros
   useEffect(() => {
@@ -721,9 +816,19 @@ export default function RHPage() {
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Atualizar
                   </Button>
-                  <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Exportar
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={loading || exportandoCsv}
+                    onClick={exportarFuncionariosCsv}
+                    title="Exportar todos os funcionários que correspondem aos filtros atuais"
+                  >
+                    {exportandoCsv ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2 shrink-0" />
+                    )}
+                    Exportar CSV
                   </Button>
                 </div>
               </div>

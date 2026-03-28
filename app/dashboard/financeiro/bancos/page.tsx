@@ -27,7 +27,9 @@ import {
   Search,
   X,
   Receipt,
-  ExternalLink
+  ExternalLink,
+  Download,
+  Loader2
 } from "lucide-react"
 import {
   BarChart,
@@ -106,6 +108,7 @@ export default function BancosPage() {
   const [filtroTipo, setFiltroTipo] = useState<string>("all")
   const [filtroBanco, setFiltroBanco] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
+  const [exportandoCsv, setExportandoCsv] = useState<"contas" | "mov" | null>(null)
   
   // Formulários
   const [bancoForm, setBancoForm] = useState({
@@ -513,6 +516,73 @@ export default function BancosPage() {
     })
   }, [movimentacoes, searchTerm])
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvContas = () => {
+    setExportandoCsv("contas")
+    try {
+      const tipoLabel = (t: string) =>
+        t === "corrente" ? "Corrente" : t === "poupanca" ? "Poupança" : t === "investimento" ? "Investimento" : t
+      const linhas: string[][] = [
+        ["Banco", "Agência", "Conta", "Tipo", "Saldo", "Status"],
+        ...contas.map((c) => [
+          c.banco,
+          c.agencia,
+          c.conta,
+          tipoLabel(c.tipo_conta),
+          formatarMoeda(parseFloat(String(c.saldo_atual))),
+          c.status,
+        ]),
+      ]
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `bancos-contas-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: "CSV exportado", description: `${contas.length} conta(s).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
+  const exportarCsvMovimentacoes = () => {
+    setExportandoCsv("mov")
+    try {
+      const linhas: string[][] = [
+        ["Data", "Banco", "Tipo", "Descrição", "Forma de Pagamento", "Referência", "Valor"],
+        ...movimentacoesFiltradas.map((mov) => [
+          formatarData(mov.data),
+          mov.contas_bancarias?.banco || "N/A",
+          mov.tipo === "entrada" ? "Entrada" : "Saída",
+          mov.descricao,
+          mov.categoria || "-",
+          mov.referencia || "-",
+          (mov.tipo === "entrada" ? "+" : "-") + formatarMoeda(mov.valor),
+        ]),
+      ]
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `bancos-movimentacoes-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({ title: "CSV exportado", description: `${movimentacoesFiltradas.length} movimentação(ões) com filtros atuais.` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
   // Calcular totais
   const totalEntradas = useMemo(() => {
     return movimentacoesFiltradas
@@ -675,8 +745,23 @@ export default function BancosPage() {
 
       {/* Lista de Bancos */}
       <Card>
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2 space-y-0">
           <CardTitle>Contas Bancárias ({contas.length})</CardTitle>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={exportarCsvContas}
+            disabled={exportandoCsv !== null || contas.length === 0}
+          >
+            {exportandoCsv === "contas" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Exportar CSV
+          </Button>
         </CardHeader>
         <CardContent>
           {contas.length === 0 ? (
@@ -978,9 +1063,26 @@ export default function BancosPage() {
 
       {/* Lista de Movimentações */}
       <Card>
-        <CardHeader>
-          <CardTitle>Movimentações ({movimentacoesFiltradas.length})</CardTitle>
-          <CardDescription>Entradas e saídas registradas</CardDescription>
+        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+          <div>
+            <CardTitle>Movimentações ({movimentacoesFiltradas.length})</CardTitle>
+            <CardDescription>Entradas e saídas registradas</CardDescription>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="gap-2 shrink-0"
+            onClick={exportarCsvMovimentacoes}
+            disabled={exportandoCsv !== null || movimentacoesFiltradas.length === 0}
+          >
+            {exportandoCsv === "mov" ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            Exportar CSV
+          </Button>
         </CardHeader>
         <CardContent>
           {movimentacoesFiltradas.length === 0 ? (

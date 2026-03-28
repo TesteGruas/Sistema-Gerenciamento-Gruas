@@ -33,7 +33,9 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Banknote
+  Banknote,
+  Download,
+  Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
@@ -120,6 +122,7 @@ export default function GruasPage() {
   const [itemsPerPage, setItemsPerPage] = useState(9)
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(0)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   
   const [gruaFormData, setGruaFormData] = useState<{
     name: string
@@ -238,37 +241,33 @@ export default function GruasPage() {
     return texto
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const montarParamsListagemGruas = (page: number, limit: number) => {
+    const params: Record<string, unknown> = { page, limit }
+    if (selectedStatus !== "all") params.status = selectedStatus
+    if (selectedTipo !== "all") params.tipo = selectedTipo
+    if (searchTerm.trim()) {
+      params.search = searchTerm.trim()
+      if (searchTerm.trim().match(/^G[A-Z0-9-]+$/)) {
+        params.grua_id = searchTerm.trim()
+        delete params.search
+      }
+    }
+    return params
+  }
+
   // Função para carregar gruas da API
   const carregarGruas = async () => {
     try {
       startLoading()
       setError(null)
       
-      const params: any = {
-        page: currentPage,
-        limit: itemsPerPage
-      }
-      
-      // Adicionar filtros para a API (conforme documentação)
-      if (selectedStatus !== "all") {
-        params.status = selectedStatus
-      }
-      
-      if (selectedTipo !== "all") {
-        params.tipo = selectedTipo
-      }
-      
-      // Adicionar parâmetros de pesquisa se fornecidos
-      if (searchTerm.trim()) {
-        params.search = searchTerm.trim()
-      }
-      
-      // Adicionar filtro por grua_id se fornecido
-      if (searchTerm.trim() && searchTerm.match(/^G[A-Z0-9-]+$/)) {
-        // Se o termo de busca parece ser um ID de grua (começa com G e tem formato específico)
-        params.grua_id = searchTerm.trim()
-        delete params.search // Remover search se for um ID
-      }
+      const params = montarParamsListagemGruas(currentPage, itemsPerPage) as any
       
       const response = await gruasApi.listarGruas(params) as unknown as GruasApiResponse
       
@@ -587,24 +586,99 @@ export default function GruasPage() {
     setGruaFormData(prev => ({ ...prev, proxima_manutencao: e.target.value }))
   }
 
+  const buscarTodasGruasParaExport = async (): Promise<GruaFrontend[]> => {
+    const PAGE_SIZE = 100
+    const todas: GruaFrontend[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const response = (await gruasApi.listarGruas(
+        montarParamsListagemGruas(page, PAGE_SIZE) as any,
+      )) as unknown as GruasApiResponse
+      if (!response.success || !response.data) break
+      todas.push(...response.data.map(converterGruaBackend))
+      totalPaginas = response.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return todas.filter(
+      (grua) => selectedObra === "all" || grua.currentObraId === selectedObra,
+    )
+  }
 
-  // Função para exportar gruas com GET de 9999 itens
+  const exportarGruasCsvFiltrado = async () => {
+    try {
+      setExportandoCsv(true)
+      const dados = await buscarTodasGruasParaExport()
+      if (dados.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há gruas com os filtros atuais.",
+        })
+        return
+      }
+      const headers = [
+        "Nome",
+        "Modelo",
+        "Fabricante",
+        "Capacidade",
+        "Status",
+        "Tipo",
+        "Obra atual",
+        "Data criação",
+      ]
+      const linhas = dados.map((grua) =>
+        [
+          grua.name || "",
+          grua.model || "",
+          grua.fabricante || "",
+          grua.capacity || "",
+          grua.status || "",
+          grua.tipo || "",
+          grua.currentObraName || "",
+          grua.createdAt ? new Date(grua.createdAt).toLocaleString("pt-BR") : "",
+        ]
+          .map(escapeCsvCelula)
+          .join(","),
+      )
+      const csv = "\ufeff" + [headers.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `gruas_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${dados.length} grua(s) exportada(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar gruas CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
+  // Função para exportar gruas (PDF/Excel/CSV) respeitando os mesmos filtros da listagem
   const handleExportGruas = async (formato: 'pdf' | 'excel' | 'csv') => {
     try {
-      // Fazer GET com limite de 9999 itens
-      const response = await gruasApi.listarGruas({ 
-        limit: 9999,
-        page: 1
-      }) as unknown as GruasApiResponse
-      
-      if (response.success && response.data) {
-        const todasGruas = response.data.map(converterGruaBackend)
-        
-        // Exportar usando a função local do ExportButton
-        await exportarLocal(todasGruas, formato)
-      } else {
-        throw new Error('Erro ao carregar dados para exportação')
+      const todasGruas = await buscarTodasGruasParaExport()
+      if (todasGruas.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há gruas com os filtros atuais.",
+          variant: "destructive",
+        })
+        return
       }
+      await exportarLocal(todasGruas, formato)
     } catch (error) {
       console.error('Erro ao exportar gruas:', error)
       toast({
@@ -639,10 +713,10 @@ export default function GruasPage() {
         grua.tipo || '',
         grua.currentObraName || '',
         grua.createdAt ? new Date(grua.createdAt).toLocaleDateString('pt-BR') : ''
-      ].map(value => typeof value === 'string' && value.includes(',') ? `"${value}"` : value).join(','))
+      ].map(value => escapeCsvCelula(value)).join(','))
     ].join('\n')
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -1335,7 +1409,21 @@ export default function GruasPage() {
           <h1 className="text-3xl font-bold text-gray-900">Controle de Gruas</h1>
           <p className="text-gray-600">Gerenciamento de gruas e histórico de manutenção</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={loading || exportandoCsv}
+            onClick={exportarGruasCsvFiltrado}
+            title="Exportar todas as gruas que correspondem aos filtros atuais (várias páginas)"
+          >
+            {exportandoCsv ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+            ) : (
+              <Download className="h-4 w-4 mr-2 shrink-0" />
+            )}
+            Exportar CSV
+          </Button>
           <ExportButton
             dados={gruas}
             tipo="gruas"

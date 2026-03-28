@@ -24,6 +24,7 @@ import {
   X,
   Download,
   AlertTriangle,
+  Loader2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -827,6 +828,76 @@ export default function AlugueisIntegradoPage() {
 
   const residenciasSelecionada = residencias.find(r => r.id === residenciaId)
 
+  const [exportandoCsv, setExportandoCsv] = useState<'alugueis' | 'residencias' | null>(null)
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? '' : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvAlugueis = () => {
+    setExportandoCsv('alugueis')
+    try {
+      const linhas: string[][] = [
+        ['Residência', 'Cidade/UF', 'Funcionário', 'Cargo', 'Valor Mensal', '% Subsídio', 'Dia venc.', 'Status'],
+        ...aluguelsFiltrados.map((a) => [
+          a.residencia.nome,
+          `${a.residencia.cidade}/${a.residencia.estado}`,
+          a.funcionario.nome,
+          a.funcionario.cargo || '',
+          formatarMoeda(a.contrato.valorMensal),
+          a.contrato.porcentagemDesconto != null ? String(a.contrato.porcentagemDesconto) : '',
+          String(a.contrato.diaVencimento),
+          a.status,
+        ]),
+      ]
+      const bom = '\ufeff'
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(',')).join('\r\n')
+      const blob = new Blob([bom + corpo], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const el = document.createElement('a')
+      el.href = url
+      el.download = `alugueis-residencias-${new Date().toISOString().slice(0, 10)}.csv`
+      el.click()
+      URL.revokeObjectURL(url)
+      toast({ title: 'CSV exportado', description: `${aluguelsFiltrados.length} aluguel(is).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
+  const exportarCsvResidencias = () => {
+    setExportandoCsv('residencias')
+    try {
+      const linhas: string[][] = [
+        ['Nome', 'Endereço', 'Cidade/UF', 'Quartos', 'Banheiros', 'Área m²', 'Valor base', 'Disponível'],
+        ...residenciasFiltradas.map((r) => [
+          r.nome,
+          r.endereco,
+          `${r.cidade}/${r.estado}`,
+          String(r.quartos),
+          String(r.banheiros),
+          String(r.area),
+          formatarMoeda(r.valorBase),
+          r.disponivel ? 'Sim' : 'Não',
+        ]),
+      ]
+      const bom = '\ufeff'
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(',')).join('\r\n')
+      const blob = new Blob([bom + corpo], { type: 'text/csv;charset=utf-8' })
+      const url = URL.createObjectURL(blob)
+      const el = document.createElement('a')
+      el.href = url
+      el.download = `residencias-${new Date().toISOString().slice(0, 10)}.csv`
+      el.click()
+      URL.revokeObjectURL(url)
+      toast({ title: 'CSV exportado', description: `${residenciasFiltradas.length} residência(s).` })
+    } finally {
+      setExportandoCsv(null)
+    }
+  }
+
   // Stats
   const ativos = alugueis.filter(a => a.status === 'ativo').length
   const valorTotalMensal = alugueis
@@ -1384,6 +1455,21 @@ export default function AlugueisIntegradoPage() {
                         <SelectItem value="encerrado">Encerrados</SelectItem>
                       </SelectContent>
                     </Select>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 shrink-0"
+                      onClick={exportarCsvAlugueis}
+                      disabled={exportandoCsv !== null || aluguelsFiltrados.length === 0}
+                    >
+                      {exportandoCsv === 'alugueis' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      Exportar CSV
+                    </Button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">
@@ -1544,14 +1630,31 @@ export default function AlugueisIntegradoPage() {
             <Card>
               <CardContent className="p-0">
                 <div className="p-4 border-b bg-gray-50">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <Input
-                      placeholder="Buscar residências..."
-                      value={busca}
-                      onChange={(e) => setBusca(e.target.value)}
-                      className="pl-10"
-                    />
+                  <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                    <div className="relative flex-1">
+                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                      <Input
+                        placeholder="Buscar residências..."
+                        value={busca}
+                        onChange={(e) => setBusca(e.target.value)}
+                        className="pl-10"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="gap-2 shrink-0"
+                      onClick={exportarCsvResidencias}
+                      disabled={exportandoCsv !== null || residenciasFiltradas.length === 0}
+                    >
+                      {exportandoCsv === 'residencias' ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Download className="h-4 w-4" />
+                      )}
+                      Exportar CSV
+                    </Button>
                   </div>
                 </div>
                 <div className="overflow-x-auto">

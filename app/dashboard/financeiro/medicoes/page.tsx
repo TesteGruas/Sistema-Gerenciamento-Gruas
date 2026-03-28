@@ -28,6 +28,7 @@ import {
   Building2,
   RefreshCw,
   Download,
+  Loader2,
   CheckCircle,
   XCircle,
   Clock,
@@ -88,6 +89,7 @@ export default function MedicoesPage() {
   
   // Estados de diálogos
   const [excluindoId, setExcluindoId] = useState<number | null>(null)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
 
 
   useEffect(() => {
@@ -227,6 +229,135 @@ export default function MedicoesPage() {
 
     return Array.from(mapa.values()).sort((a, b) => a.nome.localeCompare(b.nome))
   }, [obras])
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const rotuloStatusMedicao = (status: string | undefined) => {
+    const map: Record<string, string> = {
+      pendente: "Pendente",
+      finalizada: "Finalizada",
+      enviada: "Enviada",
+      cancelada: "Cancelada",
+    }
+    return status ? map[status] || status : ""
+  }
+
+  const buildMedicoesApiFilters = (page: number, limit: number) => {
+    const filters: Record<string, unknown> = { limit, page }
+    if (gruaFilter !== "all") filters.grua_id = parseInt(gruaFilter, 10)
+    if (obraFilter !== "all") filters.obra_id = parseInt(obraFilter, 10)
+    if (filterPeriodo) filters.periodo = filterPeriodo
+    if (filterStatus !== "all") filters.status = filterStatus
+    if (searchTerm?.trim()) filters.search = searchTerm.trim()
+    return filters
+  }
+
+  const aplicarFiltrosLocaisMedicoes = (data: MedicaoMensal[]) => {
+    let out = [...data]
+    if (clienteFilter !== "all") {
+      out = out.filter((medicao) => {
+        const clienteIdDaObra =
+          medicao.obras?.clientes?.id || medicao.obras?.cliente_id
+        return String(clienteIdDaObra) === clienteFilter
+      })
+    }
+    if (obraFilter !== "all") {
+      out = out.filter((medicao) => String(medicao.obra_id) === obraFilter)
+    }
+    return out
+  }
+
+  const buscarTodasMedicoesParaExport = async (): Promise<MedicaoMensal[]> => {
+    const PAGE_SIZE = 100
+    const todas: MedicaoMensal[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const res = await medicoesMensaisApi.listar(
+        buildMedicoesApiFilters(page, PAGE_SIZE) as any,
+      )
+      const lote = res.data || []
+      todas.push(...lote)
+      totalPaginas = res.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return aplicarFiltrosLocaisMedicoes(todas)
+  }
+
+  const exportarMedicoesCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodasMedicoesParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há medições com os filtros atuais.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Período",
+        "Cliente",
+        "Obra",
+        "Total",
+        "Locação",
+        "Serviços / demais",
+        "Status",
+        "NF",
+      ]
+      const linhas = lista.map((m) => {
+        const total = Number(m.valor_total) || 0
+        const loc = Number(m.valor_mensal_bruto) || 0
+        const servico = Math.max(0, total - loc)
+        const nfTexto = m.numero
+          ? `NF-${String(m.numero).padStart(4, "0")}`
+          : ""
+        const cliente =
+          m.obras?.clientes?.nome || m.orcamentos?.clientes?.nome || ""
+        return [
+          m.id,
+          m.periodo,
+          cliente,
+          m.obras?.nome || "",
+          total.toFixed(2),
+          loc.toFixed(2),
+          servico.toFixed(2),
+          rotuloStatusMedicao(m.status),
+          nfTexto,
+        ]
+          .map(escapeCsvCelula)
+          .join(",")
+      })
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `medicoes_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} medição(ões) exportada(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar medições CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   const resumoFinanceiro = useMemo(() => {
     const base = filteredMedicoes
@@ -528,8 +659,20 @@ export default function MedicoesPage() {
                     <Button variant="outline" onClick={carregarMedicoes} className="h-9 w-9 p-0">
                       <RefreshCw className="w-4 h-4" />
                     </Button>
-                    <Button variant="outline" className="h-9 w-9 p-0">
-                      <Download className="w-4 h-4" />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="h-9 px-3"
+                      disabled={isLoading || exportandoCsv}
+                      onClick={exportarMedicoesCsv}
+                      title="Exportar todas as medições que correspondem aos filtros atuais"
+                    >
+                      {exportandoCsv ? (
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+                      ) : (
+                        <Download className="w-4 h-4 mr-2 shrink-0" />
+                      )}
+                      Exportar CSV
                     </Button>
                     <Button onClick={() => router.push('/dashboard/medicoes/nova')} className="h-9 px-3">
                       Nova Medição

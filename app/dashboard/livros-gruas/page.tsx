@@ -9,10 +9,11 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { BookOpen, Search, Wrench, Eye, AlertCircle } from "lucide-react"
+import { BookOpen, Search, Wrench, Eye, AlertCircle, Download, Loader2 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { useCurrentUser } from "@/hooks/use-current-user"
+import { useToast } from "@/hooks/use-toast"
 import { PaginationControl } from "@/components/ui/pagination-control"
 
 interface GruaObraRelacao {
@@ -49,6 +50,7 @@ function formatRelacaoDate(d?: string | null): string {
 
 export default function LivrosGruasPage() {
   const router = useRouter()
+  const { toast } = useToast()
   const { user, loading: userLoading, isAdmin } = useCurrentUser()
   
   // Estados principais
@@ -68,6 +70,7 @@ export default function LivrosGruasPage() {
   // Estados para obras e status únicos (carregados separadamente)
   const [obrasUnicas, setObrasUnicas] = useState<any[]>([])
   const [statusUnicos, setStatusUnicos] = useState<string[]>([])
+  const [exportandoCsv, setExportandoCsv] = useState(false)
 
   // Flags para controlar carregamento e evitar chamadas duplicadas
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
@@ -158,6 +161,113 @@ export default function LivrosGruasPage() {
 
   // Usar dados diretamente da API (filtros já aplicados no backend)
   const relacoesFiltradas = relacoes
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const buscarTodasRelacoesParaExport = async (): Promise<GruaObraRelacao[]> => {
+    const PAGE_SIZE = 100
+    const todas: GruaObraRelacao[] = []
+    let page = 1
+    let totalPaginas = 1
+    const search = searchTerm.trim() || undefined
+    const obraId = filterObra !== "all" ? filterObra : undefined
+    const statusF = filterStatus !== "all" ? filterStatus : undefined
+    do {
+      const response = await livroGruaApi.listarRelacoesGruaObra(
+        undefined,
+        page,
+        PAGE_SIZE,
+        search,
+        obraId,
+        statusF,
+      )
+      const lote = response.data || []
+      todas.push(...lote)
+      const total = response.total ?? 0
+      totalPaginas =
+        response.totalPages ??
+        (total > 0 ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1)
+      page += 1
+    } while (page <= totalPaginas)
+    return todas
+  }
+
+  const exportarRelacoesCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodasRelacoesParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há relações com os filtros atuais.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID relação",
+        "Grua (ID)",
+        "Modelo",
+        "Fabricante",
+        "Tipo grua",
+        "Status",
+        "Obra",
+        "Endereço obra",
+        "Cidade",
+        "UF",
+        "Início locação",
+        "Fim locação",
+        "Valor locação mensal",
+      ]
+      const linhas = lista.map((r) => {
+        const g = r.grua
+        const o = r.obra
+        return [
+          r.id,
+          g?.id ?? "",
+          g?.modelo ?? "",
+          g?.fabricante ?? "",
+          g?.tipo ?? "",
+          r.status ?? "",
+          o?.nome ?? "",
+          o?.endereco ?? "",
+          o?.cidade ?? "",
+          o?.estado ?? "",
+          formatRelacaoDate(r.data_inicio_locacao),
+          r.data_fim_locacao ? formatRelacaoDate(r.data_fim_locacao) : "",
+          r.valor_locacao_mensal != null ? Number(r.valor_locacao_mensal).toFixed(2) : "",
+        ]
+          .map(escapeCsvCelula)
+          .join(",")
+      })
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `livros-gruas_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} relação(ões) exportada(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar livros CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   // Carregar obras únicas e status únicos (uma vez)
   useEffect(() => {
@@ -284,7 +394,7 @@ export default function LivrosGruasPage() {
         <CardContent className="p-0">
           <div className="border-b px-4 py-4 sm:px-6 sm:py-5">
             <p className="mb-3 text-sm font-semibold text-foreground">Filtros</p>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-5">
               <div>
                 <Label htmlFor="search">Buscar</Label>
                 <div className="relative mt-2">
@@ -333,7 +443,7 @@ export default function LivrosGruasPage() {
                 </Select>
               </div>
 
-              <div className="flex items-end">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                 <Button
                   type="button"
                   variant="outline"
@@ -345,6 +455,21 @@ export default function LivrosGruasPage() {
                   className="mt-6 w-full md:mt-0"
                 >
                   Limpar filtros
+                </Button>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={loading || exportandoCsv}
+                  onClick={exportarRelacoesCsv}
+                  className="w-full shrink-0"
+                  title="Exportar todas as relações que correspondem aos filtros atuais"
+                >
+                  {exportandoCsv ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin shrink-0" />
+                  ) : (
+                    <Download className="mr-2 h-4 w-4 shrink-0" />
+                  )}
+                  Exportar CSV
                 </Button>
               </div>
             </div>

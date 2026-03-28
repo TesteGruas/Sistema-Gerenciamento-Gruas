@@ -538,24 +538,29 @@ export default function EstoquePage() {
 
       if (formato === 'csv') {
         const headers = Object.keys(dados[0])
+        const escapeCell = (raw: string) => {
+          const s = String(raw).replace(/"/g, '""')
+          if (/[",\r\n]/.test(s)) return `"${s}"`
+          return s
+        }
         const csvContent = [
-          headers.join(','),
-          ...dados.map((row: any) => 
-            headers.map(header => {
-              const value = row[header]
-              if (typeof value === 'string' && value.includes(',')) {
-                return `"${value}"`
-              }
-              return value || ''
-            }).join(',')
-          )
+          headers.map((h) => escapeCell(h)).join(','),
+          ...dados.map((row: any) =>
+            headers
+              .map((header) => {
+                const value = row[header]
+                if (value === null || value === undefined) return ''
+                return escapeCell(String(value))
+              })
+              .join(','),
+          ),
         ].join('\n')
 
-        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
         const url = window.URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `estoque-${new Date().toISOString().split('T')[0]}.csv`
+        a.download = `relatorio-estoque-${new Date().toISOString().split('T')[0]}.csv`
         document.body.appendChild(a)
         a.click()
         window.URL.revokeObjectURL(url)
@@ -603,7 +608,7 @@ export default function EstoquePage() {
         const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
         adicionarRodapeEmpresaFrontend(doc)
 
-        doc.save(`estoque-${new Date().toISOString().split('T')[0]}.pdf`)
+        doc.save(`relatorio-estoque-${new Date().toISOString().split('T')[0]}.pdf`)
 
         toast({
           title: "Exportação concluída!",
@@ -1233,10 +1238,11 @@ export default function EstoquePage() {
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <div className="flex gap-2">
               <ExportButton
-                dados={estoque}
+                dados={[]}
                 tipo="estoque"
                 nomeArquivo="relatorio-estoque"
                 titulo="Relatório de Estoque"
+                onExport={exportarEstoque}
               />
               <DialogTrigger asChild>
                 <Button className="bg-blue-600 hover:bg-blue-700">

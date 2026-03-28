@@ -38,7 +38,9 @@ import {
   ChevronsLeft,
   ChevronsRight,
   FileText,
-  Shield
+  Shield,
+  Download,
+  Loader2,
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend, checkAuthentication, ensureAuthenticated } from "@/lib/api-obras"
 import ClienteSearch from "@/components/cliente-search"
@@ -90,6 +92,7 @@ export default function ObrasPage() {
     total: 0,
     pages: 0
   })
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   const [obraFormData, setObraFormData] = useState({
     name: '',
     description: '',
@@ -1375,6 +1378,113 @@ export default function ObrasPage() {
     }
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const filtrarObrasPorBuscaLocal = (lista: any[]) => {
+    const t = searchTerm.trim().toLowerCase()
+    if (!t) return lista
+    return lista.filter(
+      (obra: any) =>
+        (obra.name || "").toLowerCase().includes(t) ||
+        (obra.description || "").toLowerCase().includes(t),
+    )
+  }
+
+  const buscarTodasObrasParaExport = async () => {
+    const PAGE_SIZE = 100
+    const todas: any[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const res = await obrasApi.listarObras({ page, limit: PAGE_SIZE })
+      const lote = (res.data || []).map((obraBackend: ObraBackend) =>
+        converterObraBackendParaFrontend(obraBackend),
+      )
+      todas.push(...lote)
+      totalPaginas = res.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return filtrarObrasPorBuscaLocal(todas)
+  }
+
+  const exportarObrasCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodasObrasParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: searchTerm.trim()
+            ? "Nenhuma obra corresponde à busca atual."
+            : "Não há obras cadastradas.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Nome",
+        "Descrição",
+        "Status",
+        "Data início",
+        "Data fim",
+        "Cliente",
+        "Responsável",
+        "Orçamento",
+        "Cidade",
+        "UF",
+        "Qtd. gruas",
+      ]
+      const linhas = lista.map((obra: any) => {
+        const budgetNum =
+          typeof obra.budget === "string" ? parseFloat(obra.budget) || 0 : obra.budget || 0
+        const gruasList = obra.gruasVinculadas || []
+        const nGruas = Array.isArray(gruasList) ? gruasList.length : 0
+        return [
+          obra.id,
+          obra.name,
+          obra.description,
+          obra.status,
+          obra.startDate ? safeObraDateLabel(obra.startDate) : "",
+          obra.endDate ? safeObraDateLabel(obra.endDate) : "",
+          obra.clienteName,
+          obra.responsavelName,
+          Number.isFinite(budgetNum) ? budgetNum.toFixed(2) : "",
+          obra.cidade,
+          obra.estado,
+          nGruas,
+        ]
+          .map(escapeCsvCelula)
+          .join(",")
+      })
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `obras_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} obra(s) exportada(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar obras CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   return (
     <ProtectedRoute permission="obras:visualizar">
@@ -1384,8 +1494,22 @@ export default function ObrasPage() {
           <h1 className="text-3xl font-bold text-gray-900">Gerenciamento de Obras</h1>
           <p className="text-gray-600">Controle e acompanhamento de todas as obras</p>
         </div>
-        <div className="flex gap-2">
-          <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2 justify-end">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={loading || exportandoCsv}
+              onClick={exportarObrasCsv}
+              title="Baixar todas as obras (com o filtro de busca atual) em CSV"
+            >
+              {exportandoCsv ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+              ) : (
+                <Download className="h-4 w-4 mr-2 shrink-0" />
+              )}
+              Exportar CSV
+            </Button>
             <ExportButton
               dados={paginatedObras}
               tipo="obras"

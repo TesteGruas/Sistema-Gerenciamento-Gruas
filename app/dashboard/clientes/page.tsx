@@ -33,6 +33,7 @@ import {
   Image,
   Bell,
   X,
+  Download,
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
 import { obrasApi, Obra } from "@/lib/api-obras"
@@ -123,6 +124,7 @@ export default function ClientesPage() {
   const [notificarSelecionadosOpen, setNotificarSelecionadosOpen] = useState(false)
   const [clienteNotificarIndividual, setClienteNotificarIndividual] = useState<Cliente | null>(null)
   const [notificarIndividualOpen, setNotificarIndividualOpen] = useState(false)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   const destinatariosNotificacaoClientesRef = useRef(destinatariosNotificacaoClientes)
   destinatariosNotificacaoClientesRef.current = destinatariosNotificacaoClientes
 
@@ -371,6 +373,107 @@ export default function ClientesPage() {
     return partes.join(' - ')
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const rotuloStatusCliente = (s?: string) => {
+    if (s === "ativo") return "Ativo"
+    if (s === "inativo") return "Inativo"
+    if (s === "bloqueado") return "Bloqueado"
+    if (s === "pendente") return "Pendente"
+    return s || ""
+  }
+
+  const buscarTodosClientesParaExport = async (): Promise<Cliente[]> => {
+    const PAGE_SIZE = 100
+    const status = statusFilter || undefined
+    const termo = searchTerm.trim()
+    const todos: Cliente[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const res =
+        termo.length >= 2
+          ? await clientesApi.buscarClientes(termo, page, PAGE_SIZE, status)
+          : await clientesApi.listarClientes({ page, limit: PAGE_SIZE, status })
+      const lote = res.data || []
+      todos.push(...lote)
+      totalPaginas = res.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return todos
+  }
+
+  const exportarClientesCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodosClientesParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há clientes com os filtros atuais.",
+          variant: "default",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Nome",
+        "CNPJ",
+        "Email",
+        "Telefone",
+        "Cidade",
+        "Estado",
+        "Contato",
+        "Email do contato",
+        "Telefone do contato",
+        "Status",
+        "Criado em",
+      ]
+      const linhas = lista.map((c) =>
+        [
+          c.id,
+          c.nome,
+          c.cnpj,
+          c.email,
+          c.telefone,
+          c.cidade,
+          c.estado,
+          c.contato,
+          c.contato_email,
+          c.contato_telefone,
+          rotuloStatusCliente(c.status),
+          c.created_at ? new Date(c.created_at).toLocaleString("pt-BR") : "",
+        ].map(escapeCsvCelula).join(","),
+      )
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `clientes_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} cliente(s) exportado(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar clientes CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   const handleViewDetails = (cliente: Cliente) => {
     setSelectedCliente(cliente)
@@ -1002,7 +1105,7 @@ export default function ClientesPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div className="flex items-end">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2">
                   <Button
                     variant="outline"
                     type="button"
@@ -1010,9 +1113,24 @@ export default function ClientesPage() {
                       setSearchTerm("")
                       setStatusFilter("")
                     }}
-                    className="w-full"
+                    className="w-full sm:flex-1"
                   >
                     Limpar Filtros
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full sm:flex-1"
+                    disabled={loading || exportandoCsv}
+                    onClick={exportarClientesCsv}
+                    title="Exportar todos os clientes que correspondem aos filtros atuais (várias páginas)"
+                  >
+                    {exportandoCsv ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2 shrink-0" />
+                    )}
+                    Exportar CSV
                   </Button>
                 </div>
               </div>
@@ -2443,6 +2561,7 @@ function ClienteDetails({
   )
 }
 }
+
 
 
 

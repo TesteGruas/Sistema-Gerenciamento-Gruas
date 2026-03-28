@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -105,6 +105,7 @@ export default function ImpostosPage() {
   const [impostoParaPagar, setImpostoParaPagar] = useState<any>(null)
   const [contaBancariaPago, setContaBancariaPago] = useState('')
   const [contasBancariasMain, setContasBancariasMain] = useState<any[]>([])
+  const [exportandoCsv, setExportandoCsv] = useState(false)
 
   // Tipos padrão
   const tiposPadrao = [
@@ -326,6 +327,70 @@ export default function ImpostosPage() {
     ...tiposImpostos.filter(t => tiposPadrao.indexOf(t.nome) === -1).map(t => t.nome)
   ].sort()
 
+  const impostosFiltrados = useMemo(() => {
+    return impostos.filter((i) => {
+      const st = searchTerm.trim().toLowerCase()
+      const matchSearch =
+        !st ||
+        String(i.descricao || "")
+          .toLowerCase()
+          .includes(st) ||
+        String(i.tipo || "")
+          .toLowerCase()
+          .includes(st)
+      const matchStatus = selectedStatus === "all" || i.status === selectedStatus
+      const matchTipo = selectedTipo === "all" || i.tipo === selectedTipo
+      return matchSearch && matchStatus && matchTipo
+    })
+  }, [impostos, searchTerm, selectedStatus, selectedTipo])
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvImpostos = () => {
+    setExportandoCsv(true)
+    try {
+      const linhas: string[][] = [
+        ["Tipo", "Descrição", "Valor", "Vencimento", "Status", "Data Pagamento", "Número Nota"],
+        ...impostosFiltrados.map((imposto) => {
+          const dataVencimento = imposto.data_vencimento || imposto.vencimento
+          const dataPagamento = imposto.data_pagamento || imposto.dataPagamento
+          const numeroNota = imposto.referencia || imposto.numeroNota
+          return [
+            imposto.tipo,
+            imposto.descricao,
+            `R$ ${parseFloat(imposto.valor || 0).toLocaleString("pt-BR", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}`,
+            dataVencimento ? new Date(dataVencimento).toLocaleDateString("pt-BR") : "-",
+            imposto.status,
+            dataPagamento ? new Date(dataPagamento).toLocaleDateString("pt-BR") : "-",
+            numeroNota || "-",
+          ]
+        }),
+      ]
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `impostos-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({
+        title: "CSV exportado",
+        description: `${impostosFiltrados.length} registro(s) com os filtros atuais.`,
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
   // Agrupar impostos por mês
   const groupImpostosByMonth = (impostos: any[]) => {
     const grouped: any = {}
@@ -476,9 +541,26 @@ export default function ImpostosPage() {
         {/* Pagamentos de Impostos */}
         <TabsContent value="pagamentos" className="space-y-6">
           <Card>
-            <CardHeader>
-              <CardTitle>Pagamentos de Impostos</CardTitle>
-              <CardDescription>Gestão de pagamentos de impostos</CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle>Pagamentos de Impostos</CardTitle>
+                <CardDescription>Gestão de pagamentos de impostos</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-2 shrink-0"
+                onClick={exportarCsvImpostos}
+                disabled={exportandoCsv || impostosFiltrados.length === 0}
+              >
+                {exportandoCsv ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Exportar CSV
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-4">
@@ -548,13 +630,15 @@ export default function ImpostosPage() {
                           <Loader2 className="w-6 h-6 animate-spin mx-auto" />
                         </TableCell>
                       </TableRow>
-                    ) : impostos.length === 0 ? (
+                    ) : impostosFiltrados.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                          Nenhum imposto encontrado
+                          {impostos.length === 0
+                            ? "Nenhum imposto encontrado"
+                            : "Nenhum imposto encontrado para os filtros atuais"}
                         </TableCell>
                       </TableRow>
-                    ) : impostos.map((imposto) => {
+                    ) : impostosFiltrados.map((imposto) => {
                       const dataVencimento = imposto.data_vencimento || imposto.vencimento
                       const dataPagamento = imposto.data_pagamento || imposto.dataPagamento
                       const numeroNota = imposto.referencia || imposto.numeroNota

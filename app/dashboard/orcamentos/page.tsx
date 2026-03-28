@@ -27,7 +27,8 @@ import {
   XCircle,
   Download,
   Save,
-  Package
+  Package,
+  Loader2,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { useEmpresa } from "@/hooks/use-empresa"
@@ -116,6 +117,7 @@ export default function OrcamentosPage() {
   const [currentPageObra, setCurrentPageObra] = useState(1)
   const [totalPagesObra, setTotalPagesObra] = useState(1)
   const [totalItemsObra, setTotalItemsObra] = useState(0)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const loadingRef = useRef(false)
   const initialLoadDoneRef = useRef(false)
@@ -207,6 +209,44 @@ export default function OrcamentosPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm])
 
+  const mapearOrcamentoDaApi = (orc: OrcamentoAPI): Orcamento => ({
+    id: orc.id.toString(),
+    numero: orc.numero || '',
+    cliente_id: orc.cliente_id,
+    cliente_nome: orc.cliente_nome || orc.clientes?.nome,
+    obra_nome: orc.obra_nome || '',
+    obra_endereco: orc.obra_endereco,
+    obra_cidade: orc.obra_cidade,
+    obra_estado: orc.obra_estado,
+    tipo_obra: orc.tipo_obra,
+    equipamento: orc.equipamento || '',
+    altura_inicial: orc.altura_inicial,
+    altura_final: orc.altura_final,
+    comprimento_lanca: orc.comprimento_lanca,
+    carga_maxima: orc.carga_maxima,
+    carga_ponta: orc.carga_ponta,
+    potencia_eletrica: orc.potencia_eletrica,
+    energia_necessaria: orc.energia_necessaria,
+    valor_locacao_mensal: orc.valor_locacao_mensal || 0,
+    valor_operador: orc.valor_operador || 0,
+    valor_sinaleiro: orc.valor_sinaleiro || 0,
+    valor_manutencao: orc.valor_manutencao || 0,
+    total_mensal: orc.total_mensal || 0,
+    prazo_locacao_meses: orc.prazo_locacao_meses || 0,
+    data_inicio_estimada: orc.data_inicio_estimada,
+    tolerancia_dias: orc.tolerancia_dias,
+    status: (orc.status || 'rascunho') as StatusOrcamento,
+    validade_proposta: orc.validade_proposta,
+    condicoes_comerciais: orc.condicoes_comerciais,
+    responsabilidades_cliente: orc.responsabilidades_cliente,
+    escopo_incluso: orc.escopo_incluso,
+    created_at: orc.created_at || '',
+    updated_at: orc.updated_at,
+    aprovado_por: orc.aprovado_por,
+    aprovado_em: orc.aprovado_em,
+    observacoes: orc.observacoes
+  })
+
   const loadOrcamentos = async () => {
     if (loadingRef.current) return
     setLoading(true)
@@ -219,43 +259,7 @@ export default function OrcamentosPage() {
       })
 
       if (response.success && response.data) {
-        const orcamentosMapeados = response.data.map((orc: OrcamentoAPI) => ({
-          id: orc.id.toString(),
-          numero: orc.numero || '',
-          cliente_id: orc.cliente_id,
-          cliente_nome: orc.cliente_nome || orc.clientes?.nome,
-          obra_nome: orc.obra_nome || '',
-          obra_endereco: orc.obra_endereco,
-          obra_cidade: orc.obra_cidade,
-          obra_estado: orc.obra_estado,
-          tipo_obra: orc.tipo_obra,
-          equipamento: orc.equipamento || '',
-          altura_inicial: orc.altura_inicial,
-          altura_final: orc.altura_final,
-          comprimento_lanca: orc.comprimento_lanca,
-          carga_maxima: orc.carga_maxima,
-          carga_ponta: orc.carga_ponta,
-          potencia_eletrica: orc.potencia_eletrica,
-          energia_necessaria: orc.energia_necessaria,
-          valor_locacao_mensal: orc.valor_locacao_mensal || 0,
-          valor_operador: orc.valor_operador || 0,
-          valor_sinaleiro: orc.valor_sinaleiro || 0,
-          valor_manutencao: orc.valor_manutencao || 0,
-          total_mensal: orc.total_mensal || 0,
-          prazo_locacao_meses: orc.prazo_locacao_meses || 0,
-          data_inicio_estimada: orc.data_inicio_estimada,
-          tolerancia_dias: orc.tolerancia_dias,
-          status: (orc.status || 'rascunho') as StatusOrcamento,
-          validade_proposta: orc.validade_proposta,
-          condicoes_comerciais: orc.condicoes_comerciais,
-          responsabilidades_cliente: orc.responsabilidades_cliente,
-          escopo_incluso: orc.escopo_incluso,
-          created_at: orc.created_at || '',
-          updated_at: orc.updated_at,
-          aprovado_por: orc.aprovado_por,
-          aprovado_em: orc.aprovado_em,
-          observacoes: orc.observacoes
-        }))
+        const orcamentosMapeados = response.data.map(mapearOrcamentoDaApi)
         setOrcamentos(orcamentosMapeados)
         setTotalPagesObra(response.pagination.pages || 1)
         setTotalItemsObra(response.pagination.total || 0)
@@ -613,6 +617,111 @@ export default function OrcamentosPage() {
     }
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const rotuloStatusOrcamentoCsv = (status: StatusOrcamento) => {
+    const map: Record<StatusOrcamento, string> = {
+      rascunho: "Rascunho",
+      enviado: "Enviado",
+      aprovado: "Aprovado",
+      rejeitado: "Rejeitado",
+      vencido: "Vencido",
+      convertido: "Convertido",
+    }
+    return map[status] || status
+  }
+
+  const buscarTodosOrcamentosParaExport = async (): Promise<Orcamento[]> => {
+    const PAGE_SIZE = 100
+    const statusFilter = filtroStatus !== "todos" ? filtroStatus : undefined
+    const search = searchTerm.trim() || undefined
+    const todos: Orcamento[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const res = await getOrcamentos({
+        page,
+        limit: PAGE_SIZE,
+        status: statusFilter,
+        search,
+      })
+      const lote = (res.data || []).map(mapearOrcamentoDaApi)
+      todos.push(...lote)
+      totalPaginas = res.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return todos
+  }
+
+  const exportarOrcamentosCsv = async () => {
+    try {
+      setExportandoCsv(true)
+      const lista = await buscarTodosOrcamentosParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há orçamentos com os filtros atuais.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Número",
+        "Cliente",
+        "Obra",
+        "Cidade",
+        "UF",
+        "Equipamento",
+        "Valor mensal",
+        "Prazo (meses)",
+        "Status",
+        "Criado em",
+      ]
+      const linhas = lista.map((o) =>
+        [
+          o.id,
+          o.numero,
+          o.cliente_nome,
+          o.obra_nome,
+          o.obra_cidade,
+          o.obra_estado,
+          o.equipamento,
+          Number.isFinite(o.total_mensal) ? o.total_mensal.toFixed(2) : "",
+          o.prazo_locacao_meses,
+          rotuloStatusOrcamentoCsv(o.status),
+          o.created_at ? new Date(o.created_at).toLocaleString("pt-BR") : "",
+        ].map(escapeCsvCelula).join(","),
+      )
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `orcamentos_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} orçamento(s) exportado(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar orçamentos CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
 
   return (
     <div className="space-y-6">
@@ -665,8 +774,8 @@ export default function OrcamentosPage() {
                     Visualize e gerencie todos os orçamentos de obras
                   </CardDescription>
                 </div>
-                <div className="flex gap-2">
-                  <div className="relative w-64">
+                <div className="flex flex-wrap gap-2 items-center">
+                  <div className="relative w-64 min-w-[200px]">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                     <Input
                       placeholder="Pesquisar..."
@@ -686,6 +795,20 @@ export default function OrcamentosPage() {
                     <option value="aprovado">Aprovado</option>
                     <option value="rejeitado">Rejeitado</option>
                   </select>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={loading || exportandoCsv}
+                    onClick={exportarOrcamentosCsv}
+                    title="Exportar todos os orçamentos que correspondem à pesquisa e ao status atuais"
+                  >
+                    {exportandoCsv ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2 shrink-0" />
+                    )}
+                    Exportar CSV
+                  </Button>
                 </div>
               </div>
             </CardHeader>

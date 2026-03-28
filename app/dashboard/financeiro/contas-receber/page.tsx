@@ -33,7 +33,8 @@ import {
   Receipt,
   AlertTriangle,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { receitasApi, Receita, ReceitaCreate, ReceitaUpdate } from "@/lib/api-receitas"
@@ -130,6 +131,7 @@ export default function ContasReceberPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [viewingItem, setViewingItem] = useState<any>(null)
   const [loadingDetalhesNota, setLoadingDetalhesNota] = useState(false)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
 
   // Estados para Contas a Receber
   const [contas, setContas] = useState<ContaReceber[]>([])
@@ -617,29 +619,6 @@ export default function ContasReceberPage() {
     }
   }
 
-  const handleExportReceitas = async () => {
-    try {
-      await receitasApi.export({
-        obra_id: filterObra !== 'all' ? parseInt(filterObra) : undefined,
-        tipo: filterTipo !== 'all' ? filterTipo : undefined,
-        status: filterStatus !== 'all' ? filterStatus : undefined,
-        data_inicio: filterPeriodo ? `${filterPeriodo}-01` : undefined,
-        data_fim: filterPeriodo ? `${filterPeriodo}-31` : undefined
-      })
-      toast({
-        title: "Sucesso",
-        description: "Receitas exportadas com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao exportar receitas:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao exportar receitas",
-        variant: "destructive"
-      })
-    }
-  }
-
   const resetForm = () => {
     setReceitaForm({
       obra_id: '',
@@ -750,6 +729,97 @@ export default function ContasReceberPage() {
     }
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvListaUnificada = () => {
+    setExportandoCsv(true)
+    try {
+      const labelMedicao = (s: string) => {
+        const m: Record<string, string> = {
+          finalizada: "Finalizada",
+          enviada: "Enviada",
+          pendente: "Pendente",
+          cancelada: "Cancelada",
+        }
+        return m[s] || s
+      }
+      const linhas: string[][] = [
+        ["Tipo", "Descrição", "Obra", "Cliente", "Data", "Valor", "Status"],
+        ...todosRegistros.map((reg) => {
+          if (reg.tipo === "receita") {
+            const r = reg.data as ReceitaComRelacionamentos
+            return [
+              getTipoLabel(r.tipo),
+              r.descricao,
+              r.obras?.nome || "N/A",
+              r.obras?.clientes?.nome || "N/A",
+              formatarData(r.data_receita),
+              formatarMoeda(r.valor || 0),
+              r.status,
+            ]
+          }
+          if (reg.tipo === "medicao") {
+            const m = reg.data as MedicaoMensal
+            const dataStr = m.periodo
+              ? `${m.periodo.split("-")[1]}/${m.periodo.split("-")[0]}`
+              : formatarData(m.data_medicao)
+            return [
+              "Medição",
+              m.numero || `Medição #${m.id}`,
+              m.obras?.nome || m.gruas?.name || "N/A",
+              m.obras?.clientes?.nome || m.orcamentos?.clientes?.nome || "N/A",
+              dataStr,
+              formatarMoeda(m.valor_total || 0),
+              labelMedicao(m.status),
+            ]
+          }
+          if (reg.tipo === "conta") {
+            const c = reg.data as ContaReceber
+            return [
+              "Conta a Receber",
+              c.descricao,
+              c.obra?.nome || "N/A",
+              c.cliente?.nome || "N/A",
+              formatarData(c.data_vencimento),
+              formatarMoeda(c.valor),
+              c.status,
+            ]
+          }
+          const n = reg.data as ContaReceber
+          const desc = n.numero_nf ? `${n.descricao} (NF ${n.numero_nf}${n.serie ? ` Série ${n.serie}` : ""})` : n.descricao
+          return [
+            "Nota Fiscal",
+            desc,
+            n.obra?.nome || "N/A",
+            n.cliente?.nome || "N/A",
+            formatarData(n.data_vencimento),
+            formatarMoeda(n.valor),
+            n.status,
+          ]
+        }),
+      ]
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `contas-receber-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({
+        title: "CSV exportado",
+        description: `${todosRegistros.length} registro(s) com os filtros atuais.`,
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
   const toNumber = (value: any) => {
     const parsed = parseFloat(String(value ?? 0))
     return Number.isFinite(parsed) ? parsed : 0
@@ -839,9 +909,19 @@ export default function ContasReceberPage() {
           <p className="text-gray-600">Gestão de receitas, medições e orçamentos</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportReceitas}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
+          <Button
+            type="button"
+            variant="outline"
+            onClick={exportarCsvListaUnificada}
+            disabled={exportandoCsv || totalRegistros === 0}
+            className="gap-2"
+          >
+            {exportandoCsv ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Exportar CSV
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -913,9 +993,26 @@ export default function ContasReceberPage() {
 
           {/* Lista Unificada de Receitas e Contas a Receber */}
           <Card>
-            <CardHeader>
-              <CardTitle>Contas a Receber e Medições ({filteredReceitas.length + filteredMedicoes.length + contas.length})</CardTitle>
-              <CardDescription>Lista unificada de receitas, medições e contas a receber</CardDescription>
+            <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+              <div>
+                <CardTitle>Contas a Receber e Medições ({filteredReceitas.length + filteredMedicoes.length + contas.length})</CardTitle>
+                <CardDescription>Lista unificada de receitas, medições e contas a receber</CardDescription>
+              </div>
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="gap-2 shrink-0"
+                onClick={exportarCsvListaUnificada}
+                disabled={exportandoCsv || totalRegistros === 0}
+              >
+                {exportandoCsv ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4" />
+                )}
+                Exportar CSV
+              </Button>
             </CardHeader>
             <CardContent className="space-y-4">
             {/* Filtros */}

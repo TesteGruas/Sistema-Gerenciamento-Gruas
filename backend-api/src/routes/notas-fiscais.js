@@ -508,6 +508,153 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * Exportação completa: notas com os mesmos filtros da listagem + itens (impostos por linha, custos).
+ * Deve ficar registrado ANTES de GET /:id para não ser capturado como id.
+ *
+ * Query: tipo, status, search, tipo_nota (opcional; use "all" ou omita para todos)
+ */
+router.get('/exportacao-completa', async (req, res) => {
+  try {
+    const { tipo, status, search, tipo_nota } = req.query;
+
+    const PAGE = 200;
+    let pageIdx = 0;
+    const todasNotas = [];
+
+    // Mesmos filtros da listagem GET /
+    while (true) {
+      const offset = pageIdx * PAGE;
+      let query = supabaseAdmin
+        .from('notas_fiscais')
+        .select(
+          `
+        *,
+        clientes(nome, cnpj),
+        fornecedores(nome, cnpj),
+        vendas(numero_venda),
+        compras(numero_pedido),
+        boletos(id, numero_boleto, valor, data_vencimento, status, tipo, arquivo_boleto),
+        medicoes_mensais(numero, periodo),
+        locacoes(numero)
+      `,
+          { count: 'exact' }
+        );
+
+      if (tipo) {
+        query = query.eq('tipo', tipo);
+      }
+      if (status) {
+        query = query.eq('status', status);
+      }
+      if (search) {
+        const searchTerm = `%${search}%`;
+        query = query.or(`numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm}`);
+      }
+      if (tipo_nota && tipo_nota !== 'all') {
+        query = query.eq('tipo_nota', tipo_nota);
+      }
+
+      query = query.order('created_at', { ascending: false }).range(offset, offset + PAGE - 1);
+
+      const { data, error } = await query;
+      if (error) throw error;
+
+      const chunk = data || [];
+      todasNotas.push(...chunk);
+      if (chunk.length < PAGE) break;
+      pageIdx += 1;
+      if (pageIdx > 200) break; // segurança: no máx. ~40k notas
+    }
+
+    const notasProcessadas = todasNotas.map((nota) => processarDatasNotaFiscal({ ...nota }));
+
+    const ids = notasProcessadas.map((n) => n.id).filter(Boolean);
+    const itensPorNota = {};
+
+    const chunkSize = 150;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const slice = ids.slice(i, i + chunkSize);
+      if (slice.length === 0) continue;
+      const { data: itensChunk, error: errItens } = await supabaseAdmin
+        .from('notas_fiscais_itens')
+        .select('*')
+        .in('nota_fiscal_id', slice)
+        .order('id', { ascending: true });
+      if (errItens) throw errItens;
+      for (const item of itensChunk || []) {
+        const nid = item.nota_fiscal_id;
+        if (!itensPorNota[nid]) itensPorNota[nid] = [];
+        let impostosDin = item.impostos_dinamicos;
+        if (impostosDin && typeof impostosDin === 'string') {
+          try {
+            impostosDin = JSON.parse(impostosDin);
+          } catch {
+            impostosDin = [];
+          }
+        }
+        itensPorNota[nid].push({ ...item, impostos_dinamicos: impostosDin });
+      }
+    }
+
+    const data = notasProcessadas.map((nota) => {
+      const itens = itensPorNota[nota.id] || [];
+      let somaPrecoItens = 0;
+      let somaIcmsItens = 0;
+      let somaIpiItens = 0;
+      let somaPisItens = 0;
+      let somaCofinsItens = 0;
+      let somaIssItens = 0;
+      let somaInssItens = 0;
+      let somaIrItens = 0;
+      let somaCsllItens = 0;
+      for (const it of itens) {
+        somaPrecoItens += Number(it.preco_total || 0);
+        somaIcmsItens += Number(it.valor_icms || 0);
+        somaIpiItens += Number(it.valor_ipi || 0);
+        somaPisItens += Number(it.valor_pis || 0);
+        somaCofinsItens += Number(it.valor_cofins || 0);
+        somaIssItens += Number(it.valor_issqn || 0);
+        somaInssItens += Number(it.valor_inss || 0);
+        somaIrItens += Number(it.valor_ir || 0);
+        somaCsllItens += Number(it.valor_csll || 0);
+      }
+
+      return {
+        nota,
+        itens,
+        totais_itens: {
+          quantidade_linhas: itens.length,
+          soma_preco_total: somaPrecoItens,
+          soma_valor_icms: somaIcmsItens,
+          soma_valor_ipi: somaIpiItens,
+          soma_valor_pis: somaPisItens,
+          soma_valor_cofins: somaCofinsItens,
+          soma_valor_issqn: somaIssItens,
+          soma_valor_inss: somaInssItens,
+          soma_valor_ir: somaIrItens,
+          soma_valor_csll: somaCsllItens
+        }
+      };
+    });
+
+    res.json({
+      success: true,
+      data,
+      meta: {
+        total: data.length
+      }
+    });
+  } catch (error) {
+    console.error('Erro na exportação completa de notas fiscais:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    });
+  }
+});
+
+/**
  * @swagger
  * /api/notas-fiscais:
  *   post:

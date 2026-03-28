@@ -12,6 +12,20 @@ import { Download, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { getApiBasePath } from '@/lib/runtime-config'
 
+/** Evita [object Object] ao exportar campos aninhados (ex.: categorias, estoque). */
+function serializeExportCell(value: unknown): string {
+  if (value === null || value === undefined) return ''
+  if (typeof value === 'object') return JSON.stringify(value)
+  return String(value)
+}
+
+/** Valor pronto para célula CSV: escapa aspas e quebras de linha. */
+function escapeCsvCell(raw: string): string {
+  const s = raw.replace(/"/g, '""')
+  if (/[",\r\n]/.test(s)) return `"${s}"`
+  return s
+}
+
 interface ExportButtonProps {
   dados: any[]
   tipo: 'gruas' | 'obras' | 'funcionarios' | 'financeiro' | 'estoque' | 'ponto' | 'relatorios'
@@ -141,19 +155,15 @@ export function ExportButton({
 
     const headers = colunas || Object.keys(dados[0])
     const csvContent = [
-      headers.join(','),
-      ...dados.map(row => 
-        headers.map(header => {
-          const value = row[header]
-          if (typeof value === 'string' && value.includes(',')) {
-            return `"${value}"`
-          }
-          return value || ''
-        }).join(',')
-      )
+      headers.map((h) => escapeCsvCell(String(h))).join(','),
+      ...dados.map((row) =>
+        headers
+          .map((header) => escapeCsvCell(serializeExportCell(row[header])))
+          .join(','),
+      ),
     ].join('\n')
 
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' })
     const url = window.URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -177,7 +187,11 @@ export function ExportButton({
       const worksheet = XLSX.utils.json_to_sheet(dados.map(row => {
         const newRow: any = {}
         headers.forEach(header => {
-          newRow[header] = row[header] || ''
+          const v = row[header]
+          newRow[header] =
+            v !== null && v !== undefined && typeof v === 'object'
+              ? JSON.stringify(v)
+              : (v ?? '')
         })
         return newRow
       }))
@@ -235,9 +249,9 @@ export function ExportButton({
       
       const tableData = dados.map(row => 
         headers.map(header => {
-          const value = row[header] || ''
-          // Converter valores para string e limitar tamanho
-          return String(value).substring(0, 100)
+          const value = row[header]
+          const text = serializeExportCell(value)
+          return text.substring(0, 100)
         })
       )
 

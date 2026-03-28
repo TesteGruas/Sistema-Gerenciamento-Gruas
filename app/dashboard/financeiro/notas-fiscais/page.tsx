@@ -44,6 +44,7 @@ import {
   AlertTriangle,
   Zap,
   Mail,
+  Loader2,
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 import { clientesApi } from "@/lib/api-clientes"
@@ -126,6 +127,7 @@ export default function NotasFiscaisPage() {
   const [incluirEmailsCliente, setIncluirEmailsCliente] = useState(true)
   const [anexarBoletoEmail, setAnexarBoletoEmail] = useState(true)
   const [emailSending, setEmailSending] = useState(false)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
@@ -2513,6 +2515,222 @@ export default function NotasFiscaisPage() {
     return filtered
   }, [notasFiscais, tipoNotaFilter, activeTab])
 
+  const escapeCsvCelulaNf = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvNotasFiscais = async () => {
+    setExportandoCsv(true)
+    try {
+      const response = await notasFiscaisApi.exportacaoCompleta({
+        tipo: activeTab,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+        search: searchTerm || undefined,
+        tipo_nota: tipoNotaFilter,
+      })
+
+      if (!response?.success) {
+        toast({
+          title: "Erro ao exportar",
+          description: "Resposta inválida do servidor.",
+          variant: "destructive",
+        })
+        return
+      }
+
+      const entries = (response.data || []) as Array<{
+        nota: NotaFiscal & {
+          medicoes_mensais?: { numero?: string; periodo?: string }
+          medicoes?: { numero?: string; periodo?: string }
+        }
+        itens: Array<Record<string, unknown>>
+        totais_itens: {
+          quantidade_linhas: number
+          soma_preco_total: number
+          soma_valor_icms: number
+          soma_valor_ipi: number
+          soma_valor_pis: number
+          soma_valor_cofins: number
+          soma_valor_issqn: number
+          soma_valor_inss: number
+          soma_valor_ir: number
+          soma_valor_csll: number
+        }
+      }>
+
+      const cobrancaTxt = (n: NotaFiscal) => {
+        const b = n.boletos?.[0]
+        return b ? `Boleto ${b.numero_boleto}` : "Sem boleto"
+      }
+
+      type NotaComEmbed = NotaFiscal & {
+        medicoes_mensais?: { numero?: string; periodo?: string }
+        medicoes?: { numero?: string; periodo?: string }
+      }
+
+      const origemDeNota = (n: NotaComEmbed) => {
+        const med = n.medicoes_mensais || n.medicoes
+        if (med?.numero) return `Medição: ${med.numero}`
+        if (n.locacoes?.numero) return `Locação: ${n.locacoes.numero}`
+        return "-"
+      }
+
+      const statusTxt = (s: string) => {
+        const m: Record<string, string> = {
+          pendente: "Pendente",
+          paga: "Paga",
+          vencida: "Vencida",
+          cancelada: "Cancelada",
+        }
+        return m[s] || s
+      }
+
+      const fmt = (v: unknown) => {
+        const n = Number(v)
+        return Number.isFinite(n) ? formatCurrency(n) : ""
+      }
+
+      const detalheItens = (itens: Array<Record<string, unknown>>) =>
+        itens
+          .map((it, idx) => {
+            let extras = ""
+            const din = it.impostos_dinamicos
+            if (Array.isArray(din) && din.length > 0) {
+              extras =
+                " [extras: " +
+                din
+                  .map((x: { nome?: string; tipo?: string; valor_calculado?: number }) =>
+                    `${x.nome || x.tipo || "?"} ${x.valor_calculado ?? ""}`.trim()
+                  )
+                  .join("; ") +
+                "]"
+            }
+            return `#${idx + 1} ${String(it.descricao ?? "")} | qtd ${String(it.quantidade ?? "")} | total ${fmt(it.preco_total)} | ICMS ${fmt(it.valor_icms)} | IPI ${fmt(it.valor_ipi)} | ISS ${fmt(it.valor_issqn)} | INSS ${fmt(it.valor_inss)} | Líq.item ${fmt(it.valor_liquido)}${extras}`
+          })
+          .join(" || ")
+
+      const header = [
+        "Número",
+        "Série",
+        "Tipo nota",
+        "Tipo",
+        "Cliente",
+        "Fornecedor",
+        "Origem",
+        "Compra / Venda ref.",
+        "Data Emissão",
+        "Vencimento",
+        "Valor Total",
+        "Valor Líquido (nota)",
+        "ICMS (nota)",
+        "ICMS ST (nota)",
+        "FCP ST (nota)",
+        "IPI (nota)",
+        "PIS (nota)",
+        "COFINS (nota)",
+        "INSS (nota)",
+        "IR (nota)",
+        "CSLL (nota)",
+        "ISSQN (nota)",
+        "Ret. federais (nota)",
+        "Outras ret. (nota)",
+        "Chave acesso",
+        "Observações",
+        "Cobrança",
+        "Status",
+        "Qtd itens",
+        "Soma preço itens",
+        "Soma ICMS itens",
+        "Soma IPI itens",
+        "Soma PIS itens",
+        "Soma COFINS itens",
+        "Soma ISSQN itens",
+        "Soma INSS itens",
+        "Soma IR itens",
+        "Soma CSLL itens",
+        "Detalhamento dos itens (impostos por linha)",
+      ]
+
+      const linhas: string[][] = [
+        header,
+        ...entries.map(({ nota: n, itens, totais_itens: t }) => {
+          const compraVenda =
+            n.compras?.numero_pedido
+              ? `Pedido ${n.compras.numero_pedido}`
+              : n.vendas?.numero_venda
+                ? `Venda ${n.vendas.numero_venda}`
+                : "-"
+          return [
+            n.numero_nf,
+            n.serie || "-",
+            getTipoNotaLabel(n.tipo_nota),
+            n.tipo,
+            n.clientes?.nome || "-",
+            n.fornecedores?.nome || "-",
+            origemDeNota(n),
+            compraVenda,
+            formatDate(n.data_emissao),
+            n.data_vencimento ? formatDate(n.data_vencimento) : "-",
+            fmt(n.valor_total),
+            fmt(n.valor_liquido ?? getValorExibicaoNota(n)),
+            fmt(n.valor_icms),
+            fmt(n.valor_icms_st),
+            fmt(n.valor_fcp_st),
+            fmt(n.valor_ipi),
+            fmt(n.valor_pis),
+            fmt(n.valor_cofins),
+            fmt(n.valor_inss),
+            fmt(n.valor_ir),
+            fmt(n.valor_csll),
+            fmt(n.valor_issqn),
+            fmt(n.retencoes_federais),
+            fmt(n.outras_retencoes),
+            n.chave_acesso || "",
+            (n.observacoes || "").replace(/\r?\n/g, " ").slice(0, 2000),
+            cobrancaTxt(n),
+            statusTxt(n.status),
+            String(t?.quantidade_linhas ?? itens?.length ?? 0),
+            fmt(t?.soma_preco_total),
+            fmt(t?.soma_valor_icms),
+            fmt(t?.soma_valor_ipi),
+            fmt(t?.soma_valor_pis),
+            fmt(t?.soma_valor_cofins),
+            fmt(t?.soma_valor_issqn),
+            fmt(t?.soma_valor_inss),
+            fmt(t?.soma_valor_ir),
+            fmt(t?.soma_valor_csll),
+            detalheItens(itens || []),
+          ]
+        }),
+      ]
+
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelulaNf).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `notas-fiscais-${activeTab}-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({
+        title: "CSV exportado",
+        description: `${entries.length} nota(s) com itens e impostos (exportação completa).`,
+      })
+    } catch (e: unknown) {
+      const err = e as { message?: string }
+      toast({
+        title: "Erro ao exportar",
+        description: err?.message || "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2591,45 +2809,61 @@ export default function NotasFiscaisPage() {
                   <Filter className="w-5 h-5" />
                   <h3 className="font-semibold">Filtros</h3>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-3 items-end">
-                  <div className="lg:col-span-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Buscar por número, série, cliente..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="relative min-w-[200px] flex-1 basis-[min(100%,28rem)]">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                    <Input
+                      placeholder="Buscar por número, série, cliente..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os Status</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="paga">Paga</SelectItem>
-                      <SelectItem value="vencida">Vencida</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={tipoNotaFilter} onValueChange={setTipoNotaFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Tipo de Nota" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os Tipos</SelectItem>
-                      <SelectItem value="nf_servico">NFs (Serviço)</SelectItem>
-                      <SelectItem value="nf_locacao">NF Locação</SelectItem>
-                      <SelectItem value="fatura">Fatura</SelectItem>
-                      <SelectItem value="nfe_eletronica">NFe (Eletrônica)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={carregarNotasFiscais}>
+                  <div className="w-full min-[480px]:w-[11rem] shrink-0">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Status</SelectItem>
+                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="paga">Paga</SelectItem>
+                        <SelectItem value="vencida">Vencida</SelectItem>
+                        <SelectItem value="cancelada">Cancelada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-full min-[480px]:w-[12.5rem] shrink-0">
+                    <Select value={tipoNotaFilter} onValueChange={setTipoNotaFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Tipo de Nota" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Tipos</SelectItem>
+                        <SelectItem value="nf_servico">NFs (Serviço)</SelectItem>
+                        <SelectItem value="nf_locacao">NF Locação</SelectItem>
+                        <SelectItem value="fatura">Fatura</SelectItem>
+                        <SelectItem value="nfe_eletronica">NFe (Eletrônica)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" onClick={carregarNotasFiscais} className="shrink-0">
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Atualizar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={exportarCsvNotasFiscais}
+                    disabled={exportandoCsv}
+                    className="gap-2 shrink-0"
+                  >
+                    {exportandoCsv ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Exportar CSV
                   </Button>
                 </div>
               </div>
@@ -2856,33 +3090,61 @@ export default function NotasFiscaisPage() {
                   <Filter className="w-5 h-5" />
                   <h3 className="font-semibold">Filtros</h3>
                 </div>
-                <div className="grid grid-cols-1 lg:grid-cols-4 gap-3 items-end">
-                  <div className="lg:col-span-2">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Buscar por número, série, fornecedor..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-10"
-                      />
-                    </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="relative min-w-[200px] flex-1 basis-[min(100%,28rem)]">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4 pointer-events-none" />
+                    <Input
+                      placeholder="Buscar por número, série, fornecedor..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="pl-10"
+                    />
                   </div>
-                  <Select value={statusFilter} onValueChange={setStatusFilter}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos os Status</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="paga">Paga</SelectItem>
-                      <SelectItem value="vencida">Vencida</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Button variant="outline" onClick={carregarNotasFiscais}>
+                  <div className="w-full min-[480px]:w-[11rem] shrink-0">
+                    <Select value={statusFilter} onValueChange={setStatusFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Status</SelectItem>
+                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="paga">Paga</SelectItem>
+                        <SelectItem value="vencida">Vencida</SelectItem>
+                        <SelectItem value="cancelada">Cancelada</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="w-full min-[480px]:w-[12.5rem] shrink-0">
+                    <Select value={tipoNotaFilter} onValueChange={setTipoNotaFilter}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="Tipo de Nota" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Todos os Tipos</SelectItem>
+                        <SelectItem value="nf_servico">NFs (Serviço)</SelectItem>
+                        <SelectItem value="nf_locacao">NF Locação</SelectItem>
+                        <SelectItem value="fatura">Fatura</SelectItem>
+                        <SelectItem value="nfe_eletronica">NFe (Eletrônica)</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button variant="outline" onClick={carregarNotasFiscais} className="shrink-0">
                     <RefreshCw className="w-4 h-4 mr-2" />
                     Atualizar
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={exportarCsvNotasFiscais}
+                    disabled={exportandoCsv}
+                    className="gap-2 shrink-0"
+                  >
+                    {exportandoCsv ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Download className="w-4 h-4" />
+                    )}
+                    Exportar CSV
                   </Button>
                 </div>
               </div>

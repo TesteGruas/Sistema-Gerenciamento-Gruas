@@ -26,7 +26,8 @@ import {
   Wrench,
   AlertCircle,
   CheckCircle2,
-  Loader2
+  Loader2,
+  Download,
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiOrigin } from "@/lib/runtime-config"
@@ -67,6 +68,7 @@ export default function ComplementosPage() {
   const [filtroTipo, setFiltroTipo] = useState<"todos" | "acessorio" | "servico">("todos")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<ComplementoCatalogo | null>(null)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
   
   const [formData, setFormData] = useState<Partial<ComplementoCatalogo>>({
     nome: "",
@@ -140,6 +142,80 @@ export default function ComplementosPage() {
     
     return matchesSearch && matchesTipo
   })
+
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarComplementosCsv = () => {
+    const rotuloPrecificacao = (tipo: TipoPrecificacao) => {
+      const labels: Record<TipoPrecificacao, string> = {
+        mensal: "Mensal",
+        unico: "Único",
+        por_metro: "Por Metro",
+        por_hora: "Por Hora",
+        por_dia: "Por Dia",
+      }
+      return labels[tipo] || tipo
+    }
+    try {
+      setExportandoCsv(true)
+      const lista = filteredComplementos
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Nenhum complemento corresponde aos filtros atuais.",
+        })
+        return
+      }
+      const cabecalho = [
+        "ID",
+        "Nome",
+        "SKU",
+        "Tipo",
+        "Precificação",
+        "Unidade",
+        "Preço (R$)",
+        "Fator",
+        "Ativo",
+        "Descrição",
+      ]
+      const linhas = lista.map((c) =>
+        [
+          c.id,
+          c.nome,
+          c.sku,
+          c.tipo === "acessorio" ? "Acessório" : "Serviço",
+          rotuloPrecificacao(c.tipo_precificacao),
+          c.unidade,
+          (c.preco_unitario_centavos / 100).toFixed(2),
+          c.fator != null ? String(c.fator) : "",
+          c.ativo ? "Sim" : "Não",
+          c.descricao || "",
+        ]
+          .map(escapeCsvCelula)
+          .join(","),
+      )
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `complementos_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} item(ns) exportado(s) para CSV.`,
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
 
   const handleOpenDialog = (item?: ComplementoCatalogo) => {
     if (item) {
@@ -452,8 +528,8 @@ export default function ComplementosPage() {
                 Produtos e serviços disponíveis para adicionar às obras
               </CardDescription>
             </div>
-            <div className="flex gap-2">
-              <div className="relative w-64">
+            <div className="flex flex-wrap gap-2">
+              <div className="relative w-64 min-w-[200px]">
                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
                 <Input
                   placeholder="Pesquisar..."
@@ -472,6 +548,20 @@ export default function ComplementosPage() {
                   <SelectItem value="servico">Serviços</SelectItem>
                 </SelectContent>
               </Select>
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={loading || exportandoCsv}
+                onClick={exportarComplementosCsv}
+                title="Exportar os complementos visíveis com os filtros atuais"
+              >
+                {exportandoCsv ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin shrink-0" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2 shrink-0" />
+                )}
+                Exportar CSV
+              </Button>
             </div>
           </div>
         </CardHeader>

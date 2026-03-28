@@ -31,7 +31,8 @@ import {
   Clock,
   TrendingDown,
   Receipt,
-  AlertTriangle
+  AlertTriangle,
+  Loader2
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { custosApi, custosUtils, Custo, CustoCreate, CustoUpdate } from "@/lib/api-custos"
@@ -128,6 +129,7 @@ export default function ContasPagarPage() {
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
   const [viewingItem, setViewingItem] = useState<any>(null)
   const [loadingDetalhesNota, setLoadingDetalhesNota] = useState(false)
+  const [exportandoCsv, setExportandoCsv] = useState(false)
 
   // Estados para Contas a Pagar
   const [contas, setContas] = useState<ContaPagar[]>([])
@@ -585,29 +587,6 @@ export default function ContasPagarPage() {
     }
   }
 
-  const handleExportCustos = async () => {
-    try {
-      await custosApi.export({
-        obra_id: filterObra !== 'all' ? parseInt(filterObra) : undefined,
-        tipo: filterTipo !== 'all' ? filterTipo : undefined,
-        status: filterStatus !== 'all' ? filterStatus : undefined,
-        data_inicio: filterPeriodo ? `${filterPeriodo}-01` : undefined,
-        data_fim: filterPeriodo ? `${filterPeriodo}-31` : undefined
-      })
-      toast({
-        title: "Sucesso",
-        description: "Custos exportados com sucesso"
-      })
-    } catch (error) {
-      console.error('Erro ao exportar custos:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao exportar custos",
-        variant: "destructive"
-      })
-    }
-  }
-
   const resetForm = () => {
     setCustoForm({
       obra_id: '',
@@ -719,6 +698,107 @@ export default function ContasPagarPage() {
     }
   }
 
+  const escapeCsvCelula = (valor: unknown) => {
+    const s = valor === null || valor === undefined ? "" : String(valor)
+    if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const exportarCsvListaUnificada = () => {
+    setExportandoCsv(true)
+    try {
+      const statusLabel = (s: string, nf?: boolean) => {
+        if (nf) {
+          const m: Record<string, string> = {
+            pendente: "Pendente",
+            pago: "Paga",
+            vencido: "Vencida",
+            cancelado: "Cancelada",
+          }
+          return m[s] || s
+        }
+        const m: Record<string, string> = {
+          pendente: "Pendente",
+          pago: "Pago",
+          vencido: "Vencido",
+          cancelado: "Cancelado",
+          confirmado: "Confirmado",
+          atrasado: "Atrasado",
+        }
+        return m[s] || s
+      }
+      const linhas: string[][] = [
+        ["Tipo", "Descrição", "Obra", "Cliente", "Data", "Valor", "Status"],
+        ...todosRegistros.map((reg) => {
+          if (reg.tipo === "custo") {
+            const c = reg.data as CustoComRelacionamentos
+            return [
+              getTipoLabel(c.tipo),
+              c.descricao,
+              c.obras?.nome || "N/A",
+              c.obras?.clientes?.nome || "N/A",
+              formatarData(c.data_custo),
+              formatarMoeda(c.valor || 0),
+              c.status,
+            ]
+          }
+          if (reg.tipo === "imposto") {
+            const i = reg.data as Imposto
+            return [
+              "Imposto",
+              i.descricao || i.tipo || `Imposto #${i.id}`,
+              "N/A",
+              "N/A",
+              i.data_vencimento ? formatarData(i.data_vencimento) : "N/A",
+              formatarMoeda(i.valor || 0),
+              i.status,
+            ]
+          }
+          if (reg.tipo === "conta") {
+            const c = reg.data as ContaPagar
+            return [
+              "Conta a Pagar",
+              c.descricao,
+              c.obra?.nome || "N/A",
+              c.fornecedor?.nome || c.cliente?.nome || "N/A",
+              formatarData(c.data_vencimento),
+              formatarMoeda(c.valor),
+              statusLabel(c.status),
+            ]
+          }
+          const n = reg.data as ContaPagar
+          const desc = n.numero_nf
+            ? `${n.descricao} (NF ${n.numero_nf}${n.serie ? ` Série ${n.serie}` : ""})`
+            : n.descricao
+          return [
+            "Nota Fiscal",
+            desc,
+            n.obra?.nome || "N/A",
+            n.fornecedor?.nome || n.cliente?.nome || "N/A",
+            formatarData(n.data_vencimento),
+            formatarMoeda(n.valor),
+            statusLabel(n.status, true),
+          ]
+        }),
+      ]
+      const bom = "\ufeff"
+      const corpo = linhas.map((linha) => linha.map(escapeCsvCelula).join(",")).join("\r\n")
+      const blob = new Blob([bom + corpo], { type: "text/csv;charset=utf-8" })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `contas-pagar-${new Date().toISOString().slice(0, 10)}.csv`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast({
+        title: "CSV exportado",
+        description: `${todosRegistros.length} registro(s) com os filtros atuais.`,
+      })
+    } finally {
+      setExportandoCsv(false)
+    }
+  }
+
   const toNumber = (value: any) => {
     const parsed = parseFloat(String(value ?? 0))
     return Number.isFinite(parsed) ? parsed : 0
@@ -814,9 +894,19 @@ export default function ContasPagarPage() {
           <p className="text-gray-600">Gestão de custos, salários, impostos e aluguéis</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={handleExportCustos}>
-            <Download className="w-4 h-4 mr-2" />
-            Exportar
+          <Button
+            type="button"
+            variant="outline"
+            onClick={exportarCsvListaUnificada}
+            disabled={exportandoCsv || totalRegistros === 0}
+            className="gap-2"
+          >
+            {exportandoCsv ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Download className="w-4 h-4 mr-2" />
+            )}
+            Exportar CSV
           </Button>
           <Button onClick={() => setIsCreateDialogOpen(true)}>
             <Plus className="w-4 h-4 mr-2" />
@@ -888,9 +978,26 @@ export default function ContasPagarPage() {
 
         {/* Lista Unificada de Custos e Contas a Pagar */}
         <Card>
-          <CardHeader>
-            <CardTitle>Contas a Pagar e Custos ({totalRegistros})</CardTitle>
-            <CardDescription>Lista unificada de custos, salários, impostos, aluguéis e contas a pagar</CardDescription>
+          <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2 space-y-0">
+            <div>
+              <CardTitle>Contas a Pagar e Custos ({totalRegistros})</CardTitle>
+              <CardDescription>Lista unificada de custos, salários, impostos, aluguéis e contas a pagar</CardDescription>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="gap-2 shrink-0"
+              onClick={exportarCsvListaUnificada}
+              disabled={exportandoCsv || totalRegistros === 0}
+            >
+              {exportandoCsv ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Exportar CSV
+            </Button>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Filtros */}

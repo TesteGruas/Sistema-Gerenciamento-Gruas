@@ -358,6 +358,7 @@ export default function PontoPage() {
   const prevPageSizeRef = useRef(pageSize)
   // Estado para controlar loading da tabela durante busca/filtros
   const [loadingTabela, setLoadingTabela] = useState(false)
+  const [exportandoCsvRegistros, setExportandoCsvRegistros] = useState(false)
 
   // Função para carregar dados com filtros aplicados (declarada antes dos useEffects que a usam)
   const carregarDadosComFiltros = useCallback(async () => {
@@ -1264,6 +1265,200 @@ export default function PontoPage() {
     
     return () => clearTimeout(timer)
   }, [filtroData, dadosIniciaisCarregados])
+
+  const escapeCsvCelulaRegistro = (valor: unknown) => {
+    const s = valor == null ? "" : String(valor)
+    if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
+    return s
+  }
+
+  const buscarTodosRegistrosPontoParaExport = useCallback(async (): Promise<RegistroPonto[]> => {
+    const PAGE_SIZE = 100
+    const filtrosBase: Record<string, unknown> = { recalcular: false }
+    if (filtroData) filtrosBase.data = filtroData
+    if (debouncedSearchTerm?.trim()) filtrosBase.search = debouncedSearchTerm.trim()
+    const todos: RegistroPonto[] = []
+    let page = 1
+    let totalPaginas = 1
+    do {
+      const res = await apiRegistrosPonto.listar({
+        ...filtrosBase,
+        page,
+        limit: PAGE_SIZE,
+      } as Parameters<typeof apiRegistrosPonto.listar>[0])
+      const lote = res.data || []
+      todos.push(...lote)
+      totalPaginas = res.pagination?.pages ?? 1
+      page += 1
+    } while (page <= totalPaginas)
+    return todos.sort(
+      (a, b) => new Date(b.data).getTime() - new Date(a.data).getTime(),
+    )
+  }, [filtroData, debouncedSearchTerm])
+
+  const exportarRegistrosPontoCsvCompleto = async () => {
+    try {
+      setExportandoCsvRegistros(true)
+      const lista = await buscarTodosRegistrosPontoParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há registros com os filtros atuais.",
+          variant: "destructive",
+        })
+        return
+      }
+      const cabecalho = [
+        "Funcionário",
+        "Data",
+        "Entrada",
+        "Saída almoço",
+        "Volta almoço",
+        "Saída",
+        "Horas trabalhadas",
+        "Horas extras",
+        "Status",
+      ]
+      const linhas = lista.map((r) =>
+        [
+          r.funcionario?.nome || String(r.funcionario_id ?? ""),
+          utilsPonto.formatarData(r.data),
+          r.entrada ?? "",
+          r.saida_almoco ?? "",
+          r.volta_almoco ?? "",
+          r.saida ?? "",
+          r.horas_trabalhadas ?? "",
+          r.horas_extras ?? "",
+          r.status ?? "",
+        ]
+          .map(escapeCsvCelulaRegistro)
+          .join(","),
+      )
+      const csv = "\ufeff" + [cabecalho.join(","), ...linhas].join("\n")
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `registros_ponto_${new Date().toISOString().slice(0, 10)}.csv`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} registro(s) exportado(s) para CSV.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar registros CSV:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o CSV.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsvRegistros(false)
+    }
+  }
+
+  const exportarRegistrosPontoJsonCompleto = async () => {
+    try {
+      setExportandoCsvRegistros(true)
+      const lista = await buscarTodosRegistrosPontoParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há registros com os filtros atuais.",
+          variant: "destructive",
+        })
+        return
+      }
+      const blob = new Blob([JSON.stringify(lista, null, 2)], {
+        type: "application/json;charset=utf-8;",
+      })
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      a.download = `registros_ponto_${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      window.URL.revokeObjectURL(url)
+      document.body.removeChild(a)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} registro(s) exportado(s) para JSON.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar registros JSON:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o JSON.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsvRegistros(false)
+    }
+  }
+
+  const exportarRegistrosPontoPdfCompleto = async () => {
+    try {
+      setExportandoCsvRegistros(true)
+      const lista = await buscarTodosRegistrosPontoParaExport()
+      if (lista.length === 0) {
+        toast({
+          title: "Nada para exportar",
+          description: "Não há registros com os filtros atuais.",
+          variant: "destructive",
+        })
+        return
+      }
+      const { jsPDF } = await import("jspdf")
+      const autoTable = (await import("jspdf-autotable")).default
+      const doc = new jsPDF("landscape", "mm", "a4")
+      doc.setFontSize(14)
+      doc.text("Registros de ponto", 14, 12)
+      doc.setFontSize(9)
+      doc.text(`Gerado em ${new Date().toLocaleString("pt-BR")}`, 14, 18)
+      autoTable(doc, {
+        head: [
+          [
+            "Funcionário",
+            "Data",
+            "Entrada",
+            "Saída",
+            "Horas",
+            "H. extras",
+            "Status",
+          ],
+        ],
+        body: lista.map((r) => [
+          String(r.funcionario?.nome || r.funcionario_id || ""),
+          utilsPonto.formatarData(r.data),
+          r.entrada || "",
+          r.saida || "",
+          String(r.horas_trabalhadas ?? ""),
+          String(r.horas_extras ?? ""),
+          r.status || "",
+        ]),
+        startY: 22,
+        styles: { fontSize: 7 },
+        headStyles: { fillColor: [66, 139, 202] },
+      })
+      doc.save(`registros_ponto_${new Date().toISOString().slice(0, 10)}.pdf`)
+      toast({
+        title: "Exportação concluída",
+        description: `${lista.length} registro(s) exportado(s) para PDF.`,
+      })
+    } catch (e) {
+      console.error("Erro ao exportar registros PDF:", e)
+      toast({
+        title: "Erro na exportação",
+        description: e instanceof Error ? e.message : "Não foi possível gerar o PDF.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoCsvRegistros(false)
+    }
+  }
 
   // Os dados já vêm filtrados da API, então não precisamos filtrar novamente
   // Memoizar para evitar recálculo a cada render
@@ -2739,6 +2934,21 @@ export default function PontoPage() {
                   >
                     Limpar
                   </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="h-9"
+                    disabled={loadingTabela || exportandoCsvRegistros}
+                    onClick={exportarRegistrosPontoCsvCompleto}
+                    title="Exportar todos os registros que correspondem à data e à busca atuais (várias páginas)"
+                  >
+                    {exportandoCsvRegistros ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+                    ) : (
+                      <Download className="w-4 h-4 mr-2 shrink-0" />
+                    )}
+                    Exportar CSV
+                  </Button>
                 </div>
 
                 {/* Informações de resultados e exportar - cada um em uma ponta */}
@@ -2757,47 +2967,32 @@ export default function PontoPage() {
                     <DropdownMenuTrigger asChild>
                       <Button
                         variant="outline"
-                        disabled={sortedRegistros.length === 0}
+                        disabled={sortedRegistros.length === 0 || exportandoCsvRegistros}
                         size="sm"
                         className="h-8"
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        Exportar
+                        Mais formatos
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
                         onClick={async () => {
-                          if (sortedRegistros.length > 0) {
-                            await exportarRelatorio('csv')
-                          }
+                          await exportarRegistrosPontoJsonCompleto()
                         }}
-                        disabled={sortedRegistros.length === 0}
+                        disabled={sortedRegistros.length === 0 || exportandoCsvRegistros}
                       >
                         <Download className="w-4 h-4 mr-2" />
-                        Exportar CSV
+                        Exportar JSON (lista completa)
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         onClick={async () => {
-                          if (sortedRegistros.length > 0) {
-                            await exportarRelatorio('json')
-                          }
+                          await exportarRegistrosPontoPdfCompleto()
                         }}
-                        disabled={sortedRegistros.length === 0}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Exportar JSON
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={async () => {
-                          if (sortedRegistros.length > 0) {
-                            await exportarRelatorio('pdf')
-                          }
-                        }}
-                        disabled={sortedRegistros.length === 0}
+                        disabled={sortedRegistros.length === 0 || exportandoCsvRegistros}
                       >
                         <FileText className="w-4 h-4 mr-2" />
-                        Exportar PDF
+                        Exportar PDF (lista completa)
                       </DropdownMenuItem>
                     </DropdownMenuContent>
                     </DropdownMenu>

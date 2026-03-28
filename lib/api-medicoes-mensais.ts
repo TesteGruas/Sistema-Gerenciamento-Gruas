@@ -221,6 +221,8 @@ export const medicoesMensaisApi = {
     
     if (filters.orcamento_id) params.append('orcamento_id', filters.orcamento_id.toString());
     if (filters.obra_id) params.append('obra_id', filters.obra_id.toString()); // NOVO
+    if (filters.grua_id != null && filters.grua_id !== '')
+      params.append('grua_id', String(filters.grua_id));
     if (filters.periodo) params.append('periodo', filters.periodo);
     if (filters.status) params.append('status', filters.status);
     if (filters.data_inicio) params.append('data_inicio', filters.data_inicio);

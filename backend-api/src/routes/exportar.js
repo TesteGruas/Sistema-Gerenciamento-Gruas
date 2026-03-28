@@ -637,7 +637,10 @@ function renderizarTabelaGenericaPDF(doc, dados, yPos, adicionarNovaPaginaComLog
 
     colunas.forEach((col, index) => {
       const value = item[col];
-      const text = value !== null && value !== undefined ? String(value).substring(0, 15) : 'N/A';
+      const text =
+        value !== null && value !== undefined
+          ? serializeExportCell(value).substring(0, 80)
+          : 'N/A';
       doc.text(text, 50 + (index * colWidth), currentY);
     });
 
@@ -768,9 +771,20 @@ async function exportarExcel(res, dados, tipo, titulo) {
     const ws = XLSX.utils.json_to_sheet(gruasData);
     XLSX.utils.book_append_sheet(workbook, ws, 'Gruas');
   } else {
-    // Genérico
-    const ws = XLSX.utils.json_to_sheet(dados);
-    XLSX.utils.book_append_sheet(workbook, ws, tipo);
+    // Genérico: achatar objetos aninhados para não virar [object Object] nas células
+    const flat = dados.map((item) => {
+      const row = {};
+      Object.keys(item).forEach((key) => {
+        const v = item[key];
+        row[key] =
+          v !== null && v !== undefined && typeof v === 'object'
+            ? JSON.stringify(v)
+            : v ?? '';
+      });
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(flat);
+    XLSX.utils.book_append_sheet(workbook, ws, String(tipo).slice(0, 31));
   }
 
   const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
@@ -869,7 +883,7 @@ async function exportarCSV(res, dados, tipo, titulo) {
         const linha = colunas.map(col => {
           const value = item[col];
           if (value === null || value === undefined) return '';
-          const str = String(value);
+          const str = serializeExportCell(value);
           return str.includes(',') || str.includes('"') || str.includes('\n')
             ? `"${str.replace(/"/g, '""')}"`
             : str;
@@ -893,6 +907,13 @@ function formatarData(data) {
   } catch (error) {
     return data;
   }
+}
+
+/** Evita [object Object] em CSV/Excel/PDF quando o valor é objeto ou array aninhado. */
+function serializeExportCell(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'object') return JSON.stringify(value);
+  return String(value);
 }
 
 export default router;
