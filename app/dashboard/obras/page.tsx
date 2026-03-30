@@ -1602,7 +1602,11 @@ export default function ObrasPage() {
                       typeof obra.budget === "string" ? parseFloat(obra.budget) || 0 : obra.budget || 0
 
                     return (
-                      <TableRow key={obra.id} className="hover:bg-muted/50">
+                      <TableRow
+                        key={obra.id}
+                        className="hover:bg-muted/50 cursor-pointer"
+                        onClick={() => router.push(`/dashboard/obras/${obra.id}`)}
+                      >
                         <TableCell>
                           <div className="flex items-start gap-2 min-w-0">
                             <Building2 className="w-4 h-4 shrink-0 text-blue-600 mt-0.5" />
@@ -1647,7 +1651,10 @@ export default function ObrasPage() {
                             <span className="text-muted-foreground text-sm">—</span>
                           )}
                         </TableCell>
-                        <TableCell className="text-right whitespace-nowrap p-2">
+                        <TableCell
+                          className="text-right whitespace-nowrap p-2"
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex flex-nowrap justify-end items-center gap-1">
                             <Button
                               type="button"
@@ -1658,17 +1665,6 @@ export default function ObrasPage() {
                               onClick={() => router.push(`/dashboard/obras/${obra.id}`)}
                             >
                               <Eye className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0 text-gray-600 hover:text-gray-700 hover:bg-gray-50"
-                              title="Editar"
-                              disabled={loadingEdit}
-                              onClick={() => handleEditObra(obra)}
-                            >
-                              <Edit className="w-4 h-4" />
                             </Button>
                             <Button
                               type="button"
