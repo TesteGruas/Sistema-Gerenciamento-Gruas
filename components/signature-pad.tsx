@@ -30,6 +30,9 @@ export function SignaturePad({
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
   const [hasSignature, setHasSignature] = useState(false)
+  /** iOS: distinguir rolagem vertical de traço no canvas (touch-none bloqueava o scroll da página) */
+  const touchModeRef = useRef<"undecided" | "scroll" | "draw">("undecided")
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -60,7 +63,21 @@ export function SignaturePad({
     return () => window.removeEventListener("resize", resizeCanvas)
   }, [compact])
 
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+  useEffect(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+
+    const blockScrollWhileDrawing = (e: TouchEvent) => {
+      if (touchModeRef.current === "draw") e.preventDefault()
+    }
+
+    canvas.addEventListener("touchmove", blockScrollWhileDrawing, { passive: false })
+    return () => canvas.removeEventListener("touchmove", blockScrollWhileDrawing)
+  }, [])
+
+  const beginStrokeAt = (
+    e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
+  ) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
@@ -78,14 +95,51 @@ export function SignaturePad({
     ctx.moveTo(x, y)
   }
 
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return
+  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
+    if ("touches" in e) {
+      if (e.touches.length !== 1) return
+      const t = e.touches[0]
+      touchModeRef.current = "undecided"
+      touchStartRef.current = { x: t.clientX, y: t.clientY }
+      return
+    }
+    beginStrokeAt(e)
+  }
 
+  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     const canvas = canvasRef.current
     if (!canvas) return
 
     const ctx = canvas.getContext("2d")
     if (!ctx) return
+
+    if ("touches" in e) {
+      if (e.touches.length !== 1 || !touchStartRef.current) return
+
+      const t = e.touches[0]
+      const dx = t.clientX - touchStartRef.current.x
+      const dy = t.clientY - touchStartRef.current.y
+      const ax = Math.abs(dx)
+      const ay = Math.abs(dy)
+
+      if (touchModeRef.current === "undecided") {
+        if (ay > 14 && ay > ax * 1.25) {
+          touchModeRef.current = "scroll"
+          touchStartRef.current = null
+          setIsDrawing(false)
+          return
+        }
+        if (ax > 5 || ay > 5) {
+          touchModeRef.current = "draw"
+          beginStrokeAt(e)
+        }
+        return
+      }
+
+      if (touchModeRef.current === "scroll") return
+    } else if (!isDrawing) {
+      return
+    }
 
     const rect = canvas.getBoundingClientRect()
     const x = "touches" in e ? e.touches[0].clientX - rect.left : e.clientX - rect.left
@@ -96,6 +150,8 @@ export function SignaturePad({
   }
 
   const stopDrawing = () => {
+    touchModeRef.current = "undecided"
+    touchStartRef.current = null
     setIsDrawing(false)
   }
 
@@ -137,7 +193,7 @@ export function SignaturePad({
           onTouchMove={draw}
           onTouchEnd={stopDrawing}
           className={cn(
-            "w-full touch-none cursor-crosshair bg-white",
+            "w-full cursor-crosshair bg-white",
             compact
               ? "border-0 rounded-xl"
               : "border-2 border-dashed border-gray-300 rounded-lg"

@@ -1544,6 +1544,28 @@ router.post('/change-password', authenticateToken, async (req, res) => {
         })
       }
 
+      // O Supabase invalida sessões antigas ao alterar a senha — o JWT do cliente deixa de valer.
+      // Nova sessão com a mesma senha já aplicada para o cliente atualizar tokens.
+      try {
+        await supabase.auth.signOut()
+      } catch (_) {
+        // ignorar se não existir sessão no cliente singleton
+      }
+
+      const { data: newAuthData, error: newSessionError } = await supabase.auth.signInWithPassword({
+        email: usuario.email,
+        password: newPassword
+      })
+
+      if (newSessionError || !newAuthData?.session) {
+        console.error('Senha alterada mas falha ao emitir nova sessão:', newSessionError)
+        return res.json({
+          success: true,
+          message: 'Senha alterada com sucesso. Faça login novamente com a nova senha.',
+          reauth_required: true
+        })
+      }
+
       // Enviar email de confirmação
       try {
         await sendPasswordChangedEmail({
@@ -1557,7 +1579,11 @@ router.post('/change-password', authenticateToken, async (req, res) => {
 
       res.json({
         success: true,
-        message: 'Senha alterada com sucesso'
+        message: 'Senha alterada com sucesso',
+        data: {
+          access_token: newAuthData.session.access_token,
+          refresh_token: newAuthData.session.refresh_token
+        }
       })
 
     } catch (error) {

@@ -305,7 +305,7 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   if (loadingAprovacao) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-[100dvh] bg-gray-50 p-4 overflow-x-hidden touch-pan-y overscroll-contain">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-4">
             <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -327,7 +327,7 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   if (!aprovacaoSelecionada) {
     return (
-      <div className="min-h-screen bg-gray-50 p-4">
+      <div className="min-h-[100dvh] bg-gray-50 p-4 overflow-x-hidden touch-pan-y overscroll-contain">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-4">
             <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -352,7 +352,7 @@ function PWAAprovacaoAssinaturaPageContent() {
     !isPendenteCorrecao && aprovacaoSelecionada.status !== 'Aprovado';
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-[100dvh] bg-gray-50 overflow-x-hidden touch-pan-y overscroll-contain">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4">
         <div className="flex items-center gap-3 mb-2">
@@ -838,7 +838,7 @@ function PWAAprovacaoAssinaturaPageContent() {
 export default function PWAAprovacaoAssinaturaPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center overflow-x-hidden touch-pan-y">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Carregando...</p>

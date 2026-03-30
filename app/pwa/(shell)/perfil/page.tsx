@@ -53,6 +53,7 @@ import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
 import { getApiOrigin } from "@/lib/runtime-config"
+import { sessionPersistence } from "@/lib/session-persistence"
 
 // Função helper para calcular dias até vencimento
 function calcularDiasParaVencimento(dataValidade: string): number {
@@ -430,10 +431,42 @@ function PWAPerfilPageContent() {
       const data = await response.json()
 
       if (response.ok && data.success) {
+        if (data.reauth_required) {
+          toast({
+            title: "Senha alterada",
+            description: "Faça login novamente com a nova senha.",
+            variant: "default"
+          })
+          handleLogout()
+          return
+        }
+
+        if (data.data?.access_token) {
+          localStorage.setItem('access_token', data.data.access_token)
+          if (data.data.refresh_token) {
+            localStorage.setItem('refresh_token', data.data.refresh_token)
+          }
+          try {
+            const raw = localStorage.getItem('user_data')
+            const userData = raw ? JSON.parse(raw) : null
+            if (userData?.email) {
+              await sessionPersistence.saveSession({
+                email: userData.email,
+                token: data.data.access_token,
+                refreshToken: data.data.refresh_token,
+                userData,
+                lastLogin: Date.now()
+              })
+            }
+          } catch (e) {
+            console.warn('[perfil] Não foi possível atualizar sessão persistente:', e)
+          }
+        }
+
         // Notificação de sucesso
         toast({
           title: "Senha alterada com sucesso!",
-          description: "Sua senha foi alterada com sucesso. Use a nova senha no próximo login.",
+          description: "Sua sessão foi renovada automaticamente.",
           variant: "default"
         })
 
