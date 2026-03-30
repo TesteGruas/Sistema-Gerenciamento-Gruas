@@ -1,25 +1,25 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { 
   Bell, 
   BellRing,
   Clock,
-  FileText,
   CheckCircle,
   AlertCircle,
   Info,
   Trash2,
   RefreshCw,
   Briefcase,
-  Eye
+  Eye,
+  CalendarDays
 } from "lucide-react"
-import { useToast } from "@/hooks/use-toast"
 import { NotificacoesAPI, Notificacao as NotificacaoAPI } from "@/lib/api-notificacoes"
 import { STORAGE_KEY_NOTIFICACOES_LOCAIS } from "@/hooks/use-vencimentos-documentos"
 import { PWA_NOTIFICACOES_API_EVENT } from "@/hooks/use-pwa-socket-notifications"
@@ -35,13 +35,78 @@ interface Notificacao {
   acao?: string
 }
 
+type PeriodoData = 'todas' | 'hoje' | 'ontem' | 'ultimos7' | 'ultimos30'
+
+function inicioDoDia(d: Date): Date {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function fimDoDia(d: Date): Date {
+  const x = new Date(d)
+  x.setHours(23, 59, 59, 999)
+  return x
+}
+
+function mesmoDiaCalendario(a: Date, b: Date): boolean {
+  return (
+    a.getFullYear() === b.getFullYear() &&
+    a.getMonth() === b.getMonth() &&
+    a.getDate() === b.getDate()
+  )
+}
+
+function notificacaoNoPeriodo(dataIso: string, periodo: PeriodoData): boolean {
+  if (periodo === 'todas') return true
+
+  const t = new Date(dataIso)
+  if (Number.isNaN(t.getTime())) return false
+
+  const agora = new Date()
+  const hojeInicio = inicioDoDia(agora)
+  const hojeFim = fimDoDia(agora)
+
+  if (periodo === 'hoje') {
+    return t >= hojeInicio && t <= hojeFim
+  }
+
+  const ontem = new Date(hojeInicio)
+  ontem.setDate(ontem.getDate() - 1)
+  if (periodo === 'ontem') {
+    return mesmoDiaCalendario(t, ontem)
+  }
+
+  if (periodo === 'ultimos7') {
+    const limite = new Date(hojeInicio)
+    limite.setDate(limite.getDate() - 6)
+    return t >= limite && t <= hojeFim
+  }
+
+  if (periodo === 'ultimos30') {
+    const limite = new Date(hojeInicio)
+    limite.setDate(limite.getDate() - 29)
+    return t >= limite && t <= hojeFim
+  }
+
+  return true
+}
+
+const PERIODOS: { id: PeriodoData; label: string }[] = [
+  { id: "todas", label: "Todas" },
+  { id: "hoje", label: "Hoje" },
+  { id: "ontem", label: "Ontem" },
+  { id: "ultimos7", label: "7 dias" },
+  { id: "ultimos30", label: "30 dias" },
+]
+
 export default function PWANotificacoesPage() {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [filtro, setFiltro] = useState<'todas' | 'nao-lidas'>('todas')
+  const [periodoData, setPeriodoData] = useState<PeriodoData>('todas')
   const [loading, setLoading] = useState(false)
   const [notificacaoSelecionada, setNotificacaoSelecionada] = useState<Notificacao | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
-  const { toast } = useToast()
 
   const carregarNotificacoes = useCallback(async () => {
     setLoading(true)
@@ -285,208 +350,353 @@ export default function PWANotificacoesPage() {
     return badges[tipoOriginal]
   }
 
-  const notificacoesFiltradas = notificacoes.filter(n => 
-    filtro === 'todas' || !n.lida
+  const notificacoesNoPeriodo = notificacoes.filter((n) =>
+    notificacaoNoPeriodo(n.data, periodoData)
   )
 
-  const naoLidas = notificacoes.filter(n => !n.lida).length
+  const notificacoesFiltradas = notificacoesNoPeriodo.filter(
+    (n) => filtro === 'todas' || !n.lida
+  )
 
-  return (
-    <div className="space-y-3">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Notificações</h1>
-        <p className="text-gray-600">Gerencie suas notificações e alertas</p>
+  const naoLidas = notificacoesNoPeriodo.filter((n) => !n.lida).length
+  const totalNoPeriodo = notificacoesNoPeriodo.length
+
+  const listaNotificacoesUi = loading ? (
+    <div className="flex flex-col items-center justify-center py-14">
+      <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+        <RefreshCw className="h-7 w-7 animate-spin text-[#871b0b]" />
       </div>
+      <p className="text-sm font-medium text-foreground">Carregando…</p>
+      <p className="text-xs text-muted-foreground">Buscando suas notificações</p>
+    </div>
+  ) : notificacoesFiltradas.length === 0 ? (
+    <div className="flex flex-col items-center py-12 text-center">
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-muted/80">
+        <Bell className="h-8 w-8 text-muted-foreground/60" />
+      </div>
+      <p className="font-medium text-foreground">
+        {notificacoes.length === 0
+          ? "Nenhuma notificação"
+          : "Nada neste período"}
+      </p>
+      <p className="mt-1 max-w-xs text-sm text-muted-foreground">
+        {notificacoes.length === 0
+          ? "Quando houver alertas, eles aparecem aqui."
+          : "Ajuste o período ou a aba para ver mais itens."}
+      </p>
+    </div>
+  ) : (
+    <ul className="space-y-3">
+      {notificacoesFiltradas.map((notif) => (
+        <li key={notif.id}>
+          <div
+            className={cn(
+              "rounded-xl border bg-card transition-shadow hover:shadow-sm",
+              notif.lida
+                ? "border-border/70 shadow-none"
+                : "border-blue-200/80 shadow-sm"
+            )}
+          >
+            <div className="space-y-2 p-4">
+              <div className="flex min-w-0 items-start gap-2">
+                <span
+                  className="mt-0.5 flex shrink-0 [&_svg]:h-5 [&_svg]:w-5"
+                  aria-hidden
+                >
+                  {getIconeNotificacao(notif.tipo, notif.tipoOriginal)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <h4 className="font-medium leading-snug text-foreground">
+                      {notif.titulo}
+                    </h4>
+                    {!notif.lida && (
+                      <Badge className="border-0 bg-blue-100 text-[10px] font-semibold text-blue-800">
+                        Nova
+                      </Badge>
+                    )}
+                    {getBadgeTipo(notif.tipoOriginal) && (
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          "text-[10px]",
+                          getBadgeTipo(notif.tipoOriginal)?.className
+                        )}
+                      >
+                        {getBadgeTipo(notif.tipoOriginal)?.label}
+                      </Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <p className="line-clamp-3 text-sm leading-relaxed text-muted-foreground">
+                {notif.mensagem}
+              </p>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Clock className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                <time dateTime={notif.data}>
+                  {new Date(notif.data).toLocaleString("pt-BR", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </time>
+              </div>
+            </div>
 
-      {/* Lista de Notificações */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle>Suas Notificações</CardTitle>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" onClick={carregarNotificacoes}>
-                <RefreshCw className="w-4 h-4" />
+            <div className="flex flex-wrap items-center justify-end gap-1 border-t border-border/50 px-3 py-2 sm:px-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs sm:h-8"
+                onClick={() => {
+                  setNotificacaoSelecionada(notif)
+                  setIsModalOpen(true)
+                }}
+              >
+                <Eye className="mr-1.5 h-4 w-4" />
+                Detalhes
               </Button>
-              {naoLidas > 0 && (
-                <Button variant="outline" size="sm" onClick={marcarTodasComoLidas}>
-                  Marcar todas como lidas
+              {!notif.lida && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-9 text-xs text-blue-700 hover:bg-blue-50 hover:text-blue-800 sm:h-8"
+                  onClick={() => marcarComoLida(notif.id)}
+                >
+                  <CheckCircle className="mr-1.5 h-4 w-4" />
+                  Lida
                 </Button>
               )}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-9 text-xs text-destructive hover:bg-destructive/10 hover:text-destructive sm:h-8"
+                onClick={() => excluirNotificacao(notif.id)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Excluir
+              </Button>
             </div>
           </div>
-        </CardHeader>
-        <CardContent>
-          <Tabs value={filtro} onValueChange={(v) => setFiltro(v as any)}>
-            <TabsList className="grid w-full grid-cols-2 mb-4">
-              <TabsTrigger value="todas">
-                Todas ({notificacoes.length})
+        </li>
+      ))}
+    </ul>
+  )
+
+  return (
+    <div className="space-y-5 pb-2">
+      {/* Cabeçalho — alinhado ao tema PWA */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-[#871b0b] via-[#7a1809] to-[#5c1207] px-5 py-6 text-white shadow-lg ring-1 ring-black/10">
+        <div className="pointer-events-none absolute -right-10 -top-12 h-40 w-40 rounded-full bg-white/[0.07]" />
+        <div className="pointer-events-none absolute -bottom-8 left-1/3 h-24 w-24 rounded-full bg-black/10" />
+        <div className="relative flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-white/15 shadow-inner ring-1 ring-white/20">
+              <Bell className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold tracking-tight sm:text-2xl">
+                Notificações
+              </h1>
+              <p className="mt-0.5 text-sm text-red-100/90">
+                Alertas e avisos em um só lugar
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+            {naoLidas > 0 && (
+              <Badge className="border-white/25 bg-white/15 px-2.5 py-0.5 text-xs font-semibold text-white hover:bg-white/20">
+                {naoLidas} não lida{naoLidas !== 1 ? "s" : ""}
+              </Badge>
+            )}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="border-0 bg-white/15 text-white shadow-sm hover:bg-white/25"
+              onClick={carregarNotificacoes}
+              disabled={loading}
+              title="Atualizar"
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </Button>
+            {naoLidas > 0 && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="border-0 bg-white text-[#871b0b] shadow-sm hover:bg-red-50"
+                onClick={marcarTodasComoLidas}
+              >
+                Marcar todas lidas
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <Card className="overflow-hidden border-0 shadow-md ring-1 ring-black/[0.06]">
+        <Tabs value={filtro} onValueChange={(v) => setFiltro(v as "todas" | "nao-lidas")}>
+          <CardHeader className="space-y-4 border-b border-border/60 bg-muted/25 pb-5 pt-5">
+            <div className="flex flex-col gap-1">
+              <CardTitle className="text-base font-semibold sm:text-lg">
+                Lista
+              </CardTitle>
+              <p className="text-xs text-muted-foreground sm:text-sm">
+                Filtre por período e por status de leitura
+              </p>
+            </div>
+
+            <TabsList className="grid h-11 w-full grid-cols-2 rounded-xl bg-muted/80 p-1">
+              <TabsTrigger
+                value="todas"
+                className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Todas
+                <span className="ml-1.5 tabular-nums text-muted-foreground data-[state=active]:text-foreground">
+                  ({totalNoPeriodo})
+                </span>
               </TabsTrigger>
-              <TabsTrigger value="nao-lidas">
-                Não Lidas ({naoLidas})
+              <TabsTrigger
+                value="nao-lidas"
+                className="rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-sm"
+              >
+                Não lidas
+                <span className="ml-1.5 tabular-nums text-muted-foreground data-[state=active]:text-foreground">
+                  ({naoLidas})
+                </span>
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value={filtro}>
-              {loading ? (
-                <div className="text-center py-8">
-                  <RefreshCw className="w-8 h-8 animate-spin mx-auto text-blue-600 mb-2" />
-                  <p className="text-gray-600">Carregando notificações...</p>
-                </div>
-              ) : notificacoesFiltradas.length === 0 ? (
-                <div className="text-center py-8">
-                  <Bell className="w-12 h-12 mx-auto text-gray-300 mb-4" />
-                  <p className="text-gray-600">Nenhuma notificação</p>
-                  <p className="text-sm text-gray-500">Você está em dia!</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {notificacoesFiltradas.map((notif) => (
-                    <div
-                      key={notif.id}
-                      className={`p-4 rounded-lg border transition-colors ${
-                        notif.lida 
-                          ? 'bg-gray-50 border-gray-200' 
-                          : 'bg-white border-blue-200 shadow-sm'
-                      }`}
-                    >
-                      {/* Conteúdo principal - título e texto ocupando 100% */}
-                      <div className="w-full">
-                        <div className="flex items-center gap-2 mb-2 flex-wrap">
-                          <h4 className="font-medium text-gray-900 flex-1">{notif.titulo}</h4>
-                          {!notif.lida && (
-                            <Badge className="bg-blue-100 text-blue-800 text-xs">
-                              Nova
-                            </Badge>
-                          )}
-                          {getBadgeTipo(notif.tipoOriginal) && (
-                            <Badge className={`text-xs ${getBadgeTipo(notif.tipoOriginal)?.className}`}>
-                              {getBadgeTipo(notif.tipoOriginal)?.label}
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm text-gray-600 mb-3">{notif.mensagem}</p>
-                        <div className="flex items-center gap-1 text-xs text-gray-500 mb-3">
-                          <Clock className="w-3 h-3" />
-                          {new Date(notif.data).toLocaleString('pt-BR', {
-                            day: '2-digit',
-                            month: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </div>
-                      </div>
+            <div>
+              <p className="mb-2 flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                <CalendarDays className="h-3.5 w-3.5" />
+                Período
+              </p>
+              <div className="-mx-1 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {PERIODOS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setPeriodoData(p.id)}
+                    className={cn(
+                      "shrink-0 rounded-full px-3.5 py-2 text-xs font-medium transition-all sm:text-sm",
+                      periodoData === p.id
+                        ? "bg-[#871b0b] text-white shadow-md ring-2 ring-[#871b0b]/30"
+                        : "bg-muted/90 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </CardHeader>
 
-                      {/* Botões de ação na parte inferior */}
-                      <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-200">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setNotificacaoSelecionada(notif)
-                            setIsModalOpen(true)
-                          }}
-                          title="Ver detalhes"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </Button>
-                        {!notif.lida && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => marcarComoLida(notif.id)}
-                            title="Marcar como lida"
-                          >
-                            <CheckCircle className="w-4 h-4" />
-                          </Button>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => excluirNotificacao(notif.id)}
-                          title="Excluir"
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+          <CardContent className="px-4 pb-6 pt-5 sm:px-6">
+            <TabsContent value="todas" className="mt-0 outline-none">
+              {listaNotificacoesUi}
             </TabsContent>
-          </Tabs>
-        </CardContent>
+            <TabsContent value="nao-lidas" className="mt-0 outline-none">
+              {listaNotificacoesUi}
+            </TabsContent>
+          </CardContent>
+        </Tabs>
       </Card>
 
       {/* Modal de Detalhes da Notificação */}
       <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {notificacaoSelecionada && getIconeNotificacao(notificacaoSelecionada.tipo, notificacaoSelecionada.tipoOriginal)}
-              Detalhes da Notificação
-            </DialogTitle>
+        <DialogContent className="gap-0 overflow-hidden rounded-2xl border-0 p-0 sm:max-w-[500px]">
+          <DialogHeader className="space-y-3 border-b border-border/60 bg-muted/30 px-6 py-5 text-left">
+            <div className="flex items-start gap-3">
+              {notificacaoSelecionada && (
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-background shadow-sm ring-1 ring-border/60">
+                  {getIconeNotificacao(
+                    notificacaoSelecionada.tipo,
+                    notificacaoSelecionada.tipoOriginal
+                  )}
+                </div>
+              )}
+              <div className="min-w-0 flex-1 pt-0.5">
+                <DialogTitle className="text-lg leading-snug">
+                  {notificacaoSelecionada?.titulo ?? "Detalhes"}
+                </DialogTitle>
+                <p className="mt-1 text-xs font-medium text-muted-foreground">
+                  Notificação
+                </p>
+              </div>
+            </div>
           </DialogHeader>
-          
+
           {notificacaoSelecionada && (
-            <div className="space-y-4 mt-4">
-              <div className="bg-gray-50 rounded-lg p-4">
-                <p className="text-sm text-gray-700 whitespace-pre-wrap">
+            <div className="space-y-4 px-6 py-5">
+              <div className="rounded-xl bg-muted/50 p-4 ring-1 ring-border/50">
+                <p className="text-sm leading-relaxed text-foreground whitespace-pre-wrap">
                   {notificacaoSelecionada.mensagem}
                 </p>
               </div>
 
-              <div className="flex items-center justify-between text-sm text-gray-600 pt-4 border-t border-gray-200">
+              <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
                 <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4" />
+                  <Clock className="h-4 w-4 shrink-0 opacity-80" />
                   <span>
-                    {new Date(notificacaoSelecionada.data).toLocaleString('pt-BR', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      year: 'numeric',
-                      hour: '2-digit',
-                      minute: '2-digit'
+                    {new Date(notificacaoSelecionada.data).toLocaleString("pt-BR", {
+                      day: "2-digit",
+                      month: "2-digit",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
                     })}
                   </span>
                 </div>
                 {notificacaoSelecionada.lida ? (
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-300">
-                    <CheckCircle className="w-3 h-3 mr-1" />
+                  <Badge
+                    variant="outline"
+                    className="border-green-300 bg-green-50 text-green-800"
+                  >
+                    <CheckCircle className="mr-1 h-3 w-3" />
                     Lida
                   </Badge>
                 ) : (
-                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
-                    <BellRing className="w-3 h-3 mr-1" />
+                  <Badge
+                    variant="outline"
+                    className="border-amber-300 bg-amber-50 text-amber-900"
+                  >
+                    <BellRing className="mr-1 h-3 w-3" />
                     Não lida
                   </Badge>
                 )}
               </div>
 
-              <div className="flex gap-2 pt-4 border-t border-gray-200">
+              <div className="flex flex-col gap-2 border-t border-border/60 pt-4 sm:flex-row">
                 {!notificacaoSelecionada.lida && (
                   <Button
                     variant="outline"
-                    className="flex-1"
+                    className="flex-1 rounded-xl border-[#871b0b]/30 text-[#871b0b] hover:bg-red-50"
                     onClick={() => {
                       marcarComoLida(notificacaoSelecionada.id)
-                      setNotificacaoSelecionada(prev => prev ? { ...prev, lida: true } : null)
+                      setNotificacaoSelecionada((prev) =>
+                        prev ? { ...prev, lida: true } : null
+                      )
                     }}
                   >
-                    <CheckCircle className="w-4 h-4 mr-2" />
+                    <CheckCircle className="mr-2 h-4 w-4" />
                     Marcar como lida
                   </Button>
                 )}
                 <Button
                   variant="destructive"
-                  className="flex-1"
+                  className="flex-1 rounded-xl"
                   onClick={() => {
                     excluirNotificacao(notificacaoSelecionada.id)
                     setIsModalOpen(false)
                     setNotificacaoSelecionada(null)
                   }}
                 >
-                  <Trash2 className="w-4 h-4 mr-2" />
+                  <Trash2 className="mr-2 h-4 w-4" />
                   Excluir
                 </Button>
               </div>
