@@ -284,7 +284,7 @@ async function buscarTelefoneWhatsAppCliente(cliente_id) {
     console.log(`[whatsapp-service] 🔍 Buscando telefone do cliente ${cliente_id}...`);
     const { data: cliente, error } = await supabaseAdmin
       .from('clientes')
-      .select('telefone')
+      .select('telefone, contato_telefone, contato_usuario_id')
       .eq('id', cliente_id)
       .single();
     
@@ -298,15 +298,25 @@ async function buscarTelefoneWhatsAppCliente(cliente_id) {
       return null;
     }
     
-    console.log(`[whatsapp-service] 📞 Telefone encontrado no banco: ${cliente.telefone || 'null'}`);
+    // Prioriza celular do contato (comum no WhatsApp); senão telefone da empresa
+    const bruto = cliente.contato_telefone || cliente.telefone;
+    console.log(`[whatsapp-service] 📞 Telefone empresa: ${cliente.telefone || 'null'}, contato: ${cliente.contato_telefone || 'null'} → usando: ${bruto || 'null'}`);
     
-    if (cliente.telefone) {
-      const telefoneFormatado = formatarTelefone(cliente.telefone);
-      console.log(`[whatsapp-service] ✅ Telefone formatado: ${cliente.telefone} -> ${telefoneFormatado}`);
+    if (bruto) {
+      const telefoneFormatado = formatarTelefone(bruto);
+      console.log(`[whatsapp-service] ✅ Telefone formatado: ${bruto} -> ${telefoneFormatado}`);
       return telefoneFormatado;
     }
     
-    console.warn(`[whatsapp-service] ⚠️ Cliente ${cliente_id} não tem telefone cadastrado`);
+    if (cliente.contato_usuario_id) {
+      const viaContatoUsuario = await buscarTelefoneWhatsAppUsuario(cliente.contato_usuario_id);
+      if (viaContatoUsuario) {
+        console.log(`[whatsapp-service] ✅ Telefone via contato_usuario_id ${cliente.contato_usuario_id}: ${viaContatoUsuario}`);
+        return viaContatoUsuario;
+      }
+    }
+    
+    console.warn(`[whatsapp-service] ⚠️ Cliente ${cliente_id} sem telefone, contato_telefone ou telefone no usuário do contato`);
     return null;
   } catch (error) {
     console.error('[whatsapp-service] ❌ Erro ao buscar telefone WhatsApp do cliente:', error);
@@ -343,18 +353,12 @@ async function buscarTelefoneWhatsAppGestor(gestor_id, isFuncionario = false) {
           return telefoneFormatado;
         }
         
-        // Se não tem telefone no funcionario, tentar buscar no usuario vinculado
+        // Sem telefone na ficha do funcionário: resolver via usuário (mesma lógica de busca em profundidade)
         if (funcionario.user_id) {
-          const { data: usuario, error: userError } = await supabaseAdmin
-            .from('usuarios')
-            .select('telefone')
-            .eq('id', funcionario.user_id)
-            .single();
-          
-          if (!userError && usuario && usuario.telefone) {
-            const telefoneFormatado = formatarTelefone(usuario.telefone);
-            console.log(`[whatsapp-service] Telefone encontrado no usuário vinculado: ${telefoneFormatado}`);
-            return telefoneFormatado;
+          const viaUsuario = await buscarTelefoneWhatsAppUsuario(funcionario.user_id);
+          if (viaUsuario) {
+            console.log(`[whatsapp-service] Telefone resolvido via usuário vinculado (user_id ${funcionario.user_id}): ${viaUsuario}`);
+            return viaUsuario;
           }
         }
       }
@@ -909,7 +913,7 @@ export async function enviarMensagemNovaObra(obra) {
       console.log(`[whatsapp-service] 🔍 Buscando cliente ID: ${obraCompleta.cliente_id}`);
       const { data: clienteData, error: clienteError } = await supabaseAdmin
         .from('clientes')
-        .select('id, nome, telefone')
+        .select('id, nome, telefone, contato_telefone, contato_usuario_id')
         .eq('id', obraCompleta.cliente_id)
         .single();
       
@@ -918,7 +922,9 @@ export async function enviarMensagemNovaObra(obra) {
         resultados.erros.push(`Cliente: Erro ao buscar dados (${clienteError.message || 'Cliente não encontrado'})`);
       } else if (clienteData) {
         cliente = clienteData;
-        console.log(`[whatsapp-service] ✅ Cliente encontrado: ${cliente.nome} (ID: ${cliente.id}, Telefone: ${cliente.telefone || 'não cadastrado'})`);
+        console.log(
+          `[whatsapp-service] ✅ Cliente encontrado: ${cliente.nome} (ID: ${cliente.id}, tel. empresa: ${cliente.telefone || '—'}, contato: ${cliente.contato_telefone || '—'}, contato_usuario_id: ${cliente.contato_usuario_id ?? '—'})`
+        );
       } else {
         console.warn(`[whatsapp-service] ⚠️ Cliente ${obraCompleta.cliente_id} não encontrado no banco`);
         resultados.erros.push(`Cliente: Não encontrado no banco de dados`);
@@ -967,7 +973,7 @@ export async function enviarMensagemNovaObra(obra) {
         });
         console.log(`[whatsapp-service] ✅ Cliente adicionado à lista de destinatários: ${cliente.nome} (${telefoneCliente})`);
       } else {
-        const erroCliente = `Cliente ${cliente.nome}: Telefone WhatsApp não cadastrado`;
+        const erroCliente = `Cliente ${cliente.nome}: Telefone não cadastrado (empresa ou contato)`;
         resultados.erros.push(erroCliente);
         console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não disponível para cliente ${cliente.id} (${cliente.nome})`);
       }
@@ -985,7 +991,15 @@ export async function enviarMensagemNovaObra(obra) {
         .single();
       
       if (!funcError && funcionario) {
-        const telefoneResponsavel = await buscarTelefoneWhatsAppGestor(funcionario.id, true);
+        let telefoneResponsavel = await buscarTelefoneWhatsAppGestor(funcionario.id, true);
+        if (!telefoneResponsavel && obraCompleta.cliente_id) {
+          telefoneResponsavel = await buscarTelefoneWhatsAppCliente(obraCompleta.cliente_id);
+          if (telefoneResponsavel) {
+            console.log(
+              `[whatsapp-service] ℹ️ Responsável ${funcionario.nome}: sem telefone na ficha — usando telefone do cliente da obra (contato/empresa/usuário do contato)`
+            );
+          }
+        }
         if (telefoneResponsavel) {
           destinatarios.push({
             tipo: 'responsavel',
@@ -994,7 +1008,9 @@ export async function enviarMensagemNovaObra(obra) {
           });
           console.log(`[whatsapp-service] ✅ Responsável adicionado: ${funcionario.nome} (${telefoneResponsavel})`);
         } else {
-          resultados.erros.push(`Responsável ${funcionario.nome}: Telefone WhatsApp não cadastrado`);
+          resultados.erros.push(
+            `Responsável ${funcionario.nome}: sem telefone na ficha e cliente da obra também não tem telefone para uso como fallback`
+          );
           console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não disponível para responsável ${funcionario.id}`);
         }
       } else {
@@ -1006,7 +1022,15 @@ export async function enviarMensagemNovaObra(obra) {
           .single();
         
         if (!userError && usuario) {
-          const telefoneResponsavel = await buscarTelefoneWhatsAppGestor(usuario.id, false);
+          let telefoneResponsavel = await buscarTelefoneWhatsAppGestor(usuario.id, false);
+          if (!telefoneResponsavel && obraCompleta.cliente_id) {
+            telefoneResponsavel = await buscarTelefoneWhatsAppCliente(obraCompleta.cliente_id);
+            if (telefoneResponsavel) {
+              console.log(
+                `[whatsapp-service] ℹ️ Responsável ${usuario.nome}: sem telefone no usuário — usando telefone do cliente da obra como fallback`
+              );
+            }
+          }
           if (telefoneResponsavel) {
             destinatarios.push({
               tipo: 'responsavel',
@@ -1015,7 +1039,9 @@ export async function enviarMensagemNovaObra(obra) {
             });
             console.log(`[whatsapp-service] ✅ Responsável adicionado: ${usuario.nome} (${telefoneResponsavel})`);
           } else {
-            resultados.erros.push(`Responsável ${usuario.nome}: Telefone WhatsApp não cadastrado`);
+            resultados.erros.push(
+              `Responsável ${usuario.nome}: sem telefone no usuário e cliente da obra também não tem telefone para fallback`
+            );
             console.warn(`[whatsapp-service] ⚠️ Telefone WhatsApp não disponível para responsável ${usuario.id}`);
           }
         } else {
@@ -1047,11 +1073,20 @@ export async function enviarMensagemNovaObra(obra) {
       }
     }
     
-    console.log(`[whatsapp-service] 📋 Total de destinatários: ${destinatarios.length}`);
-    console.log(`[whatsapp-service] 📋 Destinatários:`, destinatarios.map(d => `${d.tipo}: ${d.nome} (${d.telefone})`));
+    // Evita enviar duas vezes ao mesmo número (ex.: cliente e responsável com mesmo telefone)
+    const vistos = new Set();
+    const destinatariosUnicos = [];
+    for (const d of destinatarios) {
+      if (!d.telefone || vistos.has(d.telefone)) continue;
+      vistos.add(d.telefone);
+      destinatariosUnicos.push(d);
+    }
+    
+    console.log(`[whatsapp-service] 📋 Total de destinatários: ${destinatariosUnicos.length}`);
+    console.log(`[whatsapp-service] 📋 Destinatários:`, destinatariosUnicos.map(d => `${d.tipo}: ${d.nome} (${d.telefone})`));
     
     // 4. Enviar mensagem para CADA destinatário (POST separado para cada um)
-    for (const destinatario of destinatarios) {
+    for (const destinatario of destinatariosUnicos) {
       console.log(`[whatsapp-service] ===== Enviando para ${destinatario.tipo}: ${destinatario.nome} (${destinatario.telefone}) =====`);
       const resultado = await enviarMensagemWebhook(
         destinatario.telefone, 
