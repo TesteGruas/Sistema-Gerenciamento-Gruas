@@ -2501,6 +2501,27 @@ export default function NotasFiscaisPage() {
     return nota.valor_liquido ?? nota.valor_total
   }
 
+  const renderValorNota = (nota: NotaFiscal) => {
+    const valorTotal = Number(nota.valor_total || 0)
+    const valorLiquido = Number(getValorExibicaoNota(nota) || 0)
+    const exibirTotalSeparado = Math.abs(valorTotal - valorLiquido) > 0.009
+
+    if (!exibirTotalSeparado) {
+      return <span className="font-semibold">{formatCurrency(valorLiquido)}</span>
+    }
+
+    return (
+      <div className="space-y-0.5">
+        <div className="text-xs text-muted-foreground">
+          Total: <span className="font-medium">{formatCurrency(valorTotal)}</span>
+        </div>
+        <div className="font-semibold">
+          Líquido: {formatCurrency(valorLiquido)}
+        </div>
+      </div>
+    )
+  }
+
   // Filtrar notas fiscais
   const filteredNotas = useMemo(() => {
     let filtered = notasFiscais
@@ -2885,7 +2906,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Origem</TableHead>
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor Líquido</TableHead>
+                        <TableHead>Valor</TableHead>
                         <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
@@ -2930,9 +2951,7 @@ export default function NotasFiscaisPage() {
                           <TableCell>
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
-                          <TableCell className="font-semibold">
-                            {formatCurrency(getValorExibicaoNota(nota))}
-                          </TableCell>
+                          <TableCell>{renderValorNota(nota)}</TableCell>
                           <TableCell>{renderCobrancaNota(nota)}</TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
@@ -3165,7 +3184,7 @@ export default function NotasFiscaisPage() {
                         <TableHead>Compra</TableHead>
                         <TableHead>Data Emissão</TableHead>
                         <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor Líquido</TableHead>
+                        <TableHead>Valor</TableHead>
                         <TableHead>Cobrança</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Ações</TableHead>
@@ -3200,9 +3219,7 @@ export default function NotasFiscaisPage() {
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
                           <TableCell>{formatDate(nota.data_emissao)}</TableCell>
-                          <TableCell className="font-semibold">
-                            {formatCurrency(getValorExibicaoNota(nota))}
-                          </TableCell>
+                          <TableCell>{renderValorNota(nota)}</TableCell>
                           <TableCell>{renderCobrancaNota(nota)}</TableCell>
                           <TableCell>{getStatusBadge(nota.status)}</TableCell>
                           <TableCell>
