@@ -2366,6 +2366,9 @@ router.put('/registros/:id', async (req, res) => {
       status
     } = req.body;
 
+    const bodyTemSaidaAlmoco = Object.prototype.hasOwnProperty.call(req.body, 'saida_almoco');
+    const bodyTemVoltaAlmoco = Object.prototype.hasOwnProperty.call(req.body, 'volta_almoco');
+
     // Buscar registro atual
     const { data: registroAtual, error: errorBusca } = await supabaseAdmin
       .from('registros_ponto')
@@ -2403,14 +2406,14 @@ router.put('/registros/:id', async (req, res) => {
       });
     }
 
-    if (saida_almoco && !validarHorario(saida_almoco)) {
+    if (bodyTemSaidaAlmoco && saida_almoco && !validarHorario(saida_almoco)) {
       return res.status(400).json({
         success: false,
         message: 'Horário de saída para almoço inválido'
       });
     }
 
-    if (volta_almoco && !validarHorario(volta_almoco)) {
+    if (bodyTemVoltaAlmoco && volta_almoco && !validarHorario(volta_almoco)) {
       return res.status(400).json({
         success: false,
         message: 'Horário de volta do almoço inválido'
@@ -2427,14 +2430,16 @@ router.put('/registros/:id', async (req, res) => {
     // Normalizar horários (remover segundos se existir)
     const entradaNormalizada = entrada ? normalizarHorario(entrada) : null;
     const saidaNormalizada = saida ? normalizarHorario(saida) : null;
-    const saidaAlmocoNormalizada = saida_almoco ? normalizarHorario(saida_almoco) : null;
-    const voltaAlmocoNormalizada = volta_almoco ? normalizarHorario(volta_almoco) : null;
 
     // Calcular novas horas trabalhadas e extras
     const novaEntrada = entradaNormalizada || registroAtual.entrada;
     const novaSaida = saidaNormalizada || registroAtual.saida;
-    const novaSaidaAlmoco = saidaAlmocoNormalizada || registroAtual.saida_almoco;
-    const novaVoltaAlmoco = voltaAlmocoNormalizada || registroAtual.volta_almoco;
+    const novaSaidaAlmoco = bodyTemSaidaAlmoco
+      ? (saida_almoco ? normalizarHorario(saida_almoco) : null)
+      : registroAtual.saida_almoco;
+    const novaVoltaAlmoco = bodyTemVoltaAlmoco
+      ? (volta_almoco ? normalizarHorario(volta_almoco) : null)
+      : registroAtual.volta_almoco;
     const novoTrabalhoCorrido = trabalho_corrido !== undefined
       ? Boolean(trabalho_corrido)
       : Boolean(registroAtual.trabalho_corrido);
@@ -2567,18 +2572,18 @@ router.put('/registros/:id', async (req, res) => {
         valor_novo: entradaNormalizada
       });
     }
-    if (saidaAlmocoNormalizada && saidaAlmocoNormalizada !== registroAtual.saida_almoco) {
+    if (bodyTemSaidaAlmoco && String(novaSaidaAlmoco ?? '') !== String(registroAtual.saida_almoco ?? '')) {
       alteracoes.push({
         campo_alterado: 'saida_almoco',
         valor_anterior: registroAtual.saida_almoco,
-        valor_novo: saidaAlmocoNormalizada
+        valor_novo: novaSaidaAlmoco
       });
     }
-    if (voltaAlmocoNormalizada && voltaAlmocoNormalizada !== registroAtual.volta_almoco) {
+    if (bodyTemVoltaAlmoco && String(novaVoltaAlmoco ?? '') !== String(registroAtual.volta_almoco ?? '')) {
       alteracoes.push({
         campo_alterado: 'volta_almoco',
         valor_anterior: registroAtual.volta_almoco,
-        valor_novo: voltaAlmocoNormalizada
+        valor_novo: novaVoltaAlmoco
       });
     }
     if (saidaNormalizada && saidaNormalizada !== registroAtual.saida) {

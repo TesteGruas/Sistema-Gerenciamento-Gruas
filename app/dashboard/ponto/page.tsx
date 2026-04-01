@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, Coffee, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
+import { Clock, Play, Square, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import { AuthService } from "@/app/lib/auth"
@@ -154,8 +154,6 @@ export default function PontoPage() {
   const [registroEditando, setRegistroEditando] = useState<RegistroPonto | null>(null)
   const [dadosEdicao, setDadosEdicao] = useState({
     entrada: "",
-    saida_almoco: "",
-    volta_almoco: "",
     saida: "",
     observacoes: "",
     justificativa_alteracao: "",
@@ -599,8 +597,6 @@ export default function PontoPage() {
     const mapeamento: { [key: string]: string } = {
       'Entrada': 'entrada',
       'Saída': 'saida',
-      'Saída Almoço': 'saida_almoco',
-      'Volta Almoço': 'volta_almoco'
     }
     return mapeamento[tipo] || tipo.toLowerCase().replace(' ', '_')
   }
@@ -622,8 +618,6 @@ export default function PontoPage() {
     return {
       temEntrada: !!registro.entrada,
       temSaida: !!registro.saida,
-      temSaidaAlmoco: !!registro.saida_almoco,
-      temVoltaAlmoco: !!registro.volta_almoco,
       registro
     }
   }
@@ -1030,12 +1024,10 @@ export default function PontoPage() {
 
       if (tipo === 'csv') {
         // Criar CSV manualmente
-        const headers = ['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas Trabalhadas', 'Horas Extras', 'Status']
+        const headers = ['Data', 'Entrada', 'Saída', 'Horas Trabalhadas', 'Horas Extras', 'Status']
         const rows = historicoRegistros.map(r => [
           utilsPonto.formatarData(r.data || ''),
           r.entrada || '-',
-          r.saida_almoco || '-',
-          r.volta_almoco || '-',
           r.saida || '-',
           (r.horas_trabalhadas || 0).toFixed(2),
           (r.horas_extras || 0).toFixed(2),
@@ -1141,8 +1133,6 @@ export default function PontoPage() {
           const tableData = historicoRegistros.map(registro => [
             utilsPonto.formatarData(registro.data || ''),
             formatarHora(registro.entrada),
-            formatarHora(registro.saida_almoco),
-            formatarHora(registro.volta_almoco),
             formatarHora(registro.saida),
             `${(registro.horas_trabalhadas || 0).toFixed(2)}h`,
             registro.horas_extras && registro.horas_extras > 0 
@@ -1152,7 +1142,7 @@ export default function PontoPage() {
           ])
 
           autoTable(doc, {
-            head: [['Data', 'Entrada', 'Saída Almoço', 'Volta Almoço', 'Saída', 'Horas', 'Extras', 'Status']],
+            head: [['Data', 'Entrada', 'Saída', 'Horas', 'Extras', 'Status']],
             body: tableData,
             startY: yPos,
             styles: { 
@@ -1170,14 +1160,12 @@ export default function PontoPage() {
               fillColor: [245, 245, 245]
             },
             columnStyles: {
-              0: { cellWidth: 28, halign: 'center' }, // Data
-              1: { cellWidth: 22, halign: 'center' }, // Entrada
-              2: { cellWidth: 22, halign: 'center' }, // Saída Almoço
-              3: { cellWidth: 22, halign: 'center' }, // Volta Almoço
-              4: { cellWidth: 22, halign: 'center' }, // Saída
-              5: { cellWidth: 20, halign: 'center' }, // Horas
-              6: { cellWidth: 20, halign: 'center' }, // Extras
-              7: { cellWidth: 30, halign: 'center' }  // Status
+              0: { cellWidth: 28, halign: 'center' },
+              1: { cellWidth: 24, halign: 'center' },
+              2: { cellWidth: 24, halign: 'center' },
+              3: { cellWidth: 22, halign: 'center' },
+              4: { cellWidth: 22, halign: 'center' },
+              5: { cellWidth: 36, halign: 'center' }
             },
             margin: { left: 14, right: 14 }
           })
@@ -1312,8 +1300,6 @@ export default function PontoPage() {
         "Funcionário",
         "Data",
         "Entrada",
-        "Saída almoço",
-        "Volta almoço",
         "Saída",
         "Horas trabalhadas",
         "Horas extras",
@@ -1324,8 +1310,6 @@ export default function PontoPage() {
           r.funcionario?.nome || String(r.funcionario_id ?? ""),
           utilsPonto.formatarData(r.data),
           r.entrada ?? "",
-          r.saida_almoco ?? "",
-          r.volta_almoco ?? "",
           r.saida ?? "",
           r.horas_trabalhadas ?? "",
           r.horas_extras ?? "",
@@ -1768,8 +1752,6 @@ export default function PontoPage() {
     setRegistroEditando(registro)
     setDadosEdicao({
       entrada: registro.entrada || "",
-      saida_almoco: registro.saida_almoco || "",
-      volta_almoco: registro.volta_almoco || "",
       saida: registro.saida || "",
       observacoes: registro.observacoes || "",
       justificativa_alteracao: "",
@@ -1791,74 +1773,18 @@ export default function PontoPage() {
     setIsJustificativaOpen(true)
   }
 
-  // Componente para toggle de entrada (mostra saída do almoço)
   const ToggleEntrada = ({ registro }: { registro: RegistroPonto }) => {
-    const [isOpen, setIsOpen] = useState(false)
-    
     if (!registro.entrada) {
       return <span className="text-gray-400">-</span>
     }
-
-    return (
-      <div className="relative">
-        <button
-          className="font-medium cursor-pointer"
-          onMouseEnter={() => setIsOpen(true)}
-          onMouseLeave={() => setIsOpen(false)}
-        >
-          {registro.entrada}
-        </button>
-        {isOpen && (
-          <div className="absolute z-10 top-8 left-0 bg-white border rounded-lg shadow-lg p-3 min-w-[200px]">
-            <div className="text-sm">
-              <div className="font-medium text-gray-900 mb-1">Entrada</div>
-              <div className="text-gray-600">{registro.entrada}</div>
-              {registro.saida_almoco && (
-                <>
-                  <div className="font-medium text-gray-900 mt-2 mb-1">Saída Almoço</div>
-                  <div className="text-gray-600">{registro.saida_almoco}</div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    )
+    return <span className="font-medium">{registro.entrada}</span>
   }
 
-  // Componente para toggle de saída (mostra volta do almoço)
   const ToggleSaida = ({ registro }: { registro: RegistroPonto }) => {
-    const [isOpen, setIsOpen] = useState(false)
-    
     if (!registro.saida) {
       return <span className="text-gray-400">-</span>
     }
-
-    return (
-      <div className="relative">
-        <button
-          className="font-medium cursor-pointer"
-          onMouseEnter={() => setIsOpen(true)}
-          onMouseLeave={() => setIsOpen(false)}
-        >
-          {registro.saida}
-        </button>
-        {isOpen && (
-          <div className="absolute z-10 top-8 left-0 bg-white border rounded-lg shadow-lg p-3 min-w-[200px]">
-            <div className="text-sm">
-              <div className="font-medium text-gray-900 mb-1">Saída</div>
-              <div className="text-gray-600">{registro.saida}</div>
-              {registro.volta_almoco && (
-                <>
-                  <div className="font-medium text-gray-900 mt-2 mb-1">Volta Almoço</div>
-                  <div className="text-gray-600">{registro.volta_almoco}</div>
-                </>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-    )
+    return <span className="font-medium">{registro.saida}</span>
   }
 
   // Funções para aprovação de horas extras
@@ -2037,8 +1963,8 @@ export default function PontoPage() {
     try {
       const registroAtualizado = await apiRegistrosPonto.atualizar(registroEditando.id || '', {
         entrada: dadosEdicao.entrada,
-        saida_almoco: dadosEdicao.saida_almoco,
-        volta_almoco: dadosEdicao.volta_almoco,
+        saida_almoco: null,
+        volta_almoco: null,
         saida: dadosEdicao.saida,
         observacoes: dadosEdicao.observacoes,
         justificativa_alteracao: dadosEdicao.justificativa_alteracao
@@ -2057,8 +1983,6 @@ export default function PontoPage() {
       setRegistroEditando(null)
       setDadosEdicao({
         entrada: "",
-        saida_almoco: "",
-        volta_almoco: "",
         saida: "",
         observacoes: "",
         justificativa_alteracao: "",
@@ -2229,26 +2153,6 @@ export default function PontoPage() {
                     required
                   />
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="saidaAlmoco">Saída Almoço</Label>
-                  <Input
-                    id="saidaAlmoco"
-                    type="time"
-                    value={dadosEdicao.saida_almoco}
-                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, saida_almoco: e.target.value })}
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="voltaAlmoco">Volta Almoço</Label>
-                  <Input
-                    id="voltaAlmoco"
-                    type="time"
-                    value={dadosEdicao.volta_almoco}
-                    onChange={(e) => setDadosEdicao({ ...dadosEdicao, volta_almoco: e.target.value })}
-                    required
-                  />
-                </div>
               </div>
 
               {/* Cálculo automático de horas */}
@@ -2260,9 +2164,7 @@ export default function PontoPage() {
                     <span className="ml-2 font-medium">
                       {(utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
-                        dadosEdicao.saida,
-                        dadosEdicao.saida_almoco,
-                        dadosEdicao.volta_almoco
+                        dadosEdicao.saida
                       ) || 0).toFixed(2)}h
                     </span>
                   </div>
@@ -2271,9 +2173,7 @@ export default function PontoPage() {
                     {(() => {
                       const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
                         dadosEdicao.entrada,
-                        dadosEdicao.saida,
-                        dadosEdicao.saida_almoco,
-                        dadosEdicao.volta_almoco
+                        dadosEdicao.saida
                       ) || 0;
                       const horasExtras = horasTrabalhadas - 8;
                       
@@ -2512,14 +2412,6 @@ export default function PontoPage() {
                             yPos += 6;
                             doc.text(`Entrada: ${registroEditando.entrada || '-'}`, 14, yPos);
                             yPos += 6;
-                            if (registroEditando.saida_almoco) {
-                              doc.text(`Saída Almoço: ${registroEditando.saida_almoco}`, 14, yPos);
-                              yPos += 6;
-                            }
-                            if (registroEditando.volta_almoco) {
-                              doc.text(`Volta Almoço: ${registroEditando.volta_almoco}`, 14, yPos);
-                              yPos += 6;
-                            }
                             doc.text(`Saída: ${registroEditando.saida || '-'}`, 14, yPos);
                             yPos += 6;
                             doc.text(`Horas Trabalhadas: ${(registroEditando.horas_trabalhadas || 0).toFixed(2)}h`, 14, yPos);
@@ -2785,7 +2677,7 @@ export default function PontoPage() {
               <Clock className="w-5 h-5" />
               Registrar Ponto
             </CardTitle>
-            <CardDescription>Registre entrada, saída e intervalos</CardDescription>
+            <CardDescription>Registre entrada e saída</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Seleção de Funcionário */}
@@ -2821,8 +2713,6 @@ export default function PontoPage() {
                 const status = getStatusRegistroAtual()
                 const podeEntrada = !status || (!status.temEntrada || status.temSaida)
                 const podeSaida = status && status.temEntrada && !status.temSaida
-                const podeSaidaAlmoco = status && status.temEntrada && !status.temSaidaAlmoco
-                const podeVoltaAlmoco = status && status.temSaidaAlmoco && !status.temVoltaAlmoco
 
                 return (
                   <>
@@ -2851,30 +2741,6 @@ export default function PontoPage() {
                     >
                       <Square className="w-4 h-4" />
                       Saída
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Saída Almoço")}
-                      disabled={!podeSaidaAlmoco}
-                      variant="outline"
-                      className={`flex items-center gap-2 ${
-                        !podeSaidaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                      title={!podeSaidaAlmoco ? "Registre a entrada primeiro" : ""}
-                    >
-                      <Coffee className="w-4 h-4" />
-                      Saída Almoço
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Volta Almoço")}
-                      disabled={!podeVoltaAlmoco}
-                      variant="outline"
-                      className={`flex items-center gap-2 ${
-                        !podeVoltaAlmoco ? "opacity-50 cursor-not-allowed" : ""
-                      }`}
-                      title={!podeVoltaAlmoco ? "Registre a saída para almoço primeiro" : ""}
-                    >
-                      <Coffee className="w-4 h-4" />
-                      Volta Almoço
                     </Button>
                   </>
                 )
@@ -3149,12 +3015,9 @@ export default function PontoPage() {
                         </TableCell>
                         <TableCell>
                           {(() => {
-                            // Calcular horas trabalhadas dinamicamente considerando horários de almoço
                             const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
                               registro.entrada,
-                              registro.saida,
-                              registro.saida_almoco,
-                              registro.volta_almoco
+                              registro.saida
                             );
                             const horasNegativas = horasTrabalhadas < 8 ? 8 - horasTrabalhadas : 0;
                             
@@ -4415,8 +4278,6 @@ export default function PontoPage() {
                           <TableRow className="bg-gray-50">
                             <TableHead className="font-semibold">Data</TableHead>
                             <TableHead className="font-semibold">Entrada</TableHead>
-                            <TableHead className="font-semibold">Saída Almoço</TableHead>
-                            <TableHead className="font-semibold">Volta Almoço</TableHead>
                             <TableHead className="font-semibold">Saída</TableHead>
                             <TableHead className="font-semibold text-center">Horas</TableHead>
                             <TableHead className="font-semibold text-center">Extras</TableHead>
@@ -4438,16 +4299,6 @@ export default function PontoPage() {
                               <TableCell>
                                 <span className="font-mono text-sm">
                                   {registro.entrada || <span className="text-gray-400">-</span>}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <span className="font-mono text-sm">
-                                  {registro.saida_almoco || <span className="text-gray-400">-</span>}
-                                </span>
-                              </TableCell>
-                              <TableCell>
-                                <span className="font-mono text-sm">
-                                  {registro.volta_almoco || <span className="text-gray-400">-</span>}
                                 </span>
                               </TableCell>
                               <TableCell>

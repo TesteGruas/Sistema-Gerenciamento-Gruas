@@ -60,8 +60,9 @@ export interface RegistroPontoPayload {
   funcionario_id: number | string;
   data: string;
   entrada?: string;
-  saida_almoco?: string;
-  volta_almoco?: string;
+  /** `null` em atualização PUT limpa o horário no servidor */
+  saida_almoco?: string | null;
+  volta_almoco?: string | null;
   saida?: string;
   localizacao?: string;
   justificativa_alteracao?: string;
