@@ -760,6 +760,8 @@ const obraUpdateSchema = Joi.object({
  *                     pages:
  *                       type: integer
  */
+const OBRAS_LIST_MAX_LIMIT = 100
+
 router.get('/', authenticateToken, async (req, res) => {
   try {
     const user = req.user
@@ -770,8 +772,12 @@ router.get('/', authenticateToken, async (req, res) => {
       .replace(/[\u0300-\u036f]/g, '')
       .toLowerCase()
       .trim()
-    const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 10
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const rawLimit = parseInt(req.query.limit, 10)
+    const limit = Math.min(
+      OBRAS_LIST_MAX_LIMIT,
+      Math.max(1, Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 10)
+    )
     const offset = (page - 1) * limit
     const { status, cliente_id } = req.query
 
@@ -990,9 +996,10 @@ router.get('/', authenticateToken, async (req, res) => {
       console.log(`✅ [OBRAS] Funcionário tem acesso global - mostrando todas as obras`)
     }
 
-    const totalPages = Math.ceil(filteredCount / limit)
+    const total = filteredCount ?? 0
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0
 
-    console.log(`✅ [OBRAS] Retornando ${filteredData.length} obras (Total: ${filteredCount})`)
+    console.log(`✅ [OBRAS] Retornando ${filteredData.length} obras (Total: ${total})`)
 
     res.json({
       success: true,
@@ -1000,7 +1007,7 @@ router.get('/', authenticateToken, async (req, res) => {
       pagination: {
         page,
         limit,
-        total: filteredCount,
+        total,
         pages: totalPages
       }
     })

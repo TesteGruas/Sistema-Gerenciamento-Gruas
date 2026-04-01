@@ -21,9 +21,9 @@ import {
 import Link from "next/link"
 import { useState, useEffect } from "react"
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts"
-import { obrasApi } from "@/lib/api-obras"
+import { listarTodasObras } from "@/lib/api-obras"
 import { clientesApi } from "@/lib/api-clientes"
-import { gruasApi } from "@/lib/api-gruas"
+import { listarTodasGruas } from "@/lib/api-gruas"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 
 const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899']
@@ -84,16 +84,14 @@ export default function Dashboard() {
         setLoading(true)
         
         // Buscar dados reais das APIs
-        const [obrasResponse, clientesResponse, gruasResponse, funcionariosResponse] = await Promise.all([
-          obrasApi.listarObras({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+        const [obras, clientesResponse, gruas, funcionariosResponse] = await Promise.all([
+          listarTodasObras().catch(() => []),
           clientesApi.listarClientes({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
-          gruasApi.listarGruas({ limit: 1000 }).catch(() => ({ success: false, data: [] })),
+          listarTodasGruas().catch(() => []),
           funcionariosApi.listarFuncionarios({ limit: 1000 }).catch(() => ({ success: false, data: [] }))
         ])
 
-        const obras = obrasResponse?.success && obrasResponse?.data ? (Array.isArray(obrasResponse.data) ? obrasResponse.data : []) : []
         const clientes = clientesResponse?.success && clientesResponse?.data ? (Array.isArray(clientesResponse.data) ? clientesResponse.data : []) : []
-        const gruas = gruasResponse?.success && gruasResponse?.data ? (Array.isArray(gruasResponse.data) ? gruasResponse.data : []) : []
         const funcionarios = funcionariosResponse?.success && funcionariosResponse?.data ? (Array.isArray(funcionariosResponse.data) ? funcionariosResponse.data : []) : []
 
         // Processar dados para gráficos

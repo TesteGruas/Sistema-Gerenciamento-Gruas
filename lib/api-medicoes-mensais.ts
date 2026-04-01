@@ -8,6 +8,12 @@ export interface MedicaoMensal {
   numero: string;
   periodo: string; // YYYY-MM
   data_medicao: string;
+  /** Início do período de emissão (fim = data_medicao). Opcional em registros antigos. */
+  data_inicio_emissao?: string | null;
+  /** Preenchido pela API: pelo menos uma NF de saída vinculada (medicao_id), excl. cancelada. */
+  faturado?: boolean;
+  notas_fiscais_count?: number;
+  notas_fiscais_numeros?: string[];
   mes_referencia: number;
   ano_referencia: number;
   valor_mensal_bruto: number;
@@ -167,6 +173,7 @@ export interface MedicaoMensalCreate {
   numero: string;
   periodo: string;
   data_medicao: string;
+  data_inicio_emissao?: string | null;
   mes_referencia: number;
   ano_referencia: number;
   valor_mensal_bruto?: number;

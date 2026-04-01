@@ -200,29 +200,37 @@ VALUES (
                     <p style="margin:4px 0 0;font-size:14px;font-weight:600;">{{numero}}</p>
                   </td>
                   <td width="50%" style="padding:6px 0 6px 8px;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Período</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{periodo}}</p>
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Período (mês/ano)</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{periodo_formatado}}</p>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:6px 8px 6px 0;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Data da medição</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{data_medicao}}</p>
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Data Início Emissão</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{data_inicio_emissao}}</p>
+                  </td>
+                  <td style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Data Fim Emissão</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{data_fim_emissao}}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 8px 6px 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Total de Dias</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{total_dias_emissao}}</p>
                   </td>
                   <td style="padding:6px 0 6px 8px;vertical-align:top;">
                     <p style="margin:0;font-size:11px;color:#6b7280;">Grua</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{grua_nome}}</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{grua_linha}}</p>
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="padding:6px 0;vertical-align:top;">
+                  <td style="padding:6px 8px 6px 0;vertical-align:top;">
                     <p style="margin:0;font-size:11px;color:#6b7280;">Obra</p>
                     <p style="margin:4px 0 0;font-size:14px;">{{obra_nome}}</p>
                   </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="padding:8px 0 0;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor total</p>
+                  <td style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor Total</p>
                     <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#2563eb;">R$ {{valor_total}}</p>
                   </td>
                 </tr>
@@ -278,7 +286,7 @@ VALUES (
 </body>
 </html>
 $MEDICAO_ENVIADA$,
-  '["numero", "periodo", "periodo_assunto", "obra_nome_assunto", "grua_nome_assunto", "valor_total", "valor_mensal_bruto", "valor_aditivos", "valor_custos_extras", "valor_descontos", "grua_nome", "obra_nome", "cliente_nome", "data_medicao", "link_pdf", "empresa", "bloco_comercial_html", "historico_status_html", "documentos_resumo_html"]'::jsonb,
+  '["numero", "periodo", "periodo_formatado", "periodo_assunto", "obra_nome_assunto", "grua_nome_assunto", "valor_total", "valor_mensal_bruto", "valor_aditivos", "valor_custos_extras", "valor_descontos", "grua_nome", "grua_linha", "obra_nome", "cliente_nome", "data_medicao", "data_inicio_emissao", "data_fim_emissao", "total_dias_emissao", "link_pdf", "empresa", "bloco_comercial_html", "historico_status_html", "documentos_resumo_html"]'::jsonb,
   true
 )
 ON CONFLICT (tipo) DO NOTHING;

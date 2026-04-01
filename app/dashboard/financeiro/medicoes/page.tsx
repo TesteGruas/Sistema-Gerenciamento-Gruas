@@ -37,8 +37,8 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
-import { gruasApi } from "@/lib/api-gruas"
-import { obrasApi } from "@/lib/api-obras"
+import { listarTodasGruas } from "@/lib/api-gruas"
+import { listarTodasObras } from "@/lib/api-obras"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
@@ -61,6 +61,13 @@ interface Obra {
     nome: string
   }
   status?: string
+}
+
+/** Faturado = pelo menos uma NF vinculada à medição (API: faturado / notas_fiscais_count). */
+function medicaoEstaFaturada(m: MedicaoMensal): boolean {
+  if (m.faturado === true) return true
+  const n = m.notas_fiscais_count
+  return typeof n === "number" && n > 0
 }
 
 export default function MedicoesPage() {
@@ -100,10 +107,8 @@ export default function MedicoesPage() {
   const carregarGruas = async () => {
     try {
       setLoadingGruas(true)
-      const response = await gruasApi.listarGruas({ limit: 1000 })
-      if (response.success) {
-        setGruas(response.data || [])
-      }
+      const data = await listarTodasGruas()
+      setGruas(data || [])
     } catch (error: any) {
       console.error("Erro ao carregar gruas:", error)
     } finally {
@@ -113,10 +118,8 @@ export default function MedicoesPage() {
 
   const carregarObras = async () => {
     try {
-      const response = await obrasApi.listarObras({ limit: 1000 })
-      if (response.success) {
-        setObras(response.data || [])
-      }
+      const data = await listarTodasObras()
+      setObras(data || [])
     } catch (error: any) {
       console.error("Erro ao carregar obras:", error)
     }
@@ -314,9 +317,10 @@ export default function MedicoesPage() {
         const total = Number(m.valor_total) || 0
         const loc = Number(m.valor_mensal_bruto) || 0
         const servico = Math.max(0, total - loc)
-        const nfTexto = m.numero
-          ? `NF-${String(m.numero).padStart(4, "0")}`
-          : ""
+        const nfTexto =
+          m.notas_fiscais_numeros && m.notas_fiscais_numeros.length > 0
+            ? m.notas_fiscais_numeros.join("; ")
+            : ""
         const cliente =
           m.obras?.clientes?.nome || m.orcamentos?.clientes?.nome || ""
         return [
@@ -361,19 +365,23 @@ export default function MedicoesPage() {
 
   const resumoFinanceiro = useMemo(() => {
     const base = filteredMedicoes
+    const naoCancelada = (m: MedicaoMensal) =>
+      String(m.status || "").toLowerCase() !== "cancelada"
+
     const aFaturar = base
-      .filter((m) => ['pendente'].includes(String(m.status || '').toLowerCase()))
+      .filter((m) => naoCancelada(m) && !medicaoEstaFaturada(m))
       .reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
 
     const jaFaturado = base
-      .filter((m) => ['finalizada', 'enviada'].includes(String(m.status || '').toLowerCase()))
+      .filter((m) => naoCancelada(m) && medicaoEstaFaturada(m))
       .reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
 
-    const totalMensal = base.reduce((acc, m) => acc + (Number(m.valor_total) || 0), 0)
-    const totaisPorA = base.reduce((acc, m) => acc + (Number(m.valor_aditivos) || 0), 0)
+    /** Soma de já faturado + a faturar (medições não canceladas). */
+    const totalEsperado = aFaturar + jaFaturado
 
     const mapaClientes = new Map<string, number>()
     for (const medicao of base) {
+      if (!naoCancelada(medicao)) continue
       const nomeCliente =
         medicao.obras?.clientes?.nome ||
         medicao.orcamentos?.clientes?.nome ||
@@ -386,7 +394,7 @@ export default function MedicoesPage() {
       .sort((a, b) => b.total - a.total)
       .slice(0, 4)
 
-    return { aFaturar, jaFaturado, totalMensal, totaisPorA, totaisPorCliente }
+    return { aFaturar, jaFaturado, totalEsperado, totaisPorCliente }
   }, [filteredMedicoes])
 
   const handleEditar = (medicao: MedicaoMensal) => {
@@ -466,29 +474,26 @@ export default function MedicoesPage() {
       </div>
 
       {/* Resumo Financeiro */}
-      <div className="grid grid-cols-1 xl:grid-cols-6 gap-4">
+      <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
         <Card className="xl:col-span-1">
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">A Faturar</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.aFaturar)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Sem nota fiscal vinculada</p>
           </CardContent>
         </Card>
         <Card className="xl:col-span-1">
           <CardContent className="p-4">
             <p className="text-sm text-gray-500">Já Faturado</p>
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.jaFaturado)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Com ao menos uma NF na medição</p>
           </CardContent>
         </Card>
         <Card className="xl:col-span-1">
           <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Total Mensal</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.totalMensal)}</p>
-          </CardContent>
-        </Card>
-        <Card className="xl:col-span-1">
-          <CardContent className="p-4">
-            <p className="text-sm text-gray-500">Totais por A</p>
-            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.totaisPorA)}</p>
+            <p className="text-sm text-gray-500">Total esperado</p>
+            <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoFinanceiro.totalEsperado)}</p>
+            <p className="text-xs text-muted-foreground mt-1">Já faturado + a faturar</p>
           </CardContent>
         </Card>
         <Card className="xl:col-span-2">
@@ -500,8 +505,8 @@ export default function MedicoesPage() {
               ) : (
                 resumoFinanceiro.totaisPorCliente.map((item, idx) => {
                   const cores = ['bg-blue-500', 'bg-emerald-500', 'bg-amber-400', 'bg-indigo-500']
-                  const percentual = resumoFinanceiro.totalMensal > 0
-                    ? ((item.total / resumoFinanceiro.totalMensal) * 100).toFixed(1)
+                  const percentual = resumoFinanceiro.totalEsperado > 0
+                    ? ((item.total / resumoFinanceiro.totalEsperado) * 100).toFixed(1)
                     : '0.0'
                   return (
                     <div key={`${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
@@ -523,7 +528,7 @@ export default function MedicoesPage() {
                     const cores = ['#3b82f6', '#10b981', '#f59e0b', '#6366f1']
                     let inicio = 0
                     const fatias = resumoFinanceiro.totaisPorCliente.map((item, idx) => {
-                      const pct = resumoFinanceiro.totalMensal > 0 ? (item.total / resumoFinanceiro.totalMensal) * 100 : 0
+                      const pct = resumoFinanceiro.totalEsperado > 0 ? (item.total / resumoFinanceiro.totalEsperado) * 100 : 0
                       const fim = inicio + pct
                       const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
                       inicio = fim
@@ -708,8 +713,8 @@ export default function MedicoesPage() {
                         <TableHead className="w-[7.25rem] whitespace-nowrap">Total</TableHead>
                         <TableHead className="w-[7.25rem] whitespace-nowrap">Locação</TableHead>
                         <TableHead className="w-[7.25rem] whitespace-nowrap">Serviço</TableHead>
-                        <TableHead className="w-[7rem] whitespace-nowrap">Status</TableHead>
-                        <TableHead className="w-16 min-w-0">NF</TableHead>
+                        <TableHead className="w-[9rem] whitespace-nowrap">Status / Faturamento</TableHead>
+                        <TableHead className="w-[7.5rem] min-w-0">NF</TableHead>
                         <TableHead className="w-[13rem] min-w-[13rem] whitespace-nowrap text-right">
                           Ações
                         </TableHead>
@@ -717,9 +722,16 @@ export default function MedicoesPage() {
                     </TableHeader>
                     <TableBody>
                       {filteredMedicoes.map((medicao) => {
-                        const nfTexto = medicao.numero
-                          ? `NF-${String(medicao.numero).padStart(4, "0")}`
-                          : null
+                        const faturada = medicaoEstaFaturada(medicao)
+                        const numeros = medicao.notas_fiscais_numeros || []
+                        const nfTexto =
+                          numeros.length === 0
+                            ? null
+                            : numeros.length === 1
+                              ? numeros[0]
+                              : `${numeros.length} NF(s)`
+                        const nfTooltip =
+                          numeros.length > 1 ? numeros.join(", ") : numeros[0] || ""
                         return (
                         <TableRow key={medicao.id}>
                           <TableCell className="min-w-0 whitespace-nowrap">{medicao.periodo}</TableCell>
@@ -749,10 +761,21 @@ export default function MedicoesPage() {
                           <TableCell className="min-w-0 whitespace-nowrap tabular-nums">
                             {formatCurrency(Math.max(0, (medicao.valor_total || 0) - (medicao.valor_mensal_bruto || 0)))}
                           </TableCell>
-                          <TableCell className="w-[7rem] min-w-0 whitespace-nowrap">
-                            {getStatusBadge(medicao.status)}
+                          <TableCell className="w-[9rem] min-w-0 whitespace-nowrap">
+                            <div className="flex flex-col gap-1">
+                              {getStatusBadge(medicao.status)}
+                              {faturada ? (
+                                <Badge variant="default" className="w-fit text-[10px] px-1.5 py-0 h-5">
+                                  Faturado
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="w-fit text-[10px] px-1.5 py-0 h-5 text-muted-foreground border-dashed">
+                                  A faturar
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
-                          <TableCell className="w-16 max-w-16 min-w-0 align-middle">
+                          <TableCell className="w-[7.5rem] max-w-[7.5rem] min-w-0 align-middle">
                             {nfTexto ? (
                               <Tooltip>
                                 <TooltipTrigger asChild>
@@ -767,11 +790,11 @@ export default function MedicoesPage() {
                                   side="top"
                                   className="max-w-xs break-all text-left font-mono text-xs"
                                 >
-                                  {nfTexto}
+                                  {nfTooltip}
                                 </TooltipContent>
                               </Tooltip>
                             ) : (
-                              "-"
+                              "—"
                             )}
                           </TableCell>
                           <TableCell className="w-[13rem] min-w-[13rem] whitespace-nowrap align-middle text-right">

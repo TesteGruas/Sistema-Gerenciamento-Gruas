@@ -96,6 +96,18 @@ export const medicoesUtils = {
   }
 };
 
+/** Dias corridos entre duas datas YYYY-MM-DD (inclusive), igual ao formulário de nova medição. */
+export function calcularDiasPeriodoEmissao(dataInicio: string, dataFim: string): number {
+  if (!dataInicio || !dataFim) return 0;
+  const [anoInicio, mesInicio, diaInicio] = dataInicio.split('-').map(Number);
+  const [anoFim, mesFim, diaFim] = dataFim.split('-').map(Number);
+  const inicio = new Date(anoInicio, mesInicio - 1, diaInicio);
+  const fim = new Date(anoFim, mesFim - 1, diaFim);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim < inicio) return 0;
+  const diffMs = fim.getTime() - inicio.getTime();
+  return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1;
+}
+
 /** Moeda pt-BR em input: só dígitos; os dois últimos são centavos (ex.: digitar 100022 → 1.000,22). */
 export function parseBrlMoneyDigitsInput(raw: string): number {
   const digits = raw.replace(/\D/g, '');

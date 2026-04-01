@@ -22,6 +22,36 @@ async function fetchUrlBufferForEmail(url) {
   return Buffer.from(await res.arrayBuffer());
 }
 
+/**
+ * Baixa arquivo do bucket arquivos-obras usando o client admin (funciona com bucket privado).
+ * Aceita URL pública/sign ou caminho relativo no bucket.
+ */
+async function downloadArquivosObrasBuffer(urlOrPath) {
+  const raw = String(urlOrPath || '').trim();
+  if (!raw) throw new Error('URL/caminho vazio');
+
+  let storagePath = null;
+  const publicMarker = '/object/public/arquivos-obras/';
+  const signMarker = '/object/sign/arquivos-obras/';
+  if (raw.includes(publicMarker)) {
+    storagePath = decodeURIComponent(raw.split(publicMarker)[1]?.split('?')[0] || '');
+  } else if (raw.includes(signMarker)) {
+    storagePath = decodeURIComponent(raw.split(signMarker)[1]?.split('?')[0] || '');
+  } else if (!/^https?:\/\//i.test(raw)) {
+    storagePath = raw.replace(/^\/+/, '');
+  }
+
+  if (storagePath) {
+    const { data, error } = await supabaseAdmin.storage.from('arquivos-obras').download(storagePath);
+    if (!error && data) {
+      return Buffer.from(await data.arrayBuffer());
+    }
+    console.warn('[downloadArquivosObrasBuffer] falha storage.download:', error?.message, storagePath.substring(0, 80));
+  }
+
+  return fetchUrlBufferForEmail(raw);
+}
+
 function filenameFromStorageUrl(url, fallback) {
   try {
     const u = new URL(url);
@@ -51,7 +81,7 @@ async function tryEmailAttachmentFromUrl(url, fallbackFilename, seenUrls) {
   const u = String(url || '').trim();
   if (!u || seenUrls.has(u)) return null;
   try {
-    const buf = await fetchUrlBufferForEmail(u);
+    const buf = await downloadArquivosObrasBuffer(u);
     seenUrls.add(u);
     return { filename: filenameFromStorageUrl(u, fallbackFilename), content: buf };
   } catch (e) {
@@ -82,6 +112,47 @@ const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
     { expiresIn }
   );
 };
+
+/**
+ * Notas fiscais vinculadas à medição (medicao_id). NFs canceladas não contam como faturado.
+ */
+async function enriquecerMedicoesComResumoNotasFiscais(medicoes) {
+  if (!medicoes?.length) return medicoes;
+  const ids = medicoes.map((m) => m.id);
+  const { data: notas, error } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('id, medicao_id, numero_nf, status')
+    .in('medicao_id', ids);
+
+  if (error) {
+    console.error('[medicoes-mensais] notas_fiscais resumo:', error.message);
+    return medicoes.map((m) => ({
+      ...m,
+      notas_fiscais_count: 0,
+      faturado: false,
+      notas_fiscais_numeros: []
+    }));
+  }
+
+  const validas = (notas || []).filter((n) => n.status !== 'cancelada');
+  const byMedicao = {};
+  for (const n of validas) {
+    const mid = n.medicao_id;
+    if (!byMedicao[mid]) byMedicao[mid] = [];
+    byMedicao[mid].push(n);
+  }
+
+  return medicoes.map((m) => {
+    const list = byMedicao[m.id] || [];
+    const numeros = list.map((x) => x.numero_nf).filter(Boolean);
+    return {
+      ...m,
+      notas_fiscais_count: list.length,
+      faturado: list.length > 0,
+      notas_fiscais_numeros: numeros
+    };
+  });
+}
 
 // Configuração do multer para upload de arquivos
 const storage = multer.memoryStorage();
@@ -282,6 +353,8 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       }
     }
 
+    medicoesComDocumentos = await enriquecerMedicoesComResumoNotasFiscais(medicoesComDocumentos);
+
     res.json({
       success: true,
       data: medicoesComDocumentos,
@@ -388,10 +461,13 @@ router.get('/:id', authenticateToken, requirePermission('obras:visualizar'), asy
       });
     }
 
+    const [enriched] = await enriquecerMedicoesComResumoNotasFiscais([medicao]);
+    const base = enriched || medicao;
+
     res.json({
       success: true,
       data: {
-        ...medicao,
+        ...base,
         custos_mensais: custosMensais || [],
         horas_extras: horasExtras || [],
         servicos_adicionais: servicosAdicionais || [],
@@ -1110,7 +1186,8 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
         ),
         gruas:grua_id (
           id,
-          name
+          name,
+          modelo
         )
       `)
       .eq('id', id)
@@ -1235,6 +1312,8 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             .select('id, numero_nf, nome_arquivo, arquivo_nf')
             .eq('medicao_id', medicao.id);
 
+          const notaIds = (notasMedicao || []).map((n) => n.id).filter(Boolean);
+
           for (const nota of notasMedicao || []) {
             if (!nota.arquivo_nf) continue;
             const fallback =
@@ -1245,17 +1324,37 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             if (att) attachments.push(att);
           }
 
-          const { data: boletosMedicao } = await supabaseAdmin
+          const { data: boletosPorMedicao } = await supabaseAdmin
             .from('boletos')
             .select('id, numero_boleto, arquivo_boleto')
             .eq('medicao_id', medicao.id);
 
-          for (const bol of boletosMedicao || []) {
+          let boletosPorNota = [];
+          if (notaIds.length > 0) {
+            const { data: bNota } = await supabaseAdmin
+              .from('boletos')
+              .select('id, numero_boleto, arquivo_boleto')
+              .in('nota_fiscal_id', notaIds);
+            boletosPorNota = bNota || [];
+          }
+
+          const boletosUnicos = new Map();
+          for (const bol of [...(boletosPorMedicao || []), ...boletosPorNota]) {
+            if (bol?.id) boletosUnicos.set(bol.id, bol);
+          }
+
+          for (const bol of boletosUnicos.values()) {
             if (!bol.arquivo_boleto) continue;
             const fallback = `Boleto_medicao_${medicao.id}_${String(bol.numero_boleto || bol.id).replace(/[^\w.-]+/g, '_')}.pdf`;
             const att = await tryEmailAttachmentFromUrl(bol.arquivo_boleto, fallback, seenAttachmentUrls);
             if (att) attachments.push(att);
           }
+
+          console.log(
+            '[medicoes-mensais/enviar] Anexos preparados:',
+            attachments.length,
+            attachments.map((a) => a.filename)
+          );
 
           // Enviar e-mail (HTML/assunto via template em email_templates.tipo = medicao_enviada)
           for (const emailDestino of emailsUnicos) {

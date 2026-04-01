@@ -28,6 +28,7 @@ import {
   Edit
 } from "lucide-react"
 import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
+import { medicoesUtils, calcularDiasPeriodoEmissao } from "@/lib/medicoes-utils"
 
 type TipoDocumentoMedicaoUpload = MedicaoDocumento["tipo_documento"]
 import { format } from "date-fns"
@@ -473,6 +474,17 @@ export default function MedicaoDetalhesPage() {
     return null
   }
 
+  const dataInicioEmissaoStr = medicao.data_inicio_emissao
+    ? medicao.data_inicio_emissao.split("T")[0]
+    : /^\d{4}-\d{2}$/.test(medicao.periodo)
+      ? `${medicao.periodo}-01`
+      : ""
+  const dataFimEmissaoStr = medicao.data_medicao ? medicao.data_medicao.split("T")[0] : ""
+  const totalDiasEmissaoDetalhe =
+    dataInicioEmissaoStr && dataFimEmissaoStr
+      ? calcularDiasPeriodoEmissao(dataInicioEmissaoStr, dataFimEmissaoStr)
+      : 0
+
   const podeAprovarNoDashboard =
     medicao.status === 'enviada' &&
     (!medicao.status_aprovacao || medicao.status_aprovacao === 'pendente')
@@ -521,13 +533,6 @@ export default function MedicaoDetalhesPage() {
     medicao.orcamentos?.clientes?.telefone ||
     ""
   const temContatoClientePadrao = Boolean(emailClientePadrao || telefoneClientePadrao)
-
-  const podeGerarNotaFiscal = medicao.status_aprovacao === "aprovada"
-  const motivoBloqueioNotaFiscal = podeGerarNotaFiscal
-    ? ""
-    : medicao.status_aprovacao === "rejeitada"
-      ? "Medição rejeitada — não é possível gerar nota fiscal."
-      : "Aprove a medição antes de gerar a nota fiscal."
 
   const abrirDialogEnviar = () => {
     setIncluirContatosCliente(temContatoClientePadrao)
@@ -654,7 +659,13 @@ export default function MedicaoDetalhesPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Medição {medicao.numero}</h1>
             <p className="text-sm text-gray-500 mt-1">
-              Período: {medicao.periodo} | Data: {format(new Date(medicao.data_medicao), "dd/MM/yyyy", { locale: ptBR })}
+              {medicoesUtils.formatPeriodo(medicao.periodo)}
+              {dataInicioEmissaoStr && dataFimEmissaoStr
+                ? ` · ${format(new Date(dataInicioEmissaoStr + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })} – ${format(new Date(dataFimEmissaoStr + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })}`
+                : medicao.data_medicao
+                  ? ` · ${format(new Date(medicao.data_medicao), "dd/MM/yyyy", { locale: ptBR })}`
+                  : ""}
+              {totalDiasEmissaoDetalhe > 0 ? ` · ${totalDiasEmissaoDetalhe} dia(s)` : ""}
             </p>
           </div>
         </div>
@@ -692,32 +703,6 @@ export default function MedicaoDetalhesPage() {
           </Button>
           <Button
             variant="outline"
-            disabled={!podeGerarNotaFiscal}
-            onClick={() => {
-              if (!podeGerarNotaFiscal) return
-              try {
-                sessionStorage.setItem("sgg_nf_prefill_medicao_id", String(medicao.id))
-              } catch {
-                /* ignore */
-              }
-              router.push(`/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`)
-            }}
-            title={
-              podeGerarNotaFiscal
-                ? "Abrir formulário de nota fiscal de saída pré-preenchido (a nota só é criada ao salvar)"
-                : motivoBloqueioNotaFiscal
-            }
-            className={
-              podeGerarNotaFiscal
-                ? "border-emerald-200 text-emerald-800 hover:bg-emerald-50"
-                : "opacity-60"
-            }
-          >
-            <FileText className="w-4 h-4 mr-2" />
-            Gerar nota fiscal
-          </Button>
-          <Button
-            variant="outline"
             onClick={exportarPdfCompleto}
             disabled={exportandoPdfCompleto}
           >
@@ -749,12 +734,32 @@ export default function MedicaoDetalhesPage() {
                   <p className="font-semibold">{medicao.numero}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Período</Label>
-                  <p>{medicao.periodo}</p>
+                  <Label className="text-xs text-gray-500">Período (mês/ano)</Label>
+                  <p>{medicoesUtils.formatPeriodo(medicao.periodo)}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Data da Medição</Label>
-                  <p>{format(new Date(medicao.data_medicao), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  <Label className="text-xs text-gray-500">Data Início Emissão</Label>
+                  <p>
+                    {dataInicioEmissaoStr
+                      ? format(new Date(dataInicioEmissaoStr + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Data Fim Emissão</Label>
+                  <p>
+                    {dataFimEmissaoStr
+                      ? format(new Date(dataFimEmissaoStr + "T12:00:00"), "dd/MM/yyyy", { locale: ptBR })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <Label className="text-xs text-gray-500">Total de Dias</Label>
+                  <p>
+                    {totalDiasEmissaoDetalhe > 0
+                      ? `${totalDiasEmissaoDetalhe} dia(s)`
+                      : "—"}
+                  </p>
                 </div>
                 {medicao.gruas && (
                   <div>
@@ -790,19 +795,19 @@ export default function MedicaoDetalhesPage() {
             <CardContent>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <Label className="text-xs text-gray-500">Valor Mensal Bruto</Label>
+                  <Label className="text-xs text-gray-500">Valor de Locação (R$)</Label>
                   <p className="font-semibold">{formatCurrency(medicao.valor_mensal_bruto || 0)}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Aditivos</Label>
+                  <Label className="text-xs text-gray-500">Valor de Aditivos (R$)</Label>
                   <p className="font-semibold text-green-600">{formatCurrency(medicao.valor_aditivos || 0)}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Custos Extras</Label>
+                  <Label className="text-xs text-gray-500">Valor de Serviço (R$)</Label>
                   <p className="font-semibold">{formatCurrency(medicao.valor_custos_extras || 0)}</p>
                 </div>
                 <div>
-                  <Label className="text-xs text-gray-500">Descontos</Label>
+                  <Label className="text-xs text-gray-500">Descontos (R$)</Label>
                   <p className="font-semibold text-red-600">{formatCurrency(medicao.valor_descontos || 0)}</p>
                 </div>
               </div>
@@ -1035,7 +1040,7 @@ export default function MedicaoDetalhesPage() {
                   )}
                   {renderDocumentoArquivo(
                     'nf_locacao',
-                    'Locação',
+                    'NF de Locação',
                     FileCheck,
                     'text-green-600',
                     documentosLocacao[0],
@@ -1131,7 +1136,7 @@ export default function MedicaoDetalhesPage() {
           <DialogHeader>
             <DialogTitle>
               {tipoDocumentoUpload === 'nf_servico' && 'Enviar Nota Fiscal de Serviço'}
-              {tipoDocumentoUpload === 'nf_locacao' && 'Enviar documento de Locação'}
+              {tipoDocumentoUpload === 'nf_locacao' && 'Enviar NF de Locação'}
               {tipoDocumentoUpload === 'boleto_nf_servico_1' && 'Enviar Boleto (NF Serviço)'}
               {tipoDocumentoUpload === 'boleto_nf_locacao_1' && 'Enviar Boleto (Locação)'}
               {tipoDocumentoUpload === 'medicao_pdf' && (uploadEhAnexoAdicional ? 'Enviar Anexo Adicional' : 'Enviar PDF da Medição')}

@@ -533,10 +533,16 @@ const clienteDataSchema = Joi.object({
  *                     pages:
  *                       type: integer
  */
+const GRUAS_LIST_MAX_LIMIT = 100
+
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 10
+    const page = Math.max(1, parseInt(req.query.page, 10) || 1)
+    const rawLimit = parseInt(req.query.limit, 10)
+    const limit = Math.min(
+      GRUAS_LIST_MAX_LIMIT,
+      Math.max(1, Number.isFinite(rawLimit) && rawLimit > 0 ? rawLimit : 10)
+    )
     const offset = (page - 1) * limit
     const { status, tipo, search } = req.query
 
@@ -574,7 +580,8 @@ router.get('/', async (req, res) => {
       })
     }
 
-    const totalPages = Math.ceil(count / limit)
+    const total = count ?? 0
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0
 
     // Enriquecer dados de cada grua
     const gruasEnriquecidas = (data || []).map(grua => ({
@@ -606,7 +613,7 @@ router.get('/', async (req, res) => {
       pagination: {
         page,
         limit,
-        total: count,
+        total,
         pages: totalPages
       }
     })

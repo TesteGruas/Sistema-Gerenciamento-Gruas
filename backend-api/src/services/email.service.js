@@ -345,7 +345,8 @@ async function buildTestEmailContent({ tipo, destinatario, dados_teste: dadosTes
       valor_aditivos: dt.valor_aditivos ?? 0,
       valor_custos_extras: dt.valor_custos_extras ?? 4719.03,
       valor_descontos: dt.valor_descontos ?? 0,
-      data_medicao: dt.data_medicao || agora,
+      data_inicio_emissao: dt.data_inicio_emissao || '2026-03-01',
+      data_medicao: dt.data_medicao || '2026-03-31',
       created_at: dt.created_at || agora,
       data_envio: dt.data_envio || agora,
       data_aprovacao: dt.data_aprovacao || agora,
@@ -355,7 +356,9 @@ async function buildTestEmailContent({ tipo, destinatario, dados_teste: dadosTes
       updated_at: agora,
       obras: dt.obra_nome ? { nome: dt.obra_nome } : { nome: 'Obra Vereda' },
       orcamentos: null,
-      gruas: dt.grua_nome ? { name: dt.grua_nome } : { name: 'Grua XCMG QTZ63B' }
+      gruas: dt.grua_nome
+        ? { name: dt.grua_nome, modelo: dt.grua_modelo != null ? String(dt.grua_modelo) : '' }
+        : { name: "Grua 00'", modelo: 'Liebheer 67' }
     };
     const clienteFake = {
       nome: dt.cliente_nome || 'Cliente Teste'
@@ -433,6 +436,17 @@ function escapeHtmlMedicao(s) {
     .replace(/"/g, '&quot;');
 }
 
+/** Mesma regra da tela da medição: nome + " - " + modelo quando houver modelo. */
+function formatGruaLinhaMedicaoEmail(medicao) {
+  const g = medicao?.gruas;
+  if (!g) return '—';
+  const name = (g.name || '').trim();
+  const modelo = (g.modelo || '').trim();
+  if (!name && !modelo) return '—';
+  if (name && modelo) return `${name} - ${modelo}`;
+  return name || modelo;
+}
+
 function fmtMoneyBrlMedicao(n) {
   const v = parseFloat(n || 0);
   return v.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -506,6 +520,40 @@ function mesAnteriorAoPeriodoNome(periodo) {
   let mes = p.mes - 1;
   if (mes < 1) mes = 12;
   return MESES_TEXTO_MEDICAO[mes - 1];
+}
+
+/** Ex.: 2026-04 → Abril 2026 (igual `medicoesUtils.formatPeriodo` no frontend) */
+const MESES_NOME_CAPITALIZADO = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
+
+function formatPeriodoMesAnoMedicao(periodo) {
+  const p = parsePeriodoMedicao(periodo);
+  if (!p || p.mes < 1 || p.mes > 12) return String(periodo || '');
+  return `${MESES_NOME_CAPITALIZADO[p.mes - 1]} ${p.ano}`;
+}
+
+/** Dias corridos entre duas datas YYYY-MM-DD (inclusive), igual ao formulário de medição. */
+function calcularDiasPeriodoEmissaoNode(dataInicio, dataFim) {
+  if (!dataInicio || !dataFim) return 0;
+  const [ai, mi, di] = String(dataInicio).split('-').map(Number);
+  const [af, mf, df] = String(dataFim).split('-').map(Number);
+  const inicio = new Date(ai, mi - 1, di);
+  const fim = new Date(af, mf - 1, df);
+  if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim < inicio) return 0;
+  return Math.floor((fim.getTime() - inicio.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+}
+
+function extrairIntervaloEmissaoMedicao(medicao) {
+  const dataFimStr = medicao.data_medicao ? String(medicao.data_medicao).split('T')[0] : '';
+  let dataInicioStr = medicao.data_inicio_emissao
+    ? String(medicao.data_inicio_emissao).split('T')[0]
+    : '';
+  if (!dataInicioStr && medicao.periodo && /^\d{4}-\d{2}$/.test(String(medicao.periodo))) {
+    dataInicioStr = `${medicao.periodo}-01`;
+  }
+  return { dataInicioStr, dataFimStr };
 }
 
 function saudacaoDoDiaMedicao() {
@@ -585,14 +633,14 @@ function buildBlocoComercialMedicaoHtml(medicao, documentos) {
 }
 
 const DOC_TIPO_LABEL_MEDICAO = {
-  medicao_pdf: 'PDF da Medição',
-  nf_servico: 'NF de Serviço',
-  nf_locacao: 'Locação',
-  nf_produto: 'NF Produto',
-  boleto_nf_servico_1: 'Boleto (NF Serviço)',
-  boleto_nf_servico_2: 'Boleto (NF Serviço) — 2º',
-  boleto_nf_locacao_1: 'Boleto (Locação)',
-  boleto_nf_locacao_2: 'Boleto (Locação) — 2º'
+  medicao_pdf: 'PDF da medição',
+  nf_servico: 'NF de serviço',
+  nf_locacao: 'NF de locação',
+  nf_produto: 'NF produto',
+  boleto_nf_servico_1: 'Boleto (NF serviço)',
+  boleto_nf_servico_2: 'Boleto NF serviço (2º)',
+  boleto_nf_locacao_1: 'Boleto (locação)',
+  boleto_nf_locacao_2: 'Boleto locação (2º)'
 };
 
 const DOC_DISPLAY_ORDER_MEDICAO = [
@@ -663,43 +711,39 @@ function buildHistoricoStatusHtmlMedicao(medicao) {
   return rows.join('');
 }
 
-function buildDocumentosResumoHtmlMedicao(documentos, medicaoNumero) {
+function buildDocumentosResumoHtmlMedicao(documentos, _medicaoNumero) {
   const list = Array.isArray(documentos) ? documentos : [];
   const byTipo = {};
   for (const d of list) {
     const t = d.tipo_documento;
     if (t && !byTipo[t]) byTipo[t] = d;
   }
-  const numeroStr = medicaoNumero != null ? String(medicaoNumero) : '—';
-  const blocks = [];
+  const rows = [];
   for (const tipo of DOC_DISPLAY_ORDER_MEDICAO) {
     const label = DOC_TIPO_LABEL_MEDICAO[tipo] || tipo;
     const d = byTipo[tipo];
-    if (!d) {
-      blocks.push(
-        '<div style="border:1px solid #e5e7eb;border-radius:8px;padding:12px 14px;margin-bottom:10px;background:#f9fafb;">' +
-          `<p style="margin:0 0 4px;font-size:14px;font-weight:600;">${escapeHtmlMedicao(label)}</p>` +
-          '<p style="margin:0;font-size:12px;color:#6b7280;">Nenhum arquivo</p>' +
-          '</div>'
-      );
-      continue;
-    }
-    const temArquivo = !!(d.caminho_arquivo && String(d.caminho_arquivo).trim());
-    const status = escapeHtmlMedicao(labelDocStatusMedicao(d.status));
-    const bg = temArquivo ? '#eff6ff' : '#f9fafb';
-    const border = temArquivo ? '#3b82f6' : '#e5e7eb';
-    blocks.push(
-      `<div style="border:1px solid ${border};border-radius:8px;padding:12px 14px;margin-bottom:10px;background:${bg};">` +
-        `<p style="margin:0 0 4px;font-size:14px;font-weight:600;">${escapeHtmlMedicao(label)}</p>` +
-        `<p style="margin:0;font-size:12px;color:#4b5563;">Nº ${escapeHtmlMedicao(numeroStr)}</p>` +
-        `<p style="margin:4px 0 0;font-size:12px;color:#6b7280;">Status: ${status}</p>` +
+    const temArquivo = !!(d && d.caminho_arquivo && String(d.caminho_arquivo).trim());
+    const mark = temArquivo ? '✓' : '○';
+    const cor = temArquivo ? '#15803d' : '#9ca3af';
+    rows.push(
+      '<tr>' +
+        `<td style="padding:3px 10px 3px 0;font-size:15px;color:${cor};vertical-align:top;width:1.25em;">${mark}</td>` +
+        `<td style="padding:3px 0;font-size:13px;color:#374151;line-height:1.35;">${escapeHtmlMedicao(label)}` +
         (temArquivo
-          ? ''
-          : '<p style="margin:6px 0 0;font-size:11px;color:#9ca3af;">Nenhum arquivo anexado neste envio.</p>') +
-        '</div>'
+          ? ` <span style="color:#6b7280;font-size:12px;">(${escapeHtmlMedicao(labelDocStatusMedicao(d.status))})</span>`
+          : ' <span style="color:#9ca3af;font-size:12px;">(sem arquivo)</span>') +
+        '</td>' +
+        '</tr>'
     );
   }
-  return blocks.join('');
+  return (
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0;">' +
+      rows.join('') +
+      '</table>' +
+    '<p style="margin:10px 0 0;font-size:11px;color:#6b7280;line-height:1.4;">' +
+      '✓ cadastrado com arquivo · ○ sem arquivo. Os PDFs disponíveis seguem em anexo a este e-mail.' +
+    '</p>'
+  );
 }
 
 function getDefaultMedicaoEnviadaTemplateHtml() {
@@ -735,29 +779,37 @@ function getDefaultMedicaoEnviadaTemplateHtml() {
                     <p style="margin:4px 0 0;font-size:14px;font-weight:600;">{{numero}}</p>
                   </td>
                   <td width="50%" style="padding:6px 0 6px 8px;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Período</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{periodo}}</p>
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Período (mês/ano)</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{periodo_formatado}}</p>
                   </td>
                 </tr>
                 <tr>
                   <td style="padding:6px 8px 6px 0;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Data da medição</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{data_medicao}}</p>
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Data Início Emissão</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{data_inicio_emissao}}</p>
+                  </td>
+                  <td style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Data Fim Emissão</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{data_fim_emissao}}</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:6px 8px 6px 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Total de Dias</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{total_dias_emissao}}</p>
                   </td>
                   <td style="padding:6px 0 6px 8px;vertical-align:top;">
                     <p style="margin:0;font-size:11px;color:#6b7280;">Grua</p>
-                    <p style="margin:4px 0 0;font-size:14px;">{{grua_nome}}</p>
+                    <p style="margin:4px 0 0;font-size:14px;">{{grua_linha}}</p>
                   </td>
                 </tr>
                 <tr>
-                  <td colspan="2" style="padding:6px 0;vertical-align:top;">
+                  <td style="padding:6px 8px 6px 0;vertical-align:top;">
                     <p style="margin:0;font-size:11px;color:#6b7280;">Obra</p>
                     <p style="margin:4px 0 0;font-size:14px;">{{obra_nome}}</p>
                   </td>
-                </tr>
-                <tr>
-                  <td colspan="2" style="padding:8px 0 0;vertical-align:top;">
-                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor total</p>
+                  <td style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor Total</p>
                     <p style="margin:4px 0 0;font-size:18px;font-weight:700;color:#2563eb;">R$ {{valor_total}}</p>
                   </td>
                 </tr>
@@ -788,8 +840,8 @@ function getDefaultMedicaoEnviadaTemplateHtml() {
               <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">Histórico de status da medição</p>
               <div style="margin-bottom:20px;">{{historico_status_html}}</div>
 
-              <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">Documentos</p>
-              <div style="margin-bottom:20px;">{{documentos_resumo_html}}</div>
+              <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">Checklist de documentos</p>
+              <div style="margin-bottom:16px;">{{documentos_resumo_html}}</div>
 
               <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
                 <tr>
@@ -820,13 +872,26 @@ function getDefaultMedicaoEnviadaTemplateHtml() {
 function buildMedicaoEmailVars({ medicao, linkPdfPublico, cliente, empresaNome, documentos = [] }) {
   const valorNum = parseFloat(medicao.valor_total || 0);
   const valorBr = fmtMoneyBrlMedicao(valorNum);
-  const dataMed = medicao.data_medicao
+  const { dataInicioStr, dataFimStr } = extrairIntervaloEmissaoMedicao(medicao);
+  const fmtDia = (ymd) => {
+    if (!ymd) return '—';
+    const d = new Date(`${ymd}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
+  };
+  const data_inicio_emissao = fmtDia(dataInicioStr);
+  const data_fim_emissao = fmtDia(dataFimStr);
+  const diasN = dataInicioStr && dataFimStr ? calcularDiasPeriodoEmissaoNode(dataInicioStr, dataFimStr) : 0;
+  const total_dias_emissao = diasN > 0 ? `${diasN} dia(s)` : '—';
+  const periodo_formatado = formatPeriodoMesAnoMedicao(medicao.periodo);
+  const dataMed = data_fim_emissao !== '—' ? data_fim_emissao : medicao.data_medicao
     ? new Date(medicao.data_medicao).toLocaleDateString('pt-BR')
     : '-';
   const obraNome = medicao.obras?.nome
     || (medicao.orcamentos?.numero != null ? `Orçamento ${medicao.orcamentos.numero}` : '-');
   const clienteNome = cliente?.nome || '-';
-  const gruaNome = medicao.gruas?.name || '-';
+  const gruaNomeCurto = medicao.gruas?.name || '-';
+  const gruaLinha = formatGruaLinhaMedicaoEmail(medicao);
+  const gruaLinhaHtml = escapeHtmlMedicao(gruaLinha);
   const empresa = empresaNome || 'Sistema de Gerenciamento de Gruas';
 
   const historico_status_html = buildHistoricoStatusHtmlMedicao(medicao);
@@ -834,11 +899,12 @@ function buildMedicaoEmailVars({ medicao, linkPdfPublico, cliente, empresaNome, 
   const bloco_comercial_html = buildBlocoComercialMedicaoHtml(medicao, documentos);
   const periodo_assunto = periodoParaAssuntoMedicao(medicao.periodo);
   const obra_nome_assunto = String(obraNome || '-').toUpperCase();
-  const grua_nome_assunto = String(gruaNome || '-').toUpperCase();
+  const grua_nome_assunto = String(gruaNomeCurto || '-').toUpperCase();
 
   return {
-    numero: String(medicao.numero ?? ''),
+    numero: escapeHtmlMedicao(String(medicao.numero ?? '')),
     periodo: String(medicao.periodo ?? ''),
+    periodo_formatado,
     periodo_assunto: periodo_assunto,
     obra_nome_assunto: obra_nome_assunto,
     grua_nome_assunto: grua_nome_assunto,
@@ -847,12 +913,17 @@ function buildMedicaoEmailVars({ medicao, linkPdfPublico, cliente, empresaNome, 
     valor_aditivos: fmtMoneyBrlMedicao(medicao.valor_aditivos),
     valor_custos_extras: fmtMoneyBrlMedicao(medicao.valor_custos_extras),
     valor_descontos: fmtMoneyBrlMedicao(medicao.valor_descontos),
-    grua_nome: gruaNome,
-    obra_nome: obraNome,
-    cliente_nome: clienteNome,
+    /** Texto exibido como na tela (nome + modelo); HTML escapado. */
+    grua_nome: gruaLinhaHtml,
+    grua_linha: gruaLinhaHtml,
+    obra_nome: escapeHtmlMedicao(obraNome),
+    cliente_nome: escapeHtmlMedicao(clienteNome),
     data_medicao: dataMed,
+    data_inicio_emissao,
+    data_fim_emissao,
+    total_dias_emissao,
     link_pdf: linkPdfPublico,
-    empresa,
+    empresa: escapeHtmlMedicao(empresa),
     historico_status_html,
     documentos_resumo_html,
     bloco_comercial_html
@@ -870,7 +941,8 @@ function getFakeMedicaoPreviewPayload() {
       valor_aditivos: 0,
       valor_custos_extras: 4719.03,
       valor_descontos: 0,
-      data_medicao: agora,
+      data_inicio_emissao: '2026-03-01',
+      data_medicao: '2026-03-31',
       created_at: agora,
       data_envio: agora,
       data_aprovacao: null,
@@ -880,7 +952,7 @@ function getFakeMedicaoPreviewPayload() {
       updated_at: agora,
       obras: { nome: 'Obra Vereda' },
       orcamentos: null,
-      gruas: { name: 'Grua XCMG QTZ63B' }
+      gruas: { name: "Grua 00'", modelo: 'Liebheer 67' }
     },
     cliente: { nome: 'Cliente Exemplo LTDA' },
     documentos: [

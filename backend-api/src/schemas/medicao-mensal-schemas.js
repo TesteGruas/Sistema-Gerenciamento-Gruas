@@ -36,6 +36,9 @@ const medicaoMensalSchema = Joi.object({
     'date.base': 'Data da medição deve ser uma data válida',
     'any.required': 'Data da medição é obrigatória'
   }),
+  data_inicio_emissao: Joi.date().iso().allow(null).optional().messages({
+    'date.base': 'Data início emissão deve ser uma data válida'
+  }),
   mes_referencia: Joi.number().integer().min(1).max(12).required().messages({
     'number.base': 'Mês de referência deve ser um número',
     'number.integer': 'Mês de referência deve ser um número inteiro',
@@ -143,6 +146,7 @@ const medicaoMensalUpdateSchema = Joi.object({
   numero: Joi.string().min(1).max(50).optional(),
   periodo: Joi.string().pattern(/^\d{4}-\d{2}$/).optional(),
   data_medicao: Joi.date().iso().optional(),
+  data_inicio_emissao: Joi.date().iso().allow(null).optional(),
   mes_referencia: Joi.number().integer().min(1).max(12).optional(),
   ano_referencia: Joi.number().integer().min(2000).max(2100).optional(),
   valor_mensal_bruto: Joi.number().min(0).precision(2).optional(),

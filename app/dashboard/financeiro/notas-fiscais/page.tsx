@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback } from "react"
+import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast, toast as toastNotify } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -22,6 +22,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { 
   Plus, 
   Search, 
@@ -30,7 +31,6 @@ import {
   Trash2,
   FileText,
   Building2,
-  Truck,
   Receipt,
   Download,
   Upload,
@@ -43,13 +43,12 @@ import {
   Clock,
   AlertTriangle,
   Zap,
-  Mail,
   Loader2,
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 import { clientesApi } from "@/lib/api-clientes"
 import { fornecedoresApi } from "@/lib/api-fornecedores"
-import { medicoesMensaisApi, type MedicaoMensal } from "@/lib/api-medicoes-mensais"
+import { medicoesMensaisApi, type MedicaoMensal, type MedicaoDocumento } from "@/lib/api-medicoes-mensais"
 import { locacoesApi, Locacao as LocacaoFull } from "@/lib/api-locacoes"
 import { gruasApi } from "@/lib/api-gruas"
 import { apiCompras } from "@/lib/api-compras"
@@ -57,6 +56,7 @@ import { apiContasBancarias, ContaBancaria } from "@/lib/api-contas-bancarias"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { DebugButton } from "@/components/debug-button"
+import { formatBrlMoneyInputValue, parseBrlMoneyDigitsInput } from "@/lib/medicoes-utils"
 
 interface Cliente {
   id: number
@@ -74,6 +74,7 @@ interface Medicao {
   id: number
   numero: string
   periodo: string
+  status_aprovacao?: string | null
 }
 
 interface Locacao {
@@ -91,6 +92,88 @@ interface Compra {
 }
 
 const NF_FROM_MEDICAO_STORAGE_KEY = "sgg_nf_prefill_medicao_id"
+
+/** Alinha ao painel da medição (NF serviço / locação / produto). */
+function mapTipoNotaParaDocumentoMedicao(
+  tipoNota: string | undefined
+): 'nf_servico' | 'nf_locacao' | 'nf_produto' {
+  switch (tipoNota) {
+    case 'nf_locacao':
+      return 'nf_locacao'
+    case 'nf_servico':
+      return 'nf_servico'
+    case 'nf_produto':
+    case 'nfe_eletronica':
+      return 'nf_produto'
+    case 'fatura':
+    default:
+      return 'nf_servico'
+  }
+}
+
+/** Usa _1 se vazio; senão _2 (dois boletos por tipo na medição). */
+function escolherTipoBoletoMedicao(
+  tipoNota: string | undefined,
+  docs: MedicaoDocumento[]
+): 'boleto_nf_servico_1' | 'boleto_nf_servico_2' | 'boleto_nf_locacao_1' | 'boleto_nf_locacao_2' {
+  const isLocacao = tipoNota === 'nf_locacao'
+  if (isLocacao) {
+    const has1 = docs.some((d) => d.tipo_documento === 'boleto_nf_locacao_1')
+    return has1 ? 'boleto_nf_locacao_2' : 'boleto_nf_locacao_1'
+  }
+  const has1 = docs.some((d) => d.tipo_documento === 'boleto_nf_servico_1')
+  return has1 ? 'boleto_nf_servico_2' : 'boleto_nf_servico_1'
+}
+
+async function anexarArquivosNotaNaMedicao(opts: {
+  medicaoId: number
+  notaId: number
+  tipoNota: string | undefined
+  numeroNf: string
+  dataEmissao: string
+  dataVencimento: string | null | undefined
+  valorTotal: number
+  formFile: File | null
+  boletoFile: File | null
+  anexarBoletoNaMedicao: boolean
+}): Promise<void> {
+  const docsRes = await medicoesMensaisApi.listarDocumentos(opts.medicaoId)
+  const docs = docsRes.success && docsRes.data ? docsRes.data : []
+
+  if (opts.formFile) {
+    const tipoDoc = mapTipoNotaParaDocumentoMedicao(opts.tipoNota)
+    await medicoesMensaisApi.criarDocumento(
+      opts.medicaoId,
+      {
+        tipo_documento: tipoDoc,
+        numero_documento: opts.numeroNf,
+        data_emissao: opts.dataEmissao,
+        data_vencimento: opts.dataVencimento || null,
+        valor: opts.valorTotal,
+        status: 'pendente',
+        observacoes: `Nota fiscal de saída #${opts.notaId} — NF ${opts.numeroNf}.`
+      },
+      opts.formFile
+    )
+  }
+
+  if (opts.anexarBoletoNaMedicao && opts.boletoFile) {
+    const tipoBoleto = escolherTipoBoletoMedicao(opts.tipoNota, docs)
+    await medicoesMensaisApi.criarDocumento(
+      opts.medicaoId,
+      {
+        tipo_documento: tipoBoleto,
+        numero_documento: opts.numeroNf,
+        data_emissao: opts.dataEmissao,
+        data_vencimento: opts.dataVencimento || null,
+        valor: opts.valorTotal,
+        status: 'pendente',
+        observacoes: `Boleto — NF ${opts.numeroNf} (nota fiscal #${opts.notaId}).`
+      },
+      opts.boletoFile
+    )
+  }
+}
 
 export default function NotasFiscaisPage() {
   const router = useRouter()
@@ -148,7 +231,28 @@ export default function NotasFiscaisPage() {
   const [compras, setCompras] = useState<Compra[]>([])
   const [contasBancarias, setContasBancarias] = useState<ContaBancaria[]>([])
   const [contaBancariaSelecionada, setContaBancariaSelecionada] = useState<number | null>(null)
-  
+  /** Seleção no bloco "Importar da medição" (nova NF de saída) */
+  const [medicaoIdParaImportar, setMedicaoIdParaImportar] = useState("")
+  const [importandoMedicao, setImportandoMedicao] = useState(false)
+  /** Salvar criar/editar NF (evita cliques repetidos e mostra feedback) */
+  const [salvandoNotaFiscal, setSalvandoNotaFiscal] = useState(false)
+  /** Leitura/parsing do XML no diálogo */
+  const [parseandoXmlNfe, setParseandoXmlNfe] = useState(false)
+  /** Após escolher Serviço vs Locação no diálogo */
+  const [dialogEscolhaTipoImportOpen, setDialogEscolhaTipoImportOpen] = useState(false)
+  const [medicaoParaEscolherTipo, setMedicaoParaEscolherTipo] = useState<MedicaoMensal | null>(null)
+  const [importModoSelecionado, setImportModoSelecionado] = useState<'servico' | 'locacao'>('locacao')
+  const [pendingImportCtx, setPendingImportCtx] = useState<{
+    abrirDialogoNf: boolean
+    origemUrl: boolean
+  } | null>(null)
+  const ignorarCloseEscolhaImportTipo = useRef(false)
+
+  const medicoesAprovadasListar = useMemo(
+    () => medicoes.filter((m) => m.status_aprovacao === 'aprovada'),
+    [medicoes]
+  )
+
   // Formulário
   const [formData, setFormData] = useState<NotaFiscalCreate>({
     numero_nf: '',
@@ -231,7 +335,7 @@ export default function NotasFiscaisPage() {
   })
 
   // Função para calcular impostos automaticamente
-  const calcularImpostos = (item: NotaFiscalItem): NotaFiscalItem => {
+  const calcularImpostos = useCallback((item: NotaFiscalItem): NotaFiscalItem => {
     const novoItem = { ...item }
     
     // Calcular valor total
@@ -292,7 +396,7 @@ export default function NotasFiscaisPage() {
     novoItem.valor_liquido = novoItem.preco_total - totalImpostosFixos - totalImpostosDinamicos
     
     return novoItem
-  }
+  }, [])
 
   // Funções para gerenciar impostos dinâmicos
   const adicionarImpostoDinamico = () => {
@@ -351,56 +455,197 @@ export default function NotasFiscaisPage() {
     }
   }, [fromMedicaoQuery])
 
-  /** Pré-preenche NF de saída a partir da medição (?fromMedicao=id) — medições sempre geram nota de saída */
-  useEffect(() => {
-    const rawId = fromMedicaoQuery ?? medicaoIdFallback
-    if (!rawId) return
+  /** Aplica medição já carregada conforme o modo (Serviço = custos extras / detalhe; Locação = bruto + aditivos) */
+  const aplicarMedicaoComModoNaForma = useCallback(
+    (
+      m: MedicaoMensal,
+      modo: 'servico' | 'locacao',
+      ctx: { abrirDialogoNf: boolean; origemUrl: boolean }
+    ) => {
+      const unwrapRel = <T,>(x: T | T[] | null | undefined): T | undefined => {
+        if (x == null) return undefined
+        return Array.isArray(x) ? x[0] : x
+      }
 
-    const medicaoId = parseInt(rawId, 10)
-    if (Number.isNaN(medicaoId)) return
+      const normId = (v: unknown): number | undefined => {
+        if (v == null || v === '') return undefined
+        const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
+        return Number.isFinite(n) ? n : undefined
+      }
 
-    let cancelled = false
+      const mkItem = (descricao: string, quantidade: number, valorUnit: number, valorTotal?: number): NotaFiscalItem => {
+        const q = quantidade > 0 ? quantidade : 1
+        const vu = Number(valorUnit) || 0
+        const pt = valorTotal !== undefined ? Number(valorTotal) : q * vu
+        return calcularImpostos({
+          descricao,
+          unidade: 'UN',
+          quantidade: q,
+          preco_unitario: vu,
+          preco_total: pt,
+          base_calculo_icms: 0,
+          percentual_icms: 0,
+          valor_icms: 0,
+          percentual_ipi: 0,
+          valor_ipi: 0,
+          base_calculo_issqn: 0,
+          aliquota_issqn: 0,
+          valor_issqn: 0,
+          valor_inss: 0,
+          valor_cbs: 0,
+          valor_liquido: 0,
+          impostos_dinamicos: []
+        })
+      }
 
-    const unwrapRel = <T,>(x: T | T[] | null | undefined): T | undefined => {
-      if (x == null) return undefined
-      return Array.isArray(x) ? x[0] : x
-    }
+      const obra = unwrapRel(m.obras as any)
+      const orc = unwrapRel(m.orcamentos as any)
+      const cliente = obra?.clientes || orc?.clientes || null
+      const clienteId =
+        normId(cliente?.id) ?? normId(obra?.cliente_id) ?? normId(orc?.cliente_id)
 
-    const normId = (v: unknown): number | undefined => {
-      if (v == null || v === '') return undefined
-      const n = typeof v === 'string' ? parseInt(v, 10) : Number(v)
-      return Number.isFinite(n) ? n : undefined
-    }
+      const dataEmissao = m.data_medicao
+        ? String(m.data_medicao).split('T')[0]
+        : new Date().toISOString().split('T')[0]
 
-    const mkItem = (descricao: string, quantidade: number, valorUnit: number, valorTotal?: number): NotaFiscalItem => {
-      const q = quantidade > 0 ? quantidade : 1
-      const vu = Number(valorUnit) || 0
-      const pt = valorTotal !== undefined ? Number(valorTotal) : q * vu
-      return calcularImpostos({
-        descricao,
-        unidade: 'UN',
-        quantidade: q,
-        preco_unitario: vu,
-        preco_total: pt,
-        base_calculo_icms: 0,
-        percentual_icms: 0,
-        valor_icms: 0,
-        percentual_ipi: 0,
-        valor_ipi: 0,
-        base_calculo_issqn: 0,
-        aliquota_issqn: 0,
-        valor_issqn: 0,
-        valor_inss: 0,
-        valor_cbs: 0,
-        valor_liquido: 0,
-        impostos_dinamicos: []
+      const itensMedicao: NotaFiscalItem[] = []
+      let valorTotalForm = 0
+      let tipoNota: 'nf_servico' | 'nf_locacao' = 'nf_locacao'
+
+      const descontoMed = Number(m.valor_descontos) || 0
+
+      if (modo === 'locacao') {
+        tipoNota = 'nf_locacao'
+        const vLoc = Number(m.valor_mensal_bruto) || 0
+        const vAdit = Number(m.valor_aditivos) || 0
+        if (vLoc > 0) {
+          itensMedicao.push(
+            mkItem(`Locação — período ${m.periodo} (ref. medição ${m.numero || m.id})`, 1, vLoc, vLoc)
+          )
+        }
+        if (vAdit > 0) {
+          itensMedicao.push(
+            mkItem(`Aditivos — ref. medição ${m.numero || m.id} (${m.periodo})`, 1, vAdit, vAdit)
+          )
+        }
+        valorTotalForm = vLoc + vAdit
+      } else {
+        tipoNota = 'nf_servico'
+        const temDetalheServico =
+          (m.custos_mensais?.length || 0) > 0 ||
+          (m.horas_extras?.length || 0) > 0 ||
+          (m.servicos_adicionais?.length || 0) > 0
+
+        if (temDetalheServico) {
+          for (const c of m.custos_mensais || []) {
+            const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
+            const vu = Number(c.valor_mensal) || 0
+            const tot = Number(c.valor_total) || qtd * vu
+            const label = `${c.descricao || c.tipo || 'Custo mensal'} — ref. medição ${m.numero || m.id} (${m.periodo})`
+            itensMedicao.push(mkItem(label, qtd, vu, tot))
+          }
+          for (const h of m.horas_extras || []) {
+            const q = Number(h.quantidade_horas) || 0
+            const tot = Number(h.valor_total) || 0
+            const vu = q > 0 ? tot / q : Number(h.valor_hora) || 0
+            itensMedicao.push(
+              mkItem(
+                `Horas extras (${h.tipo} / ${h.dia_semana}) — ref. medição ${m.numero || m.id}`,
+                q > 0 ? q : 1,
+                vu,
+                tot || vu
+              )
+            )
+          }
+          for (const s of m.servicos_adicionais || []) {
+            const q = Number(s.quantidade) > 0 ? Number(s.quantidade) : 1
+            const vu = Number(s.valor_unitario) || 0
+            const tot = Number(s.valor_total) || q * vu
+            itensMedicao.push(mkItem(s.descricao || 'Serviço adicional', q, vu, tot))
+          }
+          valorTotalForm = itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
+        } else {
+          const vServ = Number(m.valor_custos_extras) || 0
+          if (vServ > 0) {
+            itensMedicao.push(
+              mkItem(
+                `Serviços / custos extras — ref. medição ${m.numero || m.id} (${m.periodo})`,
+                1,
+                vServ,
+                vServ
+              )
+            )
+          }
+          valorTotalForm = vServ
+        }
+      }
+
+      const obsLinhas = [
+        `Importação (${modo === 'locacao' ? 'Locação' : 'Serviço'}) — medição ${m.numero || '#' + m.id} (período ${m.periodo}).`,
+        obra?.nome ? `Obra: ${obra.nome}.` : '',
+        cliente?.nome ? `Cliente: ${cliente.nome}.` : '',
+        descontoMed > 0
+          ? `Descontos na medição: R$ ${descontoMed.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}.`
+          : ''
+      ].filter(Boolean)
+
+      const numeroSugerido = `REF-MED-${m.id}-${modo === 'locacao' ? 'LOC' : 'SRV'}`
+
+      setActiveTab('saida')
+      setFormData({
+        numero_nf: numeroSugerido,
+        serie: '',
+        data_emissao: dataEmissao,
+        data_vencimento: '',
+        valor_total: valorTotalForm,
+        tipo: 'saida',
+        status: 'pendente',
+        tipo_nota: tipoNota,
+        cliente_id: clienteId,
+        medicao_id: m.id,
+        fornecedor_id: undefined,
+        observacoes: obsLinhas.join(' ')
       })
-    }
+      setItens(itensMedicao)
+      setFormFile(null)
+      setGruaInfo(null)
+      setCriarBoleto(false)
+      setFormaPagamento('')
+      setTipoPagamentoPersonalizado('')
+      setBoletoFile(null)
+      setContaBancariaSelecionada(null)
+      setVincularCompraExistente(false)
+      setMedicaoIdParaImportar(String(m.id))
+      if (ctx.abrirDialogoNf) {
+        setIsCreateDialogOpen(true)
+      }
 
-    ;(async () => {
+      try {
+        sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
+      } catch {
+        /* ignore */
+      }
+      setMedicaoIdFallback(null)
+
+      toastNotify({
+        title: 'Dados importados da medição',
+        description: clienteId
+          ? 'Revise o número da NF, valores e itens antes de salvar.'
+          : 'Cliente não identificado na medição — selecione o cliente manualmente. Revise valores e itens antes de salvar.'
+      })
+    },
+    [calcularImpostos, toastNotify]
+  )
+
+  /** Busca medição e abre o diálogo Serviço vs Locação */
+  const prepararImportacaoMedicao = useCallback(
+    async (
+      medicaoId: number,
+      opts: { abrirDialogoNf: boolean; origemUrl: boolean; isCancelled?: () => boolean }
+    ) => {
       try {
         const medRes = await medicoesMensaisApi.obter(medicaoId)
-        if (cancelled) return
+        if (opts.isCancelled?.()) return
 
         if (!medRes.success || !medRes.data) {
           toastNotify({
@@ -412,171 +657,168 @@ export default function NotasFiscaisPage() {
         }
 
         const m = medRes.data as MedicaoMensal
-        if (m.status_aprovacao !== "aprovada") {
+        if (m.status_aprovacao !== 'aprovada') {
           try {
             sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
           } catch {
             /* ignore */
           }
-          setMedicaoIdFallback(null)
+          if (opts.origemUrl) {
+            setMedicaoIdFallback(null)
+            router.replace('/dashboard/financeiro/notas-fiscais', { scroll: false })
+          }
           toastNotify({
-            title: "Medição não aprovada",
+            title: 'Medição não aprovada',
             description:
-              m.status_aprovacao === "rejeitada"
-                ? "Esta medição foi rejeitada. Não é possível gerar nota fiscal."
-                : "Aprove a medição antes de gerar a nota fiscal. A nota só pode ser criada após a aprovação.",
-            variant: "destructive"
+              m.status_aprovacao === 'rejeitada'
+                ? 'Esta medição foi rejeitada. Não é possível gerar nota fiscal.'
+                : 'Aprove a medição antes de gerar a nota fiscal. A nota só pode ser criada após a aprovação.',
+            variant: 'destructive'
           })
-          router.replace("/dashboard/financeiro/notas-fiscais", { scroll: false })
           return
         }
 
-        const obra = unwrapRel(m.obras as any)
-        const orc = unwrapRel(m.orcamentos as any)
-        const cliente = obra?.clientes || orc?.clientes || null
-        const clienteId =
-          normId(cliente?.id) ??
-          normId(obra?.cliente_id) ??
-          normId(orc?.cliente_id)
+        const podeLocacao =
+          (Number(m.valor_mensal_bruto) || 0) > 0 || (Number(m.valor_aditivos) || 0) > 0
+        const temDetalheServico =
+          (m.custos_mensais?.length || 0) > 0 ||
+          (m.horas_extras?.length || 0) > 0 ||
+          (m.servicos_adicionais?.length || 0) > 0
+        const podeServico = temDetalheServico || (Number(m.valor_custos_extras) || 0) > 0
 
-        const itensMedicao: NotaFiscalItem[] = []
-
-        for (const c of m.custos_mensais || []) {
-          const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
-          const vu = Number(c.valor_mensal) || 0
-          const tot = Number(c.valor_total) || qtd * vu
-          const label = `${c.descricao || c.tipo || 'Custo mensal'} — ref. medição ${m.numero || m.id} (${m.periodo})`
-          itensMedicao.push(mkItem(label, qtd, vu, tot))
-        }
-
-        for (const h of m.horas_extras || []) {
-          const q = Number(h.quantidade_horas) || 0
-          const tot = Number(h.valor_total) || 0
-          const vu = q > 0 ? tot / q : Number(h.valor_hora) || 0
-          itensMedicao.push(
-            mkItem(
-              `Horas extras (${h.tipo} / ${h.dia_semana}) — ref. medição ${m.numero || m.id}`,
-              q > 0 ? q : 1,
-              vu,
-              tot || vu
-            )
-          )
-        }
-
-        for (const s of m.servicos_adicionais || []) {
-          const q = Number(s.quantidade) > 0 ? Number(s.quantidade) : 1
-          const vu = Number(s.valor_unitario) || 0
-          const tot = Number(s.valor_total) || q * vu
-          itensMedicao.push(mkItem(s.descricao || 'Serviço adicional', q, vu, tot))
-        }
-
-        const descontosTexto: string[] = []
-        for (const a of m.aditivos || []) {
-          if (a.tipo === 'adicional') {
-            const v = Number(a.valor) || 0
-            itensMedicao.push(mkItem(`Aditivo: ${a.descricao || 'Adicional'}`, 1, v, v))
-          } else {
-            descontosTexto.push(`${a.descricao || 'Desconto'}: R$ ${Number(a.valor || 0).toFixed(2)}`)
+        if (!podeLocacao && !podeServico) {
+          toastNotify({
+            title: 'Nada para importar',
+            description: 'Esta medição não possui valores de locação nem de serviço utilizáveis.',
+            variant: 'destructive'
+          })
+          if (opts.origemUrl) {
+            setMedicaoIdFallback(null)
+            router.replace('/dashboard/financeiro/notas-fiscais', { scroll: false })
           }
+          return
         }
 
-        const valorMedicaoBruto = Number(m.valor_total) || 0
-        if (itensMedicao.length === 0 && valorMedicaoBruto > 0) {
-          itensMedicao.push(
-            mkItem(
-              `Medição ${m.numero || m.id} — período ${m.periodo} (consolidado)`,
-              1,
-              valorMedicaoBruto,
-              valorMedicaoBruto
-            )
-          )
-        }
-
-        const somaItens = itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
-        const valorMedicao = valorMedicaoBruto
-        if (valorMedicao > 0 && Math.abs(valorMedicao - somaItens) > 0.02) {
-          const delta = valorMedicao - somaItens
-          itensMedicao.push(
-            mkItem('Ajuste (total da medição × soma dos itens)', 1, delta, delta)
-          )
-        }
-
-        const dataEmissao = m.data_medicao
-          ? String(m.data_medicao).split('T')[0]
-          : new Date().toISOString().split('T')[0]
-
-        const obsLinhas = [
-          `Gerado a partir da medição ${m.numero || '#' + m.id} (período ${m.periodo}).`,
-          obra?.nome ? `Obra: ${obra.nome}.` : '',
-          cliente?.nome ? `Cliente: ${cliente.nome}.` : '',
-          descontosTexto.length ? `Descontos na medição: ${descontosTexto.join('; ')}.` : ''
-        ].filter(Boolean)
-
-        const valorTotalForm =
-          valorMedicao > 0 ? valorMedicao : itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
-
-        const numeroSugerido = `REF-MED-${m.id}`
-
-        if (cancelled) return
-
-        // Aplicar estado no mesmo ciclo (evita Strict Mode + setTimeout com setState de instância desmontada)
-        setActiveTab('saida')
-        setFormData({
-          numero_nf: numeroSugerido,
-          serie: '',
-          data_emissao: dataEmissao,
-          data_vencimento: '',
-          valor_total: valorTotalForm,
-          tipo: 'saida',
-          status: 'pendente',
-          tipo_nota: 'nf_locacao',
-          cliente_id: clienteId,
-          medicao_id: m.id,
-          fornecedor_id: undefined,
-          observacoes: obsLinhas.join(' ')
-        })
-        setItens(itensMedicao)
-        setFormFile(null)
-        setGruaInfo(null)
-        setCriarBoleto(false)
-        setFormaPagamento('')
-        setTipoPagamentoPersonalizado('')
-        setBoletoFile(null)
-        setContaBancariaSelecionada(null)
-        setVincularCompraExistente(false)
-        setIsCreateDialogOpen(true)
-
-        try {
-          sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
-        } catch {
-          /* ignore */
-        }
-        setMedicaoIdFallback(null)
-
-        // Não chamar router.replace aqui: no App Router isso pode remontar a página e zerar modal/form.
-        // A query ?fromMedicao= é removida ao fechar o diálogo de criação.
-
-        toastNotify({
-          title: 'Nota fiscal pré-preenchida',
-          description: clienteId
-            ? 'Revise o número da NF, valores e itens antes de salvar.'
-            : 'Cliente não identificado na medição — selecione o cliente manualmente. Revise valores e itens antes de salvar.'
-        })
+        setMedicaoParaEscolherTipo(m)
+        setPendingImportCtx({ abrirDialogoNf: opts.abrirDialogoNf, origemUrl: opts.origemUrl })
+        setImportModoSelecionado(podeLocacao ? 'locacao' : 'servico')
+        setDialogEscolhaTipoImportOpen(true)
       } catch (e: any) {
-        if (!cancelled) {
+        if (!opts.isCancelled?.()) {
           toastNotify({
             title: 'Erro',
-            description: e?.message || 'Falha ao montar nota fiscal a partir da medição.',
+            description: e?.message || 'Falha ao preparar importação da medição.',
             variant: 'destructive'
           })
         }
+      }
+    },
+    [router, toastNotify]
+  )
+
+  const confirmarImportacaoTipoMedicao = useCallback(() => {
+    if (!medicaoParaEscolherTipo || !pendingImportCtx) return
+    const m = medicaoParaEscolherTipo
+    const podeLocacao =
+      (Number(m.valor_mensal_bruto) || 0) > 0 || (Number(m.valor_aditivos) || 0) > 0
+    const temDetalheServico =
+      (m.custos_mensais?.length || 0) > 0 ||
+      (m.horas_extras?.length || 0) > 0 ||
+      (m.servicos_adicionais?.length || 0) > 0
+    const podeServico = temDetalheServico || (Number(m.valor_custos_extras) || 0) > 0
+    if (importModoSelecionado === 'locacao' && !podeLocacao) {
+      toastNotify({
+        title: 'Valor de locação indisponível',
+        description: 'Não há valor de locação ou aditivos nesta medição.',
+        variant: 'destructive'
+      })
+      return
+    }
+    if (importModoSelecionado === 'servico' && !podeServico) {
+      toastNotify({
+        title: 'Valor de serviço indisponível',
+        description: 'Não há custos extras nem itens de serviço nesta medição.',
+        variant: 'destructive'
+      })
+      return
+    }
+    ignorarCloseEscolhaImportTipo.current = true
+    aplicarMedicaoComModoNaForma(medicaoParaEscolherTipo, importModoSelecionado, pendingImportCtx)
+    setDialogEscolhaTipoImportOpen(false)
+    setMedicaoParaEscolherTipo(null)
+    setPendingImportCtx(null)
+    queueMicrotask(() => {
+      ignorarCloseEscolhaImportTipo.current = false
+    })
+  }, [medicaoParaEscolherTipo, pendingImportCtx, importModoSelecionado, aplicarMedicaoComModoNaForma])
+
+  const cancelarDialogEscolhaTipoImport = useCallback(() => {
+    if (ignorarCloseEscolhaImportTipo.current) return
+    const eraUrl = pendingImportCtx?.origemUrl
+    setDialogEscolhaTipoImportOpen(false)
+    setMedicaoParaEscolherTipo(null)
+    setPendingImportCtx(null)
+    try {
+      sessionStorage.removeItem(NF_FROM_MEDICAO_STORAGE_KEY)
+    } catch {
+      /* ignore */
+    }
+    setMedicaoIdFallback(null)
+    if (eraUrl) {
+      router.replace('/dashboard/financeiro/notas-fiscais', { scroll: false })
+    }
+  }, [pendingImportCtx, router])
+
+  const handleImportarDadosMedicao = async () => {
+    const id = parseInt(medicaoIdParaImportar, 10)
+    if (!Number.isFinite(id) || id <= 0) {
+      toast({
+        title: 'Selecione uma medição',
+        description: 'Escolha uma medição aprovada na lista antes de importar.',
+        variant: 'destructive'
+      })
+      return
+    }
+    setImportandoMedicao(true)
+    try {
+      await prepararImportacaoMedicao(id, { abrirDialogoNf: false, origemUrl: false })
+    } finally {
+      setImportandoMedicao(false)
+    }
+  }
+
+  /** Pré-preenche NF de saída a partir da medição (?fromMedicao=id) — abre escolha Serviço/Locação */
+  useEffect(() => {
+    const rawId = fromMedicaoQuery ?? medicaoIdFallback
+    if (!rawId) return
+
+    const medicaoId = parseInt(rawId, 10)
+    if (Number.isNaN(medicaoId)) return
+
+    let cancelled = false
+
+    ;(async () => {
+      setImportandoMedicao(true)
+      try {
+        await prepararImportacaoMedicao(medicaoId, {
+          abrirDialogoNf: true,
+          origemUrl: true,
+          isCancelled: () => cancelled
+        })
+      } finally {
+        if (!cancelled) setImportandoMedicao(false)
       }
     })()
 
     return () => {
       cancelled = true
+      setImportandoMedicao(false)
     }
-  }, [fromMedicaoQuery, medicaoIdFallback, router])
+  }, [fromMedicaoQuery, medicaoIdFallback, prepararImportacaoMedicao])
+
+  /** Diálogo criar/editar NF: operação em andamento (salvar, XML ou medição) */
+  const dialogFormNfOcupado =
+    salvandoNotaFiscal || parseandoXmlNfe || importandoMedicao
 
   useEffect(() => {
     carregarDados()
@@ -869,6 +1111,7 @@ export default function NotasFiscaisPage() {
     }
 
     try {
+      setSalvandoNotaFiscal(true)
       // Log dos dados antes de enviar
       console.log('📋 [NOTAS-FISCAIS] Dados do formulário antes de enviar:', {
         formData,
@@ -1248,6 +1491,38 @@ export default function NotasFiscaisPage() {
             description: mensagem
           })
         }
+
+        const tipoCriada = tipoNotaFiscalCriada || tipoNotaFiscal
+        if (
+          formData.medicao_id &&
+          tipoCriada === 'saida' &&
+          (formFile || boletoFile)
+        ) {
+          try {
+            await anexarArquivosNotaNaMedicao({
+              medicaoId: formData.medicao_id,
+              notaId,
+              tipoNota: formData.tipo_nota,
+              numeroNf: formData.numero_nf,
+              dataEmissao: formData.data_emissao,
+              dataVencimento: formData.data_vencimento,
+              valorTotal: formData.valor_total,
+              formFile,
+              boletoFile,
+              anexarBoletoNaMedicao: Boolean(boletoFile)
+            })
+          } catch (medDocErr: any) {
+            console.error('[NOTAS-FISCAIS] Erro ao anexar documentos na medição:', medDocErr)
+            toast({
+              title: 'Aviso',
+              description:
+                'Nota fiscal criada, mas não foi possível registrar o arquivo na medição: ' +
+                (medDocErr?.message || 'Erro desconhecido'),
+              variant: 'destructive'
+            })
+          }
+        }
+
         setIsCreateDialogOpen(false)
         resetForm()
         await carregarNotasFiscais()
@@ -1258,6 +1533,8 @@ export default function NotasFiscaisPage() {
         description: error.message || "Erro ao criar nota fiscal",
         variant: "destructive"
       })
+    } finally {
+      setSalvandoNotaFiscal(false)
     }
   }
 
@@ -1305,6 +1582,7 @@ export default function NotasFiscaisPage() {
     }
 
     try {
+      setSalvandoNotaFiscal(true)
 
       // Limpar dados antes de enviar
       const dadosLimpos = limparDadosNotaFiscal(formData)
@@ -1356,6 +1634,32 @@ export default function NotasFiscaisPage() {
         if (formFile) {
           try {
             await notasFiscaisApi.uploadFile(editingNota.id, formFile)
+            const tipoEd = formData.tipo || activeTab
+            if (formData.medicao_id && tipoEd === 'saida') {
+              try {
+                await anexarArquivosNotaNaMedicao({
+                  medicaoId: formData.medicao_id,
+                  notaId: editingNota.id,
+                  tipoNota: formData.tipo_nota,
+                  numeroNf: formData.numero_nf,
+                  dataEmissao: formData.data_emissao,
+                  dataVencimento: formData.data_vencimento,
+                  valorTotal: formData.valor_total,
+                  formFile,
+                  boletoFile: null,
+                  anexarBoletoNaMedicao: false
+                })
+              } catch (medDocErr: any) {
+                console.error('[NOTAS-FISCAIS] Erro ao anexar na medição (edição):', medDocErr)
+                toast({
+                  title: 'Aviso',
+                  description:
+                    'Arquivo da nota enviado, mas não foi possível registrar na medição: ' +
+                    (medDocErr?.message || 'Erro desconhecido'),
+                  variant: 'destructive'
+                })
+              }
+            }
             toast({
               title: "Sucesso",
               description: "Nota fiscal atualizada e arquivo enviado com sucesso"
@@ -1384,6 +1688,8 @@ export default function NotasFiscaisPage() {
         description: error.message || "Erro ao atualizar nota fiscal",
         variant: "destructive"
       })
+    } finally {
+      setSalvandoNotaFiscal(false)
     }
   }
 
@@ -1771,6 +2077,7 @@ export default function NotasFiscaisPage() {
     setBoletoFile(null)
     setContaBancariaSelecionada(null)
     setVincularCompraExistente(false)
+    setMedicaoIdParaImportar('')
   }
 
   // Função para preencher dados de teste do item
@@ -1888,6 +2195,7 @@ export default function NotasFiscaisPage() {
 
   // Função para parsear XML de NFe e preencher o formulário automaticamente
   const parseNFeXML = async (file: File) => {
+    setParseandoXmlNfe(true)
     try {
       const xmlBuffer = await file.arrayBuffer()
       const xmlBytes = new Uint8Array(xmlBuffer)
@@ -2385,6 +2693,8 @@ export default function NotasFiscaisPage() {
         description: error.message || "Não foi possível extrair os dados do XML",
         variant: "destructive"
       })
+    } finally {
+      setParseandoXmlNfe(false)
     }
   }
 
@@ -2586,18 +2896,6 @@ export default function NotasFiscaisPage() {
         return b ? `Boleto ${b.numero_boleto}` : "Sem boleto"
       }
 
-      type NotaComEmbed = NotaFiscal & {
-        medicoes_mensais?: { numero?: string; periodo?: string }
-        medicoes?: { numero?: string; periodo?: string }
-      }
-
-      const origemDeNota = (n: NotaComEmbed) => {
-        const med = n.medicoes_mensais || n.medicoes
-        if (med?.numero) return `Medição: ${med.numero}`
-        if (n.locacoes?.numero) return `Locação: ${n.locacoes.numero}`
-        return "-"
-      }
-
       const statusTxt = (s: string) => {
         const m: Record<string, string> = {
           pendente: "Pendente",
@@ -2639,7 +2937,6 @@ export default function NotasFiscaisPage() {
         "Tipo",
         "Cliente",
         "Fornecedor",
-        "Origem",
         "Compra / Venda ref.",
         "Data Emissão",
         "Vencimento",
@@ -2690,7 +2987,6 @@ export default function NotasFiscaisPage() {
             n.tipo,
             n.clientes?.nome || "-",
             n.fornecedores?.nome || "-",
-            origemDeNota(n),
             compraVenda,
             formatDate(n.data_emissao),
             n.data_vencimento ? formatDate(n.data_vencimento) : "-",
@@ -2896,118 +3192,54 @@ export default function NotasFiscaisPage() {
                 <div className="text-center py-8 text-gray-500">Nenhuma nota fiscal encontrada</div>
               ) : (
                 <>
-                  <Table>
+                  <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Série</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Origem</TableHead>
-                        <TableHead>Data Emissão</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Cobrança</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
+                        <TableHead className="w-[11%] min-w-[7rem]">Número</TableHead>
+                        <TableHead className="w-[5%] min-w-[3rem]">Série</TableHead>
+                        <TableHead className="w-[11%] min-w-[7.5rem]">Tipo</TableHead>
+                        <TableHead className="w-[24%] min-w-[11rem]">Cliente</TableHead>
+                        <TableHead className="w-[9%] whitespace-nowrap">Data Emissão</TableHead>
+                        <TableHead className="w-[9%] whitespace-nowrap">Vencimento</TableHead>
+                        <TableHead className="w-[10%] whitespace-nowrap text-right">Valor</TableHead>
+                        <TableHead className="w-[15%] min-w-0">Cobrança</TableHead>
+                        <TableHead className="w-[8%] whitespace-nowrap">Status</TableHead>
+                        <TableHead className="w-[88px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredNotas.map((nota) => (
                         <TableRow key={nota.id}>
-                          <TableCell className="font-medium">{nota.numero_nf}</TableCell>
-                          <TableCell>{nota.serie || '-'}</TableCell>
-                          <TableCell>
-                            <Badge variant="outline">{getTipoNotaLabel(nota.tipo_nota)}</Badge>
+                          <TableCell className="font-medium align-top">{nota.numero_nf}</TableCell>
+                          <TableCell className="align-top">{nota.serie || '-'}</TableCell>
+                          <TableCell className="align-top">
+                            <Badge variant="outline" className="max-w-full truncate">{getTipoNotaLabel(nota.tipo_nota)}</Badge>
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top min-w-0">
                             {nota.clientes ? (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4 text-gray-400" />
-                                <span>{nota.clientes.nome}</span>
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Building2 className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                                <span className="truncate" title={nota.clientes.nome}>{nota.clientes.nome}</span>
                               </div>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
-                            {nota.medicoes && (
-                              <div className="flex items-center gap-2">
-                                <Receipt className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm">Medição: {nota.medicoes.numero}</span>
-                              </div>
-                            )}
-                            {nota.locacoes && (
-                              <div className="flex items-center gap-2">
-                                <Truck className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm">Locação: {nota.locacoes.numero}</span>
-                              </div>
-                            )}
-                            {!nota.medicoes && !nota.locacoes && (
-                              <span className="text-gray-400">-</span>
-                            )}
-                          </TableCell>
-                          <TableCell>{formatDate(nota.data_emissao)}</TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap align-top">{formatDate(nota.data_emissao)}</TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
-                          <TableCell>{renderValorNota(nota)}</TableCell>
-                          <TableCell>{renderCobrancaNota(nota)}</TableCell>
-                          <TableCell>{getStatusBadge(nota.status)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {nota.arquivo_nf ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDownload(nota)}
-                                  title="Baixar arquivo da nota fiscal"
-                                  aria-label="Baixar arquivo da nota fiscal"
-                                  className="text-green-600 hover:text-green-700"
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpload(nota)}
-                                  title="Upload do arquivo"
-                                >
-                                  <Upload className="w-4 h-4" />
-                                </Button>
-                              )}
+                          <TableCell className="text-right align-top whitespace-nowrap">{renderValorNota(nota)}</TableCell>
+                          <TableCell className="align-top min-w-0">
+                            <div className="min-w-0 break-words">{renderCobrancaNota(nota)}</div>
+                          </TableCell>
+                          <TableCell className="align-top whitespace-nowrap">{getStatusBadge(nota.status)}</TableCell>
+                          <TableCell className="w-[88px] text-right align-top">
+                            <div className="flex items-start justify-end gap-0.5">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                onClick={() => handleDownloadBoletoVinculado(nota)}
-                                title={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
-                                aria-label={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
-                                className="text-blue-600 hover:text-blue-700"
-                                disabled={!getBoletoComArquivo(nota)}
-                              >
-                                <Receipt className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenEnviarEmail(nota)}
-                                title={
-                                  !nota.cliente_id
-                                    ? "Nota sem cliente"
-                                    : !nota.arquivo_nf
-                                      ? "Cadastre o arquivo da nota fiscal"
-                                      : "Enviar nota e boleto por e-mail"
-                                }
-                                aria-label="Enviar nota fiscal por e-mail"
-                                className="text-violet-600 hover:text-violet-700"
-                                disabled={!nota.cliente_id || !nota.arquivo_nf}
-                              >
-                                <Mail className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
                                 onClick={() => handleView(nota)}
                                 title="Visualizar"
                               >
@@ -3015,7 +3247,8 @@ export default function NotasFiscaisPage() {
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
                                 onClick={() => handleEdit(nota)}
                                 title="Editar"
                               >
@@ -3025,8 +3258,8 @@ export default function NotasFiscaisPage() {
                                 <AlertDialogTrigger asChild>
                                   <Button
                                     variant="ghost"
-                                    size="sm"
-                                    className="text-red-600 hover:text-red-700"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0 text-red-600 hover:text-red-700"
                                     title="Excluir"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -3175,90 +3408,61 @@ export default function NotasFiscaisPage() {
                 <div className="text-center py-8 text-gray-500">Nenhuma nota fiscal encontrada</div>
               ) : (
                 <>
-                  <Table>
+                  <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Série</TableHead>
-                        <TableHead>Fornecedor</TableHead>
-                        <TableHead>Compra</TableHead>
-                        <TableHead>Data Emissão</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Cobrança</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
+                        <TableHead className="w-[11%] min-w-[7rem]">Número</TableHead>
+                        <TableHead className="w-[5%] min-w-[3rem]">Série</TableHead>
+                        <TableHead className="w-[20%] min-w-[10rem]">Fornecedor</TableHead>
+                        <TableHead className="w-[12%] min-w-[7rem]">Compra</TableHead>
+                        <TableHead className="w-[9%] whitespace-nowrap">Data Emissão</TableHead>
+                        <TableHead className="w-[9%] whitespace-nowrap">Vencimento</TableHead>
+                        <TableHead className="w-[10%] whitespace-nowrap text-right">Valor</TableHead>
+                        <TableHead className="w-[15%] min-w-0">Cobrança</TableHead>
+                        <TableHead className="w-[8%] whitespace-nowrap">Status</TableHead>
+                        <TableHead className="w-[88px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                       {filteredNotas.map((nota) => (
                         <TableRow key={nota.id}>
-                          <TableCell className="font-medium">{nota.numero_nf}</TableCell>
-                          <TableCell>{nota.serie || '-'}</TableCell>
-                          <TableCell>
+                          <TableCell className="font-medium align-top">{nota.numero_nf}</TableCell>
+                          <TableCell className="align-top">{nota.serie || '-'}</TableCell>
+                          <TableCell className="align-top min-w-0">
                             {nota.fornecedores ? (
-                              <div className="flex items-center gap-2">
-                                <Building2 className="w-4 h-4 text-gray-400" />
-                                <span>{nota.fornecedores.nome}</span>
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Building2 className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                                <span className="truncate" title={nota.fornecedores.nome}>{nota.fornecedores.nome}</span>
                               </div>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="align-top min-w-0 text-sm">
                             {nota.compras ? (
-                              <div className="flex items-center gap-2">
-                                <Receipt className="w-4 h-4 text-gray-400" />
-                                <span className="text-sm">{nota.compras.numero_pedido}</span>
+                              <div className="flex items-start gap-2 min-w-0">
+                                <Receipt className="w-4 h-4 text-gray-400 shrink-0 mt-0.5" />
+                                <span className="truncate">{nota.compras.numero_pedido}</span>
                               </div>
                             ) : (
                               <span className="text-gray-400">-</span>
                             )}
                           </TableCell>
-                          <TableCell>
+                          <TableCell className="whitespace-nowrap align-top">{formatDate(nota.data_emissao)}</TableCell>
+                          <TableCell className="whitespace-nowrap align-top">
                             {nota.data_vencimento ? formatDate(nota.data_vencimento) : '-'}
                           </TableCell>
-                          <TableCell>{formatDate(nota.data_emissao)}</TableCell>
-                          <TableCell>{renderValorNota(nota)}</TableCell>
-                          <TableCell>{renderCobrancaNota(nota)}</TableCell>
-                          <TableCell>{getStatusBadge(nota.status)}</TableCell>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              {nota.arquivo_nf ? (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDownload(nota)}
-                                  title="Baixar arquivo da nota fiscal"
-                                  aria-label="Baixar arquivo da nota fiscal"
-                                  className="text-green-600 hover:text-green-700"
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleUpload(nota)}
-                                  title="Upload do arquivo"
-                                >
-                                  <Upload className="w-4 h-4" />
-                                </Button>
-                              )}
+                          <TableCell className="text-right align-top whitespace-nowrap">{renderValorNota(nota)}</TableCell>
+                          <TableCell className="align-top min-w-0">
+                            <div className="min-w-0 break-words">{renderCobrancaNota(nota)}</div>
+                          </TableCell>
+                          <TableCell className="align-top whitespace-nowrap">{getStatusBadge(nota.status)}</TableCell>
+                          <TableCell className="w-[88px] text-right align-top">
+                            <div className="flex items-start justify-end gap-0.5">
                               <Button
                                 variant="ghost"
-                                size="sm"
-                                onClick={() => handleDownloadBoletoVinculado(nota)}
-                                title={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
-                                aria-label={getBoletoComArquivo(nota) ? "Baixar arquivo do boleto vinculado" : "Sem boleto com arquivo disponível"}
-                                className="text-blue-600 hover:text-blue-700"
-                                disabled={!getBoletoComArquivo(nota)}
-                              >
-                                <Receipt className="w-4 h-4" />
-                              </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
                                 onClick={() => handleView(nota)}
                                 title="Visualizar"
                               >
@@ -3266,7 +3470,8 @@ export default function NotasFiscaisPage() {
                               </Button>
                               <Button
                                 variant="ghost"
-                                size="sm"
+                                size="icon"
+                                className="h-8 w-8 shrink-0"
                                 onClick={() => handleEdit(nota)}
                                 title="Editar"
                               >
@@ -3276,8 +3481,8 @@ export default function NotasFiscaisPage() {
                                 <AlertDialogTrigger asChild>
                                   <Button
                                     variant="ghost"
-                                    size="sm"
-                                    className="text-red-600 hover:text-red-700"
+                                    size="icon"
+                                    className="h-8 w-8 shrink-0 text-red-600 hover:text-red-700"
                                     title="Excluir"
                                   >
                                     <Trash2 className="w-4 h-4" />
@@ -3347,6 +3552,7 @@ export default function NotasFiscaisPage() {
 
       {/* Dialog de Criação/Edição */}
       <Dialog open={isCreateDialogOpen || isEditDialogOpen} onOpenChange={(open) => {
+        if (!open && dialogFormNfOcupado) return
         if (!open) {
           setIsCreateDialogOpen(false)
           setIsEditDialogOpen(false)
@@ -3359,6 +3565,28 @@ export default function NotasFiscaisPage() {
         }
       }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <div className="relative min-h-0">
+          {dialogFormNfOcupado && (
+            <div
+              className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 rounded-lg bg-background/85 backdrop-blur-[2px]"
+              aria-busy="true"
+              aria-live="polite"
+            >
+              <Loader2 className="h-9 w-9 animate-spin text-primary" />
+              <p className="text-sm font-medium text-foreground">
+                {salvandoNotaFiscal
+                  ? 'Salvando nota fiscal…'
+                  : parseandoXmlNfe
+                    ? 'Importando XML…'
+                    : importandoMedicao
+                      ? 'Importando dados da medição…'
+                      : 'Aguarde…'}
+              </p>
+              <p className="text-xs text-muted-foreground px-6 text-center max-w-sm">
+                Aguarde — não feche esta janela.
+              </p>
+            </div>
+          )}
           <DialogHeader>
             <div className="flex items-center justify-between">
               <div className="flex-1">
@@ -3377,6 +3605,7 @@ export default function NotasFiscaisPage() {
                     type="button"
                     variant="outline"
                     size="sm"
+                    disabled={dialogFormNfOcupado}
                     onClick={() => {
                       const input = document.createElement('input')
                       input.type = 'file'
@@ -3393,8 +3622,12 @@ export default function NotasFiscaisPage() {
                     className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
                     title="Importar dados de um XML de NFe/NFS-e"
                   >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Importar XML
+                    {parseandoXmlNfe ? (
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    ) : (
+                      <Upload className="w-4 h-4 mr-2" />
+                    )}
+                    {parseandoXmlNfe ? 'Lendo XML…' : 'Importar XML'}
                   </Button>
                   <DebugButton
                     onClick={preencherDadosTeste}
@@ -3402,6 +3635,7 @@ export default function NotasFiscaisPage() {
                     variant="outline"
                     label="Preencher Dados"
                     title="Preencher com dados de teste"
+                    disabled={dialogFormNfOcupado}
                   />
                 </div>
               )}
@@ -3409,6 +3643,64 @@ export default function NotasFiscaisPage() {
           </DialogHeader>
           
           <div className="space-y-4">
+            {!isEditDialogOpen && (formData.tipo || activeTab) === 'saida' && (
+              <div className="flex flex-wrap items-end gap-2 pb-1 text-xs text-muted-foreground border-b border-border/50">
+                <span className="sr-only">Importar dados de medição aprovada</span>
+                <span className="hidden sm:inline self-center shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground/80">
+                  Medição
+                </span>
+                <Select
+                  value={medicaoIdParaImportar}
+                  onValueChange={setMedicaoIdParaImportar}
+                  disabled={dialogFormNfOcupado}
+                >
+                  <SelectTrigger className="h-8 w-full sm:w-[min(100%,240px)] text-xs bg-background/80">
+                    <SelectValue
+                      placeholder={
+                        medicoesAprovadasListar.length === 0
+                          ? 'Nenhuma aprovada'
+                          : 'Selecionar…'
+                      }
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {medicoesAprovadasListar.length === 0 ? (
+                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                        Nenhuma medição aprovada.
+                      </div>
+                    ) : (
+                      medicoesAprovadasListar.map((med) => (
+                        <SelectItem key={med.id} value={String(med.id)} className="text-xs">
+                          {med.numero} — {med.periodo}
+                        </SelectItem>
+                      ))
+                    )}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleImportarDadosMedicao}
+                  disabled={
+                    dialogFormNfOcupado ||
+                    !medicaoIdParaImportar ||
+                    medicoesAprovadasListar.length === 0
+                  }
+                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
+                >
+                  {importandoMedicao ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin inline" />
+                      Carregando…
+                    </>
+                  ) : (
+                    'Importar da medição'
+                  )}
+                </Button>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="numero_nf">Número da Nota Fiscal *</Label>
@@ -3468,57 +3760,36 @@ export default function NotasFiscaisPage() {
                   </div>
                 </div>
 
-                {(formData.tipo_nota === 'nf_servico' || formData.tipo_nota === 'nf_locacao' || formData.tipo_nota === 'medicao' || formData.tipo_nota === 'locacao') && (
+                {formData.medicao_id ? (
+                  <p className="text-xs text-muted-foreground rounded-md border border-dashed bg-muted/30 px-3 py-2">
+                    Vinculada à medição <span className="font-medium">#{formData.medicao_id}</span>
+                    {medicoes.find((med) => med.id === formData.medicao_id) && (
+                      <>
+                        {' '}
+                        — {medicoes.find((med) => med.id === formData.medicao_id)?.numero}{' '}
+                        ({medicoes.find((med) => med.id === formData.medicao_id)?.periodo})
+                      </>
+                    )}
+                  </p>
+                ) : null}
+
+                {formData.tipo_nota === 'nf_locacao' && gruaInfo && (
                   <div className="grid grid-cols-2 gap-4">
-                    {(formData.tipo_nota === 'nf_servico' || formData.tipo_nota === 'medicao') && (
-                      <div>
-                        <Label htmlFor="medicao_id">Medição</Label>
-                        <Select 
-                          value={formData.medicao_id?.toString() || ''} 
-                          onValueChange={(value) => setFormData({ ...formData, medicao_id: parseInt(value) })}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder={medicoes.length === 0 ? "Nenhuma medição disponível" : "Selecione a medição"} />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {medicoes.length === 0 ? (
-                              <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                                Nenhuma medição disponível
-                              </div>
-                            ) : (
-                              medicoes.map(medicao => (
-                                <SelectItem key={medicao.id} value={medicao.id.toString()}>
-                                  {medicao.numero} - {medicao.periodo}
-                                </SelectItem>
-                              ))
-                            )}
-                          </SelectContent>
-                        </Select>
-                        {medicoes.length === 0 && (
-                          <p className="text-xs text-muted-foreground mt-1">
-                            Nenhuma medição encontrada. Crie uma medição primeiro.
-                          </p>
-                        )}
-                      </div>
-                    )}
-                    {formData.tipo_nota === 'nf_locacao' && gruaInfo && (
-                      <div>
-                        <Label>Grua (Carregada Automaticamente)</Label>
-                        <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
-                          <span className="font-medium">
-                            {gruaInfo.modelo && gruaInfo.fabricante 
-                              ? `${gruaInfo.fabricante} - ${gruaInfo.modelo}`
-                              : gruaInfo.modelo 
+                    <div>
+                      <Label>Grua (Carregada Automaticamente)</Label>
+                      <div className="flex h-10 w-full items-center rounded-md border border-input bg-muted px-3 py-2 text-sm">
+                        <span className="font-medium">
+                          {gruaInfo.modelo && gruaInfo.fabricante
+                            ? `${gruaInfo.fabricante} - ${gruaInfo.modelo}`
+                            : gruaInfo.modelo
                               ? gruaInfo.modelo
-                              : `Grua ID: ${gruaInfo.id}`
-                            }
-                          </span>
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">
-                          Grua carregada automaticamente da locação ativa do cliente
-                        </p>
+                              : `Grua ID: ${gruaInfo.id}`}
+                        </span>
                       </div>
-                    )}
+                      <p className="text-xs text-muted-foreground mt-1">
+                        Grua carregada automaticamente da locação ativa do cliente
+                      </p>
+                    </div>
                   </div>
                 )}
               </>
@@ -3704,15 +3975,16 @@ export default function NotasFiscaisPage() {
                 <Label htmlFor="valor_total">Valor Total (R$) *</Label>
                 <Input
                   id="valor_total"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="Ex: 1500.00"
-                  value={formData.valor_total > 0 ? formData.valor_total : ''}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  placeholder="0,00"
+                  className="text-right tabular-nums"
+                  title="Digite apenas números; os dois últimos dígitos são centavos (ex.: 1250000 → 12.500,00)"
+                  value={formatBrlMoneyInputValue(Number(formData.valor_total) || 0, !formData.valor_total)}
                   onChange={(e) => {
-                    const rawValue = e.target.value
-                    const valor = rawValue === '' ? 0 : Number(rawValue)
-                    setFormData({ ...formData, valor_total: Number.isFinite(valor) ? valor : 0 })
+                    const valor = parseBrlMoneyDigitsInput(e.target.value)
+                    setFormData({ ...formData, valor_total: valor })
                   }}
                 />
               </div>
@@ -4058,16 +4330,142 @@ export default function NotasFiscaisPage() {
           </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => {
+            <Button
+              variant="outline"
+              disabled={dialogFormNfOcupado}
+              onClick={() => {
               setIsCreateDialogOpen(false)
               setIsEditDialogOpen(false)
               setEditingNota(null)
               resetForm()
-            }}>
+            }}
+            >
               Cancelar
             </Button>
-            <Button onClick={isEditDialogOpen ? handleUpdate : handleCreate}>
-              {isEditDialogOpen ? 'Atualizar' : 'Criar'} Nota Fiscal
+            <Button
+              disabled={dialogFormNfOcupado}
+              onClick={isEditDialogOpen ? handleUpdate : handleCreate}
+            >
+              {salvandoNotaFiscal ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {isEditDialogOpen ? 'Salvando…' : 'Criando…'}
+                </>
+              ) : (
+                <>
+                  {isEditDialogOpen ? 'Atualizar' : 'Criar'} Nota Fiscal
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={dialogEscolhaTipoImportOpen}
+        onOpenChange={(open) => {
+          if (!open) cancelarDialogEscolhaTipoImport()
+        }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Tipo de importação</DialogTitle>
+            <DialogDescription>
+              Escolha o que esta nota deve registrar: valores de <strong>locação</strong> (mensal + aditivos) ou de{' '}
+              <strong>serviço</strong> (custos extras e itens de serviço, quando houver).
+            </DialogDescription>
+          </DialogHeader>
+          {medicaoParaEscolherTipo ? (() => {
+            const m = medicaoParaEscolherTipo
+            const fmt = (n: number) =>
+              n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+            const vLoc = Number(m.valor_mensal_bruto) || 0
+            const vAdit = Number(m.valor_aditivos) || 0
+            const vServ = Number(m.valor_custos_extras) || 0
+            const temDetalheServico =
+              (m.custos_mensais?.length || 0) > 0 ||
+              (m.horas_extras?.length || 0) > 0 ||
+              (m.servicos_adicionais?.length || 0) > 0
+            /** Mesma regra que `aplicarMedicaoComModoNaForma` (modo serviço). */
+            const totalServicoImport = (() => {
+              if (!temDetalheServico) return vServ
+              let acc = 0
+              for (const c of m.custos_mensais || []) {
+                const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
+                const vu = Number(c.valor_mensal) || 0
+                acc += Number(c.valor_total) || qtd * vu
+              }
+              for (const h of m.horas_extras || []) {
+                const q = Number(h.quantidade_horas) || 0
+                const tot = Number(h.valor_total) || 0
+                const vu = q > 0 ? tot / q : Number(h.valor_hora) || 0
+                acc += tot || vu
+              }
+              for (const s of m.servicos_adicionais || []) {
+                const q = Number(s.quantidade) > 0 ? Number(s.quantidade) : 1
+                const vu = Number(s.valor_unitario) || 0
+                acc += Number(s.valor_total) || q * vu
+              }
+              return acc
+            })()
+            const podeLocacao = vLoc > 0 || vAdit > 0
+            const podeServico = temDetalheServico || vServ > 0
+            const totalLoc = vLoc + vAdit
+            return (
+              <RadioGroup
+                value={importModoSelecionado}
+                onValueChange={(v) => setImportModoSelecionado(v as 'servico' | 'locacao')}
+                className="gap-3"
+              >
+                <div
+                  className={`flex gap-3 rounded-md border p-3 text-left ${importModoSelecionado === 'locacao' ? 'border-primary/50 bg-muted/30' : 'border-border'}`}
+                >
+                  <RadioGroupItem value="locacao" id="nf-imp-loc" className="mt-1 shrink-0" disabled={!podeLocacao} />
+                  <Label htmlFor="nf-imp-loc" className="flex-1 cursor-pointer font-normal leading-snug">
+                    <span className="text-sm font-medium text-foreground">Locação</span>
+                    <p className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                      <span>Valor de locação (R$) + Valor de aditivos (R$)</span>
+                      <span className="block text-foreground/90">
+                        R$ {fmt(vLoc)} + R$ {fmt(vAdit)} ={' '}
+                        <strong className="text-foreground">R$ {fmt(totalLoc)}</strong>
+                      </span>
+                    </p>
+                  </Label>
+                </div>
+                <div
+                  className={`flex gap-3 rounded-md border p-3 text-left ${importModoSelecionado === 'servico' ? 'border-primary/50 bg-muted/30' : 'border-border'}`}
+                >
+                  <RadioGroupItem value="servico" id="nf-imp-srv" className="mt-1 shrink-0" disabled={!podeServico} />
+                  <Label htmlFor="nf-imp-srv" className="flex-1 cursor-pointer font-normal leading-snug">
+                    <span className="text-sm font-medium text-foreground">Serviço</span>
+                    <p className="text-xs text-muted-foreground mt-1 space-y-0.5">
+                      <span>Valor de serviço (R$)</span>
+                      <span className="block text-foreground/90">
+                        {temDetalheServico ? (
+                          <>
+                            Soma dos itens (custos mensais, horas extras e serviços adicionais):{' '}
+                            <strong className="text-foreground">R$ {fmt(totalServicoImport)}</strong>
+                          </>
+                        ) : (
+                          <>
+                            Consolidado em custos extras:{' '}
+                            <strong className="text-foreground">R$ {fmt(vServ)}</strong>
+                          </>
+                        )}
+                      </span>
+                    </p>
+                  </Label>
+                </div>
+              </RadioGroup>
+            )
+          })() : null}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={cancelarDialogEscolhaTipoImport}>
+              Cancelar
+            </Button>
+            <Button type="button" onClick={confirmarImportacaoTipoMedicao}>
+              Importar
             </Button>
           </DialogFooter>
         </DialogContent>

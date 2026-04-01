@@ -65,7 +65,7 @@ api.interceptors.request.use(
     // Adicionar token se disponível
     if (typeof window !== 'undefined') {
       // Tenta buscar o token com ambos os nomes para compatibilidade
-      const token = localStorage.getItem('token') || localStorage.getItem('access_token')
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       if (token) {
         config.headers.Authorization = `Bearer ${token}`
       }

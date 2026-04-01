@@ -37,7 +37,12 @@ import { obrasApi } from "@/lib/api-obras"
 import { gruaObraApi } from "@/lib/api-grua-obra"
 import { itensCustosMensaisApi, ItemCustoMensal } from "@/lib/api-itens-custos-mensais"
 import { medicoesMensaisApi, MedicaoMensalCreate } from "@/lib/api-medicoes-mensais"
-import { medicoesUtils } from "@/lib/medicoes-utils"
+import {
+  medicoesUtils,
+  calcularDiasPeriodoEmissao,
+  formatBrlMoneyInputValue,
+  parseBrlMoneyDigitsInput,
+} from "@/lib/medicoes-utils"
 
 interface CustoMensalForm {
   item: string
@@ -128,18 +133,7 @@ export default function NovaMedicaoPage() {
   const obraSelecionada = obras.find((obra) => String(obra.id) === medicaoForm.obra_id)
   const clienteMedicao = obraSelecionada?.clientes?.nome || (obraSelecionada?.cliente_id ? `Cliente ID ${obraSelecionada.cliente_id}` : "")
 
-  const calcularTotalDiasEmissao = (dataInicio: string, dataFim: string) => {
-    if (!dataInicio || !dataFim) return 0
-    const [anoInicio, mesInicio, diaInicio] = dataInicio.split('-').map(Number)
-    const [anoFim, mesFim, diaFim] = dataFim.split('-').map(Number)
-    const inicio = new Date(anoInicio, mesInicio - 1, diaInicio)
-    const fim = new Date(anoFim, mesFim - 1, diaFim)
-    if (Number.isNaN(inicio.getTime()) || Number.isNaN(fim.getTime()) || fim < inicio) return 0
-    const diffMs = fim.getTime() - inicio.getTime()
-    return Math.floor(diffMs / (1000 * 60 * 60 * 24)) + 1
-  }
-
-  const totalDiasEmissao = calcularTotalDiasEmissao(
+  const totalDiasEmissao = calcularDiasPeriodoEmissao(
     medicaoForm.data_inicio_emissao,
     medicaoForm.data_fim_emissao
   )
@@ -685,6 +679,7 @@ trailer<</Size 4/Root 1 0 R>>
         numero,
         periodo: periodoMedicao,
         data_medicao: medicaoForm.data_fim_emissao,
+        data_inicio_emissao: medicaoForm.data_inicio_emissao,
         mes_referencia: parseInt(mes),
         ano_referencia: parseInt(ano),
         valor_mensal_bruto: medicaoForm.valor_mensal_bruto,
@@ -987,55 +982,95 @@ trailer<</Size 4/Root 1 0 R>>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
               <div>
                 <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor de Locação (R$)</Label>
-                <Input
-                  id="valor_mensal_bruto"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_mensal_bruto === 0 ? '' : medicaoForm.valor_mensal_bruto}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_mensal_bruto: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white h-8 text-sm"
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                    R$
+                  </span>
+                  <Input
+                    id="valor_mensal_bruto"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formatBrlMoneyInputValue(medicaoForm.valor_mensal_bruto, true)}
+                    onChange={(e) =>
+                      setMedicaoForm({
+                        ...medicaoForm,
+                        valor_mensal_bruto: parseBrlMoneyDigitsInput(e.target.value),
+                      })
+                    }
+                    placeholder="0,00"
+                    className="h-8 bg-white pl-9 text-sm tabular-nums"
+                  />
+                </div>
               </div>
               <div>
                 <Label htmlFor="valor_aditivos" className="text-xs">Valor de Aditivos (R$)</Label>
-                <Input
-                  id="valor_aditivos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_aditivos === 0 ? '' : medicaoForm.valor_aditivos}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_aditivos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white h-8 text-sm"
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                    R$
+                  </span>
+                  <Input
+                    id="valor_aditivos"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formatBrlMoneyInputValue(medicaoForm.valor_aditivos, true)}
+                    onChange={(e) =>
+                      setMedicaoForm({
+                        ...medicaoForm,
+                        valor_aditivos: parseBrlMoneyDigitsInput(e.target.value),
+                      })
+                    }
+                    placeholder="0,00"
+                    className="h-8 bg-white pl-9 text-sm tabular-nums"
+                  />
+                </div>
               </div>
               <div>
                 <Label htmlFor="valor_custos_extras" className="text-xs">Valor de Serviço (R$)</Label>
-                <Input
-                  id="valor_custos_extras"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_custos_extras === 0 ? '' : medicaoForm.valor_custos_extras}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_custos_extras: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white h-8 text-sm"
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                    R$
+                  </span>
+                  <Input
+                    id="valor_custos_extras"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formatBrlMoneyInputValue(medicaoForm.valor_custos_extras, true)}
+                    onChange={(e) =>
+                      setMedicaoForm({
+                        ...medicaoForm,
+                        valor_custos_extras: parseBrlMoneyDigitsInput(e.target.value),
+                      })
+                    }
+                    placeholder="0,00"
+                    className="h-8 bg-white pl-9 text-sm tabular-nums"
+                  />
+                </div>
               </div>
               <div>
                 <Label htmlFor="valor_descontos" className="text-xs">Descontos (R$)</Label>
-                <Input
-                  id="valor_descontos"
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={medicaoForm.valor_descontos === 0 ? '' : medicaoForm.valor_descontos}
-                  onChange={(e) => setMedicaoForm({ ...medicaoForm, valor_descontos: e.target.value === '' ? 0 : parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
-                  className="bg-white h-8 text-sm"
-                />
+                <div className="relative">
+                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                    R$
+                  </span>
+                  <Input
+                    id="valor_descontos"
+                    type="text"
+                    inputMode="numeric"
+                    autoComplete="off"
+                    value={formatBrlMoneyInputValue(medicaoForm.valor_descontos, true)}
+                    onChange={(e) =>
+                      setMedicaoForm({
+                        ...medicaoForm,
+                        valor_descontos: parseBrlMoneyDigitsInput(e.target.value),
+                      })
+                    }
+                    placeholder="0,00"
+                    className="h-8 bg-white pl-9 text-sm tabular-nums"
+                  />
+                </div>
               </div>
               </div>
               <div className="mt-4 max-w-md">

@@ -65,6 +65,9 @@ export interface GruaBackend {
   velocidade_elevacao?: string | number;
 }
 
+/** Máximo por página alinhado ao backend (`GET /api/gruas`). */
+export const GRUAS_LIST_MAX_PER_PAGE = 100
+
 export interface GruaFiltros {
   status?: string;
   obra_id?: number;
@@ -311,6 +314,30 @@ export const gruasApi = {
     };
   },
 };
+
+/**
+ * Carrega todas as gruas em páginas (até GRUAS_LIST_MAX_PER_PAGE por requisição).
+ * Use em selects / dashboards em vez de `limit: 1000`.
+ */
+export async function listarTodasGruas(
+  filtros?: Omit<GruaFiltros, 'page' | 'limit'>
+): Promise<Grua[]> {
+  const todas: Grua[] = []
+  let page = 1
+  let pages = 1
+  do {
+    const r = await gruasApi.listarGruas({
+      ...filtros,
+      page,
+      limit: GRUAS_LIST_MAX_PER_PAGE,
+    } as GruaFiltros)
+    if (!r.success || !r.data?.length) break
+    todas.push(...r.data)
+    pages = r.pagination?.pages ?? 1
+    page += 1
+  } while (page <= pages)
+  return todas
+}
 
 // ============================================
 // EXPORTS DE COMPATIBILIDADE (para código antigo)

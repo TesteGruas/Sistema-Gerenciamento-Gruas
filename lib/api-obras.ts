@@ -1105,10 +1105,36 @@ export const ensureAuthenticated = async (): Promise<boolean> => {
   return true
 }
 
+/** Máximo por página alinhado ao backend (`GET /api/obras`). */
+export const OBRAS_LIST_MAX_PER_PAGE = 100
+
+/**
+ * Carrega todas as obras em páginas (até OBRAS_LIST_MAX_PER_PAGE por requisição).
+ * Evita uma única requisição com `limit` alto que sobrecarrega o servidor.
+ */
+export async function listarTodasObras(
+  params?: Omit<Parameters<typeof obrasApi.listarObras>[0], 'page' | 'limit'>
+): Promise<ObraBackend[]> {
+  const todas: ObraBackend[] = []
+  let page = 1
+  let pages = 1
+  do {
+    const r = await obrasApi.listarObras({
+      ...params,
+      page,
+      limit: OBRAS_LIST_MAX_PER_PAGE,
+    })
+    if (!r.success || !r.data?.length) break
+    todas.push(...r.data)
+    pages = r.pagination?.pages ?? 1
+    page += 1
+  } while (page <= pages)
+  return todas
+}
+
 // Funções de conveniência para compatibilidade
 export const getObras = async (): Promise<ObraBackend[]> => {
-  const response = await obrasApi.listarObras({ limit: 1000 });
-  return response.data || [];
-};
+  return listarTodasObras()
+}
 
 export default obrasApi
