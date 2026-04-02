@@ -16,6 +16,12 @@ interface SignaturePadProps {
   className?: string
   /** Texto do botão que aplica a assinatura ao estado pai (ex.: diferente do CTA final “Enviar”) */
   applyLabel?: string
+  /** Em modo compact, oculta “Cancelar” quando o fluxo já tem ação equivalente fora do quadro */
+  showCancelButton?: boolean
+  /** Altura do canvas em px (sobrescreve o padrão compact 220 / normal 200) */
+  canvasHeightPx?: number
+  /** Botões e espaçamentos menores (telas PWA “fit na viewport”) */
+  compactDense?: boolean
 }
 
 export function SignaturePad({
@@ -25,7 +31,10 @@ export function SignaturePad({
   description,
   compact = false,
   className,
-  applyLabel
+  applyLabel,
+  showCancelButton = true,
+  canvasHeightPx,
+  compactDense = false
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -48,11 +57,13 @@ export function SignaturePad({
 
       const rect = container.getBoundingClientRect()
       canvas.width = rect.width
-      canvas.height = compact ? 220 : 200
+      const targetH =
+        canvasHeightPx ?? (compact ? (compactDense ? 120 : 220) : 200)
+      canvas.height = targetH
 
       // Configurar estilo de desenho
       ctx.strokeStyle = "#000000"
-      ctx.lineWidth = compact ? 2.5 : 2
+      ctx.lineWidth = compactDense ? 2 : compact ? 2.5 : 2
       ctx.lineCap = "round"
       ctx.lineJoin = "round"
     }
@@ -61,7 +72,7 @@ export function SignaturePad({
     window.addEventListener("resize", resizeCanvas)
 
     return () => window.removeEventListener("resize", resizeCanvas)
-  }, [compact])
+  }, [compact, compactDense, canvasHeightPx])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -174,7 +185,8 @@ export function SignaturePad({
     onSave(dataUrl)
   }
 
-  const canvasH = compact ? 220 : 200
+  const canvasH =
+    canvasHeightPx ?? (compact ? (compactDense ? 120 : 220) : 200)
   const applyText = applyLabel || "Confirmar Assinatura"
 
   const inner = (
@@ -202,37 +214,64 @@ export function SignaturePad({
         />
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <p className="text-gray-400 text-sm font-medium">Assine aqui</p>
+            <p
+              className={cn(
+                "text-gray-400 font-medium",
+                compactDense ? "text-xs" : "text-sm"
+              )}
+            >
+              Assine aqui
+            </p>
           </div>
         )}
       </div>
 
       {compact ? (
-        <div className="flex flex-col gap-2.5 pt-1">
+        <div
+          className={cn(
+            "flex flex-col pt-0.5",
+            compactDense ? "gap-1.5" : "gap-2.5"
+          )}
+        >
           <Button
             type="button"
-            className="w-full h-11 text-base font-semibold bg-green-600 hover:bg-green-700"
+            className={cn(
+              "w-full font-semibold bg-green-600 hover:bg-green-700",
+              compactDense ? "h-9 text-sm" : "h-11 text-base"
+            )}
             onClick={saveSignature}
             disabled={!hasSignature}
           >
-            <Check className="w-5 h-5 mr-2 shrink-0" />
+            <Check className={cn("mr-2 shrink-0", compactDense ? "w-4 h-4" : "w-5 h-5")} />
             {applyText}
           </Button>
-          <div className="grid grid-cols-2 gap-2">
+          <div
+            className={cn(
+              showCancelButton ? "grid grid-cols-2 gap-2" : "grid grid-cols-1 gap-2",
+              compactDense && "gap-1.5"
+            )}
+          >
             <Button
               type="button"
               variant="outline"
-              className="h-10"
+              className={compactDense ? "h-8 text-xs" : "h-10"}
               onClick={clearSignature}
               disabled={!hasSignature}
             >
               <RotateCcw className="w-4 h-4 mr-1.5 shrink-0" />
               Limpar
             </Button>
-            <Button type="button" variant="outline" className="h-10" onClick={onCancel}>
-              <X className="w-4 h-4 mr-1.5 shrink-0" />
-              Cancelar
-            </Button>
+            {showCancelButton && (
+              <Button
+                type="button"
+                variant="outline"
+                className={compactDense ? "h-8 text-xs" : "h-10"}
+                onClick={onCancel}
+              >
+                <X className="w-4 h-4 mr-1.5 shrink-0" />
+                Cancelar
+              </Button>
+            )}
           </div>
         </div>
       ) : (
@@ -260,7 +299,11 @@ export function SignaturePad({
   )
 
   if (compact) {
-    return <div className={cn("space-y-3", className)}>{inner}</div>
+    return (
+      <div className={cn(compactDense ? "space-y-2" : "space-y-3", className)}>
+        {inner}
+      </div>
+    )
   }
 
   return <Card className={cn("p-6 space-y-4", className)}>{inner}</Card>

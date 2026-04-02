@@ -3,7 +3,6 @@
 import { useState, useEffect, Suspense } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -14,7 +13,6 @@ import {
   Clock,
   CheckCircle,
   User,
-  Calendar,
   Check,
   AlertTriangle,
   ChevronDown,
@@ -32,21 +30,11 @@ function formatarData(data: string): string {
   return new Date(data).toLocaleDateString('pt-BR');
 }
 
-function getStatusColor(status: string): string {
-  switch (status) {
-    case 'Aprovado':
-      return 'text-green-600 bg-green-50 border-green-200';
-    case 'Pendente Aprovação':
-    case 'Pendente Assinatura':
-    case 'Pendente Assinatura Funcionário':
-      return 'text-orange-600 bg-orange-50 border-orange-200';
-    case 'Pendente Correção':
-      return 'text-red-600 bg-red-50 border-red-200';
-    case 'Rejeitado':
-      return 'text-red-600 bg-red-50 border-red-200';
-    default:
-      return 'text-gray-600 bg-gray-50 border-gray-200';
-  }
+/** Ex.: 14:40:00 → 14:40 — economiza uma linha na UI compacta */
+function formatarHoraCurta(t: string | null | undefined): string {
+  if (!t || t === '-') return '-';
+  const s = String(t).trim();
+  return s.length >= 8 && s[2] === ':' && s[5] === ':' ? s.slice(0, 5) : s;
 }
 
 function PWAAprovacaoAssinaturaPageContent() {
@@ -106,46 +94,6 @@ function PWAAprovacaoAssinaturaPageContent() {
   const canAssinar = canResponsavelAssinar || isFuncionarioDoRegistro;
 
   useEffect(() => {
-    const disabledAssinar = !canAssinar || !assinatura.trim() || isLoading;
-    console.log('[PWA Assinatura][DEBUG][estado-botao]', {
-      registroId,
-      userId: user?.id,
-      isResponsavelObra,
-      statusAtual,
-      statusNormalizado,
-      isStatusPendenteCorrecao,
-      isStatusAprovado,
-      responsavelJaAssinou,
-      funcionarioJaAssinou,
-      aguardandoAssinaturaFuncionario,
-      registroFinalizado,
-      isFuncionarioDoRegistro,
-      canResponsavelAssinar,
-      canAssinar,
-      assinaturaPreenchida: Boolean(assinatura.trim()),
-      isLoading,
-      disabledAssinar
-    });
-  }, [
-    assinatura,
-    canAssinar,
-    canResponsavelAssinar,
-    isFuncionarioDoRegistro,
-    isLoading,
-    isResponsavelObra,
-    isStatusPendenteCorrecao,
-    isStatusAprovado,
-    responsavelJaAssinou,
-    funcionarioJaAssinou,
-    aguardandoAssinaturaFuncionario,
-    registroFinalizado,
-    registroId,
-    statusAtual,
-    statusNormalizado,
-    user?.id
-  ]);
-
-  useEffect(() => {
     const carregarAprovacao = async () => {
       if (!registroId) {
         toast.error('ID do registro não encontrado');
@@ -170,13 +118,6 @@ function PWAAprovacaoAssinaturaPageContent() {
         }
 
         setAprovacaoSelecionada(registro);
-        console.log('[PWA Assinatura][DEBUG][registro-carregado]', {
-          registroId: registro.id,
-          status: registro.status,
-          funcionarioId: registro.funcionario_id,
-          assinatura_responsavel_path: registro.assinatura_responsavel_path,
-          assinatura_funcionario_path: registro.assinatura_funcionario_path
-        });
 
         // Pré-popular a modal de edição com os dados atuais
         setHorasEditadas({
@@ -197,17 +138,6 @@ function PWAAprovacaoAssinaturaPageContent() {
   }, [registroId, router]);
 
   const handleAprovar = async () => {
-    console.log('[PWA Assinatura][DEBUG][clicou-assinar]', {
-      registroId: aprovacaoSelecionada?.id,
-      statusAtual,
-      statusNormalizado,
-      isResponsavelObra,
-      isFuncionarioDoRegistro,
-      canResponsavelAssinar,
-      canAssinar,
-      assinaturaPreenchida: Boolean(assinatura.trim())
-    });
-
     if (!canAssinar) {
       toast.error('Este registro ainda aguarda a assinatura do responsável da obra.');
       return;
@@ -305,7 +235,7 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   if (loadingAprovacao) {
     return (
-      <div className="min-h-[100dvh] bg-gray-50 p-4 overflow-x-hidden touch-pan-y overscroll-contain">
+      <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 p-4">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-4">
             <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -327,7 +257,7 @@ function PWAAprovacaoAssinaturaPageContent() {
 
   if (!aprovacaoSelecionada) {
     return (
-      <div className="min-h-[100dvh] bg-gray-50 p-4 overflow-x-hidden touch-pan-y overscroll-contain">
+      <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 p-4">
         <div className="max-w-md mx-auto">
           <div className="flex items-center gap-3 mb-4">
             <Button variant="ghost" size="sm" onClick={() => router.back()}>
@@ -352,162 +282,138 @@ function PWAAprovacaoAssinaturaPageContent() {
     !isPendenteCorrecao && aprovacaoSelecionada.status !== 'Aprovado';
 
   return (
-    <div className="min-h-[100dvh] bg-gray-50 overflow-x-hidden touch-pan-y overscroll-contain">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="flex items-center gap-3 mb-2">
-          <Button variant="ghost" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="w-5 h-5" />
+    <div className="flex flex-col overflow-hidden bg-gray-50 -mx-4 min-h-0 h-[calc(100dvh-10rem)] max-h-[calc(100dvh-10rem)]">
+      {/* Header compacto — uma linha + subtítulo curto */}
+      <div className="shrink-0 bg-white border-b border-gray-200 px-2 py-1.5">
+        <div className="flex items-center gap-1.5 max-w-lg mx-auto">
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 shrink-0" onClick={() => router.back()}>
+            <ArrowLeft className="w-4 h-4" />
           </Button>
-          <h1 className="text-xl font-bold text-gray-900">
-            {isPendenteCorrecao ? 'Corrigir Horas' : 'Assinatura Digital'}
-          </h1>
+          <div className="min-w-0 flex-1">
+            <h1 className="text-sm font-bold text-gray-900 leading-tight truncate">
+              {isPendenteCorrecao ? 'Corrigir horas' : 'Assinar ponto'}
+            </h1>
+            <p className="text-[10px] text-gray-500 leading-tight line-clamp-2">
+              {isPendenteCorrecao
+                ? 'Ajuste os horários e reenvie.'
+                : 'Desenhe, Aplicar, depois Salvar abaixo.'}
+            </p>
+          </div>
         </div>
-        <p className="text-sm text-gray-600">
-          {isPendenteCorrecao 
-            ? 'O responsável não concordou com as horas. Corrija e reenvie.'
-            : 'Assine o registro de ponto com sua assinatura digital'}
-        </p>
       </div>
 
-      {/* Espaço inferior: altura do rodapé PWA (nav z-50) + faixa de ações acima dela */}
+      {/* Conteúdo: sem rolagem (overflow hidden) */}
       <div
-        className={`px-2 py-1 space-y-2 max-w-lg mx-auto w-full ${
+        className={`flex-1 min-h-0 overflow-hidden px-2 py-1.5 space-y-1.5 max-w-lg mx-auto w-full ${
           showBottomActionsBar
-            ? 'pb-[calc(4rem+10px+env(safe-area-inset-bottom,0px)+9.5rem)]'
-            : 'pb-6'
+            ? 'pb-[calc(4rem+8px+env(safe-area-inset-bottom,0px)+4.25rem)]'
+            : 'pb-4'
         }`}
       >
         {/* Alerta de rejeição (quando o registro foi rejeitado) */}
         {isPendenteCorrecao && aprovacaoSelecionada.observacoes && (
-          <Card className="border-red-300 bg-red-50">
-            <CardContent className="p-3">
-              <div className="flex items-start gap-2">
-                <XCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <h4 className="font-semibold text-red-900 text-sm">Motivo da rejeição</h4>
-                  <p className="text-red-800 text-xs mt-1">{aprovacaoSelecionada.observacoes}</p>
+          <Card className="border-red-300 bg-red-50 gap-0 py-0 shadow-sm">
+            <CardContent className="p-2">
+              <div className="flex items-start gap-1.5">
+                <XCircle className="w-3.5 h-3.5 text-red-600 shrink-0 mt-0.5" />
+                <div className="min-w-0">
+                  <h4 className="font-semibold text-red-900 text-[11px]">Motivo</h4>
+                  <p className="text-red-800 text-[10px] leading-snug line-clamp-3">{aprovacaoSelecionada.observacoes}</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Resumo Compacto */}
-        <Card className="border-0 shadow-none">
-          <CardHeader className="pb-1 px-3 pt-3">
-            <CardTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Clock className="w-4 h-4 text-blue-600" />
-                <span className="text-base">
-                  {isPendenteCorrecao ? 'Registro a Corrigir' : 'Assinatura de Registro de Ponto'}
+        {/* Resumo — gap-0 py-0 evita o py-6 padrão do Card */}
+        <Card className="border border-gray-200/80 shadow-none gap-0 py-0">
+          <CardHeader className="px-2.5 pt-2 pb-0 space-y-0">
+            <CardTitle className="flex items-center justify-between gap-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <Clock className="w-3.5 h-3.5 text-blue-600 shrink-0" />
+                <span className="text-xs font-semibold truncate">
+                  {isPendenteCorrecao ? 'Registro' : 'Ponto'}
                 </span>
               </div>
-              <Button variant="ghost" size="sm" onClick={() => setShowDetalhes(!showDetalhes)} className="p-1">
-                {showDetalhes ? <ChevronUp className="w-4 h-4 text-gray-500" /> : <ChevronDown className="w-4 h-4 text-gray-500" />}
+              <Button variant="ghost" size="sm" onClick={() => setShowDetalhes(!showDetalhes)} className="h-7 w-7 p-0 shrink-0">
+                {showDetalhes ? <ChevronUp className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />}
               </Button>
             </CardTitle>
           </CardHeader>
-          <CardContent className="px-3 pb-3 space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-blue-600" />
+          <CardContent className="px-2.5 pb-2 pt-1 space-y-1.5">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <div className="w-7 h-7 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                  <User className="w-3.5 h-3.5 text-blue-600" />
                 </div>
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{aprovacaoSelecionada.funcionario?.nome || 'Funcionário'}</h3>
-                  <p className="text-xs text-gray-600">{aprovacaoSelecionada.funcionario?.cargo || 'Cargo'}</p>
+                <div className="min-w-0">
+                  <h3 className="font-semibold text-gray-900 text-xs leading-tight truncate">{aprovacaoSelecionada.funcionario?.nome || 'Funcionário'}</h3>
+                  <p className="text-[10px] text-gray-500 truncate">{aprovacaoSelecionada.funcionario?.cargo || '—'}</p>
                 </div>
               </div>
-              <div className="text-right">
-                <p className="text-xs text-gray-600">Horas Trabalhadas</p>
-                <p className="text-lg font-bold text-blue-600">{aprovacaoSelecionada.horas_trabalhadas || 0}h</p>
+              <div className="text-right shrink-0">
+                <p className="text-[9px] text-gray-500 leading-none">Total</p>
+                <p className="text-sm font-bold text-blue-600 leading-tight">{aprovacaoSelecionada.horas_trabalhadas || 0}h</p>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-2 text-xs">
-              <div className="flex items-center gap-1">
-                <Calendar className="w-3 h-3 text-gray-500" />
-                <span className="text-gray-600">Data:</span>
-                <span className="font-medium">{formatarData(aprovacaoSelecionada.data)}</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <Clock className="w-3 h-3 text-gray-500" />
-                <span className="text-gray-600">Período:</span>
-                <span className="font-medium">{aprovacaoSelecionada.entrada || '-'} - {aprovacaoSelecionada.saida || '-'}</span>
-              </div>
-            </div>
+            <p className="text-[10px] text-gray-600 leading-tight">
+              <span className="text-gray-600">{formatarData(aprovacaoSelecionada.data)}</span>
+              <span className="mx-1 text-gray-300">·</span>
+              <span className="font-medium text-gray-800">
+                {formatarHoraCurta(aprovacaoSelecionada.entrada)} – {formatarHoraCurta(aprovacaoSelecionada.saida)}
+              </span>
+            </p>
 
-            {/* Status */}
-            <div className={`rounded-lg p-2 ${
-              isPendenteCorrecao
-                ? 'bg-red-50 border border-red-200'
-                : aguardandoAssinaturaFuncionario
-                  ? 'bg-green-50 border border-green-200'
-                  : 'bg-blue-50 border border-blue-200'
-            }`}>
-              <div className="flex items-center gap-1">
-                {isPendenteCorrecao 
-                  ? <XCircle className="w-3 h-3 text-red-600" />
-                  : <Clock className={`w-3 h-3 ${aguardandoAssinaturaFuncionario ? 'text-green-600' : 'text-blue-600'}`} />
-                }
-                <span className={`text-xs font-medium ${
+            <div
+              className={`rounded-md px-1.5 py-1 ${
+                isPendenteCorrecao
+                  ? 'bg-red-50 border border-red-200'
+                  : aguardandoAssinaturaFuncionario
+                    ? 'bg-green-50 border border-green-200'
+                    : 'bg-blue-50 border border-blue-200'
+              }`}
+            >
+              <p
+                className={`text-[10px] font-medium leading-snug ${
                   isPendenteCorrecao
                     ? 'text-red-800'
-                    : aguardandoAssinaturaFuncionario ? 'text-green-800' : 'text-blue-800'
-                }`}>
-                  {isPendenteCorrecao
-                    ? 'Não aprovado — corrija as horas abaixo'
                     : aguardandoAssinaturaFuncionario
-                      ? 'Responsável já assinou — aguardando sua assinatura'
-                      : isResponsavelObra
-                        ? 'Aguardando sua assinatura como responsável'
-                        : 'Aguardando Assinatura'}
-                </span>
-              </div>
+                      ? 'text-green-800'
+                      : 'text-blue-800'
+                }`}
+              >
+                {isPendenteCorrecao
+                  ? 'Corrija as horas abaixo.'
+                  : aguardandoAssinaturaFuncionario
+                    ? 'Responsável assinou — falta a sua.'
+                    : isResponsavelObra
+                      ? 'Assine como responsável.'
+                      : 'Aguardando assinatura.'}
+              </p>
             </div>
 
-            {/* Detalhes Expandíveis */}
             {showDetalhes && (
-              <div className="space-y-2 pt-2 border-t border-gray-200">
-                <div className="bg-gray-50 rounded-lg p-2">
-                  <h4 className="font-medium text-gray-700 mb-1 text-xs">Informações do Funcionário</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-gray-600">ID:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.funcionario_id}</p>
-                    </div>
+              <div className="space-y-1 pt-1 border-t border-gray-100">
+                <p className="text-[10px] text-gray-500">ID func. {aprovacaoSelecionada.funcionario_id}</p>
+                <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                  <div>
+                    <span className="text-gray-500">Entrada:</span>{' '}
+                    <span className="font-medium">{formatarHoraCurta(aprovacaoSelecionada.entrada)}</span>
                   </div>
-                </div>
-                <div className="bg-white border rounded-lg p-2">
-                  <h4 className="font-medium text-gray-700 mb-1 text-xs">Detalhes do Período</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div>
-                      <span className="text-gray-600">Entrada:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.entrada || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Saída:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.saida || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Saída Almoço:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.saida_almoco || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Volta Almoço:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.volta_almoco || '-'}</p>
-                    </div>
-                    <div>
-                      <span className="text-gray-600">Total Trabalhado:</span>
-                      <p className="font-medium">{aprovacaoSelecionada.horas_trabalhadas || 0}h</p>
-                    </div>
-                    {aprovacaoSelecionada.horas_extras && aprovacaoSelecionada.horas_extras > 0 && (
-                      <div>
-                        <span className="text-gray-600">Horas Extras:</span>
-                        <p className="font-bold text-orange-600">{aprovacaoSelecionada.horas_extras}h</p>
-                      </div>
-                    )}
+                  <div>
+                    <span className="text-gray-500">Saída:</span>{' '}
+                    <span className="font-medium">{formatarHoraCurta(aprovacaoSelecionada.saida)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Almoço:</span>{' '}
+                    <span className="font-medium">
+                      {formatarHoraCurta(aprovacaoSelecionada.saida_almoco)} / {formatarHoraCurta(aprovacaoSelecionada.volta_almoco)}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-gray-500">Extras:</span>{' '}
+                    <span className="font-medium">{aprovacaoSelecionada.horas_extras || 0}h</span>
                   </div>
                 </div>
               </div>
@@ -517,155 +423,117 @@ function PWAAprovacaoAssinaturaPageContent() {
 
         {/* Se pendente de correção: mostrar botão para editar horas */}
         {isPendenteCorrecao && (
-          <Card className="border-0 shadow-none">
-            <CardContent className="px-3 pb-3 pt-3 space-y-3">
-              <div className="bg-orange-50 border border-orange-200 rounded-lg p-2">
-                <p className="text-xs text-orange-800 font-medium">
-                  📝 Corrija os horários e reenvie para o responsável aprovar novamente
+          <Card className="border-0 shadow-none gap-0 py-0">
+            <CardContent className="px-3 pb-2 pt-2 space-y-2">
+              <div className="bg-orange-50 border border-orange-200 rounded-md px-2 py-1">
+                <p className="text-[10px] text-orange-800 font-medium leading-snug">
+                  Ajuste os horários e reenvie ao responsável.
                 </p>
               </div>
               <Button
                 onClick={() => setShowEditarHoras(true)}
-                className="w-full bg-orange-600 hover:bg-orange-700 h-14 text-lg font-semibold shadow-lg"
+                className="w-full bg-orange-600 hover:bg-orange-700 h-10 text-sm font-semibold"
               >
-                <Pencil className="w-5 h-5 mr-2" />
-                Editar Horas
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar horas
               </Button>
             </CardContent>
           </Card>
         )}
 
-        {/* Componente de Assinatura (escondido se pendente correção) */}
         {!isPendenteCorrecao && (
-          <Card className="border-0 shadow-none">
-            <CardHeader className="pb-1 px-3 pt-3 space-y-1">
-              <CardTitle className="flex items-center gap-2 text-base">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-                Assinatura Digital
+          <Card className="border border-gray-200/80 shadow-none gap-0 py-0">
+            <CardHeader className="px-2.5 pt-2 pb-0 space-y-0">
+              <CardTitle className="flex items-center gap-1.5 text-xs">
+                <CheckCircle className="w-3.5 h-3.5 text-green-600 shrink-0" />
+                Assinatura
               </CardTitle>
-              <CardDescription className="text-xs leading-snug">
+              <CardDescription className="text-[10px] leading-snug line-clamp-2">
                 {isResponsavelObra
-                  ? 'Assine no quadro abaixo e toque em Aplicar; depois envie com o botão fixo no rodapé.'
+                  ? 'Desenhe → Aplicar → Salvar (rodapé).'
                   : isFuncionarioDoRegistro
-                    ? 'O responsável já assinou. Desenhe sua assinatura, aplique e envie pelo rodapé.'
+                    ? 'Desenhe → Aplicar → Salvar abaixo.'
                     : aguardandoAssinaturaResponsavel
-                      ? 'Aguardando o responsável da obra. Depois você poderá assinar aqui.'
-                      : 'Desenhe sua assinatura no quadro, aplique e confirme no rodapé.'}
+                      ? 'Aguardando o responsável assinar.'
+                      : 'Desenhe e confirme.'}
               </CardDescription>
             </CardHeader>
-            <CardContent className="px-3 pb-4 space-y-3">
-              <div className="rounded-xl bg-muted/50 p-3 ring-1 ring-border/60">
+            <CardContent className="px-2.5 pb-2 pt-1 space-y-1.5">
+              <div className="rounded-lg bg-muted/40 p-1.5 ring-1 ring-border/50">
                 <SignaturePad
                   compact
+                  compactDense
+                  showCancelButton={false}
                   title=""
                   description=""
-                  applyLabel="Aplicar assinatura"
+                  applyLabel="Aplicar"
                   onSave={setAssinatura}
                   onCancel={() => setAssinatura('')}
                 />
               </div>
 
-              <div className="flex items-center justify-between gap-2 px-1">
-                <div className="flex items-center gap-2 min-w-0">
-                  <div className={`w-2 h-2 shrink-0 rounded-full ${assinatura ? 'bg-green-500' : 'bg-gray-300'}`} />
-                  <span className="text-xs font-medium text-muted-foreground truncate">
-                    {assinatura
-                      ? 'Pronto para enviar — use o botão verde abaixo'
-                      : 'Desenhe e toque em Aplicar assinatura'}
-                  </span>
-                </div>
-                {assinatura && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAssinatura('')}
-                    className="text-xs h-8 shrink-0 px-2"
-                  >
-                    Redefinir
-                  </Button>
-                )}
+              <div className="flex items-center gap-1.5 px-0.5">
+                <div className={`w-1.5 h-1.5 shrink-0 rounded-full ${assinatura ? 'bg-green-500' : 'bg-gray-300'}`} />
+                <span className="text-[10px] font-medium text-muted-foreground leading-tight">
+                  {assinatura ? 'Pronto — toque em Salvar abaixo.' : 'Desenhe e toque em Aplicar.'}
+                </span>
               </div>
-
-              {isResponsavelObra && showBottomActionsBar && (
-                <div className="pt-3 mt-1 border-t border-dashed border-border/70 space-y-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-red-300 text-red-700 hover:bg-red-50 h-11 font-semibold"
-                    onClick={() => setShowRejeicao(true)}
-                    disabled={isLoading}
-                  >
-                    <XCircle className="w-5 h-5 mr-2 shrink-0" />
-                    Não concordo com as horas
-                  </Button>
-                  <p className="text-[11px] text-muted-foreground text-center leading-snug px-0.5">
-                    Use se o registro estiver incorreto. O funcionário receberá o motivo e poderá ajustar os horários.
-                  </p>
-                </div>
-              )}
             </CardContent>
           </Card>
         )}
-
-        {/* Informações (secundário no mobile — menos rolagem) */}
-        <Card className="bg-blue-50 border-blue-200 hidden sm:block">
-          <CardContent className="p-4">
-            <div className="flex items-center gap-3">
-              <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse"></div>
-              <div>
-                <h4 className="font-semibold text-blue-800 text-sm">Informações</h4>
-                <p className="text-blue-700 text-xs">
-                  {isPendenteCorrecao
-                    ? 'Após corrigir, o registro será reenviado automaticamente para o responsável.'
-                    : 'Sua assinatura digital é obrigatória para confirmar o registro de ponto.'}
-                </p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
 
       </div>
 
       {showBottomActionsBar && (
         <div
-          className="fixed inset-x-0 z-40 border-t border-gray-200/90 bg-background/95 backdrop-blur-md shadow-[0_-8px_32px_rgba(0,0,0,0.08)] px-3 pt-3 space-y-2 pb-3 max-w-lg mx-auto w-full box-border bottom-[calc(4rem+10px+env(safe-area-inset-bottom,0px))]"
+          className="fixed inset-x-0 z-40 border-t border-gray-200/90 bg-background/95 backdrop-blur-md shadow-[0_-8px_24px_rgba(0,0,0,0.06)] px-2.5 pt-2 pb-2 max-w-lg mx-auto w-full box-border bottom-[calc(4rem+10px+env(safe-area-inset-bottom,0px))]"
           aria-label="Ações de assinatura"
         >
-          <Button
-            onClick={handleAprovar}
-            disabled={!canAssinar || !assinatura.trim() || isLoading}
-            className="w-full bg-green-600 hover:bg-green-700 h-12 sm:h-14 text-base sm:text-lg font-semibold shadow-md"
+          <div
+            className={
+              isResponsavelObra
+                ? 'flex flex-row gap-2 items-stretch'
+                : 'flex flex-col'
+            }
           >
-            {isLoading ? (
-              <div className="flex items-center gap-2">
-                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                Processando...
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Check className="w-6 h-6" />
-                {isResponsavelObra
-                  ? 'Enviar assinatura (responsável)'
-                  : isFuncionarioDoRegistro
-                    ? 'Enviar minha assinatura'
-                    : aguardandoAssinaturaResponsavel
-                      ? 'Aguardando Responsável'
-                      : 'Enviar assinatura'}
-              </div>
+            {isResponsavelObra && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowRejeicao(true)}
+                disabled={isLoading}
+                className="flex-1 min-w-0 border-red-300 text-red-700 hover:bg-red-50 h-10 text-xs font-semibold px-2"
+              >
+                <XCircle className="w-4 h-4 mr-1 shrink-0" />
+                <span className="truncate">Não concordo</span>
+              </Button>
             )}
-          </Button>
-
-          {isResponsavelObra && (
             <Button
-              variant="outline"
-              onClick={() => setShowRejeicao(true)}
-              disabled={isLoading}
-              className="w-full border-red-300 text-red-700 hover:bg-red-50 h-11 sm:h-12 font-semibold"
+              onClick={handleAprovar}
+              disabled={!canAssinar || !assinatura.trim() || isLoading}
+              className={
+                isResponsavelObra
+                  ? 'flex-1 min-w-0 bg-green-600 hover:bg-green-700 h-10 text-sm font-semibold shadow-sm px-2'
+                  : 'w-full bg-green-600 hover:bg-green-700 h-10 text-sm font-semibold shadow-sm'
+              }
             >
-              <XCircle className="w-5 h-5 mr-2" />
-              Não Concordo
+              {isLoading ? (
+                <div className="flex items-center justify-center gap-2 w-full">
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin shrink-0" />
+                  <span className="truncate">Salvando...</span>
+                </div>
+              ) : (
+                <div className="flex items-center justify-center gap-1.5 w-full min-w-0">
+                  <Check className="w-4 h-4 shrink-0" />
+                  <span className="truncate">
+                    {aguardandoAssinaturaResponsavel && !isResponsavelObra
+                      ? 'Aguardando…'
+                      : 'Salvar'}
+                  </span>
+                </div>
+              )}
             </Button>
-          )}
+          </div>
         </div>
       )}
 
@@ -836,9 +704,22 @@ function PWAAprovacaoAssinaturaPageContent() {
 }
 
 export default function PWAAprovacaoAssinaturaPage() {
+  useEffect(() => {
+    const html = document.documentElement
+    const body = document.body
+    const prevHtml = html.style.overflow
+    const prevBody = body.style.overflow
+    html.style.overflow = 'hidden'
+    body.style.overflow = 'hidden'
+    return () => {
+      html.style.overflow = prevHtml
+      body.style.overflow = prevBody
+    }
+  }, [])
+
   return (
     <Suspense fallback={
-      <div className="min-h-[100dvh] bg-gray-50 flex items-center justify-center overflow-x-hidden touch-pan-y">
+      <div className="h-[100dvh] max-h-[100dvh] overflow-hidden bg-gray-50 flex items-center justify-center -mx-4">
         <div className="text-center">
           <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
           <p className="text-gray-600">Carregando...</p>
