@@ -850,6 +850,11 @@ export default function NovaObraPage() {
     // Evita submit duplicado (duplo clique/enter/bubbling)
     if (creatingObraInFlightRef.current || creating) {
       console.warn('⏭️ [Nova Obra] Submissão ignorada: criação já em andamento.')
+      toast({
+        title: 'Aguarde',
+        description: 'A obra já está sendo criada. Evite clicar várias vezes no botão.',
+        variant: 'default'
+      })
       return
     }
     
@@ -2677,7 +2682,7 @@ startxref
       )}
 
       {/* Formulário */}
-      <form onSubmit={handleCreateObra} className="">
+      <form noValidate onSubmit={handleCreateObra} className="">
         <Tabs defaultValue="obra" className="w-full">
           <TabsList className="grid w-full grid-cols-5 gap-1">
             <TabsTrigger value="obra" className="px-4">Dados da Obra</TabsTrigger>
