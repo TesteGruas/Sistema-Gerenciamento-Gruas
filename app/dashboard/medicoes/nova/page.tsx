@@ -54,6 +54,20 @@ interface CustoMensalForm {
   valor_total: number
 }
 
+interface LinhaAditivoMedicao {
+  id: string
+  descricao: string
+  valor: number
+}
+
+function criarLinhaAditivoVazia(): LinhaAditivoMedicao {
+  const id =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `ad-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`
+  return { id, descricao: "", valor: 0 }
+}
+
 interface Grua {
   id: string | number
   codigo?: string
@@ -125,11 +139,36 @@ export default function NovaMedicaoPage() {
     data_inicio_emissao: new Date().toISOString().split('T')[0],
     data_fim_emissao: new Date().toISOString().split('T')[0],
     valor_mensal_bruto: 0,
-    valor_aditivos: 0,
     valor_custos_extras: 0,
     valor_descontos: 0,
     observacoes: ""
   })
+  /** Linhas dinâmicas de aditivos (descrição + valor); o total alimenta valor_aditivos na API. */
+  const [linhasAditivos, setLinhasAditivos] = useState<LinhaAditivoMedicao[]>(() => [
+    criarLinhaAditivoVazia(),
+  ])
+  const valorAditivosTotal = linhasAditivos.reduce((acc, l) => acc + (Number(l.valor) || 0), 0)
+
+  const atualizarLinhaAditivo = (
+    id: string,
+    patch: Partial<Pick<LinhaAditivoMedicao, "descricao" | "valor">>
+  ) => {
+    setLinhasAditivos((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)))
+  }
+
+  const adicionarLinhaAditivoApos = (id: string) => {
+    setLinhasAditivos((prev) => {
+      const i = prev.findIndex((l) => l.id === id)
+      const next = [...prev]
+      next.splice(i === -1 ? prev.length : i + 1, 0, criarLinhaAditivoVazia())
+      return next
+    })
+  }
+
+  const removerLinhaAditivo = (id: string) => {
+    setLinhasAditivos((prev) => (prev.length <= 1 ? prev : prev.filter((l) => l.id !== id)))
+  }
+
   const obraSelecionada = obras.find((obra) => String(obra.id) === medicaoForm.obra_id)
   const clienteMedicao = obraSelecionada?.clientes?.nome || (obraSelecionada?.cliente_id ? `Cliente ID ${obraSelecionada.cliente_id}` : "")
 
@@ -469,11 +508,18 @@ trailer<</Size 4/Root 1 0 R>>
       data_inicio_emissao: `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-01`,
       data_fim_emissao: now.toISOString().split("T")[0],
       valor_mensal_bruto: 15000.0,
-      valor_aditivos: 2500.0,
       valor_custos_extras: 1200.0,
       valor_descontos: 500.0,
       observacoes: "Dados preenchidos automaticamente para testes (botão Preencher dados)."
     }))
+
+    setLinhasAditivos([
+      {
+        ...criarLinhaAditivoVazia(),
+        descricao: "Aditivos de Manutenção (exemplo)",
+        valor: 2500.0,
+      },
+    ])
 
     setArquivoPdfMedicao(criarArquivoPdfPlaceholder())
 
@@ -667,11 +713,13 @@ trailer<</Size 4/Root 1 0 R>>
         }
       })
 
-      // Calcular valor total
-      const valorTotal = medicaoForm.valor_mensal_bruto + 
-                        medicaoForm.valor_aditivos + 
-                        medicaoForm.valor_custos_extras - 
-                        medicaoForm.valor_descontos
+      const aditivosApi = linhasAditivos
+        .filter((l) => (Number(l.valor) || 0) > 0)
+        .map((l) => ({
+          tipo: "adicional" as const,
+          descricao: (l.descricao || "").trim() || "Aditivo",
+          valor: Math.round(Number(l.valor) * 100) / 100,
+        }))
 
       const medicaoData: MedicaoMensalCreate = {
         obra_id: parseInt(medicaoForm.obra_id),
@@ -683,12 +731,13 @@ trailer<</Size 4/Root 1 0 R>>
         mes_referencia: parseInt(mes),
         ano_referencia: parseInt(ano),
         valor_mensal_bruto: medicaoForm.valor_mensal_bruto,
-        valor_aditivos: medicaoForm.valor_aditivos,
+        valor_aditivos: valorAditivosTotal,
         valor_custos_extras: medicaoForm.valor_custos_extras,
         valor_descontos: medicaoForm.valor_descontos,
         status: "pendente",
         observacoes: medicaoForm.observacoes,
-        custos_mensais: custosMensaisApi.length > 0 ? custosMensaisApi : undefined
+        custos_mensais: custosMensaisApi.length > 0 ? custosMensaisApi : undefined,
+        aditivos: aditivosApi.length > 0 ? aditivosApi : undefined,
       }
 
       const response = await medicoesMensaisApi.criar(medicaoData)
@@ -980,108 +1029,196 @@ trailer<</Size 4/Root 1 0 R>>
                 Valores (R$)
               </p>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-              <div>
-                <Label htmlFor="valor_mensal_bruto" className="text-xs">Valor de Locação (R$)</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <Input
-                    id="valor_mensal_bruto"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={formatBrlMoneyInputValue(medicaoForm.valor_mensal_bruto, true)}
-                    onChange={(e) =>
-                      setMedicaoForm({
-                        ...medicaoForm,
-                        valor_mensal_bruto: parseBrlMoneyDigitsInput(e.target.value),
-                      })
-                    }
-                    placeholder="0,00"
-                    className="h-8 bg-white pl-9 text-sm tabular-nums"
-                  />
+                <div>
+                  <Label htmlFor="valor_mensal_bruto" className="text-xs">
+                    Valor de Locação (R$)
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                      R$
+                    </span>
+                    <Input
+                      id="valor_mensal_bruto"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatBrlMoneyInputValue(medicaoForm.valor_mensal_bruto, true)}
+                      onChange={(e) =>
+                        setMedicaoForm({
+                          ...medicaoForm,
+                          valor_mensal_bruto: parseBrlMoneyDigitsInput(e.target.value),
+                        })
+                      }
+                      placeholder="0,00"
+                      className="h-8 bg-white pl-9 text-sm tabular-nums"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="valor_custos_extras" className="text-xs">
+                    Valor de Serviço (R$)
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                      R$
+                    </span>
+                    <Input
+                      id="valor_custos_extras"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatBrlMoneyInputValue(medicaoForm.valor_custos_extras, true)}
+                      onChange={(e) =>
+                        setMedicaoForm({
+                          ...medicaoForm,
+                          valor_custos_extras: parseBrlMoneyDigitsInput(e.target.value),
+                        })
+                      }
+                      placeholder="0,00"
+                      className="h-8 bg-white pl-9 text-sm tabular-nums"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="valor_outros_soma" className="text-xs">
+                    Outro Valor (R$)
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                      R$
+                    </span>
+                    <Input
+                      id="valor_outros_soma"
+                      type="text"
+                      readOnly
+                      tabIndex={-1}
+                      aria-readonly="true"
+                      value={formatBrlMoneyInputValue(valorAditivosTotal, true)}
+                      className="h-8 cursor-not-allowed bg-muted/60 pl-9 text-sm tabular-nums text-muted-foreground"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <Label htmlFor="valor_descontos" className="text-xs">
+                    Descontos (R$)
+                  </Label>
+                  <div className="relative">
+                    <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                      R$
+                    </span>
+                    <Input
+                      id="valor_descontos"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      value={formatBrlMoneyInputValue(medicaoForm.valor_descontos, true)}
+                      onChange={(e) =>
+                        setMedicaoForm({
+                          ...medicaoForm,
+                          valor_descontos: parseBrlMoneyDigitsInput(e.target.value),
+                        })
+                      }
+                      placeholder="0,00"
+                      className="h-8 bg-white pl-9 text-sm tabular-nums"
+                    />
+                  </div>
                 </div>
               </div>
-              <div>
-                <Label htmlFor="valor_aditivos" className="text-xs">Valor de Aditivos (R$)</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <Input
-                    id="valor_aditivos"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={formatBrlMoneyInputValue(medicaoForm.valor_aditivos, true)}
-                    onChange={(e) =>
-                      setMedicaoForm({
-                        ...medicaoForm,
-                        valor_aditivos: parseBrlMoneyDigitsInput(e.target.value),
-                      })
-                    }
-                    placeholder="0,00"
-                    className="h-8 bg-white pl-9 text-sm tabular-nums"
-                  />
+
+              <div className="mt-4 rounded-lg border border-border bg-muted/15 p-4">
+                <div className="space-y-3">
+                  {linhasAditivos.map((linha) => (
+                    <div
+                      key={linha.id}
+                      className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-3"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <Label htmlFor={`aditivo-desc-${linha.id}`} className="text-xs">
+                          Outro da Descrição
+                        </Label>
+                        <div className="relative mt-1">
+                          <Input
+                            id={`aditivo-desc-${linha.id}`}
+                            value={linha.descricao}
+                            onChange={(e) =>
+                              atualizarLinhaAditivo(linha.id, { descricao: e.target.value })
+                            }
+                            placeholder="Ex.: Aditivos de Manutenção"
+                            className="h-8 bg-white pr-11 text-sm"
+                            autoComplete="off"
+                          />
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="absolute right-0.5 top-1/2 h-7 w-7 -translate-y-1/2 shrink-0 text-muted-foreground hover:text-foreground"
+                            title="Adicionar outra linha de aditivo"
+                            onClick={() => adicionarLinhaAditivoApos(linha.id)}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                      <div className="flex w-full shrink-0 flex-col gap-2 sm:w-44 sm:flex-row sm:items-end">
+                        <div className="min-w-0 flex-1 sm:flex-1">
+                          <Label htmlFor={`aditivo-valor-${linha.id}`} className="text-xs">
+                            Outro Valor (R$)
+                          </Label>
+                          <div className="relative mt-1">
+                            <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
+                              R$
+                            </span>
+                            <Input
+                              id={`aditivo-valor-${linha.id}`}
+                              type="text"
+                              inputMode="numeric"
+                              autoComplete="off"
+                              value={formatBrlMoneyInputValue(linha.valor, true)}
+                              onChange={(e) =>
+                                atualizarLinhaAditivo(linha.id, {
+                                  valor: parseBrlMoneyDigitsInput(e.target.value),
+                                })
+                              }
+                              placeholder="0,00"
+                              className="h-8 bg-white pl-9 text-sm tabular-nums"
+                            />
+                          </div>
+                        </div>
+                        {linhasAditivos.length > 1 && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+                            title="Remover linha"
+                            onClick={() => removerLinhaAditivo(linha.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
-              <div>
-                <Label htmlFor="valor_custos_extras" className="text-xs">Valor de Serviço (R$)</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <Input
-                    id="valor_custos_extras"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={formatBrlMoneyInputValue(medicaoForm.valor_custos_extras, true)}
-                    onChange={(e) =>
-                      setMedicaoForm({
-                        ...medicaoForm,
-                        valor_custos_extras: parseBrlMoneyDigitsInput(e.target.value),
-                      })
-                    }
-                    placeholder="0,00"
-                    className="h-8 bg-white pl-9 text-sm tabular-nums"
-                  />
-                </div>
-              </div>
-              <div>
-                <Label htmlFor="valor_descontos" className="text-xs">Descontos (R$)</Label>
-                <div className="relative">
-                  <span className="pointer-events-none absolute left-2.5 top-1/2 z-10 -translate-y-1/2 text-xs text-muted-foreground select-none">
-                    R$
-                  </span>
-                  <Input
-                    id="valor_descontos"
-                    type="text"
-                    inputMode="numeric"
-                    autoComplete="off"
-                    value={formatBrlMoneyInputValue(medicaoForm.valor_descontos, true)}
-                    onChange={(e) =>
-                      setMedicaoForm({
-                        ...medicaoForm,
-                        valor_descontos: parseBrlMoneyDigitsInput(e.target.value),
-                      })
-                    }
-                    placeholder="0,00"
-                    className="h-8 bg-white pl-9 text-sm tabular-nums"
-                  />
-                </div>
-              </div>
-              </div>
+
+              <p className="mt-3 rounded-md border border-dashed border-muted-foreground/25 bg-muted/30 px-3 py-2 text-xs leading-relaxed text-muted-foreground">
+                Os campos &quot;Outro da Descrição&quot; e &quot;Outro Valor (R$)&quot; servem para incluir
+                qualquer outro tipo de custo na medição. O botão &quot;+&quot; adiciona mais linhas quando
+                necessário. O campo &quot;Outro Valor&quot; acima mostra a soma desses valores.
+              </p>
+
               <div className="mt-4 max-w-md">
-                <Label htmlFor="valor_total_medicao" className="text-xs">Valor Total da Medição</Label>
+                <Label htmlFor="valor_total_medicao" className="text-xs">
+                  Valor Total da Medição
+                </Label>
                 <Input
                   id="valor_total_medicao"
                   value={formatCurrency(
                     medicaoForm.valor_mensal_bruto +
-                    medicaoForm.valor_aditivos +
-                    medicaoForm.valor_custos_extras -
-                    medicaoForm.valor_descontos
+                      valorAditivosTotal +
+                      medicaoForm.valor_custos_extras -
+                      medicaoForm.valor_descontos
                   )}
                   readOnly
                   className="h-9 bg-muted/50 text-sm font-semibold tabular-nums"

@@ -27,7 +27,12 @@ import {
   Plus,
   Edit
 } from "lucide-react"
-import { medicoesMensaisApi, MedicaoMensal, MedicaoDocumento } from "@/lib/api-medicoes-mensais"
+import {
+  medicoesMensaisApi,
+  MedicaoMensal,
+  MedicaoDocumento,
+  MedicaoAditivo,
+} from "@/lib/api-medicoes-mensais"
 import { medicoesUtils, calcularDiasPeriodoEmissao } from "@/lib/medicoes-utils"
 
 type TipoDocumentoMedicaoUpload = MedicaoDocumento["tipo_documento"]
@@ -801,6 +806,12 @@ export default function MedicaoDetalhesPage() {
                 <div>
                   <Label className="text-xs text-gray-500">Valor de Aditivos (R$)</Label>
                   <p className="font-semibold text-green-600">{formatCurrency(medicao.valor_aditivos || 0)}</p>
+                  {(!medicao.aditivos || medicao.aditivos.length === 0) &&
+                    (medicao.valor_aditivos || 0) > 0 && (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Total consolidado (sem linhas detalhadas neste registro).
+                      </p>
+                    )}
                 </div>
                 <div>
                   <Label className="text-xs text-gray-500">Valor de Serviço (R$)</Label>
@@ -811,6 +822,52 @@ export default function MedicaoDetalhesPage() {
                   <p className="font-semibold text-red-600">{formatCurrency(medicao.valor_descontos || 0)}</p>
                 </div>
               </div>
+
+              {medicao.aditivos && medicao.aditivos.length > 0 && (
+                <div className="mt-5 border-t pt-4">
+                  <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    Discriminação dos aditivos
+                  </p>
+                  <div className="space-y-2">
+                    {medicao.aditivos.map((ad: MedicaoAditivo) => {
+                      const ehDesconto = ad.tipo === "desconto"
+                      return (
+                        <div
+                          key={ad.id}
+                          className="flex flex-col gap-1 rounded-lg border bg-gray-50 p-3 sm:flex-row sm:items-center sm:justify-between"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="mb-1 flex flex-wrap items-center gap-2">
+                              <Badge
+                                variant={ehDesconto ? "destructive" : "secondary"}
+                                className={
+                                  ehDesconto
+                                    ? "bg-red-100 text-red-800 hover:bg-red-100"
+                                    : "bg-green-100 text-green-800 hover:bg-green-100"
+                                }
+                              >
+                                {ehDesconto ? "Desconto" : "Adicional"}
+                              </Badge>
+                            </div>
+                            <p className="text-sm font-medium text-gray-900">{ad.descricao}</p>
+                            {ad.observacoes && (
+                              <p className="mt-1 text-xs text-gray-500">{ad.observacoes}</p>
+                            )}
+                          </div>
+                          <p
+                            className={`shrink-0 text-right text-sm font-semibold tabular-nums sm:text-base ${
+                              ehDesconto ? "text-red-600" : "text-green-700"
+                            }`}
+                          >
+                            {ehDesconto ? "− " : "+ "}
+                            {formatCurrency(Math.abs(Number(ad.valor) || 0))}
+                          </p>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
             </CardContent>
           </Card>
 

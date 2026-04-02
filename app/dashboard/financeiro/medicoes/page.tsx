@@ -309,14 +309,18 @@ export default function MedicoesPage() {
         "Obra",
         "Total",
         "Locação",
-        "Serviços / demais",
+        "Aditivos",
+        "Serviço",
+        "Descontos",
         "Status",
         "NF",
       ]
       const linhas = lista.map((m) => {
         const total = Number(m.valor_total) || 0
         const loc = Number(m.valor_mensal_bruto) || 0
-        const servico = Math.max(0, total - loc)
+        const adit = Number(m.valor_aditivos) || 0
+        const serv = Number(m.valor_custos_extras) || 0
+        const desc = Number(m.valor_descontos) || 0
         const nfTexto =
           m.notas_fiscais_numeros && m.notas_fiscais_numeros.length > 0
             ? m.notas_fiscais_numeros.join("; ")
@@ -330,7 +334,9 @@ export default function MedicoesPage() {
           m.obras?.nome || "",
           total.toFixed(2),
           loc.toFixed(2),
-          servico.toFixed(2),
+          adit.toFixed(2),
+          serv.toFixed(2),
+          desc.toFixed(2),
           rotuloStatusMedicao(m.status),
           nfTexto,
         ]
@@ -702,17 +708,19 @@ export default function MedicoesPage() {
               ) : (
                 <>
                   <Table
-                    className="table-fixed min-w-0 [&_td]:px-2 [&_th]:px-2"
-                    wrapperClassName="w-full max-w-full min-w-0"
+                    className="min-w-[72rem] table-fixed [&_td]:px-2 [&_th]:px-2"
+                    wrapperClassName="w-full max-w-full min-w-0 overflow-x-auto"
                   >
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[5.5rem] min-w-0 whitespace-nowrap">Período</TableHead>
                         <TableHead className="min-w-0">Cliente</TableHead>
                         <TableHead className="min-w-0">Obra</TableHead>
-                        <TableHead className="w-[7.25rem] whitespace-nowrap">Total</TableHead>
-                        <TableHead className="w-[7.25rem] whitespace-nowrap">Locação</TableHead>
-                        <TableHead className="w-[7.25rem] whitespace-nowrap">Serviço</TableHead>
+                        <TableHead className="w-[6.75rem] whitespace-nowrap">Total</TableHead>
+                        <TableHead className="w-[6.75rem] whitespace-nowrap">Locação</TableHead>
+                        <TableHead className="w-[6.75rem] whitespace-nowrap">Aditivos</TableHead>
+                        <TableHead className="w-[6.75rem] whitespace-nowrap">Serviço</TableHead>
+                        <TableHead className="w-[6.75rem] whitespace-nowrap">Descontos</TableHead>
                         <TableHead className="w-[9rem] whitespace-nowrap">Status / Faturamento</TableHead>
                         <TableHead className="w-[7.5rem] min-w-0">NF</TableHead>
                         <TableHead className="w-[13rem] min-w-[13rem] whitespace-nowrap text-right">
@@ -758,8 +766,14 @@ export default function MedicoesPage() {
                           <TableCell className="min-w-0 whitespace-nowrap tabular-nums">
                             {formatCurrency(medicao.valor_mensal_bruto || 0)}
                           </TableCell>
+                          <TableCell className="min-w-0 whitespace-nowrap tabular-nums text-green-700">
+                            {formatCurrency(medicao.valor_aditivos || 0)}
+                          </TableCell>
                           <TableCell className="min-w-0 whitespace-nowrap tabular-nums">
-                            {formatCurrency(Math.max(0, (medicao.valor_total || 0) - (medicao.valor_mensal_bruto || 0)))}
+                            {formatCurrency(medicao.valor_custos_extras || 0)}
+                          </TableCell>
+                          <TableCell className="min-w-0 whitespace-nowrap tabular-nums text-red-600">
+                            {formatCurrency(medicao.valor_descontos || 0)}
                           </TableCell>
                           <TableCell className="w-[9rem] min-w-0 whitespace-nowrap">
                             <div className="flex flex-col gap-1">
