@@ -243,6 +243,25 @@ const velocidadeElevacaoJoiOptional = Joi.alternatives()
   .allow(null, '')
   .optional()
 
+/** Tipo de grua: texto livre alinhado ao catálogo `tipos_grua` (sem enum fixo). */
+const tipoGruaNomeJoi = Joi.string().trim().min(1).max(128).messages({
+  'string.min': 'Tipo é obrigatório',
+  'string.max': 'Tipo deve ter no máximo 128 caracteres',
+  'any.required': 'Tipo é obrigatório'
+})
+
+const tipoGruaNomeJoiOptional = Joi.string().trim().min(1).max(128).messages({
+  'string.min': 'Tipo não pode ser vazio',
+  'string.max': 'Tipo deve ter no máximo 128 caracteres'
+})
+
+const tipoGruaCreateSchema = Joi.object({
+  nome: Joi.string().trim().min(1).max(128).required().messages({
+    'string.min': 'Informe o nome do tipo',
+    'string.max': 'Nome deve ter no máximo 128 caracteres'
+  })
+})
+
 // Schema de validação para gruas - baseado nos campos do frontend
 const gruaSchema = Joi.object({
   // Campos obrigatórios (baseados no frontend)
@@ -256,10 +275,7 @@ const gruaSchema = Joi.object({
     'string.min': 'Fabricante é obrigatório',
     'any.required': 'Fabricante é obrigatório'
   }),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').required().messages({
-    'any.only': 'Tipo deve ser: Grua Torre, Grua Torre Auto Estável ou Grua Móvel',
-    'any.required': 'Tipo é obrigatório'
-  }),
+  tipo: tipoGruaNomeJoi.required(),
   lanca: Joi.string().min(1).required().messages({
     'string.min': 'Lança é obrigatória',
     'any.required': 'Lança é obrigatória'
@@ -340,10 +356,7 @@ const gruaInputSchema = Joi.object({
     'string.min': 'Fabricante é obrigatório',
     'any.required': 'Fabricante é obrigatório'
   }),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').required().messages({
-    'any.only': 'Tipo deve ser: Grua Torre, Grua Torre Auto Estável ou Grua Móvel',
-    'any.required': 'Tipo é obrigatório'
-  }),
+  tipo: tipoGruaNomeJoi.required(),
   lanca: Joi.string().min(1).required().messages({
     'string.min': 'Lança é obrigatória',
     'any.required': 'Lança é obrigatória'
@@ -424,7 +437,7 @@ const gruaUpdateSchema = Joi.object({
   capacity: Joi.string().optional(),
   status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').optional(),
   fabricante: Joi.string().min(2).optional(),
-  tipo: Joi.string().valid('Grua Torre', 'Grua Torre Auto Estável', 'Grua Móvel').optional(),
+  tipo: tipoGruaNomeJoiOptional.optional(),
   lanca: Joi.string().allow(null, '').optional(),
   altura_final: Joi.number().min(0).allow(null).optional(),
   ano: Joi.number().integer().min(1900).max(new Date().getFullYear()).allow(null).optional(),
@@ -866,6 +879,102 @@ router.get('/export', async (req, res) => {
     })
   } catch (error) {
     console.error('Erro ao exportar gruas:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * Listar tipos de grua (catálogo para selects e filtros).
+ */
+router.get('/tipos', async (req, res) => {
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('tipos_grua')
+      .select('id, nome, ordem, created_at')
+      .order('ordem', { ascending: true })
+      .order('nome', { ascending: true })
+
+    if (error) {
+      return res.status(500).json({
+        error: 'Erro ao listar tipos de grua',
+        message: error.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: data || []
+    })
+  } catch (error) {
+    console.error('Erro ao listar tipos de grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * Cadastrar novo tipo de grua no catálogo.
+ */
+router.post('/tipos', async (req, res) => {
+  try {
+    const { error: validationError, value } = tipoGruaCreateSchema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true
+    })
+    if (validationError) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: validationError.details.map((d) => d.message)
+      })
+    }
+
+    const nome = value.nome.trim()
+
+    const { data: maxRows, error: maxErr } = await supabaseAdmin
+      .from('tipos_grua')
+      .select('ordem')
+      .order('ordem', { ascending: false })
+      .limit(1)
+
+    if (maxErr) {
+      return res.status(500).json({
+        error: 'Erro ao definir ordem do tipo',
+        message: maxErr.message
+      })
+    }
+
+    const proximaOrdem = (maxRows?.[0]?.ordem ?? 0) + 1
+
+    const { data: criado, error: insertError } = await supabaseAdmin
+      .from('tipos_grua')
+      .insert({ nome, ordem: proximaOrdem })
+      .select('id, nome, ordem, created_at')
+      .single()
+
+    if (insertError) {
+      if (insertError.code === '23505') {
+        return res.status(409).json({
+          error: 'Tipo já cadastrado',
+          message: 'Já existe um tipo com este nome'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao criar tipo de grua',
+        message: insertError.message
+      })
+    }
+
+    res.status(201).json({
+      success: true,
+      data: criado
+    })
+  } catch (error) {
+    console.error('Erro ao criar tipo de grua:', error)
     res.status(500).json({
       error: 'Erro interno do servidor',
       message: error.message

@@ -68,6 +68,14 @@ export interface GruaBackend {
 /** Máximo por página alinhado ao backend (`GET /api/gruas`). */
 export const GRUAS_LIST_MAX_PER_PAGE = 100
 
+/** Registro em `tipos_grua` (catálogo de tipos). */
+export interface TipoGrua {
+  id: string;
+  nome: string;
+  ordem: number;
+  created_at?: string;
+}
+
 export interface GruaFiltros {
   status?: string;
   obra_id?: number;
@@ -150,6 +158,29 @@ export function converterGruaFrontendParaBackend(grua: Grua): GruaBackend {
 // ============================================
 
 export const gruasApi = {
+  /**
+   * Listar tipos de grua cadastrados (para selects e filtros).
+   */
+  listarTiposGrua: async (): Promise<{ success: boolean; data: TipoGrua[] }> => {
+    const response = await api.get('/gruas/tipos');
+    const rows = response.data?.data ?? response.data;
+    return {
+      success: true,
+      data: Array.isArray(rows) ? rows : [],
+    };
+  },
+
+  /**
+   * Cadastrar novo tipo de grua no catálogo.
+   */
+  criarTipoGrua: async (nome: string): Promise<{ success: boolean; data: TipoGrua }> => {
+    const response = await api.post('/gruas/tipos', { nome: nome.trim() });
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  },
+
   /**
    * Listar gruas com filtros opcionais
    */

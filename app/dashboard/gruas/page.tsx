@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, type ReactNode } from "react"
+import { useState, useEffect, useRef, useMemo, type ReactNode } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
   ConeIcon as Crane, 
   Plus, 
@@ -38,7 +38,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { gruasApi, type GruaBackend } from "@/lib/api-gruas"
+import { gruasApi, type GruaBackend, type TipoGrua } from "@/lib/api-gruas"
 import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { ProtectedRoute } from "@/components/protected-route"
@@ -206,6 +206,11 @@ export default function GruasPage() {
   const { loading: updating, startLoading: startUpdating, stopLoading: stopUpdating, setLoading: setUpdating } = useLoading()
   const [deleting, setDeleting] = useState(false)
 
+  const [tiposGrua, setTiposGrua] = useState<TipoGrua[]>([])
+  const [isTipoModalOpen, setIsTipoModalOpen] = useState(false)
+  const [novoTipoNome, setNovoTipoNome] = useState("")
+  const [savingTipo, setSavingTipo] = useState(false)
+
   // Função auxiliar para converter dados do backend para o formato do componente
   const converterGruaBackend = (grua: any): GruaFrontend => {
     // Preservar TODOS os campos do backend primeiro, depois sobrescrever com campos específicos
@@ -294,6 +299,24 @@ export default function GruasPage() {
       stopLoading()
     }
   }
+
+  const carregarTiposGrua = async () => {
+    try {
+      const r = await gruasApi.listarTiposGrua()
+      if (r.success) setTiposGrua(r.data)
+    } catch (e) {
+      console.error(e)
+      toast({
+        title: "Tipos de grua",
+        description: "Não foi possível carregar a lista de tipos.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  useEffect(() => {
+    carregarTiposGrua()
+  }, [])
 
   
   // Carregar gruas quando o componente montar - apenas uma vez
@@ -489,6 +512,63 @@ export default function GruasPage() {
   const handleTipoChange = (value: string) => {
     setGruaFormData(prev => ({ ...prev, tipo: value }))
   }
+
+  const salvarNovoTipoGrua = async () => {
+    const nome = novoTipoNome.trim()
+    if (!nome) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Informe o nome do novo tipo.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      setSavingTipo(true)
+      const r = await gruasApi.criarTipoGrua(nome)
+      await carregarTiposGrua()
+      setGruaFormData((prev) => ({ ...prev, tipo: r.data.nome }))
+      setNovoTipoNome("")
+      setIsTipoModalOpen(false)
+      toast({
+        title: "Tipo adicionado",
+        description: `"${r.data.nome}" está disponível na lista.`,
+      })
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string; error?: string } } }
+      const msg =
+        ax?.response?.data?.message ||
+        ax?.response?.data?.error ||
+        (err instanceof Error ? err.message : null) ||
+        "Tente novamente."
+      toast({
+        title: "Não foi possível salvar",
+        description: msg,
+        variant: "destructive",
+      })
+    } finally {
+      setSavingTipo(false)
+    }
+  }
+
+  const tiposFiltroOpcoes = useMemo(() => {
+    const s = new Set<string>()
+    tiposGrua.forEach((t) => s.add(t.nome))
+    gruas.forEach((g) => {
+      const t = g.tipo
+      if (t && t !== "Não informado") s.add(t)
+    })
+    return Array.from(s).sort((a, b) => a.localeCompare(b, "pt-BR"))
+  }, [tiposGrua, gruas])
+
+  const opcoesTipoFormulario = useMemo(() => {
+    const nomes = new Set(tiposGrua.map((t) => t.nome))
+    const extra =
+      gruaFormData.tipo && !nomes.has(gruaFormData.tipo)
+        ? [{ id: "__legacy__", nome: gruaFormData.tipo, ordem: -1 } as TipoGrua]
+        : []
+    return [...tiposGrua, ...extra]
+  }, [tiposGrua, gruaFormData.tipo])
 
   const handleLancaChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setGruaFormData(prev => ({ ...prev, lanca: e.target.value }))
@@ -822,8 +902,9 @@ export default function GruasPage() {
   }
 
   const handleEditGrua = async (grua: GruaFrontend) => {
+    setIsViewDialogOpen(false)
     setGruaToEdit(grua)
-    
+
     // Buscar dados completos da grua da API para garantir que temos todos os campos técnicos
     try {
       const response = await gruasApi.obterGrua(grua.id)
@@ -1506,11 +1587,11 @@ export default function GruasPage() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="all">Todos os tipos</SelectItem>
-                      <SelectItem value="Grua Torre">Grua Torre</SelectItem>
-                      <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
-                      <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                      <SelectItem value="Guincho">Guincho</SelectItem>
-                      <SelectItem value="Outros">Outros</SelectItem>
+                      {tiposFiltroOpcoes.map((nome) => (
+                        <SelectItem key={nome} value={nome}>
+                          {nome}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1864,22 +1945,37 @@ export default function GruasPage() {
               </div>
               <div>
                 <Label htmlFor="tipo">Tipo *</Label>
-                <Select
-                  value={gruaFormData.tipo}
-                  onValueChange={handleTipoChange}
-                  required
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Grua Torre">Grua Torre</SelectItem>
-                    <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
-                    <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                    <SelectItem value="Guincho">Guincho</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 mt-1.5">
+                  <Select
+                    value={gruaFormData.tipo}
+                    onValueChange={handleTipoChange}
+                    required
+                  >
+                    <SelectTrigger id="tipo" className="flex-1 min-w-0">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcoesTipoFormulario.map((t) => (
+                        <SelectItem key={t.id} value={t.nome}>
+                          {t.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 h-10 w-10"
+                    title="Adicionar tipo de grua"
+                    onClick={() => {
+                      setNovoTipoNome("")
+                      setIsTipoModalOpen(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -2128,6 +2224,53 @@ export default function GruasPage() {
         </DialogContent>
       </Dialog>
 
+      <Dialog open={isTipoModalOpen} onOpenChange={setIsTipoModalOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Novo tipo de grua</DialogTitle>
+            <DialogDescription>
+              O nome será salvo no catálogo e poderá ser selecionado em novos cadastros.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="novo-tipo-nome">Nome do tipo</Label>
+            <Input
+              id="novo-tipo-nome"
+              value={novoTipoNome}
+              onChange={(e) => setNovoTipoNome(e.target.value)}
+              placeholder="Ex: Grua de pórtico"
+              maxLength={128}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  salvarNovoTipoGrua()
+                }
+              }}
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setIsTipoModalOpen(false)}
+              disabled={savingTipo}
+            >
+              Cancelar
+            </Button>
+            <Button type="button" onClick={salvarNovoTipoGrua} disabled={savingTipo}>
+              {savingTipo ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Salvando...
+                </>
+              ) : (
+                "Salvar"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Dialog de Edição de Grua */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
@@ -2173,21 +2316,36 @@ export default function GruasPage() {
               </div>
               <div>
                 <Label htmlFor="edit-tipo">Tipo</Label>
-                <Select
-                  value={gruaFormData.tipo}
-                  onValueChange={handleTipoChange}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Selecione o tipo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Grua Torre">Grua Torre</SelectItem>
-                    <SelectItem value="Grua Torre Auto Estável">Grua Torre Auto Estável</SelectItem>
-                    <SelectItem value="Grua Móvel">Grua Móvel</SelectItem>
-                    <SelectItem value="Guincho">Guincho</SelectItem>
-                    <SelectItem value="Outros">Outros</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="flex gap-2 mt-1.5">
+                  <Select
+                    value={gruaFormData.tipo}
+                    onValueChange={handleTipoChange}
+                  >
+                    <SelectTrigger id="edit-tipo" className="flex-1 min-w-0">
+                      <SelectValue placeholder="Selecione o tipo" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcoesTipoFormulario.map((t) => (
+                        <SelectItem key={t.id} value={t.nome}>
+                          {t.nome}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="shrink-0 h-10 w-10"
+                    title="Adicionar tipo de grua"
+                    onClick={() => {
+                      setNovoTipoNome("")
+                      setIsTipoModalOpen(true)
+                    }}
+                  >
+                    <Plus className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
 
