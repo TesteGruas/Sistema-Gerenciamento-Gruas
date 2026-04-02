@@ -1800,8 +1800,13 @@ const parseXMLNFSe = (xmlBuffer) => {
     const municipioIncidencia = servico['ns2:MunicipioIncidencia'] || servico.MunicipioIncidencia || '';
     const exigibilidadeISS = servico['ns2:ExigibilidadeISS'] || servico.ExigibilidadeISS || '';
 
-    // Tomador
-    const tomador = infDeclaracao['ns2:TomadorServico'] || infDeclaracao.TomadorServico || {};
+    // Tomador (ABRASF: TomadorServico em alguns layouts; Tomador em 2.03+)
+    const tomador =
+      infDeclaracao['ns2:TomadorServico'] ||
+      infDeclaracao.TomadorServico ||
+      infDeclaracao['ns2:Tomador'] ||
+      infDeclaracao.Tomador ||
+      {};
     const tomadorIdentificacao = tomador['ns2:IdentificacaoTomador'] || tomador.IdentificacaoTomador || {};
     const tomadorCpfCnpj = tomadorIdentificacao['ns2:CpfCnpj'] || tomadorIdentificacao.CpfCnpj || {};
     const tomadorCnpj = tomadorCpfCnpj['ns2:Cnpj'] || tomadorCpfCnpj.Cnpj || tomadorCpfCnpj.CPF || '';

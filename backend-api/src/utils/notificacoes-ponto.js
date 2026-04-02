@@ -1,7 +1,7 @@
 import { supabaseAdmin } from '../config/supabase.js';
 import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
 import { sendEmail, getActiveTemplateRow, replaceVariables } from '../services/email.service.js';
-import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
+import { enviarMensagemWebhook, renderWhatsAppMessage } from '../services/whatsapp-service.js';
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
 import { buscarSupervisorPorObra } from './aprovacoes-helpers.js';
@@ -557,25 +557,39 @@ async function enviarPacoteNotificacaoResponsavelPonto({
   }
 
   if (telefoneNormWhatsapp) {
-    void withTimeout(
-      enviarMensagemWebhook(
-        telefoneNormWhatsapp,
-        mensagemWhatsAppResponsavel({
-          funcionarioNome: funcionario.nome || 'Funcionário',
-          obraNome,
-          data: registro.data,
-          entrada: registro.entrada,
-          saida: registro.saida,
-          horasTrabalhadas: registro.horas_trabalhadas,
-          horasExtras: registro.horas_extras,
-          link: linkAssinar
-        }),
-        linkAssinar,
-        { tipo: 'ponto_responsavel', destinatario_nome: nome }
-      ),
-      MS_TIMEOUT_WHATSAPP,
-      'whatsapp'
-    )
+    void renderWhatsAppMessage({
+      tipo: 'ponto_responsavel',
+      fallbackText: mensagemWhatsAppResponsavel({
+        funcionarioNome: funcionario.nome || 'Funcionário',
+        obraNome,
+        data: registro.data,
+        entrada: registro.entrada,
+        saida: registro.saida,
+        horasTrabalhadas: registro.horas_trabalhadas,
+        horasExtras: registro.horas_extras,
+        link: linkAssinar
+      }),
+      vars: {
+        funcionario_nome: funcionario.nome || 'Funcionário',
+        obra_nome: obraNome || 'N/A',
+        data_formatada: formatarData(registro.data),
+        entrada: registro.entrada || '-',
+        saida: registro.saida || '-',
+        horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
+        horas_extras: formatarHoras(registro.horas_extras),
+        link_assinar: linkAssinar
+      }
+    })
+      .then((texto) =>
+        withTimeout(
+          enviarMensagemWebhook(telefoneNormWhatsapp, texto, linkAssinar, {
+            tipo: 'ponto_responsavel',
+            destinatario_nome: nome
+          }),
+          MS_TIMEOUT_WHATSAPP,
+          'whatsapp'
+        )
+      )
       .then((r) =>
         console.log(
           '[notificacoes-ponto] WhatsApp responsável concluído (background):',
@@ -718,15 +732,28 @@ async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, o
   }
 
   if (telNorm) {
-    const msg = `✅ *Ponto registrado*\n\n${nomeFunc ? `Olá ${nomeFunc}! ` : ''}Seu dia ${formatarData(registro.data)} na obra *${obraNome || 'N/A'}* foi enviado para assinatura do responsável.\n${linkEspelho}`;
-    void withTimeout(
-      enviarMensagemWebhook(telNorm, msg, linkEspelho, {
-        tipo: 'ponto_confirmacao_funcionario',
-        destinatario_nome: nomeFunc || 'Funcionário'
-      }),
-      MS_TIMEOUT_WHATSAPP,
-      'whatsapp_funcionario'
-    )
+    const saudacao = nomeFunc ? `Olá ${nomeFunc}! ` : '';
+    void renderWhatsAppMessage({
+      tipo: 'ponto_confirmacao_funcionario',
+      fallbackText: `✅ *Ponto registrado*\n\n${saudacao}Seu dia ${formatarData(registro.data)} na obra *${obraNome || 'N/A'}* foi enviado para assinatura do responsável.\n${linkEspelho}`,
+      vars: {
+        saudacao,
+        funcionario_nome: nomeFunc || '',
+        data_formatada: formatarData(registro.data),
+        obra_nome: obraNome || 'N/A',
+        link_espelho: linkEspelho
+      }
+    })
+      .then((texto) =>
+        withTimeout(
+          enviarMensagemWebhook(telNorm, texto, linkEspelho, {
+            tipo: 'ponto_confirmacao_funcionario',
+            destinatario_nome: nomeFunc || 'Funcionário'
+          }),
+          MS_TIMEOUT_WHATSAPP,
+          'whatsapp_funcionario'
+        )
+      )
       .then((r) =>
         console.log(
           '[notificacoes-ponto] WhatsApp funcionário (confirmação) concluído:',
@@ -1000,9 +1027,17 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
 
         const telefoneResponsavel = normalizarTelefoneWhatsapp(resp.telefone);
         if (telefoneResponsavel) {
+          const textoPend = await renderWhatsAppMessage({
+            tipo: 'ponto_pendente_generico',
+            fallbackText: `📋 *Pontos pendentes de aprovação*\n\nHá registros aguardando sua assinatura na obra *${obraNome}*.\nAcesse: ${linkAprovacoes}`,
+            vars: {
+              obra_nome: obraNome,
+              link_aprovacoes: linkAprovacoes
+            }
+          });
           await enviarMensagemWebhook(
             telefoneResponsavel,
-            `📋 *Pontos pendentes de aprovação*\n\nHá registros aguardando sua assinatura na obra *${obraNome}*.\nAcesse: ${linkAprovacoes}`,
+            textoPend,
             linkAprovacoes,
             { tipo: 'ponto_pendente_generico', destinatario_nome: resp.nome }
           ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp pendência genérica:', e.message));
@@ -1129,13 +1164,22 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
 
     // 2) WhatsApp
     if (telefoneFunc) {
-      await enviarMensagemWebhook(
-        telefoneFunc,
-        mensagemWhatsAppFuncionario({
+      const textoWa = await renderWhatsAppMessage({
+        tipo: 'ponto_funcionario_assinatura',
+        fallbackText: mensagemWhatsAppFuncionario({
           responsavelNome,
           data: registro.data,
           link: linkAssinar
         }),
+        vars: {
+          responsavel_nome: responsavelNome,
+          data_formatada: formatarData(registro.data),
+          link_assinar: linkAssinar
+        }
+      });
+      await enviarMensagemWebhook(
+        telefoneFunc,
+        textoWa,
         linkAssinar,
         { tipo: 'ponto_funcionario', destinatario_nome: funcData?.nome || 'Funcionário' }
       ).catch(e => console.error('[notificacoes-ponto] Erro WhatsApp funcionário:', e.message));
@@ -1294,9 +1338,24 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
 
     // 2) WhatsApp (número no formato esperado pela Evolution / webhook)
     if (telefoneNorm) {
+      const textoRej = await renderWhatsAppMessage({
+        tipo: 'ponto_rejeicao',
+        fallbackText: mensagemWhatsAppRejeicao({
+          responsavelNome,
+          data: registro.data,
+          comentario: comentario || 'Sem comentário',
+          link: linkCorrigir
+        }),
+        vars: {
+          responsavel_nome: responsavelNome,
+          data_formatada: formatarData(registro.data),
+          comentario: comentario || 'Sem comentário',
+          link_corrigir: linkCorrigir
+        }
+      });
       await enviarMensagemWebhook(
         telefoneNorm,
-        mensagemWhatsAppRejeicao({ responsavelNome, data: registro.data, comentario: comentario || 'Sem comentário', link: linkCorrigir }),
+        textoRej,
         linkCorrigir,
         { tipo: 'ponto_rejeicao', destinatario_nome: funcData?.nome || 'Funcionário' }
       )

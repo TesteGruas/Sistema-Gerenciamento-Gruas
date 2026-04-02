@@ -268,7 +268,7 @@ function replaceWhatsAppTemplateVars(template, data = {}) {
   return out.replace(/\|/g, '\n');
 }
 
-async function renderWhatsAppMessage({ tipo, fallbackText, vars = {} }) {
+export async function renderWhatsAppMessage({ tipo, fallbackText, vars = {} }) {
   const tpl = await getActiveWhatsAppTemplateRow(tipo);
   if (!tpl?.texto_template) return fallbackText;
   return replaceWhatsAppTemplateVars(tpl.texto_template, vars);

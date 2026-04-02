@@ -2259,6 +2259,41 @@ export default function NotasFiscaisPage() {
                parent.getElementsByTagName(tagName)[0] || null
       }
 
+      /** CNPJ/CPF em NFS-e ABRASF: geralmente em IdentificacaoTomador/CpfCnpj/Cnpj ou Prestador/CpfCnpj/Cnpj */
+      const getDocFromNfseParty = (partyEl: Element | null): string => {
+        if (!partyEl) return ''
+        const direto =
+          getTagValue(partyEl, 'CNPJ') ||
+          getTagValue(partyEl, 'CPF') ||
+          getTagValue(partyEl, 'Cnpj') ||
+          getTagValue(partyEl, 'Cpf')
+        if (direto) return direto.replace(/\D/g, '')
+        const idTom = getTagElement(partyEl, 'IdentificacaoTomador')
+        const idPrest = getTagElement(partyEl, 'IdentificacaoPrestador')
+        const idEl = idTom || idPrest
+        if (idEl) {
+          const cpfCnpj = getTagElement(idEl, 'CpfCnpj')
+          if (cpfCnpj) {
+            const nested =
+              getTagValue(cpfCnpj, 'CNPJ') ||
+              getTagValue(cpfCnpj, 'CPF') ||
+              getTagValue(cpfCnpj, 'Cnpj') ||
+              getTagValue(cpfCnpj, 'Cpf')
+            if (nested) return nested.replace(/\D/g, '')
+          }
+        }
+        const cpfCnpjRoot = getTagElement(partyEl, 'CpfCnpj')
+        if (cpfCnpjRoot) {
+          const nested =
+            getTagValue(cpfCnpjRoot, 'CNPJ') ||
+            getTagValue(cpfCnpjRoot, 'CPF') ||
+            getTagValue(cpfCnpjRoot, 'Cnpj') ||
+            getTagValue(cpfCnpjRoot, 'Cpf')
+          if (nested) return nested.replace(/\D/g, '')
+        }
+        return ''
+      }
+
       const normalizeImportedText = (value: string): string => {
         if (!value) return value
 
@@ -2300,8 +2335,28 @@ export default function NotasFiscaisPage() {
         const declaracao = getTagElement(infNfse, 'InfDeclaracaoPrestacaoServico')
         const servico = declaracao ? getTagElement(declaracao, 'Servico') : null
         const valoresServico = servico ? getTagElement(servico, 'Valores') : null
-        const tomador = declaracao ? getTagElement(declaracao, 'TomadorServico') : null
+        const tomador =
+          declaracao
+            ? getTagElement(declaracao, 'TomadorServico') || getTagElement(declaracao, 'Tomador')
+            : null
         const prestador = declaracao ? getTagElement(declaracao, 'Prestador') : null
+
+        const valoresNfseEl = getTagElement(infNfse, 'ValoresNfse')
+        const valorLiquidoNfse = parseFloat(valoresNfseEl ? getTagValue(valoresNfseEl, 'ValorLiquidoNfse') : '0') || 0
+        const notaNacional = getTagElement(infNfse, 'NotaNacional')
+        const ibscbsNacional = notaNacional ? getTagElement(notaNacional, 'IBSCBS') : null
+        const valoresNacional = ibscbsNacional ? getTagElement(ibscbsNacional, 'valores') : null
+        const totCibs = ibscbsNacional ? getTagElement(ibscbsNacional, 'totCIBS') : null
+        const vTotNfXml = parseFloat(totCibs ? getTagValue(totCibs, 'vTotNF') : '0') || 0
+        const vCalcReeRepRes = parseFloat(valoresNacional ? getTagValue(valoresNacional, 'vCalcReeRepRes') : '0') || 0
+        const documentosEl = servico ? getTagElement(servico, 'documentos') : null
+        const docOutroEl = documentosEl
+          ? getTagElement(documentosEl, 'docOutro')
+          : servico
+            ? getTagElement(servico, 'docOutro')
+            : null
+        const vlrReeRepResXml =
+          parseFloat(documentosEl ? getTagValue(documentosEl, 'vlrReeRepRes') : '0') || 0
 
         const numeroNfse = getTagValue(infNfse, 'Numero')
         const dataEmissaoNfseRaw = getTagValue(infNfse, 'DataEmissao')
@@ -2309,12 +2364,26 @@ export default function NotasFiscaisPage() {
           ? dataEmissaoNfseRaw.split('T')[0]
           : new Date().toISOString().split('T')[0]
         const valorServicos = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorServicos') : '0') || 0
+        /** Muitos XMLs ABRASF 2.x deixam ValorServicos em 0 e o total em ValorLiquidoNfse / Nota Nacional / reembolso */
+        const valorTotalCalculado =
+          valorServicos > 0
+            ? valorServicos
+            : valorLiquidoNfse ||
+              vTotNfXml ||
+              vCalcReeRepRes ||
+              vlrReeRepResXml ||
+              0
         const valorIss = parseFloat(
           (valoresServico ? getTagValue(valoresServico, 'ValorIss') : '') || getTagValue(infNfse, 'ValorIss')
         ) || 0
         const valorInss = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorInss') : '0') || 0
         const codigoVerificacao = getTagValue(infNfse, 'CodigoVerificacao')
         const discriminacao = normalizeImportedText(servico ? getTagValue(servico, 'Discriminacao') : '')
+        const xDocReembolso = docOutroEl ? normalizeImportedText(getTagValue(docOutroEl, 'xDoc')) : ''
+        const descricaoItem =
+          discriminacao && !/^nota fiscal sem item de servi[cç]o\s*$/i.test(discriminacao.trim())
+            ? discriminacao
+            : xDocReembolso || discriminacao || 'Serviço'
         const itemListaServico = servico ? getTagValue(servico, 'ItemListaServico') : ''
 
         const tipoNotaSelecionado: 'saida' | 'entrada' = (formData.tipo || activeTab) as 'saida' | 'entrada'
@@ -2323,22 +2392,17 @@ export default function NotasFiscaisPage() {
           serie: 'NFS-e',
           data_emissao: dataEmissaoNfse,
           data_vencimento: '',
-          valor_total: valorServicos,
+          valor_total: valorTotalCalculado,
           tipo: tipoNotaSelecionado,
           status: 'pendente',
           tipo_nota: 'nf_servico',
           eletronica: true,
           chave_acesso: codigoVerificacao || undefined,
-          observacoes: normalizeImportedText(discriminacao)
+          observacoes: [normalizeImportedText(discriminacao), xDocReembolso].filter(Boolean).join('\n\n') || undefined
         }
 
         if (tipoNotaSelecionado === 'saida' && tomador) {
-          const docTomador = (
-            getTagValue(tomador, 'CNPJ') ||
-            getTagValue(tomador, 'CPF') ||
-            getTagValue(tomador, 'Cnpj') ||
-            getTagValue(tomador, 'Cpf')
-          ).replace(/\D/g, '')
+          const docTomador = getDocFromNfseParty(tomador)
 
           if (docTomador) {
             const clienteEncontrado = clientes.find((c) => (c.cnpj || '').replace(/\D/g, '') === docTomador)
@@ -2347,12 +2411,7 @@ export default function NotasFiscaisPage() {
             }
           }
         } else if (tipoNotaSelecionado === 'entrada' && prestador) {
-          const docPrestador = (
-            getTagValue(prestador, 'CNPJ') ||
-            getTagValue(prestador, 'CPF') ||
-            getTagValue(prestador, 'Cnpj') ||
-            getTagValue(prestador, 'Cpf')
-          ).replace(/\D/g, '')
+          const docPrestador = getDocFromNfseParty(prestador)
 
           if (docPrestador) {
             const fornecedorEncontrado = fornecedores.find((f) => (f.cnpj || '').replace(/\D/g, '') === docPrestador)
@@ -2365,11 +2424,11 @@ export default function NotasFiscaisPage() {
         const itemNfse: NotaFiscalItem = calcularImpostos({
           codigo_produto: itemListaServico || 'SERVICO',
           ncm_sh: '',
-          descricao: normalizeImportedText(discriminacao) || 'Serviço',
+          descricao: descricaoItem,
           unidade: 'SV',
           quantidade: 1,
-          preco_unitario: valorServicos,
-          preco_total: valorServicos,
+          preco_unitario: valorTotalCalculado,
+          preco_total: valorTotalCalculado,
           cfop: '',
           csosn: '',
           base_calculo_icms: undefined,
@@ -2380,7 +2439,7 @@ export default function NotasFiscaisPage() {
           valor_issqn: valorIss,
           valor_inss: valorInss,
           valor_cbs: 0,
-          valor_liquido: valorServicos - valorIss - valorInss,
+          valor_liquido: valorTotalCalculado - valorIss - valorInss,
           impostos_dinamicos: []
         })
 
@@ -2389,7 +2448,7 @@ export default function NotasFiscaisPage() {
 
         toast({
           title: "XML NFS-e importado com sucesso",
-          description: `Dados extraídos: NFS-e ${dadosNfse.numero_nf}. Valor: R$ ${valorServicos.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
+          description: `Dados extraídos: NFS-e ${dadosNfse.numero_nf}. Valor: R$ ${valorTotalCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
         })
 
         return
@@ -2640,9 +2699,6 @@ export default function NotasFiscaisPage() {
           }
         }
 
-        const totalImpostosItem = vICMS + vIPI + vPIS + vCOFINS
-        const totalDinamicos = impostosDinamicos.reduce((s, imp) => s + (imp.valor_calculado || 0), 0)
-
         const item: NotaFiscalItem = {
           codigo_produto: getTagValue(prod, 'cProd'),
           ncm_sh: getTagValue(prod, 'NCM'),
@@ -2661,11 +2717,18 @@ export default function NotasFiscaisPage() {
           valor_issqn: 0,
           valor_inss: 0,
           valor_cbs: 0,
-          valor_liquido: vProd - totalImpostosItem - totalDinamicos,
+          valor_liquido: 0,
           impostos_dinamicos: impostosDinamicos
         }
 
-        itensXML.push(calcularImpostos(item))
+        const itemCalculado = calcularImpostos(item)
+        /**
+         * NF-e: vNF e vProd refletem o valor da mercadoria; tributos (ICMS, PIS, COFINS etc.) vêm discriminados.
+         * Não reduzir valor_liquido pela soma dos tributos — isso gerava linha ~2681 quando vNF=3091 (ex.: compra interestadual),
+         * divergindo do total da nota e da expectativa do cliente.
+         */
+        itemCalculado.valor_liquido = itemCalculado.preco_total
+        itensXML.push(itemCalculado)
       }
 
       if (itensXML.length > 0) {
