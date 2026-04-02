@@ -843,19 +843,16 @@ function getDefaultMedicaoEnviadaTemplateHtml() {
               <p style="margin:0 0 8px;font-size:13px;font-weight:600;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:8px;">Checklist de documentos</p>
               <div style="margin-bottom:16px;">{{documentos_resumo_html}}</div>
 
-              <table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px auto 0;">
-                <tr>
-                  <td align="center" style="border-radius:8px;background:#2563eb;">
-                    <a href="{{link_pdf}}" style="display:inline-block;padding:12px 28px;font-size:14px;font-weight:600;color:#ffffff !important;text-decoration:none;">Abrir PDF da medição</a>
-                  </td>
-                </tr>
-              </table>
-              <p style="margin:16px 0 0;font-size:11px;color:#6b7280;line-height:1.4;">Se o botão não abrir, copie e cole o link no navegador:<br/><a href="{{link_pdf}}" style="color:#2563eb;word-break:break-all;">{{link_pdf}}</a></p>
+              <div style="background:#f8f9fa;padding:14px;border-left:4px solid #007bff;margin:16px 0;">
+                <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#333;">PDF público da medição</p>
+                <p style="margin:0 0 8px;font-size:12px;color:#555;">Copie o endereço abaixo e abra no <strong>navegador</strong>. Links em e-mail costumam não abrir o app PWA corretamente.</p>
+                <p style="margin:0;font-size:11px;word-break:break-all;font-family:Consolas,monospace;color:#111;">{{link_pdf}}</p>
+              </div>
             </td>
           </tr>
           <tr>
             <td style="padding:16px 24px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;">
-              E-mail automático — {{empresa}}
+              E-mail automático — {{empresa}} · © {{ano}}
             </td>
           </tr>
         </table>
@@ -924,6 +921,7 @@ function buildMedicaoEmailVars({ medicao, linkPdfPublico, cliente, empresaNome, 
     total_dias_emissao,
     link_pdf: linkPdfPublico,
     empresa: escapeHtmlMedicao(empresa),
+    ano: String(new Date().getFullYear()),
     historico_status_html,
     documentos_resumo_html,
     bloco_comercial_html

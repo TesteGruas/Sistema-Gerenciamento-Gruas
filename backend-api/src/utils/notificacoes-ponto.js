@@ -9,6 +9,15 @@ import { validarTelefoneWhatsappBrasil, normalizarTelefoneBrasilParaWhatsApp } f
 
 const FRONTEND_URL = () => getPublicFrontendUrl();
 
+function getEmpresaNomeEmail() {
+  const v = process.env.EMAIL_EMPRESA_NOME || process.env.APP_NAME;
+  return typeof v === 'string' && v.trim() ? v.trim() : 'Sistema de Gerenciamento de Gruas';
+}
+
+function getAnoAtualEmail() {
+  return String(new Date().getFullYear());
+}
+
 /** Links absolutos para e-mail / WhatsApp (devem abrir fora do app). */
 function urlPwaAbs(path) {
   const base = String(FRONTEND_URL() || '').replace(/\/+$/, '');
@@ -155,13 +164,9 @@ function templateEmailResponsavel({ funcionarioNome, funcionarioCargo, obraNome,
             </td>
           </tr>
         </table>
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr><td align="center">
-            <a href="${linkAssinar}" style="display:inline-block;padding:14px 32px;background:#2563eb;color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-              Assinar Agora
-            </a>
-          </td></tr>
-        </table>
+        <div style="padding:14px;background:#e7f1ff;border-radius:8px;font-size:14px;color:#334155;text-align:center;line-height:1.5;">
+          <strong>Próximo passo:</strong> abra o aplicativo instalado ou o sistema no navegador e acesse a área de aprovação de ponto. Links em e-mail costumam não abrir o PWA corretamente.
+        </div>
       </td></tr>
       <tr><td style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
         <p style="margin:0;font-size:12px;color:#94a3b8;">Sistema de Gerenciamento de Gruas</p>
@@ -214,13 +219,9 @@ function templateEmailFuncionario({ responsavelNome, data, horasTrabalhadas, hor
         <p style="font-size:14px;color:#475569;text-align:center;margin-bottom:20px;">
           Acesse o app e assine também para validar o seu registro.
         </p>
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr><td align="center">
-            <a href="${linkAssinar}" style="display:inline-block;padding:14px 32px;background:#16a34a;color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-              Assinar no App
-            </a>
-          </td></tr>
-        </table>
+        <div style="padding:14px;background:#e7f1ff;border-radius:8px;font-size:14px;color:#334155;text-align:center;">
+          Falta a sua assinatura: abra o <strong>aplicativo</strong> ou o sistema no <strong>navegador</strong>. Links em e-mail costumam não abrir o PWA corretamente.
+        </div>
       </td></tr>
       <tr><td style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
         <p style="margin:0;font-size:12px;color:#94a3b8;">Sistema de Gerenciamento de Gruas</p>
@@ -318,13 +319,9 @@ function templateEmailRejeicao({ responsavelNome, comentario, data, entrada, sai
         <p style="font-size:14px;color:#475569;text-align:center;margin-bottom:20px;">
           Acesse o app para corrigir os horários e reenviar para aprovação.
         </p>
-        <table width="100%" cellpadding="0" cellspacing="0">
-          <tr><td align="center">
-            <a href="${linkCorrigir}" style="display:inline-block;padding:14px 32px;background:#dc2626;color:#fff;text-decoration:none;border-radius:8px;font-size:16px;font-weight:600;">
-              Editar Horas
-            </a>
-          </td></tr>
-        </table>
+        <div style="padding:14px;background:#fef2f2;border-left:4px solid #dc2626;border-radius:6px;font-size:14px;color:#334155;text-align:center;">
+          Corrija os horários no <strong>aplicativo</strong> ou no <strong>navegador</strong>. Links em e-mail costumam não abrir o PWA corretamente.
+        </div>
       </td></tr>
       <tr><td style="padding:16px 24px;background:#f8fafc;border-top:1px solid #e2e8f0;text-align:center;">
         <p style="margin:0;font-size:12px;color:#94a3b8;">Sistema de Gerenciamento de Gruas</p>
@@ -532,7 +529,9 @@ async function enviarPacoteNotificacaoResponsavelPonto({
           saida: registro.saida || '-',
           horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
           horas_extras: formatarHoras(registro.horas_extras),
-          link_assinar: linkAssinar
+          link_assinar: linkAssinar,
+          empresa: getEmpresaNomeEmail(),
+          ano: getAnoAtualEmail()
         },
         buildHtml: () =>
           templateEmailResponsavel({
@@ -1016,12 +1015,16 @@ export async function notificarResponsaveisObraPontosPendentes(obraId) {
             vars: {
               responsavel_nome: resp.nome || 'responsável',
               obra_nome: obraNome,
-              link_aprovacoes: linkAprovacoes
+              link_aprovacoes: linkAprovacoes,
+              empresa: getEmpresaNomeEmail(),
+              ano: getAnoAtualEmail()
             },
             buildHtml: () =>
-              `<p>Olá ${resp.nome || 'responsável'},</p>
-                   <p>Existem registros de ponto pendentes de aprovação na obra <strong>${obraNome}</strong>.</p>
-                   <p><a href="${linkAprovacoes}">Acessar aprovações</a></p>`
+              `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+                <p>Olá ${resp.nome || 'responsável'},</p>
+                <p>Existem registros de ponto pendentes de aprovação na obra <strong>${obraNome}</strong>.</p>
+                <p style="background:#fff3cd;padding:12px;border-left:4px solid #ffc107;">Acesse o aplicativo instalado ou o sistema no navegador para revisar. Links de e-mail costumam não abrir o PWA corretamente.</p>
+              </div>`
           }).catch(e => console.error('[notificacoes-ponto] Erro email pendência genérica:', e.message));
         }
 
@@ -1149,7 +1152,9 @@ export async function notificarFuncionarioPontoAssinado(registro, funcionario, r
           data_formatada: formatarData(registro.data),
           horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
           horas_extras: formatarHoras(registro.horas_extras),
-          link_assinar: linkAssinar
+          link_assinar: linkAssinar,
+          empresa: getEmpresaNomeEmail(),
+          ano: getAnoAtualEmail()
         },
         buildHtml: () =>
           templateEmailFuncionario({
@@ -1314,7 +1319,9 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
           saida: registro.saida || '-',
           horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
           horas_extras: formatarHoras(registro.horas_extras),
-          link_corrigir: linkCorrigir
+          link_corrigir: linkCorrigir,
+          empresa: getEmpresaNomeEmail(),
+          ano: getAnoAtualEmail()
         },
         buildHtml: () =>
           templateEmailRejeicao({
