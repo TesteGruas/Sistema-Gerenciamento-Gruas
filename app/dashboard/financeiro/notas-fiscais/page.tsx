@@ -2320,7 +2320,10 @@ export default function NotasFiscaisPage() {
 
       // Verificar se é um XML de NFe/NFS-e válido
       const infNFe = getTagElement(xmlDoc, 'infNFe')
-      const infNfse = getTagElement(xmlDoc, 'InfNfse')
+      const infNfse =
+        getTagElement(xmlDoc, 'InfNfse') ||
+        getTagElement(xmlDoc, 'infNFSe') ||
+        getTagElement(xmlDoc, 'infNfse')
       if (!infNFe && !infNfse) {
         toast({
           title: "XML inválido",
@@ -2330,66 +2333,143 @@ export default function NotasFiscaisPage() {
         return
       }
 
-      // Branch NFS-e (serviços)
+      // Branch NFS-e (serviços): ABRASF (InfNfse) ou NFS-e Nacional (infNFSe + DPS/infDPS)
       if (!infNFe && infNfse) {
-        const declaracao = getTagElement(infNfse, 'InfDeclaracaoPrestacaoServico')
-        const servico = declaracao ? getTagElement(declaracao, 'Servico') : null
-        const valoresServico = servico ? getTagElement(servico, 'Valores') : null
-        const tomador =
-          declaracao
-            ? getTagElement(declaracao, 'TomadorServico') || getTagElement(declaracao, 'Tomador')
-            : null
-        const prestador = declaracao ? getTagElement(declaracao, 'Prestador') : null
+        const dpsWrapper = getTagElement(infNfse, 'DPS')
+        const infDps = dpsWrapper ? getTagElement(dpsWrapper, 'infDPS') : null
 
-        const valoresNfseEl = getTagElement(infNfse, 'ValoresNfse')
-        const valorLiquidoNfse = parseFloat(valoresNfseEl ? getTagValue(valoresNfseEl, 'ValorLiquidoNfse') : '0') || 0
-        const notaNacional = getTagElement(infNfse, 'NotaNacional')
-        const ibscbsNacional = notaNacional ? getTagElement(notaNacional, 'IBSCBS') : null
-        const valoresNacional = ibscbsNacional ? getTagElement(ibscbsNacional, 'valores') : null
-        const totCibs = ibscbsNacional ? getTagElement(ibscbsNacional, 'totCIBS') : null
-        const vTotNfXml = parseFloat(totCibs ? getTagValue(totCibs, 'vTotNF') : '0') || 0
-        const vCalcReeRepRes = parseFloat(valoresNacional ? getTagValue(valoresNacional, 'vCalcReeRepRes') : '0') || 0
-        const documentosEl = servico ? getTagElement(servico, 'documentos') : null
-        const docOutroEl = documentosEl
-          ? getTagElement(documentosEl, 'docOutro')
-          : servico
-            ? getTagElement(servico, 'docOutro')
-            : null
-        const vlrReeRepResXml =
-          parseFloat(documentosEl ? getTagValue(documentosEl, 'vlrReeRepRes') : '0') || 0
+        let prestador: Element | null = null
+        let tomador: Element | null = null
+        let numeroNfse = ''
+        let dataEmissaoNfse = ''
+        let valorTotalCalculado = 0
+        let valorIss = 0
+        let valorInss = 0
+        let codigoVerificacao = ''
+        let chaveAcessoNfse: string | undefined
+        let discriminacao = ''
+        let xDocReembolso = ''
+        let itemListaServico = ''
+        let serieNfse = 'NFS-e'
+        let infoComplObs = ''
 
-        const numeroNfse = getTagValue(infNfse, 'Numero')
-        const dataEmissaoNfseRaw = getTagValue(infNfse, 'DataEmissao')
-        const dataEmissaoNfse = dataEmissaoNfseRaw
-          ? dataEmissaoNfseRaw.split('T')[0]
-          : new Date().toISOString().split('T')[0]
-        const valorServicos = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorServicos') : '0') || 0
-        /** Muitos XMLs ABRASF 2.x deixam ValorServicos em 0 e o total em ValorLiquidoNfse / Nota Nacional / reembolso */
-        const valorTotalCalculado =
-          valorServicos > 0
-            ? valorServicos
-            : valorLiquidoNfse ||
-              vTotNfXml ||
-              vCalcReeRepRes ||
-              vlrReeRepResXml ||
-              0
-        const valorIss = parseFloat(
-          (valoresServico ? getTagValue(valoresServico, 'ValorIss') : '') || getTagValue(infNfse, 'ValorIss')
-        ) || 0
-        const valorInss = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorInss') : '0') || 0
-        const codigoVerificacao = getTagValue(infNfse, 'CodigoVerificacao')
-        const discriminacao = normalizeImportedText(servico ? getTagValue(servico, 'Discriminacao') : '')
-        const xDocReembolso = docOutroEl ? normalizeImportedText(getTagValue(docOutroEl, 'xDoc')) : ''
+        if (infDps) {
+          prestador = getTagElement(infDps, 'prest')
+          tomador = getTagElement(infDps, 'toma')
+          serieNfse = getTagValue(infDps, 'serie') || 'NFS-e'
+
+          const valoresRaiz = getTagElement(infNfse, 'valores')
+          const vLiqRaiz = valoresRaiz ? parseFloat(getTagValue(valoresRaiz, 'vLiq')) : 0
+
+          const ibsRoot = getTagElement(infNfse, 'IBSCBS')
+          const valoresIbsRoot = ibsRoot ? getTagElement(ibsRoot, 'valores') : null
+          const totCibsRoot = ibsRoot ? getTagElement(ibsRoot, 'totCIBS') : null
+          const vTotNfXmlRoot = parseFloat(totCibsRoot ? getTagValue(totCibsRoot, 'vTotNF') : '0') || 0
+          const vCalcReeRepResRoot =
+            parseFloat(valoresIbsRoot ? getTagValue(valoresIbsRoot, 'vCalcReeRepRes') : '0') || 0
+
+          const serv = getTagElement(infDps, 'serv')
+          const cServ = serv ? getTagElement(serv, 'cServ') : null
+          const infoCompl = serv ? getTagElement(serv, 'infoCompl') : null
+          infoComplObs = infoCompl ? normalizeImportedText(getTagValue(infoCompl, 'xInfComp')) : ''
+
+          const valoresDps = getTagElement(infDps, 'valores')
+          const vServPrest = valoresDps ? getTagElement(valoresDps, 'vServPrest') : null
+          const valorServicos = vServPrest ? parseFloat(getTagValue(vServPrest, 'vServ')) : 0
+
+          const ibscbsDps = getTagElement(infDps, 'IBSCBS')
+          let docOutroEl: Element | null = null
+          let vlrReeRepResXml = 0
+          if (ibscbsDps) {
+            const valoresIb = getTagElement(ibscbsDps, 'valores')
+            const gRee = valoresIb ? getTagElement(valoresIb, 'gReeRepRes') : null
+            const documentosEl = gRee ? getTagElement(gRee, 'documentos') : null
+            docOutroEl = documentosEl ? getTagElement(documentosEl, 'docOutro') : null
+            vlrReeRepResXml = parseFloat(documentosEl ? getTagValue(documentosEl, 'vlrReeRepRes') : '0') || 0
+          }
+
+          numeroNfse =
+            getTagValue(infNfse, 'nNFSe') ||
+            getTagValue(infNfse, 'nDFSe') ||
+            getTagValue(infDps, 'nDPS')
+          const dataEmissaoNfseRaw = getTagValue(infDps, 'dhEmi') || getTagValue(infNfse, 'dhProc')
+          dataEmissaoNfse = dataEmissaoNfseRaw
+            ? dataEmissaoNfseRaw.split('T')[0]
+            : new Date().toISOString().split('T')[0]
+
+          valorTotalCalculado =
+            valorServicos > 0
+              ? valorServicos
+              : vLiqRaiz || vTotNfXmlRoot || vCalcReeRepResRoot || vlrReeRepResXml || 0
+
+          discriminacao = cServ ? normalizeImportedText(getTagValue(cServ, 'xDescServ')) : ''
+          xDocReembolso = docOutroEl ? normalizeImportedText(getTagValue(docOutroEl, 'xDoc')) : ''
+          itemListaServico = cServ ? getTagValue(cServ, 'cTribNac') || getTagValue(cServ, 'cTribMun') : ''
+
+          const idNf = infNfse.getAttribute('Id')
+          if (idNf) chaveAcessoNfse = idNf.replace(/^NFS/i, '')
+        } else {
+          const declaracao = getTagElement(infNfse, 'InfDeclaracaoPrestacaoServico')
+          const servico = declaracao ? getTagElement(declaracao, 'Servico') : null
+          const valoresServico = servico ? getTagElement(servico, 'Valores') : null
+          tomador =
+            declaracao
+              ? getTagElement(declaracao, 'TomadorServico') || getTagElement(declaracao, 'Tomador')
+              : null
+          prestador = declaracao ? getTagElement(declaracao, 'Prestador') : null
+
+          const valoresNfseEl = getTagElement(infNfse, 'ValoresNfse')
+          const valorLiquidoNfse = parseFloat(valoresNfseEl ? getTagValue(valoresNfseEl, 'ValorLiquidoNfse') : '0') || 0
+          const notaNacional = getTagElement(infNfse, 'NotaNacional')
+          const ibscbsNacional = notaNacional ? getTagElement(notaNacional, 'IBSCBS') : null
+          const valoresNacional = ibscbsNacional ? getTagElement(ibscbsNacional, 'valores') : null
+          const totCibs = ibscbsNacional ? getTagElement(ibscbsNacional, 'totCIBS') : null
+          const vTotNfXml = parseFloat(totCibs ? getTagValue(totCibs, 'vTotNF') : '0') || 0
+          const vCalcReeRepRes = parseFloat(valoresNacional ? getTagValue(valoresNacional, 'vCalcReeRepRes') : '0') || 0
+          const documentosEl = servico ? getTagElement(servico, 'documentos') : null
+          const docOutroEl = documentosEl
+            ? getTagElement(documentosEl, 'docOutro')
+            : servico
+              ? getTagElement(servico, 'docOutro')
+              : null
+          const vlrReeRepResXml =
+            parseFloat(documentosEl ? getTagValue(documentosEl, 'vlrReeRepRes') : '0') || 0
+
+          numeroNfse = getTagValue(infNfse, 'Numero')
+          const dataEmissaoNfseRaw = getTagValue(infNfse, 'DataEmissao')
+          dataEmissaoNfse = dataEmissaoNfseRaw
+            ? dataEmissaoNfseRaw.split('T')[0]
+            : new Date().toISOString().split('T')[0]
+          const valorServicos = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorServicos') : '0') || 0
+          /** Muitos XMLs ABRASF 2.x deixam ValorServicos em 0 e o total em ValorLiquidoNfse / Nota Nacional / reembolso */
+          valorTotalCalculado =
+            valorServicos > 0
+              ? valorServicos
+              : valorLiquidoNfse ||
+                vTotNfXml ||
+                vCalcReeRepRes ||
+                vlrReeRepResXml ||
+                0
+          valorIss =
+            parseFloat(
+              (valoresServico ? getTagValue(valoresServico, 'ValorIss') : '') || getTagValue(infNfse, 'ValorIss')
+            ) || 0
+          valorInss = parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorInss') : '0') || 0
+          codigoVerificacao = getTagValue(infNfse, 'CodigoVerificacao')
+          discriminacao = normalizeImportedText(servico ? getTagValue(servico, 'Discriminacao') : '')
+          xDocReembolso = docOutroEl ? normalizeImportedText(getTagValue(docOutroEl, 'xDoc')) : ''
+          itemListaServico = servico ? getTagValue(servico, 'ItemListaServico') : ''
+        }
+
         const descricaoItem =
           discriminacao && !/^nota fiscal sem item de servi[cç]o\s*$/i.test(discriminacao.trim())
             ? discriminacao
             : xDocReembolso || discriminacao || 'Serviço'
-        const itemListaServico = servico ? getTagValue(servico, 'ItemListaServico') : ''
 
         const tipoNotaSelecionado: 'saida' | 'entrada' = (formData.tipo || activeTab) as 'saida' | 'entrada'
         const dadosNfse: NotaFiscalCreate = {
           numero_nf: numeroNfse || `NFSE-${Date.now().toString().slice(-6)}`,
-          serie: 'NFS-e',
+          serie: serieNfse,
           data_emissao: dataEmissaoNfse,
           data_vencimento: '',
           valor_total: valorTotalCalculado,
@@ -2397,8 +2477,10 @@ export default function NotasFiscaisPage() {
           status: 'pendente',
           tipo_nota: 'nf_servico',
           eletronica: true,
-          chave_acesso: codigoVerificacao || undefined,
-          observacoes: [normalizeImportedText(discriminacao), xDocReembolso].filter(Boolean).join('\n\n') || undefined
+          chave_acesso: codigoVerificacao || chaveAcessoNfse || undefined,
+          observacoes:
+            [normalizeImportedText(discriminacao), xDocReembolso, infoComplObs].filter(Boolean).join('\n\n') ||
+            undefined
         }
 
         if (tipoNotaSelecionado === 'saida' && tomador) {
