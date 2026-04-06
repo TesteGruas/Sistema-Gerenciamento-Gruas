@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -96,6 +96,9 @@ export default function RelatoriosPage() {
   const [paginaEstoque, setPaginaEstoque] = useState(1)
   const [paginaComplementos, setPaginaComplementos] = useState(1)
   const [limitePorPagina, setLimitePorPagina] = useState(10)
+
+  const [financeiroFiltroStatus, setFinanceiroFiltroStatus] = useState("all")
+  const [financeiroFiltroNatureza, setFinanceiroFiltroNatureza] = useState("all")
   
   // Estados de loading para cada relatório
   const [loadingImpostos, setLoadingImpostos] = useState(false)
@@ -874,7 +877,41 @@ export default function RelatoriosPage() {
     setStartDate(undefined)
     setEndDate(undefined)
     setLimitePorPagina(10)
+    setFinanceiroFiltroStatus("all")
+    setFinanceiroFiltroNatureza("all")
   }
+
+  const financeiroIntegradoFiltrado = useMemo(() => {
+    let rows = financeiroIntegrado
+    if (financeiroFiltroNatureza !== "all") {
+      const alvo = normalizarStatus(financeiroFiltroNatureza)
+      rows = rows.filter((item) => normalizarStatus(item?.natureza) === alvo)
+    }
+    if (financeiroFiltroStatus !== "all") {
+      rows = rows.filter((item) => {
+        const s = normalizarStatus(item?.status)
+        switch (financeiroFiltroStatus) {
+          case "pendente":
+            return s.includes("pend")
+          case "pago":
+            return s.includes("pago") || s.includes("paga")
+          case "entrada":
+            return s === "entrada" || s.includes("entrada")
+          case "saida":
+            return s === "saida" || s.includes("saida")
+          case "encerrado":
+            return s.includes("encerr")
+          case "ativo":
+            return (s.includes("ativ") || s.includes("ativa")) && !s.includes("inativ")
+          case "inativo":
+            return s.includes("inativ")
+          default:
+            return s === normalizarStatus(financeiroFiltroStatus)
+        }
+      })
+    }
+    return rows
+  }, [financeiroIntegrado, financeiroFiltroStatus, financeiroFiltroNatureza])
 
   const dadosGraficoGruasStatus = dashboardData?.distribuicao?.por_status
     ? Object.entries(dashboardData.distribuicao.por_status).map(([status, count]) => ({
@@ -1448,6 +1485,10 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingResumoFinanceiro}
+            filtroStatus={financeiroFiltroStatus}
+            setFiltroStatus={setFinanceiroFiltroStatus}
+            filtroNatureza={financeiroFiltroNatureza}
+            setFiltroNatureza={setFinanceiroFiltroNatureza}
           />
           {/* Relatório Financeiro */}
           <Card>
@@ -1475,6 +1516,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : financeiroIntegrado.length > 0 ? (
                 <div className="space-y-4">
+                  {financeiroIntegradoFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhum lançamento com status e natureza selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros acima ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1488,7 +1536,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {financeiroIntegrado.map((item, index) => (
+                      {financeiroIntegradoFiltrado.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell>
                             <Badge variant="outline">{item.origem}</Badge>
@@ -1529,6 +1577,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -2341,7 +2390,11 @@ function FiltrosDemaisTabs({
   obras,
   onAplicar,
   onLimpar,
-  loading
+  loading,
+  filtroStatus,
+  setFiltroStatus,
+  filtroNatureza,
+  setFiltroNatureza
 }: {
   selectedObra: string
   setSelectedObra: (value: string) => void
@@ -2357,7 +2410,17 @@ function FiltrosDemaisTabs({
   onAplicar: () => void
   onLimpar: () => void
   loading?: boolean
+  filtroStatus?: string
+  setFiltroStatus?: (value: string) => void
+  filtroNatureza?: string
+  setFiltroNatureza?: (value: string) => void
 }) {
+  const mostrarFiltrosFinanceiro =
+    filtroStatus !== undefined &&
+    setFiltroStatus &&
+    filtroNatureza !== undefined &&
+    setFiltroNatureza
+
   return (
     <Card>
       <CardHeader>
@@ -2367,7 +2430,7 @@ function FiltrosDemaisTabs({
         </CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        <div className="min-w-[900px] flex items-end gap-3">
+        <div className={`${mostrarFiltrosFinanceiro ? "min-w-[1180px]" : "min-w-[900px]"} flex items-end gap-3`}>
           <div className="min-w-[140px] flex-1">
             <label className="text-sm font-medium block mb-1">Período</label>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -2452,6 +2515,43 @@ function FiltrosDemaisTabs({
               </SelectContent>
             </Select>
           </div>
+
+          {mostrarFiltrosFinanceiro && (
+            <>
+              <div className="min-w-[150px] flex-1">
+                <label className="text-sm font-medium block mb-1">Status</label>
+                <Select value={filtroStatus} onValueChange={setFiltroStatus}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="pago">Pago / Paga</SelectItem>
+                    <SelectItem value="encerrado">Encerrado</SelectItem>
+                    <SelectItem value="ativo">Ativo / Ativa</SelectItem>
+                    <SelectItem value="inativo">Inativo / Inativa</SelectItem>
+                    <SelectItem value="entrada">Entrada</SelectItem>
+                    <SelectItem value="saida">Saída</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="min-w-[140px] flex-1">
+                <label className="text-sm font-medium block mb-1">Natureza</label>
+                <Select value={filtroNatureza} onValueChange={setFiltroNatureza}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Todas" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas</SelectItem>
+                    <SelectItem value="entrada">Entrada</SelectItem>
+                    <SelectItem value="saida">Saída</SelectItem>
+                    <SelectItem value="saldo">Saldo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </>
+          )}
 
           <div className="min-w-[120px]">
             <label className="text-sm font-medium block mb-1">Itens</label>

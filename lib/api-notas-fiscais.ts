@@ -96,6 +96,8 @@ export interface NotaFiscalCreate {
   eletronica?: boolean
   chave_acesso?: string
   observacoes?: string
+  /** Valor total de ICMS ST (ICMSTot vST) — espelha o XML/DANFE */
+  valor_icms_st?: number
 }
 
 export const notasFiscaisApi = {

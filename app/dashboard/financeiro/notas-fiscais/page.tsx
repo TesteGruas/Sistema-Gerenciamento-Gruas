@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo, useCallback, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast, toast as toastNotify } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -57,6 +58,7 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { DebugButton } from "@/components/debug-button"
 import { formatBrlMoneyInputValue, parseBrlMoneyDigitsInput } from "@/lib/medicoes-utils"
+import { tiposImpostosApi } from "@/lib/api-tipos-impostos"
 
 interface Cliente {
   id: number
@@ -92,6 +94,19 @@ interface Compra {
 }
 
 const NF_FROM_MEDICAO_STORAGE_KEY = "sgg_nf_prefill_medicao_id"
+
+/**
+ * NFS-e nacional (DPS): só preenche automaticamente códigos explícitos do layout.
+ * '1' = não retido; '2' = retido pelo tomador (caso mais comum além de 1).
+ * Ausência de tag ou outros códigos → null (usuário escolhe na tela).
+ */
+function obterIssRetidoFontePorTpRetISSQN(tpRetISSQN: string): boolean | null {
+  const tp = tpRetISSQN != null && String(tpRetISSQN).trim() !== '' ? String(tpRetISSQN).trim() : ''
+  if (tp === '1') return false
+  if (tp === '2') return true
+  if (tp !== '') return null
+  return null
+}
 
 /** Alinha ao painel da medição (NF serviço / locação / produto). */
 function mapTipoNotaParaDocumentoMedicao(
@@ -291,10 +306,14 @@ export default function NotasFiscaisPage() {
     valor_icms?: number
     percentual_ipi?: number
     valor_ipi?: number
+    /** ICMS ST do item (vICMSST no XML); usado no valor líquido e no envio à API */
+    valor_icms_st?: number
     // Impostos de serviços
     base_calculo_issqn?: number
     aliquota_issqn?: number
     valor_issqn?: number
+    /** true = retido na fonte; false = não retido; null/undefined = não informado */
+    iss_retido_fonte?: boolean | null
     valor_inss?: number
     valor_cbs?: number
     valor_liquido?: number
@@ -322,9 +341,11 @@ export default function NotasFiscaisPage() {
     valor_icms: 0,
     percentual_ipi: 0,
     valor_ipi: 0,
+    valor_icms_st: 0,
     base_calculo_issqn: 0,
     aliquota_issqn: 0,
     valor_issqn: 0,
+    iss_retido_fonte: null,
     valor_inss: 0,
     valor_cbs: 0,
     valor_liquido: 0,
@@ -389,9 +410,14 @@ export default function NotasFiscaisPage() {
                                (novoItem.valor_cbs || 0)
     
     const totalImpostosDinamicos = novoItem.impostos_dinamicos?.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0) || 0
-    
-    novoItem.valor_liquido = novoItem.preco_total - totalImpostosFixos - totalImpostosDinamicos
-    
+
+    const icmsSt = novoItem.valor_icms_st || 0
+    if (icmsSt > 0) {
+      novoItem.valor_liquido = novoItem.preco_total + icmsSt
+    } else {
+      novoItem.valor_liquido = novoItem.preco_total - totalImpostosFixos - totalImpostosDinamicos
+    }
+
     return novoItem
   }, [])
 
@@ -485,9 +511,11 @@ export default function NotasFiscaisPage() {
           valor_icms: 0,
           percentual_ipi: 0,
           valor_ipi: 0,
+          valor_icms_st: 0,
           base_calculo_issqn: 0,
           aliquota_issqn: 0,
           valor_issqn: 0,
+          iss_retido_fonte: null,
           valor_inss: 0,
           valor_cbs: 0,
           valor_liquido: 0,
@@ -1766,9 +1794,16 @@ export default function NotasFiscaisPage() {
             valor_icms: item.valor_icms ? parseFloat(item.valor_icms) : undefined,
             percentual_ipi: item.percentual_ipi ? parseFloat(item.percentual_ipi) : undefined,
             valor_ipi: item.valor_ipi ? parseFloat(item.valor_ipi) : undefined,
+            valor_icms_st: item.valor_icms_st ? parseFloat(item.valor_icms_st) : undefined,
             base_calculo_issqn: item.base_calculo_issqn ? parseFloat(item.base_calculo_issqn) : undefined,
             aliquota_issqn: item.aliquota_issqn ? parseFloat(item.aliquota_issqn) : undefined,
             valor_issqn: item.valor_issqn ? parseFloat(item.valor_issqn) : undefined,
+            iss_retido_fonte:
+              item.iss_retido_fonte === true
+                ? true
+                : item.iss_retido_fonte === false
+                  ? false
+                  : null,
             valor_inss: item.valor_inss ? parseFloat(item.valor_inss) : undefined,
             valor_cbs: item.valor_cbs ? parseFloat(item.valor_cbs) : undefined,
             valor_liquido: item.valor_liquido ? parseFloat(item.valor_liquido) : undefined,
@@ -2059,6 +2094,7 @@ export default function NotasFiscaisPage() {
       valor_icms: 0, // Será calculado
       percentual_ipi: 0,
       valor_ipi: 0,
+      valor_icms_st: 0,
       base_calculo_issqn: precoTotal,
       aliquota_issqn: 5,
       valor_issqn: 0, // Será calculado
@@ -2310,6 +2346,7 @@ export default function NotasFiscaisPage() {
         let itemListaServico = ''
         let serieNfse = 'NFS-e'
         let infoComplObs = ''
+        let issRetidoFonte: boolean | null = null
 
         if (infDps) {
           prestador = getTagElement(infDps, 'prest')
@@ -2366,6 +2403,11 @@ export default function NotasFiscaisPage() {
 
           const idNf = infNfse.getAttribute('Id')
           if (idNf) chaveAcessoNfse = idNf.replace(/^NFS/i, '')
+
+          const tribEl = valoresDps ? getTagElement(valoresDps, 'trib') : null
+          const tribMun = tribEl ? getTagElement(tribEl, 'tribMun') : null
+          const tpRetISSQN = tribMun ? getTagValue(tribMun, 'tpRetISSQN') : ''
+          issRetidoFonte = obterIssRetidoFontePorTpRetISSQN(tpRetISSQN)
         } else {
           const declaracao = getTagElement(infNfse, 'InfDeclaracaoPrestacaoServico')
           const servico = declaracao ? getTagElement(declaracao, 'Servico') : null
@@ -2417,6 +2459,19 @@ export default function NotasFiscaisPage() {
           discriminacao = normalizeImportedText(servico ? getTagValue(servico, 'Discriminacao') : '')
           xDocReembolso = docOutroEl ? normalizeImportedText(getTagValue(docOutroEl, 'xDoc')) : ''
           itemListaServico = servico ? getTagValue(servico, 'ItemListaServico') : ''
+
+          const issRetidoTag = servico ? getTagValue(servico, 'IssRetido') : ''
+          if (issRetidoTag === '1') {
+            issRetidoFonte = true
+          } else if (issRetidoTag === '2') {
+            issRetidoFonte = false
+          } else if (issRetidoTag !== '') {
+            issRetidoFonte = null
+          } else {
+            const vIssRet =
+              parseFloat(valoresServico ? getTagValue(valoresServico, 'ValorIssRetido') : '0') || 0
+            if (vIssRet > 0) issRetidoFonte = true
+          }
         }
 
         const descricaoItem =
@@ -2476,7 +2531,9 @@ export default function NotasFiscaisPage() {
           valor_icms: 0,
           percentual_ipi: undefined,
           valor_ipi: 0,
+          valor_icms_st: 0,
           valor_issqn: valorIss,
+          iss_retido_fonte: issRetidoFonte,
           valor_inss: valorInss,
           valor_cbs: 0,
           valor_liquido: valorTotalCalculado - valorIss - valorInss,
@@ -2485,6 +2542,17 @@ export default function NotasFiscaisPage() {
 
         setFormData(dadosNfse)
         setItens([itemNfse])
+
+        {
+          const nomesTipos = new Set<string>()
+          if ((itemNfse.valor_issqn || 0) > 0) nomesTipos.add('ISSQN')
+          if ((itemNfse.valor_inss || 0) > 0) nomesTipos.add('INSS')
+          if ((itemNfse.valor_cbs || 0) > 0) nomesTipos.add('CBS')
+          if (valorTotalCalculado > 0 && nomesTipos.size === 0) nomesTipos.add('ISSQN')
+          if (nomesTipos.size > 0) {
+            void tiposImpostosApi.ensure([...nomesTipos]).catch(() => {})
+          }
+        }
 
         toast({
           title: "XML NFS-e importado com sucesso",
@@ -2548,18 +2616,26 @@ export default function NotasFiscaisPage() {
         }
       }
 
-      // Observações
-      const observacoes = normalizeImportedText(infAdic ? getTagValue(infAdic, 'infCpl') : '')
-
       // Tipo indicado no XML (tpNF: 1=saida, 0=entrada)
       const tipoNotaXml: 'saida' | 'entrada' = tpNF === '1' ? 'saida' : 'entrada'
       // Regra da tela: manter o tipo escolhido manualmente no formulário/aba
       const tipoNotaSelecionado: 'saida' | 'entrada' = (formData.tipo || activeTab) as 'saida' | 'entrada'
 
+      const observacoesInfCpl = normalizeImportedText(infAdic ? getTagValue(infAdic, 'infCpl') : '')
+      const nomeEmitParaObs =
+        tipoNotaSelecionado === 'entrada' && emit
+          ? normalizeImportedText(getTagValue(emit, 'xNome'))
+          : ''
+      const observacoes = nomeEmitParaObs
+        ? `Emitente conforme NF-e: ${nomeEmitParaObs}${observacoesInfCpl ? `\n\n${observacoesInfCpl}` : ''}`
+        : observacoesInfCpl
+
       // Tipo de nota fiscal: NFe eletrônica por padrão quando vem de XML
       const tipoNotaCategoria = 'nfe_eletronica'
 
       // === Preencher FormData ===
+      const vSTIcmsTot = icmsTot ? parseFloat(getTagValue(icmsTot, 'vST')) || 0 : 0
+
       const dadosXML: NotaFiscalCreate = {
         numero_nf: nNF,
         serie: serie,
@@ -2571,7 +2647,8 @@ export default function NotasFiscaisPage() {
         tipo_nota: tipoNotaCategoria,
         eletronica: true,
         chave_acesso: chaveAcesso,
-        observacoes: observacoes
+        observacoes: observacoes,
+        ...(vSTIcmsTot > 0 ? { valor_icms_st: vSTIcmsTot } : {})
       }
 
       // === Buscar cliente/fornecedor pelo CNPJ ===
@@ -2610,6 +2687,19 @@ export default function NotasFiscaisPage() {
           })
           if (fornecedorEncontrado) {
             dadosXML.fornecedor_id = fornecedorEncontrado.id
+            const nomeCadastro = (fornecedorEncontrado.nome || '').trim()
+            const nomeXmlEmit = nomeEmitParaObs.trim()
+            if (
+              nomeXmlEmit &&
+              nomeCadastro &&
+              nomeXmlEmit.replace(/\s+/g, ' ') !== nomeCadastro.replace(/\s+/g, ' ')
+            ) {
+              toast({
+                title: 'Nome do fornecedor difere do XML',
+                description: `Cadastro: "${nomeCadastro}". NF-e: "${nomeXmlEmit}". A razão social do XML foi incluída nas observações.`,
+                variant: 'default'
+              })
+            }
           } else {
             const nomeEmit = getTagValue(emit, 'xNome')
             toast({
@@ -2655,12 +2745,15 @@ export default function NotasFiscaisPage() {
         let baseCalcICMS = 0
         let pICMS = 0
         let vICMS = 0
+        let vICMSST = 0
         let pIPI = 0
         let vIPI = 0
         let vPIS = 0
         let pPIS = 0
+        let vBCPis = 0
         let vCOFINS = 0
         let pCOFINS = 0
+        let vBCCofins = 0
         let vTotTribItem = 0
 
         if (impostoEl) {
@@ -2670,6 +2763,7 @@ export default function NotasFiscaisPage() {
             baseCalcICMS = parseFloat(getTagValue(icmsEl, 'vBC')) || 0
             pICMS = parseFloat(getTagValue(icmsEl, 'pICMS')) || 0
             vICMS = parseFloat(getTagValue(icmsEl, 'vICMS')) || 0
+            vICMSST = parseFloat(getTagValue(icmsEl, 'vICMSST')) || 0
           }
           // IPI
           const ipiEl = getTagElement(impostoEl, 'IPI')
@@ -2682,12 +2776,14 @@ export default function NotasFiscaisPage() {
           if (pisEl) {
             vPIS = parseFloat(getTagValue(pisEl, 'vPIS')) || 0
             pPIS = parseFloat(getTagValue(pisEl, 'pPIS')) || 0
+            vBCPis = parseFloat(getTagValue(pisEl, 'vBC')) || 0
           }
           // COFINS
           const cofinsEl = getTagElement(impostoEl, 'COFINS')
           if (cofinsEl) {
             vCOFINS = parseFloat(getTagValue(cofinsEl, 'vCOFINS')) || 0
             pCOFINS = parseFloat(getTagValue(cofinsEl, 'pCOFINS')) || 0
+            vBCCofins = parseFloat(getTagValue(cofinsEl, 'vBC')) || 0
           }
           // Tributos aproximados (IBPT)
           vTotTribItem = parseFloat(getTagValue(impostoEl, 'vTotTrib')) || 0
@@ -2696,16 +2792,19 @@ export default function NotasFiscaisPage() {
         // Montar impostos dinâmicos a partir dos dados do XML
         const impostosDinamicos: ImpostoDinamico[] = []
 
+        const basePisXml = vBCPis > 0 ? vBCPis : vProd
+        const baseCofinsXml = vBCCofins > 0 ? vBCCofins : vProd
+
         if (vPIS > 0 || pPIS > 0) {
           impostosDinamicos.push({
             id: `pis_${i}`,
             nome: 'PIS',
             tipo: 'federal',
             tipo_calculo: pPIS > 0 ? 'porcentagem' : 'valor_fixo',
-            base_calculo: pPIS > 0 ? vProd : 0,
+            base_calculo: pPIS > 0 ? basePisXml : 0,
             aliquota: pPIS,
             valor_fixo: pPIS > 0 ? undefined : vPIS,
-            valor_calculado: vPIS || (vProd * pPIS / 100)
+            valor_calculado: vPIS || (basePisXml * pPIS) / 100
           })
         }
 
@@ -2715,15 +2814,15 @@ export default function NotasFiscaisPage() {
             nome: 'COFINS',
             tipo: 'federal',
             tipo_calculo: pCOFINS > 0 ? 'porcentagem' : 'valor_fixo',
-            base_calculo: pCOFINS > 0 ? vProd : 0,
+            base_calculo: pCOFINS > 0 ? baseCofinsXml : 0,
             aliquota: pCOFINS,
             valor_fixo: pCOFINS > 0 ? undefined : vCOFINS,
-            valor_calculado: vCOFINS || (vProd * pCOFINS / 100)
+            valor_calculado: vCOFINS || (baseCofinsXml * pCOFINS) / 100
           })
         }
 
         if (vTotTribItem > 0) {
-          const totalJaContabilizado = vICMS + vIPI + vPIS + vCOFINS
+          const totalJaContabilizado = vICMS + vICMSST + vIPI + vPIS + vCOFINS
           const tribApprox = vTotTribItem - totalJaContabilizado
           if (tribApprox > 0.01) {
             impostosDinamicos.push({
@@ -2754,7 +2853,9 @@ export default function NotasFiscaisPage() {
           valor_icms: vICMS,
           percentual_ipi: pIPI || undefined,
           valor_ipi: vIPI,
+          valor_icms_st: vICMSST || undefined,
           valor_issqn: 0,
+          iss_retido_fonte: null,
           valor_inss: 0,
           valor_cbs: 0,
           valor_liquido: 0,
@@ -2762,17 +2863,46 @@ export default function NotasFiscaisPage() {
         }
 
         const itemCalculado = calcularImpostos(item)
-        /**
-         * NF-e: vNF e vProd refletem o valor da mercadoria; tributos (ICMS, PIS, COFINS etc.) vêm discriminados.
-         * Não reduzir valor_liquido pela soma dos tributos — isso gerava linha ~2681 quando vNF=3091 (ex.: compra interestadual),
-         * divergindo do total da nota e da expectativa do cliente.
-         */
-        itemCalculado.valor_liquido = itemCalculado.preco_total
+        if (!(itemCalculado.valor_icms_st || 0)) {
+          itemCalculado.valor_liquido = itemCalculado.preco_total
+        }
         itensXML.push(itemCalculado)
       }
 
       if (itensXML.length > 0) {
         setItens(itensXML)
+      }
+
+      {
+        const nomesTipos = new Set<string>()
+        if (icmsTot) {
+          const nv = (t: string) => parseFloat(getTagValue(icmsTot, t)) || 0
+          if (nv('vICMS') || nv('vICMSDeson')) nomesTipos.add('ICMS')
+          if (nv('vST')) nomesTipos.add('ICMS_ST')
+          if (nv('vIPI')) nomesTipos.add('IPI')
+          if (nv('vPIS')) nomesTipos.add('PIS')
+          if (nv('vCOFINS')) nomesTipos.add('COFINS')
+          if (nv('vFCP')) nomesTipos.add('FCP')
+          if (nv('vFCPST')) nomesTipos.add('FCP_ST')
+        }
+        for (const it of itensXML) {
+          if ((it.valor_icms || 0) > 0) nomesTipos.add('ICMS')
+          if ((it.valor_icms_st || 0) > 0) nomesTipos.add('ICMS_ST')
+          if ((it.valor_ipi || 0) > 0) nomesTipos.add('IPI')
+          const din =
+            it.impostos_dinamicos && typeof it.impostos_dinamicos === 'string'
+              ? []
+              : it.impostos_dinamicos || []
+          for (const imp of din) {
+            if ((imp.valor_calculado || 0) > 0 && imp.nome) {
+              const raw = String(imp.nome).trim().toUpperCase().replace(/\s+/g, '_').slice(0, 100)
+              if (raw) nomesTipos.add(raw)
+            }
+          }
+        }
+        if (nomesTipos.size > 0) {
+          void tiposImpostosApi.ensure([...nomesTipos]).catch(() => {})
+        }
       }
 
       if (tipoNotaXml !== tipoNotaSelecionado) {
@@ -4210,6 +4340,13 @@ export default function NotasFiscaisPage() {
                 <div>
                   <Label className="text-base font-semibold">Itens da Nota Fiscal</Label>
                   <p className="text-sm text-muted-foreground">Adicione produtos ou serviços desta nota fiscal</p>
+                  <p className="text-xs text-muted-foreground mt-2 max-w-3xl leading-relaxed">
+                    <span className="font-medium text-foreground/80">XML e tipos de imposto:</span> ao importar XML, o
+                    sistema garante em <strong>tipos de imposto</strong> cada tributo detectado (ex. ISSQN, ICMS, PIS):
+                    se o nome já existir, reutiliza; se for novo, cadastra automaticamente. Não há de-para configurável
+                    entre tag do XML e cadastro: os nomes seguem os padrões acima. Impostos financeiros lançados à mão
+                    continuam independentes; a listagem pode agregar totais das notas pelos mesmos rótulos.
+                  </p>
                 </div>
                 <Button
                   type="button"
@@ -4227,12 +4364,15 @@ export default function NotasFiscaisPage() {
                       valor_icms: 0,
                       percentual_ipi: 0,
                       valor_ipi: 0,
+                      valor_icms_st: 0,
                       base_calculo_issqn: 0,
                       aliquota_issqn: 0,
                       valor_issqn: 0,
+                      iss_retido_fonte: null,
                       valor_inss: 0,
                       valor_cbs: 0,
-                      valor_liquido: 0
+                      valor_liquido: 0,
+                      impostos_dinamicos: []
                     })
                     setEditingItem(null)
                     setIsItemDialogOpen(true)
@@ -4242,6 +4382,21 @@ export default function NotasFiscaisPage() {
                   Adicionar Item
                 </Button>
               </div>
+
+              {formData.tipo_nota === 'nf_servico' &&
+                itens.length > 0 &&
+                itens.some((it) => it.iss_retido_fonte === null || it.iss_retido_fonte === undefined) && (
+                  <Alert className="border-amber-200 bg-amber-50/80 text-amber-950 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    <AlertTitle>ISS retido na fonte</AlertTitle>
+                    <AlertDescription>
+                      O XML não trouxe código reconhecido de retenção (
+                      <code className="text-xs">tpRetISSQN</code> diferente de 1 e 2 na NFS-e nacional, ou tag
+                      incompleta). Indique por item na coluna abaixo se o ISS é retido na fonte (ou abra o item para
+                      ajustar).
+                    </AlertDescription>
+                  </Alert>
+                )}
 
               {itens.length > 0 ? (
                 <div className="border rounded-lg">
@@ -4254,6 +4409,9 @@ export default function NotasFiscaisPage() {
                         <TableHead className="w-[100px]">Quantidade</TableHead>
                         <TableHead className="w-[120px]">Valor Unit.</TableHead>
                         <TableHead className="w-[120px]">Valor Total</TableHead>
+                        {formData.tipo_nota === 'nf_servico' && (
+                          <TableHead className="w-[min(160px,28vw)] min-w-[130px]">ISS retido na fonte</TableHead>
+                        )}
                         <TableHead className="w-[100px]">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -4266,6 +4424,34 @@ export default function NotasFiscaisPage() {
                           <TableCell>{item.quantidade.toFixed(3)}</TableCell>
                           <TableCell>R$ {item.preco_unitario.toFixed(2)}</TableCell>
                           <TableCell className="font-semibold">R$ {item.preco_total.toFixed(2)}</TableCell>
+                          {formData.tipo_nota === 'nf_servico' && (
+                            <TableCell className="align-middle">
+                              <Select
+                                value={
+                                  item.iss_retido_fonte === true
+                                    ? 'sim'
+                                    : item.iss_retido_fonte === false
+                                      ? 'nao'
+                                      : 'nao_info'
+                                }
+                                onValueChange={(v) => {
+                                  const iss_retido_fonte = v === 'sim' ? true : v === 'nao' ? false : null
+                                  const novos = [...itens]
+                                  novos[index] = { ...item, iss_retido_fonte }
+                                  setItens(novos)
+                                }}
+                              >
+                                <SelectTrigger className="h-8 text-xs" aria-label={`ISS retido item ${index + 1}`}>
+                                  <SelectValue placeholder="Escolher…" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="nao_info">Não informado</SelectItem>
+                                  <SelectItem value="nao">Não</SelectItem>
+                                  <SelectItem value="sim">Sim</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </TableCell>
+                          )}
                           <TableCell>
                             <div className="flex gap-2">
                               <Button
@@ -4320,8 +4506,16 @@ export default function NotasFiscaisPage() {
                           <span className="text-sm font-medium">R$ {itens.reduce((sum, item) => sum + item.preco_total, 0).toFixed(2)}</span>
                         </div>
                         {(() => {
-                          const totalImpostosFixos = itens.reduce((sum, item) => 
-                            sum + (item.valor_icms || 0) + (item.valor_ipi || 0) + (item.valor_issqn || 0) + (item.valor_inss || 0) + (item.valor_cbs || 0), 0
+                          const totalImpostosFixos = itens.reduce(
+                            (sum, item) =>
+                              sum +
+                              (item.valor_icms || 0) +
+                              (item.valor_icms_st || 0) +
+                              (item.valor_ipi || 0) +
+                              (item.valor_issqn || 0) +
+                              (item.valor_inss || 0) +
+                              (item.valor_cbs || 0),
+                            0
                           )
                           const totalImpostosDinamicos = itens.reduce((sum, item) => {
                             if (item.impostos_dinamicos) {
@@ -4775,7 +4969,9 @@ export default function NotasFiscaisPage() {
                         </div>
 
                         {/* Impostos do Item */}
-                        {(item.valor_icms || item.valor_ipi || item.valor_issqn || item.valor_inss || item.valor_cbs || 
+                        {(item.valor_icms || item.valor_ipi || item.valor_issqn || item.valor_inss || item.valor_cbs ||
+                          item.iss_retido_fonte === true ||
+                          item.iss_retido_fonte === false ||
                           (item.impostos_dinamicos && item.impostos_dinamicos.length > 0)) && (
                           <div className="mt-3 pt-3 border-t border-gray-200">
                             <h4 className="text-xs font-semibold text-gray-700 mb-2">Impostos do Item</h4>
@@ -4821,6 +5017,20 @@ export default function NotasFiscaisPage() {
                               {item.valor_issqn > 0 && (
                                 <div>
                                   <span className="text-gray-600">Valor ISSQN:</span> <span className="font-medium text-red-600">{formatCurrency(item.valor_issqn)}</span>
+                                </div>
+                              )}
+                              {((item.valor_issqn || 0) > 0 ||
+                                item.iss_retido_fonte === true ||
+                                item.iss_retido_fonte === false) && (
+                                <div>
+                                  <span className="text-gray-600">ISS retido na fonte:</span>{' '}
+                                  <span className="font-medium">
+                                    {item.iss_retido_fonte === true
+                                      ? 'Sim'
+                                      : item.iss_retido_fonte === false
+                                        ? 'Não'
+                                        : 'Não informado (sem dado no XML/cadastro)'}
+                                  </span>
                                 </div>
                               )}
                               {item.valor_inss > 0 && (
@@ -5330,6 +5540,34 @@ export default function NotasFiscaisPage() {
                     className="bg-muted"
                   />
                 </div>
+                <div className="col-span-2">
+                  <Label htmlFor="item_iss_retido_fonte">ISS retido na fonte</Label>
+                  <Select
+                    value={
+                      itemFormData.iss_retido_fonte === true
+                        ? 'sim'
+                        : itemFormData.iss_retido_fonte === false
+                          ? 'nao'
+                          : 'nao_info'
+                    }
+                    onValueChange={(v) => {
+                      const iss_retido_fonte = v === 'sim' ? true : v === 'nao' ? false : null
+                      setItemFormData({ ...itemFormData, iss_retido_fonte })
+                    }}
+                  >
+                    <SelectTrigger id="item_iss_retido_fonte" className="w-full">
+                      <SelectValue placeholder="Não informado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="nao_info">Não informado</SelectItem>
+                      <SelectItem value="nao">Não</SelectItem>
+                      <SelectItem value="sim">Sim</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Na NFS-e nacional costuma vir em <code className="text-[11px]">tpRetISSQN</code> (1 = não retido).
+                  </p>
+                </div>
                 <div>
                   <Label htmlFor="item_valor_inss">Valor INSS - Retenção (R$)</Label>
                   <Input
@@ -5538,9 +5776,11 @@ export default function NotasFiscaisPage() {
                 valor_icms: 0,
                 percentual_ipi: 0,
                 valor_ipi: 0,
+                valor_icms_st: 0,
                 base_calculo_issqn: 0,
                 aliquota_issqn: 0,
                 valor_issqn: 0,
+                iss_retido_fonte: null,
                 valor_inss: 0,
                 valor_cbs: 0,
                 valor_liquido: 0,
@@ -5616,9 +5856,11 @@ export default function NotasFiscaisPage() {
                 valor_icms: 0,
                 percentual_ipi: 0,
                 valor_ipi: 0,
+                valor_icms_st: 0,
                 base_calculo_issqn: 0,
                 aliquota_issqn: 0,
                 valor_issqn: 0,
+                iss_retido_fonte: null,
                 valor_inss: 0,
                 valor_cbs: 0,
                 valor_liquido: 0,

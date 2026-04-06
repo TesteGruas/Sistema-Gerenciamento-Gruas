@@ -7,6 +7,11 @@ import { XMLParser } from 'fast-xml-parser';
 import { enviarMensagemWebhook } from '../services/whatsapp-service.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { sendEmail, buildNotaFiscalClienteEmail } from '../services/email.service.js';
+import {
+  ensureTiposImpostosFromImportacaoXml,
+  ensureTiposImpostos,
+  coletarNomesTributoDoItem
+} from '../services/ensure-tipos-impostos-xml.js';
 
 async function fetchUrlBufferForEmail(url) {
   const res = await fetch(url);
@@ -2143,6 +2148,16 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
       });
     }
 
+    try {
+      await ensureTiposImpostosFromImportacaoXml(supabaseAdmin, {
+        tipoXML,
+        dadosNota,
+        xmlBuffer: file.buffer
+      });
+    } catch (ensureErr) {
+      console.warn('[importar-xml] ensure tipos_impostos:', ensureErr?.message || ensureErr);
+    }
+
     // Buscar cliente ou fornecedor
     let cliente_id = null;
     let fornecedor_id = null;
@@ -2443,6 +2458,9 @@ const notaFiscalItemSchema = Joi.object({
   valor_inss: Joi.number().min(0).allow(null).optional(),
   valor_cbs: Joi.number().min(0).allow(null).optional(),
   valor_liquido: Joi.number().min(0).allow(null).optional(),
+  /** Só para cálculo do valor_líquido na importação NF-e (ICMS ST); não persiste na tabela de itens */
+  valor_icms_st: Joi.number().min(0).allow(null).optional(),
+  iss_retido_fonte: Joi.boolean().allow(null).optional(),
   // Impostos dinâmicos
   impostos_dinamicos: Joi.alternatives().try(
     Joi.array().items(impostoDinamicoSchema),
@@ -2594,8 +2612,15 @@ router.post('/:id/itens', async (req, res) => {
                                (parseFloat(value.valor_cbs || 0));
     
     const totalImpostosDinamicos = impostosDinamicos.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0);
-    
-    value.valor_liquido = value.preco_total - totalImpostosFixos - totalImpostosDinamicos;
+
+    const icmsSt = parseFloat(value.valor_icms_st || 0);
+    delete value.valor_icms_st;
+    // NF-e com ICMS ST: valor líquido do item alinha ao vNF (vProd + vST), sem subtrair PIS/COFINS/IBPT do “líquido fiscal”
+    if (icmsSt > 0) {
+      value.valor_liquido = value.preco_total + icmsSt;
+    } else {
+      value.valor_liquido = value.preco_total - totalImpostosFixos - totalImpostosDinamicos;
+    }
 
     const { data, error } = await supabaseAdmin
       .from('notas_fiscais_itens')
@@ -2604,6 +2629,13 @@ router.post('/:id/itens', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    try {
+      const nomesItem = coletarNomesTributoDoItem(data);
+      if (nomesItem.length) await ensureTiposImpostos(supabaseAdmin, nomesItem);
+    } catch (ensureErr) {
+      console.warn('[notas-fiscais itens POST] ensure tipos_impostos:', ensureErr?.message || ensureErr);
+    }
 
     // Atualizar valor total e valor líquido da nota fiscal
     const { data: itens } = await supabaseAdmin
@@ -2771,8 +2803,14 @@ router.put('/itens/:itemId', async (req, res) => {
                                (parseFloat(itemCompleto.valor_cbs || 0));
     
     const totalImpostosDinamicos = impostosDinamicos.reduce((sum, imp) => sum + (imp.valor_calculado || 0), 0);
-    
-    itemCompleto.valor_liquido = itemCompleto.preco_total - totalImpostosFixos - totalImpostosDinamicos;
+
+    const icmsStPut = parseFloat(itemCompleto.valor_icms_st || 0);
+    delete itemCompleto.valor_icms_st;
+    if (icmsStPut > 0) {
+      itemCompleto.valor_liquido = itemCompleto.preco_total + icmsStPut;
+    } else {
+      itemCompleto.valor_liquido = itemCompleto.preco_total - totalImpostosFixos - totalImpostosDinamicos;
+    }
 
     // Remover campos que não devem ser atualizados diretamente
     delete itemCompleto.id;
@@ -2786,6 +2824,13 @@ router.put('/itens/:itemId', async (req, res) => {
       .single();
 
     if (error) throw error;
+
+    try {
+      const nomesItem = coletarNomesTributoDoItem(data);
+      if (nomesItem.length) await ensureTiposImpostos(supabaseAdmin, nomesItem);
+    } catch (ensureErr) {
+      console.warn('[notas-fiscais itens PUT] ensure tipos_impostos:', ensureErr?.message || ensureErr);
+    }
 
     // Buscar nota_fiscal_id para atualizar valor total
     const { data: item } = await supabaseAdmin

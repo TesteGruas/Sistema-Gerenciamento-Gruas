@@ -2,6 +2,7 @@ import express from 'express';
 import Joi from 'joi';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { ensureTiposImpostos } from '../services/ensure-tipos-impostos-xml.js';
 
 const router = express.Router();
 
@@ -15,6 +16,48 @@ const tipoImpostoSchema = Joi.object({
 const tipoImpostoUpdateSchema = tipoImpostoSchema.fork(
   ['nome', 'descricao', 'ativo'],
   (schema) => schema.optional()
+);
+
+const ensureNomesSchema = Joi.object({
+  nomes: Joi.array().items(Joi.string().min(1).max(100)).min(1).max(200).required()
+});
+
+/**
+ * POST /api/tipos-impostos/ensure
+ * Para cada nome: se já existir em tipos_impostos, reutiliza; senão, cadastra.
+ */
+router.post(
+  '/ensure',
+  authenticateToken,
+  requirePermission('obras:editar'),
+  async (req, res) => {
+    try {
+      const { error: validationError, value } = ensureNomesSchema.validate(req.body);
+      if (validationError) {
+        return res.status(400).json({
+          success: false,
+          message: validationError.details[0].message
+        });
+      }
+
+      const resultado = await ensureTiposImpostos(supabaseAdmin, value.nomes);
+
+      res.json({
+        success: true,
+        data: resultado,
+        message:
+          resultado.criados.length > 0
+            ? `Tipos garantidos: ${resultado.criados.length} novo(s), ${resultado.existentes.length} já existente(s).`
+            : 'Todos os tipos informados já estavam cadastrados.'
+      });
+    } catch (error) {
+      console.error('Erro em tipos-impostos/ensure:', error);
+      res.status(500).json({
+        success: false,
+        message: error.message || 'Erro ao garantir tipos de imposto'
+      });
+    }
+  }
 );
 
 /**
