@@ -56,6 +56,17 @@ const upload = multer({
   }
 });
 
+/** Supabase Storage (bucket) costuma rejeitar text/xml; application/xml é aceito. */
+function contentTypeParaStorage(mimetype) {
+  if (mimetype === 'text/xml' || mimetype === 'application/xml') {
+    return 'application/xml';
+  }
+  if (mimetype === 'image/jpg') {
+    return 'image/jpeg';
+  }
+  return mimetype;
+}
+
 const router = express.Router();
 const FRONTEND_URL = getPublicFrontendUrl();
 
@@ -1490,7 +1501,7 @@ router.post('/:id/upload', upload.single('arquivo'), async (req, res) => {
     const { data: uploadData, error: uploadError } = await supabaseAdmin.storage
       .from('arquivos-obras')
       .upload(filePath, file.buffer, {
-        contentType: file.mimetype,
+        contentType: contentTypeParaStorage(file.mimetype),
         cacheControl: '3600',
         upsert: false
       });
