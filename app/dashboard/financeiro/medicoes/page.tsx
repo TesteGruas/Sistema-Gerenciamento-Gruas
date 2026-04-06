@@ -17,13 +17,12 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { 
-  Plus, 
   Search, 
+  Brush,
   Edit,
   Trash2, 
   Eye,
   Calculator,
-  Calendar,
   DollarSign,
   Building2,
   RefreshCw,
@@ -32,8 +31,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
-  Forklift,
-  FileText
+  Forklift
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
@@ -174,13 +172,12 @@ export default function MedicoesPage() {
     setCurrentPage(1)
   }, [gruaFilter, obraFilter, clienteFilter, filterPeriodo, filterStatus, searchTerm])
 
-  // Recarregar medições quando os filtros ou página mudarem
+  // Aplica filtros automaticamente (debounce só na busca por texto)
   useEffect(() => {
-    // Debounce para busca por texto (aguardar 500ms após parar de digitar)
+    const delay = searchTerm.trim() ? 400 : 0
     const timeoutId = setTimeout(() => {
       carregarMedicoes()
-    }, searchTerm ? 500 : 0)
-    
+    }, delay)
     return () => clearTimeout(timeoutId)
   }, [carregarMedicoes, searchTerm])
 
@@ -454,26 +451,46 @@ export default function MedicoesPage() {
 
 
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin" />
-        <span className="ml-2">Carregando dados...</span>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-6 w-full min-w-0 max-w-full">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Medições</h1>
           <p className="text-gray-600">Gestão de locações, medições e área financeira</p>
         </div>
-        <div className="flex gap-2">
-          <Button onClick={() => router.push('/dashboard/medicoes/nova')}>
-            <Plus className="w-4 h-4 mr-2" />
+        <div className="flex flex-wrap items-center justify-end gap-2 shrink-0">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9"
+            disabled={isLoading || exportandoCsv}
+            onClick={exportarMedicoesCsv}
+            title="Exportar todas as medições que correspondem aos filtros atuais"
+          >
+            {exportandoCsv ? (
+              <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
+            ) : (
+              <Download className="w-4 h-4 mr-2 shrink-0" />
+            )}
+            Exportar CSV
+          </Button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={() => carregarMedicoes()}
+                aria-label="Atualizar lista"
+              >
+                <RefreshCw className="w-4 h-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">Atualizar lista</TooltipContent>
+          </Tooltip>
+          <Button size="sm" className="h-9" onClick={() => router.push("/dashboard/medicoes/nova")}>
             Nova Medição
           </Button>
         </div>
@@ -557,101 +574,85 @@ export default function MedicoesPage() {
           {/* Filtros */}
           <Card className="rounded-xl border bg-muted/20">
             <CardContent className="p-3 md:p-4">
-              <div className="space-y-2">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                  <Select value={clienteFilter} onValueChange={setClienteFilter}>
-                    <SelectTrigger className="h-9 bg-white">
-                      <SelectValue placeholder="Cliente" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Cliente</SelectItem>
-                      {clientesOptions.map((cliente) => (
-                        <SelectItem key={cliente.id} value={cliente.id}>
-                          {cliente.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={gruaFilter} onValueChange={setGruaFilter}>
-                    <SelectTrigger className="h-9 bg-white">
-                      <SelectValue placeholder="Grua" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Grua</SelectItem>
-                      {gruas.map((grua) => (
-                        <SelectItem key={grua.id} value={String(grua.id)}>
-                          {grua.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={obraFilter} onValueChange={setObraFilter}>
-                    <SelectTrigger className="h-9 bg-white">
-                      <SelectValue placeholder="Obra" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Obra</SelectItem>
-                      {obras.map((obra) => (
-                        <SelectItem key={obra.id} value={String(obra.id)}>
-                          {obra.nome}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+              <div className="flex flex-nowrap items-center gap-2 overflow-x-auto overflow-y-visible pb-0.5 [scrollbar-width:thin]">
+                <Select value={clienteFilter} onValueChange={setClienteFilter}>
+                  <SelectTrigger
+                    className="h-9 w-[11rem] shrink-0 bg-white"
+                    aria-label="Filtrar por cliente"
+                  >
+                    <SelectValue placeholder="Cliente" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos os clientes</SelectItem>
+                    {clientesOptions.map((cliente) => (
+                      <SelectItem key={cliente.id} value={cliente.id}>
+                        {cliente.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={gruaFilter} onValueChange={setGruaFilter}>
+                  <SelectTrigger className="h-9 w-[11rem] shrink-0 bg-white" aria-label="Filtrar por grua">
+                    <SelectValue placeholder="Grua" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as gruas</SelectItem>
+                    {gruas.map((grua) => (
+                      <SelectItem key={grua.id} value={String(grua.id)}>
+                        {grua.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={obraFilter} onValueChange={setObraFilter}>
+                  <SelectTrigger className="h-9 w-[11rem] shrink-0 bg-white" aria-label="Filtrar por obra">
+                    <SelectValue placeholder="Obra" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as obras</SelectItem>
+                    {obras.map((obra) => (
+                      <SelectItem key={obra.id} value={String(obra.id)}>
+                        {obra.nome}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <div className="relative min-w-[8rem] max-w-md flex-1 basis-48">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
+                  <Input
+                    placeholder="Buscar…"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 pl-9 bg-white"
+                    aria-label="Buscar medições por texto"
+                  />
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-2 items-center">
-                  <div className="md:col-span-3">
-                    <div className="relative">
-                      <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                      <Input
-                        placeholder="Filtrar / Cliente"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-9 pl-10 bg-white"
-                      />
-                    </div>
-                  </div>
-                  <div className="md:col-span-2">
-                    <Select value={obraFilter} onValueChange={setObraFilter}>
-                      <SelectTrigger className="h-9 bg-white">
-                        <SelectValue placeholder="Selecionar Obra" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Selecionar Obra</SelectItem>
-                        {obras.map((obra) => (
-                          <SelectItem key={obra.id} value={String(obra.id)}>
-                            {obra.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="md:col-span-2">
-                    <Input
-                      type="month"
-                      value={filterPeriodo}
-                      onChange={(e) => setFilterPeriodo(e.target.value)}
-                      className="h-9 bg-white"
-                    />
-                  </div>
-                  <div className="md:col-span-2">
-                  <Select value={filterStatus} onValueChange={setFilterStatus}>
-                    <SelectTrigger className="h-9 bg-white">
-                      <SelectValue placeholder="Status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">Todos</SelectItem>
-                      <SelectItem value="pendente">Pendente</SelectItem>
-                      <SelectItem value="finalizada">Finalizada</SelectItem>
-                      <SelectItem value="enviada">Enviada</SelectItem>
-                      <SelectItem value="cancelada">Cancelada</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  </div>
-                  <div className="md:col-span-3 flex flex-wrap md:flex-nowrap items-center justify-end gap-2">
+                <Input
+                  type="month"
+                  value={filterPeriodo}
+                  onChange={(e) => setFilterPeriodo(e.target.value)}
+                  className="h-9 w-[9.75rem] shrink-0 bg-white"
+                  aria-label="Período (mês e ano)"
+                />
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="h-9 w-[9rem] shrink-0 bg-white" aria-label="Status da medição">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="finalizada">Finalizada</SelectItem>
+                    <SelectItem value="enviada">Enviada</SelectItem>
+                    <SelectItem value="cancelada">Cancelada</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span className="mx-1 h-6 w-px shrink-0 bg-border/80" aria-hidden />
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <Button
                       variant="outline"
+                      size="icon"
+                      className="h-9 w-9 shrink-0"
                       onClick={() => {
                         setSearchTerm("")
                         setFilterStatus("all")
@@ -660,36 +661,13 @@ export default function MedicoesPage() {
                         setObraFilter("all")
                         setFilterPeriodo("")
                       }}
-                      className="h-9 px-3"
+                      aria-label="Limpar filtros"
                     >
-                      Limpar
+                      <Brush className="w-4 h-4" />
                     </Button>
-                    <Button variant="outline" onClick={carregarMedicoes} className="h-9 px-3">
-                      Filtrar
-                    </Button>
-                    <Button variant="outline" onClick={carregarMedicoes} className="h-9 w-9 p-0">
-                      <RefreshCw className="w-4 h-4" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="h-9 px-3"
-                      disabled={isLoading || exportandoCsv}
-                      onClick={exportarMedicoesCsv}
-                      title="Exportar todas as medições que correspondem aos filtros atuais"
-                    >
-                      {exportandoCsv ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin shrink-0" />
-                      ) : (
-                        <Download className="w-4 h-4 mr-2 shrink-0" />
-                      )}
-                      Exportar CSV
-                    </Button>
-                    <Button onClick={() => router.push('/dashboard/medicoes/nova')} className="h-9 px-3">
-                      Nova Medição
-                    </Button>
-                  </div>
-                </div>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Limpar filtros</TooltipContent>
+                </Tooltip>
               </div>
             </CardContent>
           </Card>
@@ -840,46 +818,6 @@ export default function MedicoesPage() {
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="top">Editar medição</TooltipContent>
-                              </Tooltip>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <span className="inline-flex">
-                                    <Button
-                                      variant="ghost"
-                                      size="sm"
-                                      className="px-1.5"
-                                      disabled={medicao.status_aprovacao !== "aprovada"}
-                                      aria-label={
-                                        medicao.status_aprovacao !== "aprovada"
-                                          ? "Nota fiscal: aguarde aprovação da medição"
-                                          : "Abrir nota fiscal de saída a partir desta medição"
-                                      }
-                                      onClick={() => {
-                                        if (medicao.status_aprovacao !== "aprovada") return
-                                        try {
-                                          sessionStorage.setItem(
-                                            "sgg_nf_prefill_medicao_id",
-                                            String(medicao.id)
-                                          )
-                                        } catch {
-                                          /* ignore */
-                                        }
-                                        router.push(
-                                          `/dashboard/financeiro/notas-fiscais?fromMedicao=${medicao.id}`
-                                        )
-                                      }}
-                                    >
-                                      <FileText
-                                        className={`w-4 h-4 ${medicao.status_aprovacao === "aprovada" ? "text-emerald-700" : "text-muted-foreground opacity-50"}`}
-                                      />
-                                    </Button>
-                                  </span>
-                                </TooltipTrigger>
-                                <TooltipContent side="top">
-                                  {medicao.status_aprovacao !== "aprovada"
-                                    ? "Só é possível gerar nota fiscal após a medição ser aprovada."
-                                    : "Abrir nota fiscal de saída a partir desta medição"}
-                                </TooltipContent>
                               </Tooltip>
                               <AlertDialog>
                                 <Tooltip>

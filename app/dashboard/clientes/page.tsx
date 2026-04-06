@@ -32,7 +32,7 @@ import {
   File,
   Image,
   Bell,
-  X,
+  Megaphone,
   Download,
 } from "lucide-react"
 import { clientesApi, Cliente, ClienteFormData } from "@/lib/api-clientes"
@@ -125,6 +125,7 @@ export default function ClientesPage() {
   const [clienteNotificarIndividual, setClienteNotificarIndividual] = useState<Cliente | null>(null)
   const [notificarIndividualOpen, setNotificarIndividualOpen] = useState(false)
   const [exportandoCsv, setExportandoCsv] = useState(false)
+  const [modoNotificacaoMassa, setModoNotificacaoMassa] = useState(false)
   const destinatariosNotificacaoClientesRef = useRef(destinatariosNotificacaoClientes)
   destinatariosNotificacaoClientesRef.current = destinatariosNotificacaoClientes
 
@@ -1014,15 +1015,40 @@ export default function ClientesPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  size="icon"
-                  className="shrink-0"
-                  aria-label="Enviar notificação a um usuário"
-                  title="Enviar notificação"
+                  className="shrink-0 flex items-center gap-2 h-9"
+                  title="Abrir envio de notificação para um usuário"
                 >
-                  <Bell className="h-5 w-5" />
+                  <Bell className="h-4 w-4 shrink-0" />
+                  <span className="whitespace-nowrap">Enviar notificação</span>
                 </Button>
               }
             />
+            <Button
+              type="button"
+              variant={modoNotificacaoMassa ? "default" : "outline"}
+              className="shrink-0 flex items-center gap-2 h-9"
+              aria-pressed={modoNotificacaoMassa}
+              title={
+                modoNotificacaoMassa
+                  ? "Desativar modo notificação em massa"
+                  : "Ativar notificação em massa"
+              }
+              onClick={() => setModoNotificacaoMassa((v) => !v)}
+            >
+              <Megaphone className="h-4 w-4 shrink-0" />
+              <span className="whitespace-nowrap">Notificação em massa</span>
+            </Button>
+            {modoNotificacaoMassa && destinatariosNotificacaoClientes.length > 0 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="shrink-0"
+                onClick={() => setNotificarSelecionadosOpen(true)}
+              >
+                Enviar mensagem ({destinatariosNotificacaoClientes.length})
+              </Button>
+            )}
             <Button className="flex items-center gap-2" onClick={() => setIsCreateDialogOpen(true)}>
               <Plus className="w-4 h-4" />
               Novo Cliente
@@ -1136,6 +1162,21 @@ export default function ClientesPage() {
               </div>
             </div>
 
+            {modoNotificacaoMassa && (
+              <div className="px-6 pt-4 pb-4 border-b bg-muted/20">
+                <div className="min-w-0 max-w-2xl space-y-1.5">
+                  <Label className="text-sm text-muted-foreground font-medium">
+                    Selecionar para notificação em massa
+                  </Label>
+                  <ClienteSearch
+                    className="w-full"
+                    placeholder="Digite nome ou CNPJ para incluir na lista…"
+                    onClienteSelect={(c) => c && adicionarClienteBuscaNotificacao(c)}
+                  />
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex justify-center items-center py-12 px-6">
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
@@ -1143,93 +1184,28 @@ export default function ClientesPage() {
               </div>
             ) : filteredClientes.length > 0 ? (
               <div className="p-6 space-y-4">
-                <div className="mb-6 space-y-3">
-                  <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                      <Label className="text-sm text-muted-foreground">
-                        Selecionar para notificação em massa
-                      </Label>
-                      <ClienteSearch
-                        className="w-full"
-                        placeholder="Digite nome ou CNPJ para incluir na lista…"
-                        onClienteSelect={(c) => c && adicionarClienteBuscaNotificacao(c)}
-                      />
-                    </div>
-                    <div className="flex flex-wrap gap-2 shrink-0 lg:pb-0.5">
-                      <Button
-                        type="button"
-                        disabled={destinatariosNotificacaoClientes.length === 0}
-                        onClick={() => setNotificarSelecionadosOpen(true)}
-                      >
-                        Enviar mensagem em massa
-                        {destinatariosNotificacaoClientes.length > 0
-                          ? ` (${destinatariosNotificacaoClientes.length})`
-                          : ""}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={destinatariosNotificacaoClientes.length === 0}
-                        onClick={() => setDestinatariosNotificacaoClientes([])}
-                      >
-                        Limpar seleção
-                      </Button>
-                    </div>
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Use a caixa <strong className="font-medium">antes do nome</strong> na tabela ou a busca
-                    acima. O <strong className="font-medium">sino em Ações</strong> envia só para aquele
-                    cliente. A lista em massa permanece ao trocar de página.
-                  </p>
-                  {destinatariosNotificacaoClientes.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {destinatariosNotificacaoClientes.map((d) => (
-                        <Badge
-                          key={d.id}
-                          variant="secondary"
-                          className="pl-2 pr-1 py-1 gap-1 max-w-full font-normal"
-                        >
-                          <span className="truncate max-w-[200px]" title={d.nome}>
-                            {d.nome}
-                          </span>
-                          <button
-                            type="button"
-                            className="rounded p-0.5 hover:bg-muted shrink-0"
-                            onClick={() =>
-                              setDestinatariosNotificacaoClientes((prev) =>
-                                prev.filter((x) => x.id !== d.id),
-                              )
-                            }
-                            aria-label={`Remover ${d.nome} da lista`}
-                          >
-                            <X className="h-3.5 w-3.5" />
-                          </button>
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : null}
-                </div>
-
             <div className="rounded-md border">
               <Table className="table-fixed">
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-11 px-2 text-center">
-                      <div className="flex justify-center py-0.5">
-                        <Checkbox
-                          checked={
-                            todosClientesPaginaSelecionados
-                              ? true
-                              : algunsClientesPaginaSelecionados
-                                ? "indeterminate"
-                                : false
-                          }
-                          onCheckedChange={onNotificarSelectAllPaginaClientes}
-                          disabled={filteredClientes.length === 0}
-                          aria-label="Selecionar ou limpar todos desta página para notificação em massa"
-                        />
-                      </div>
-                    </TableHead>
+                    {modoNotificacaoMassa ? (
+                      <TableHead className="w-11 px-2 text-center">
+                        <div className="flex justify-center py-0.5">
+                          <Checkbox
+                            checked={
+                              todosClientesPaginaSelecionados
+                                ? true
+                                : algunsClientesPaginaSelecionados
+                                  ? "indeterminate"
+                                  : false
+                            }
+                            onCheckedChange={onNotificarSelectAllPaginaClientes}
+                            disabled={filteredClientes.length === 0}
+                            aria-label="Selecionar ou limpar todos desta página para notificação em massa"
+                          />
+                        </div>
+                      </TableHead>
+                    ) : null}
                     <TableHead className="w-48 min-w-[12rem] px-3 text-left whitespace-nowrap">
                       Cliente
                     </TableHead>
@@ -1245,15 +1221,17 @@ export default function ClientesPage() {
                 <TableBody>
                   {filteredClientes.map((cliente) => (
                     <TableRow key={cliente.id}>
-                      <TableCell className="w-11 px-2 align-middle">
-                        <div className="flex justify-center">
-                          <Checkbox
-                            checked={destinatariosClientesIdSet.has(cliente.id)}
-                            onCheckedChange={() => toggleClienteNotificacao(cliente)}
-                            aria-label={`Incluir ${cliente.nome} na notificação em massa`}
-                          />
-                        </div>
-                      </TableCell>
+                      {modoNotificacaoMassa ? (
+                        <TableCell className="w-11 px-2 align-middle">
+                          <div className="flex justify-center">
+                            <Checkbox
+                              checked={destinatariosClientesIdSet.has(cliente.id)}
+                              onCheckedChange={() => toggleClienteNotificacao(cliente)}
+                              aria-label={`Incluir ${cliente.nome} na notificação em massa`}
+                            />
+                          </div>
+                        </TableCell>
+                      ) : null}
                       <TableCell className="w-48 min-w-[12rem] px-3 align-middle">
                         <div className="flex min-w-0 items-center gap-2">
                           <Building2 className="h-3.5 w-3.5 shrink-0 text-blue-600" />
@@ -1877,6 +1855,38 @@ function ClienteForm({
                 <SelectItem value="pendente">Pendente</SelectItem>
               </SelectContent>
             </Select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label htmlFor="email">Email da Empresa</Label>
+            <Input
+              id="email"
+              type="email"
+              value={localFormData.email || ''}
+              onChange={(e) => setLocalFormData({ ...localFormData, email: e.target.value })}
+              placeholder="contato@empresa.com.br"
+            />
+          </div>
+          <div>
+            <Label htmlFor="telefone">Telefone da Empresa</Label>
+            <Input
+              id="telefone"
+              value={localFormData.telefone || ''}
+              onChange={(e) => {
+                let value = e.target.value.replace(/\D/g, '')
+                if (value.length >= 2) {
+                  value = '(' + value.substring(0, 2) + ') ' + value.substring(2)
+                }
+                if (value.length >= 10) {
+                  value = value.substring(0, 10) + '-' + value.substring(10, 14)
+                }
+                setLocalFormData({ ...localFormData, telefone: value })
+              }}
+              placeholder="(11) 99999-9999"
+              maxLength={15}
+            />
           </div>
         </div>
         
@@ -2561,6 +2571,7 @@ function ClienteDetails({
   )
 }
 }
+
 
 
 
