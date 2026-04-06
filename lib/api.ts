@@ -317,6 +317,30 @@ api.interceptors.response.use(
   }
 )
 
+/**
+ * Extrai mensagem legível do corpo JSON da API (`message` / `error`) em erros Axios.
+ * Evita exibir apenas "Request failed with status code 400" quando o backend envia detalhes.
+ */
+export function getApiErrorMessage(error: unknown, fallback = 'Erro na requisição'): string {
+  if (error && typeof error === 'object' && 'response' in error) {
+    const ax = error as { response?: { data?: unknown } }
+    const raw = ax.response?.data
+    if (raw && typeof raw === 'object') {
+      const d = raw as { message?: unknown; error?: unknown }
+      const msg = typeof d.message === 'string' ? d.message.trim() : ''
+      const err = typeof d.error === 'string' ? d.error.trim() : ''
+      if (msg && err && msg !== err) return `${msg}. ${err}`
+      if (msg) return msg
+      if (err) return err
+    }
+  }
+  if (error instanceof Error && error.message) {
+    if (/^Request failed with status code \d+$/i.test(error.message)) return fallback
+    return error.message
+  }
+  return fallback
+}
+
 export default api
 export { api }
 

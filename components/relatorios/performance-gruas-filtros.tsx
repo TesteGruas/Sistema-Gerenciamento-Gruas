@@ -5,9 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { ArrowDown, ArrowUp, CalendarIcon, Filter, RefreshCw } from "lucide-react"
+import { DataInputBr } from "@/components/ui/data-input-br"
+import { ArrowDown, ArrowUp, Filter, RefreshCw } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import type { PerformanceGruasFiltros } from "@/lib/api-relatorios-performance"
@@ -74,8 +73,13 @@ export function PerformanceGruasFiltros({
     }
   }
 
-  const dataInicio = filtros.data_inicio ? new Date(filtros.data_inicio) : undefined
-  const dataFim = filtros.data_fim ? new Date(filtros.data_fim) : undefined
+  const parseDataFiltro = (s: string | undefined) => {
+    if (!s) return undefined
+    const d = new Date(`${s}T12:00:00`)
+    return Number.isNaN(d.getTime()) ? undefined : d
+  }
+  const dataInicio = parseDataFiltro(filtros.data_inicio)
+  const dataFim = parseDataFiltro(filtros.data_fim)
 
   return (
     <Card>
@@ -106,67 +110,33 @@ export function PerformanceGruasFiltros({
           </div>
 
           {/* Data Início */}
-          <div className="min-w-[160px] flex-1">
+          <div className="min-w-[200px] flex-1">
             <Label>Data Início</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dataInicio ? format(dataInicio, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={dataInicio}
-                  onSelect={(date) => {
-                    if (date) {
-                      onFiltrosChange({
-                        ...filtros,
-                        data_inicio: format(date, 'yyyy-MM-dd')
-                      })
-                      setPeriodoPreset('personalizado')
-                    }
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DataInputBr
+              value={dataInicio}
+              onChange={(date) => {
+                onFiltrosChange({
+                  ...filtros,
+                  data_inicio: date ? format(date, "yyyy-MM-dd") : undefined,
+                })
+                setPeriodoPreset("personalizado")
+              }}
+            />
           </div>
 
           {/* Data Fim */}
-          <div className="min-w-[160px] flex-1">
+          <div className="min-w-[200px] flex-1">
             <Label>Data Fim</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {dataFim ? format(dataFim, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={dataFim}
-                  onSelect={(date) => {
-                    if (date) {
-                      onFiltrosChange({
-                        ...filtros,
-                        data_fim: format(date, 'yyyy-MM-dd')
-                      })
-                      setPeriodoPreset('personalizado')
-                    }
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DataInputBr
+              value={dataFim}
+              onChange={(date) => {
+                onFiltrosChange({
+                  ...filtros,
+                  data_fim: date ? format(date, "yyyy-MM-dd") : undefined,
+                })
+                setPeriodoPreset("personalizado")
+              }}
+            />
           </div>
 
           {/* Grua */}

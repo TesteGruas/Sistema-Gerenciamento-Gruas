@@ -61,7 +61,7 @@ interface Obra {
   status?: string
 }
 
-/** Faturado = pelo menos uma NF vinculada à medição (API: faturado / notas_fiscais_count). */
+/** Faturado = pelo menos uma NF vinculada à medição (qualquer status; API: faturado / notas_fiscais_count). */
 function medicaoEstaFaturada(m: MedicaoMensal): boolean {
   if (m.faturado === true) return true
   const n = m.notas_fiscais_count

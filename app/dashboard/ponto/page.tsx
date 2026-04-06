@@ -2033,8 +2033,8 @@ export default function PontoPage() {
     ]
   }, [data.registrosPonto])
 
-  // Mostrar loading enquanto os dados iniciais (especialmente funcionários) não foram carregados
-  if (!dadosIniciaisCarregados || data.loading || data.funcionarios.length === 0) {
+  // Loading só até a primeira carga terminar — lista vazia (ex.: sem funcionários no banco) não pode travar a tela
+  if (!dadosIniciaisCarregados || data.loading) {
     return (
       <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
         <PageLoading text="Carregando funcionários e dados iniciais..." />
@@ -2067,6 +2067,28 @@ export default function PontoPage() {
           />
         </div>
       </div>
+
+      {data.funcionarios.length === 0 && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 flex gap-3 items-start">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+          <div>
+            <p className="font-medium">Nenhum funcionário disponível para o ponto</p>
+            <p className="text-sm text-amber-900/90 mt-1">
+              Cadastre colaboradores ativos em RH ou verifique permissões. A lista vazia não é erro de carregamento.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {data.error && (
+        <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-950 flex gap-3 items-start">
+          <AlertCircle className="h-5 w-5 shrink-0 mt-0.5" aria-hidden />
+          <div>
+            <p className="font-medium">Erro ao carregar dados</p>
+            <p className="text-sm mt-1">{data.error}</p>
+          </div>
+        </div>
+      )}
 
       <AlertDialog
         open={registroParaExcluir != null}

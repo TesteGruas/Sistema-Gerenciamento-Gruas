@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { 
   DollarSign, 
-  Receipt, 
   Calculator,
   TrendingUp,
   TrendingDown,
@@ -15,7 +14,6 @@ import {
   Home,
   FileCheck,
   ReceiptText,
-  ShoppingCart,
   Building2,
   ChevronDown
 } from "lucide-react"
@@ -46,23 +44,6 @@ const financeiroNavItems: NavItem[] = [
     href: "/dashboard/financeiro",
     icon: BarChart3,
     category: "principal"
-  },
-  {
-    title: "Vendas e Compras",
-    icon: Receipt,
-    category: "operacoes",
-    submenu: [
-      {
-        title: "Vendas",
-        href: "/dashboard/financeiro/vendas",
-        icon: Receipt
-      },
-      {
-        title: "Compras",
-        href: "/dashboard/financeiro/compras",
-        icon: ShoppingCart
-      }
-    ]
   },
   {
     title: "Medições",

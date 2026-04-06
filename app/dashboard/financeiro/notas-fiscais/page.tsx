@@ -45,8 +45,44 @@ import {
   AlertTriangle,
   Zap,
   Loader2,
+  ClipboardList,
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
+
+/** Preview no painel (valores como em Medições): em aberto vs liquidado + total + pizza por entidade */
+function calcularResumoNfPreview(
+  notas: NotaFiscal[],
+  agruparPor: "cliente" | "fornecedor"
+) {
+  const naoCancelada = (n: NotaFiscal) => n.status !== "cancelada"
+  const valor = (n: NotaFiscal) => Number(n.valor_total) || 0
+  const filtradas = notas.filter(naoCancelada)
+
+  const aFaturar = filtradas
+    .filter((n) => n.status === "pendente" || n.status === "vencida")
+    .reduce((acc, n) => acc + valor(n), 0)
+
+  const jaFaturado = filtradas
+    .filter((n) => n.status === "paga")
+    .reduce((acc, n) => acc + valor(n), 0)
+
+  const totalEsperado = filtradas.reduce((acc, n) => acc + valor(n), 0)
+
+  const mapa = new Map<string, number>()
+  for (const n of filtradas) {
+    const nome =
+      agruparPor === "cliente"
+        ? (n.clientes?.nome?.trim() || "Sem cliente")
+        : (n.fornecedores?.nome?.trim() || "Sem fornecedor")
+    mapa.set(nome, (mapa.get(nome) || 0) + valor(n))
+  }
+  const totaisPorEntidade = Array.from(mapa.entries())
+    .map(([nome, total]) => ({ nome, total }))
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 4)
+
+  return { aFaturar, jaFaturado, totalEsperado, totaisPorEntidade }
+}
 import { clientesApi } from "@/lib/api-clientes"
 import { fornecedoresApi } from "@/lib/api-fornecedores"
 import { medicoesMensaisApi, type MedicaoMensal, type MedicaoDocumento } from "@/lib/api-medicoes-mensais"
@@ -59,6 +95,7 @@ import { ptBR } from "date-fns/locale"
 import { DebugButton } from "@/components/debug-button"
 import { formatBrlMoneyInputValue, parseBrlMoneyDigitsInput } from "@/lib/medicoes-utils"
 import { tiposImpostosApi } from "@/lib/api-tipos-impostos"
+import { getApiErrorMessage } from "@/lib/api"
 
 interface Cliente {
   id: number
@@ -77,6 +114,46 @@ interface Medicao {
   numero: string
   periodo: string
   status_aprovacao?: string | null
+  data_medicao?: string
+  created_at?: string
+  obras?: { clientes?: { nome?: string | null } | null }
+  orcamentos?: { clientes?: { nome?: string | null } | null }
+}
+
+/** Rótulo do select de NF saída: Medição + data + cliente */
+function obterNomeClienteMedicao(m: Medicao | MedicaoMensal | Record<string, unknown>): string {
+  const raw = m as MedicaoMensal
+  const n =
+    raw?.obras?.clientes?.nome ||
+    raw?.orcamentos?.clientes?.nome ||
+    (m as { obra?: { clientes?: { nome?: string } } })?.obra?.clientes?.nome
+  const s = n != null ? String(n).trim() : ""
+  return s || "Cliente não informado"
+}
+
+function obterDataMedicaoLabel(m: Medicao | MedicaoMensal | Record<string, unknown>): string {
+  const raw = (m as MedicaoMensal).data_medicao || (m as Medicao).data_medicao || (m as MedicaoMensal).created_at || (m as Medicao).created_at
+  if (raw) {
+    try {
+      return format(new Date(raw as string), "dd/MM/yyyy", { locale: ptBR })
+    } catch {
+      return String(raw).slice(0, 10)
+    }
+  }
+  const per = (m as Medicao).periodo ?? (m as MedicaoMensal).periodo
+  if (per && /^\d{4}-\d{2}$/.test(String(per))) {
+    const [y, mo] = String(per).split("-")
+    return `${mo}/${y}`
+  }
+  return per ? String(per) : "—"
+}
+
+function rotuloSelectMedicaoImportar(m: Medicao | MedicaoMensal): string {
+  const num =
+    m.numero != null && String(m.numero).trim() !== ""
+      ? String(m.numero).trim()
+      : `#${m.id}`
+  return `Medição ${num} — ${obterDataMedicaoLabel(m)} — ${obterNomeClienteMedicao(m)}`
 }
 
 interface Locacao {
@@ -196,12 +273,19 @@ export default function NotasFiscaisPage() {
   const { toast } = useToast()
   /** Valor primitivo — evita reexecutar o efeito a cada render (objeto searchParams muda de referência). */
   const fromMedicaoQuery = searchParams.get("fromMedicao")
+  /** Abrir modal de visualização (ex.: link em Bancos → movimentação com referência NF-x) */
+  const notaIdAbrirQuery = searchParams.get("notaId")
   /** Fallback se a query atrasar no primeiro paint ou for perdida na navegação */
   const [medicaoIdFallback, setMedicaoIdFallback] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'saida' | 'entrada'>('saida')
+  /** Aba do bloco de resumo financeiro (preview) */
+  const [resumoPreviewTab, setResumoPreviewTab] = useState<'saida' | 'entrada'>('saida')
   
   // Estados
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([])
+  /** Amostras para cards de resumo (sem filtros da tabela) */
+  const [notasPreviewSaida, setNotasPreviewSaida] = useState<NotaFiscal[]>([])
+  const [notasPreviewEntrada, setNotasPreviewEntrada] = useState<NotaFiscal[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
@@ -324,6 +408,7 @@ export default function NotasFiscaisPage() {
   const [itens, setItens] = useState<NotaFiscalItem[]>([])
   const [isItemDialogOpen, setIsItemDialogOpen] = useState(false)
   const [isCreateFornecedorDialogOpen, setIsCreateFornecedorDialogOpen] = useState(false)
+  const [isCreateClienteDialogOpen, setIsCreateClienteDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<NotaFiscalItem | null>(null)
   const [criarBoleto, setCriarBoleto] = useState(false)
   const [formaPagamento, setFormaPagamento] = useState<string>('')
@@ -1023,6 +1108,19 @@ export default function NotasFiscaisPage() {
     }
   }
 
+  const carregarPreviewResumos = useCallback(async () => {
+    try {
+      const [rSaida, rEntrada] = await Promise.all([
+        notasFiscaisApi.list({ tipo: "saida", limit: 5000, page: 1 }),
+        notasFiscaisApi.list({ tipo: "entrada", limit: 5000, page: 1 }),
+      ])
+      if (rSaida.success) setNotasPreviewSaida(rSaida.data || [])
+      if (rEntrada.success) setNotasPreviewEntrada(rEntrada.data || [])
+    } catch (e) {
+      console.error("Erro ao carregar preview de resumo (NF):", e)
+    }
+  }, [])
+
   const carregarNotasFiscais = useCallback(async () => {
     try {
       setLoading(true)
@@ -1052,7 +1150,8 @@ export default function NotasFiscaisPage() {
     } finally {
       setLoading(false)
     }
-  }, [activeTab, currentPage, statusFilter, searchTerm, toast])
+    void carregarPreviewResumos()
+  }, [activeTab, currentPage, statusFilter, searchTerm, toast, carregarPreviewResumos])
 
   // Função helper para limpar dados antes de enviar (converter strings vazias para null)
   const limparDadosNotaFiscal = (data: any) => {
@@ -1552,10 +1651,10 @@ export default function NotasFiscaisPage() {
         resetForm()
         await carregarNotasFiscais()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao criar nota fiscal",
+        description: getApiErrorMessage(error, "Erro ao criar nota fiscal"),
         variant: "destructive"
       })
     } finally {
@@ -1707,10 +1806,10 @@ export default function NotasFiscaisPage() {
         resetForm()
         await carregarNotasFiscais()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao atualizar nota fiscal",
+        description: getApiErrorMessage(error, "Erro ao atualizar nota fiscal"),
         variant: "destructive"
       })
     } finally {
@@ -1729,10 +1828,10 @@ export default function NotasFiscaisPage() {
         })
         await carregarNotasFiscais()
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao excluir nota fiscal",
+        description: getApiErrorMessage(error, "Erro ao excluir nota fiscal"),
         variant: "destructive"
       })
     }
@@ -1825,7 +1924,10 @@ export default function NotasFiscaisPage() {
     setIsEditDialogOpen(true)
   }
 
-  const handleView = async (nota: NotaFiscal) => {
+  const handleView = async (
+    nota: NotaFiscal,
+    opts?: { ajustarAbaLista?: boolean }
+  ) => {
     console.log('🔍 [NOTAS-FISCAIS] Botão visualizar clicado')
     console.log('🔍 [NOTAS-FISCAIS] Dados da nota:', nota)
     
@@ -1849,6 +1951,12 @@ export default function NotasFiscaisPage() {
       if (detalhesResponse.success && detalhesResponse.data) {
         console.log('✅ [NOTAS-FISCAIS] Dados recebidos com sucesso:', detalhesResponse.data)
         setViewingNota(detalhesResponse.data)
+        if (opts?.ajustarAbaLista) {
+          const tipo = detalhesResponse.data.tipo
+          const aba = tipo === 'entrada' ? 'entrada' : 'saida'
+          setActiveTab(aba)
+          setResumoPreviewTab(aba)
+        }
       } else {
         console.warn('⚠️ [NOTAS-FISCAIS] Não foi possível buscar detalhes completos, usando dados disponíveis')
         console.warn('⚠️ [NOTAS-FISCAIS] Resposta:', detalhesResponse)
@@ -1887,6 +1995,28 @@ export default function NotasFiscaisPage() {
       setLoadingDetalhesNota(false)
     }
   }
+
+  /** Deep link: /notas-fiscais?notaId= — abre o mesmo modal de detalhes e remove a query da URL */
+  useEffect(() => {
+    if (!notaIdAbrirQuery) return
+    const id = parseInt(notaIdAbrirQuery, 10)
+    if (!Number.isFinite(id) || id < 1) return
+    let cancelled = false
+    ;(async () => {
+      await handleView({ id } as NotaFiscal, { ajustarAbaLista: true })
+      if (
+        !cancelled &&
+        typeof window !== "undefined" &&
+        window.location.search.includes("notaId=")
+      ) {
+        router.replace("/dashboard/financeiro/notas-fiscais", { scroll: false })
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleView é estável o suficiente; só reagir ao notaId na URL
+  }, [notaIdAbrirQuery])
 
   const handleUpload = (nota: NotaFiscal) => {
     setUploadingNota(nota)
@@ -2191,6 +2321,37 @@ export default function NotasFiscaisPage() {
   const parseNFeXML = async (file: File) => {
     setParseandoXmlNfe(true)
     try {
+      /** Com NF de saída já vinculada à medição: valores/itens/impostos vêm do XML; cliente, data e referência da medição permanecem. */
+      const snapMedicao =
+        (formData.tipo || activeTab) === 'saida' &&
+        formData.medicao_id != null &&
+        Number(formData.medicao_id) > 0
+          ? {
+              medicao_id: Number(formData.medicao_id),
+              cliente_id: formData.cliente_id,
+              data_emissao: formData.data_emissao || '',
+              numero_ref: (formData.numero_nf || '').trim(),
+              observacoes_medicao: (formData.observacoes || '').trim()
+            }
+          : null
+
+      const mesclarComMedicaoParaSaida = (dados: NotaFiscalCreate): NotaFiscalCreate => {
+        if (!snapMedicao) return dados
+        if ((dados.tipo || 'saida') !== 'saida') return dados
+        const obsParts = [
+          `Vínculo medição #${snapMedicao.medicao_id}${snapMedicao.numero_ref ? ` (ref. ${snapMedicao.numero_ref})` : ''}.`,
+          snapMedicao.observacoes_medicao,
+          dados.observacoes
+        ].filter(Boolean)
+        return {
+          ...dados,
+          medicao_id: snapMedicao.medicao_id,
+          cliente_id: snapMedicao.cliente_id ?? dados.cliente_id,
+          data_emissao: snapMedicao.data_emissao || dados.data_emissao,
+          observacoes: obsParts.join('\n\n') || dados.observacoes
+        }
+      }
+
       const xmlBuffer = await file.arrayBuffer()
       const xmlBytes = new Uint8Array(xmlBuffer)
 
@@ -2540,7 +2701,7 @@ export default function NotasFiscaisPage() {
           impostos_dinamicos: []
         })
 
-        setFormData(dadosNfse)
+        setFormData(mesclarComMedicaoParaSaida(dadosNfse))
         setItens([itemNfse])
 
         {
@@ -2556,7 +2717,9 @@ export default function NotasFiscaisPage() {
 
         toast({
           title: "XML NFS-e importado com sucesso",
-          description: `Dados extraídos: NFS-e ${dadosNfse.numero_nf}. Valor: R$ ${valorTotalCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
+          description: snapMedicao
+            ? `NFS-e ${dadosNfse.numero_nf}. Valor e tributos do XML; cliente, data de emissão e vínculo com a medição foram mantidos. Confira antes de salvar.`
+            : `Dados extraídos: NFS-e ${dadosNfse.numero_nf}. Valor: R$ ${valorTotalCalculado.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
         })
 
         return
@@ -2711,7 +2874,7 @@ export default function NotasFiscaisPage() {
         }
       }
 
-      setFormData(dadosXML)
+      setFormData(mesclarComMedicaoParaSaida(dadosXML))
       if (formaPagamentoXML) {
         setFormaPagamento(formaPagamentoXML)
         setCriarBoleto(formaPagamentoXML === 'boleto')
@@ -2916,7 +3079,9 @@ export default function NotasFiscaisPage() {
       const totalItens = itensXML.length
       toast({
         title: "XML importado com sucesso",
-        description: `Dados extraídos: NF ${nNF}, Série ${serie}, ${totalItens} item(ns). Valor: R$ ${parseFloat(vNF).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
+        description: snapMedicao
+          ? `NF ${nNF}, Série ${serie}, ${totalItens} item(ns). Valores e impostos do XML; cliente, data de emissão e vínculo com a medição foram mantidos. Confira antes de salvar.`
+          : `Dados extraídos: NF ${nNF}, Série ${serie}, ${totalItens} item(ns). Valor: R$ ${parseFloat(vNF).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}. Confira e complete os dados antes de salvar.`,
       })
 
     } catch (error: any) {
@@ -2934,6 +3099,15 @@ export default function NotasFiscaisPage() {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
+
+  const resumoNfSaida = useMemo(
+    () => calcularResumoNfPreview(notasPreviewSaida, "cliente"),
+    [notasPreviewSaida]
+  )
+  const resumoNfEntrada = useMemo(
+    () => calcularResumoNfPreview(notasPreviewEntrada, "fornecedor"),
+    [notasPreviewEntrada]
+  )
 
   const formatDate = (dateString: string) => {
     try {
@@ -3321,6 +3495,170 @@ export default function NotasFiscaisPage() {
           </Button>
         </div>
       </div>
+
+      {/* Preview de valores (como em Medições): abas saída / entrada */}
+      <Tabs
+        value={resumoPreviewTab}
+        onValueChange={(v) => setResumoPreviewTab(v as "saida" | "entrada")}
+        className="w-full min-w-0"
+      >
+        <TabsList className="grid w-full max-w-md grid-cols-2 sm:w-auto sm:inline-flex">
+          <TabsTrigger value="saida">Resumo Notas de Saída</TabsTrigger>
+          <TabsTrigger value="entrada">Resumo Notas de Entrada</TabsTrigger>
+        </TabsList>
+        <TabsContent value="saida" className="mt-4 space-y-0">
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">A Faturar</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.aFaturar)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Pendente ou vencida</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Já Faturado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.jaFaturado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status pago</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Total esperado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.totalEsperado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Já faturado + a faturar</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-2">
+              <CardContent className="p-4 flex items-center justify-between gap-4">
+                <div className="space-y-2 min-w-0">
+                  <p className="text-sm text-gray-500">Totais por Cliente</p>
+                  {resumoNfSaida.totaisPorEntidade.length === 0 ? (
+                    <p className="text-sm text-gray-400">Sem dados</p>
+                  ) : (
+                    resumoNfSaida.totaisPorEntidade.map((item, idx) => {
+                      const cores = ["bg-blue-500", "bg-emerald-500", "bg-amber-400", "bg-indigo-500"]
+                      const percentual =
+                        resumoNfSaida.totalEsperado > 0
+                          ? ((item.total / resumoNfSaida.totalEsperado) * 100).toFixed(1)
+                          : "0.0"
+                      return (
+                        <div key={`saida-${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cores[idx % cores.length]}`} />
+                            <span className="text-gray-700 truncate" title={item.nome}>{item.nome}</span>
+                          </div>
+                          <span className="font-medium text-gray-600 shrink-0">{percentual}%</span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                {resumoNfSaida.totaisPorEntidade.length > 0 && (
+                  <div
+                    className="w-28 h-28 rounded-full shrink-0"
+                    style={{
+                      background: (() => {
+                        const cores = ["#3b82f6", "#10b981", "#f59e0b", "#6366f1"]
+                        let inicio = 0
+                        const fatias = resumoNfSaida.totaisPorEntidade.map((item, idx) => {
+                          const pct =
+                            resumoNfSaida.totalEsperado > 0 ? (item.total / resumoNfSaida.totalEsperado) * 100 : 0
+                          const fim = inicio + pct
+                          const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
+                          inicio = fim
+                          return trecho
+                        })
+                        return `conic-gradient(${fatias.join(", ")})`
+                      })(),
+                    }}
+                  >
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-14 h-14 rounded-full bg-white dark:bg-card" />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+        <TabsContent value="entrada" className="mt-4 space-y-0">
+          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">A Faturar</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.aFaturar)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Pendente ou vencida</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Já Faturado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.jaFaturado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status pago</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-1">
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Total esperado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.totalEsperado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Já faturado + a faturar</p>
+              </CardContent>
+            </Card>
+            <Card className="xl:col-span-2">
+              <CardContent className="p-4 flex items-center justify-between gap-4">
+                <div className="space-y-2 min-w-0">
+                  <p className="text-sm text-gray-500">Totais por Fornecedor</p>
+                  {resumoNfEntrada.totaisPorEntidade.length === 0 ? (
+                    <p className="text-sm text-gray-400">Sem dados</p>
+                  ) : (
+                    resumoNfEntrada.totaisPorEntidade.map((item, idx) => {
+                      const cores = ["bg-blue-500", "bg-emerald-500", "bg-amber-400", "bg-indigo-500"]
+                      const percentual =
+                        resumoNfEntrada.totalEsperado > 0
+                          ? ((item.total / resumoNfEntrada.totalEsperado) * 100).toFixed(1)
+                          : "0.0"
+                      return (
+                        <div key={`entrada-${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cores[idx % cores.length]}`} />
+                            <span className="text-gray-700 truncate" title={item.nome}>{item.nome}</span>
+                          </div>
+                          <span className="font-medium text-gray-600 shrink-0">{percentual}%</span>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+                {resumoNfEntrada.totaisPorEntidade.length > 0 && (
+                  <div
+                    className="w-28 h-28 rounded-full shrink-0"
+                    style={{
+                      background: (() => {
+                        const cores = ["#3b82f6", "#10b981", "#f59e0b", "#6366f1"]
+                        let inicio = 0
+                        const fatias = resumoNfEntrada.totaisPorEntidade.map((item, idx) => {
+                          const pct =
+                            resumoNfEntrada.totalEsperado > 0 ? (item.total / resumoNfEntrada.totalEsperado) * 100 : 0
+                          const fim = inicio + pct
+                          const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
+                          inicio = fim
+                          return trecho
+                        })
+                        return `conic-gradient(${fatias.join(", ")})`
+                      })(),
+                    }}
+                  >
+                    <div className="w-full h-full flex items-center justify-center">
+                      <div className="w-14 h-14 rounded-full bg-white dark:bg-card" />
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={(v) => {
@@ -3790,7 +4128,7 @@ export default function NotasFiscaisPage() {
           }
         }
       }}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-[min(92rem,calc(100vw-1rem))] w-[min(92rem,calc(100vw-1rem))] max-h-[90vh] overflow-y-auto">
           <div className="relative min-h-0">
           {dialogFormNfOcupado && (
             <div
@@ -3813,20 +4151,20 @@ export default function NotasFiscaisPage() {
               </p>
             </div>
           )}
-          <DialogHeader>
-            <div className="flex items-center justify-between">
-              <div className="flex-1">
-                <DialogTitle>
+          <DialogHeader className="space-y-0 pb-5 sm:pb-6 pr-12 sm:pr-16">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between sm:gap-8">
+              <div className="flex-1 min-w-0 space-y-3 sm:space-y-3.5">
+                <DialogTitle className="pr-1">
                   {isEditDialogOpen ? 'Editar Nota Fiscal' : (formData.tipo || activeTab) === 'saida' ? 'Nova Nota Fiscal de Saída' : 'Nova Nota Fiscal de Entrada'}
                 </DialogTitle>
-                <DialogDescription>
+                <DialogDescription className="text-sm leading-relaxed sm:text-[0.9375rem]">
                   {(formData.tipo || activeTab) === 'saida' 
                     ? 'Preencha os dados da nota fiscal de saída (locação, circulação de equipamentos, outros equipamentos ou medição)'
                     : 'Preencha os dados da nota fiscal de entrada (fornecedor)'}
                 </DialogDescription>
               </div>
               {!isEditDialogOpen && (
-                <div className="flex items-center gap-2 ml-4">
+                <div className="flex shrink-0 flex-wrap items-center gap-3 sm:ml-0 sm:pt-0.5">
                   <Button
                     type="button"
                     variant="outline"
@@ -3870,60 +4208,91 @@ export default function NotasFiscaisPage() {
           
           <div className="space-y-4">
             {!isEditDialogOpen && (formData.tipo || activeTab) === 'saida' && (
-              <div className="flex flex-wrap items-end gap-2 pb-1 text-xs text-muted-foreground border-b border-border/50">
-                <span className="sr-only">Importar dados de medição aprovada</span>
-                <span className="hidden sm:inline self-center shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground/80">
-                  Medição
-                </span>
-                <Select
-                  value={medicaoIdParaImportar}
-                  onValueChange={setMedicaoIdParaImportar}
-                  disabled={dialogFormNfOcupado}
-                >
-                  <SelectTrigger className="h-8 w-full sm:w-[min(100%,240px)] text-xs bg-background/80">
-                    <SelectValue
-                      placeholder={
-                        medicoesAprovadasListar.length === 0
-                          ? 'Nenhuma aprovada'
-                          : 'Selecionar…'
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {medicoesAprovadasListar.length === 0 ? (
-                      <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                        Nenhuma medição aprovada.
+              <div
+                role="region"
+                aria-label="Importar dados de medição aprovada"
+                className="rounded-xl border border-blue-200/80 bg-gradient-to-br from-blue-50/90 via-background to-muted/30 p-4 shadow-sm dark:border-blue-900/50 dark:from-blue-950/40 dark:via-background dark:to-muted/20"
+              >
+                <div className="flex gap-3 min-w-0">
+                  <div
+                    className="hidden sm:flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600/10 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+                    aria-hidden
+                  >
+                    <ClipboardList className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-3">
+                      <div className="w-full sm:min-w-0 sm:flex-1 sm:max-w-md">
+                        <Label
+                          htmlFor="nf-saida-medicao-select"
+                          className="text-xs font-medium text-foreground/90"
+                        >
+                          Medição
+                        </Label>
+                        <Select
+                          value={medicaoIdParaImportar}
+                          onValueChange={setMedicaoIdParaImportar}
+                          disabled={dialogFormNfOcupado}
+                        >
+                          <SelectTrigger
+                            id="nf-saida-medicao-select"
+                            className="mt-1.5 h-10 w-full text-sm bg-background shadow-sm"
+                          >
+                            <SelectValue
+                              placeholder={
+                                medicoesAprovadasListar.length === 0
+                                  ? 'Nenhuma medição aprovada no momento'
+                                  : 'Selecione a medição…'
+                              }
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {medicoesAprovadasListar.length === 0 ? (
+                              <div className="px-2 py-2 text-sm text-muted-foreground">
+                                Nenhuma medição aprovada.
+                              </div>
+                            ) : (
+                              medicoesAprovadasListar.map((med) => {
+                                const label = rotuloSelectMedicaoImportar(med)
+                                return (
+                                  <SelectItem
+                                    key={med.id}
+                                    value={String(med.id)}
+                                    className="text-sm"
+                                    title={label}
+                                  >
+                                    {label}
+                                  </SelectItem>
+                                )
+                              })
+                            )}
+                          </SelectContent>
+                        </Select>
                       </div>
-                    ) : (
-                      medicoesAprovadasListar.map((med) => (
-                        <SelectItem key={med.id} value={String(med.id)} className="text-xs">
-                          {med.numero} — {med.periodo}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleImportarDadosMedicao}
-                  disabled={
-                    dialogFormNfOcupado ||
-                    !medicaoIdParaImportar ||
-                    medicoesAprovadasListar.length === 0
-                  }
-                  className="h-8 px-2 text-xs text-muted-foreground hover:text-foreground"
-                >
-                  {importandoMedicao ? (
-                    <>
-                      <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin inline" />
-                      Carregando…
-                    </>
-                  ) : (
-                    'Importar da medição'
-                  )}
-                </Button>
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        size="default"
+                        onClick={handleImportarDadosMedicao}
+                        disabled={
+                          dialogFormNfOcupado ||
+                          !medicaoIdParaImportar ||
+                          medicoesAprovadasListar.length === 0
+                        }
+                        className="h-10 shrink-0 px-4 text-sm font-medium sm:self-end"
+                      >
+                        {importandoMedicao ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Importando…
+                          </>
+                        ) : (
+                          'Importar da medição'
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                </div>
               </div>
             )}
 
@@ -3966,23 +4335,36 @@ export default function NotasFiscaisPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
+                  <div className="space-y-2">
                     <Label htmlFor="cliente_id">Cliente *</Label>
-                    <Select 
-                      value={formData.cliente_id?.toString() || ''} 
-                      onValueChange={(value) => setFormData({ ...formData, cliente_id: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o cliente" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {clientes.map(cliente => (
-                          <SelectItem key={cliente.id} value={cliente.id.toString()}>
-                            {cliente.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    <div className="flex gap-2 items-center">
+                      <Select
+                        value={formData.cliente_id?.toString() || ''}
+                        onValueChange={(value) => setFormData({ ...formData, cliente_id: parseInt(value) })}
+                      >
+                        <SelectTrigger id="cliente_id" className="flex-1 min-w-0">
+                          <SelectValue placeholder="Selecione o cliente" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clientes.map((cliente) => (
+                            <SelectItem key={cliente.id} value={cliente.id.toString()}>
+                              {cliente.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setIsCreateClienteDialogOpen(true)}
+                        className="h-10 shrink-0 px-3"
+                        disabled={dialogFormNfOcupado}
+                      >
+                        <Plus className="w-4 h-4 mr-1" />
+                        Novo
+                      </Button>
+                    </div>
                   </div>
                 </div>
 
@@ -4041,35 +4423,35 @@ export default function NotasFiscaisPage() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Label htmlFor="fornecedor_id">Fornecedor *</Label>
+                  <div className="space-y-2">
+                    <Label htmlFor="fornecedor_id">Fornecedor *</Label>
+                    <div className="flex gap-2 items-center">
+                      <Select
+                        value={formData.fornecedor_id?.toString() || ''}
+                        onValueChange={(value) => setFormData({ ...formData, fornecedor_id: parseInt(value) })}
+                      >
+                        <SelectTrigger id="fornecedor_id" className="flex-1 min-w-0">
+                          <SelectValue placeholder="Selecione o fornecedor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {fornecedores.map((fornecedor) => (
+                            <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
+                              {fornecedor.nome}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={() => setIsCreateFornecedorDialogOpen(true)}
-                        className="h-7 text-xs"
+                        className="h-10 shrink-0 px-3"
                       >
-                        <Plus className="w-3 h-3 mr-1" />
+                        <Plus className="w-4 h-4 mr-1" />
                         Novo
                       </Button>
                     </div>
-                    <Select 
-                      value={formData.fornecedor_id?.toString() || ''} 
-                      onValueChange={(value) => setFormData({ ...formData, fornecedor_id: parseInt(value) })}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione o fornecedor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {fornecedores.map(fornecedor => (
-                          <SelectItem key={fornecedor.id} value={fornecedor.id.toString()}>
-                            {fornecedor.nome}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
                   </div>
                 </div>
 
@@ -5873,6 +6255,17 @@ export default function NotasFiscaisPage() {
         </DialogContent>
       </Dialog>
 
+      {/* Dialog para criar novo cliente (NF saída) */}
+      <CreateClienteDialog
+        isOpen={isCreateClienteDialogOpen}
+        onClose={() => setIsCreateClienteDialogOpen(false)}
+        onSuccess={(novoCliente) => {
+          setClientes([...clientes, { id: novoCliente.id, nome: novoCliente.nome, cnpj: novoCliente.cnpj }])
+          setFormData({ ...formData, cliente_id: novoCliente.id })
+          setIsCreateClienteDialogOpen(false)
+        }}
+      />
+
       {/* Dialog para criar novo fornecedor */}
       <CreateFornecedorDialog
         isOpen={isCreateFornecedorDialogOpen}
@@ -6184,6 +6577,173 @@ function CreateFornecedorDialog({
               {isSubmitting ? 'Salvando...' : 'Cadastrar Fornecedor'}
             </Button>
           </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** Campos obrigatórios iguais ao cadastro em Clientes (nome, CNPJ, representante, e-mail do contato). */
+function CreateClienteDialog({
+  isOpen,
+  onClose,
+  onSuccess,
+}: {
+  isOpen: boolean
+  onClose: () => void
+  onSuccess: (cliente: Cliente) => void
+}) {
+  const { toast } = useToast()
+  const [formCliente, setFormCliente] = useState({
+    nome: "",
+    cnpj: "",
+    contato: "",
+    contato_email: "",
+  })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setFormCliente({ nome: "", cnpj: "", contato: "", contato_email: "" })
+    }
+  }, [isOpen])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+
+    const camposFaltando: string[] = []
+    if (!formCliente.nome?.trim()) camposFaltando.push("Nome da Empresa")
+    if (!formCliente.cnpj?.trim()) camposFaltando.push("CNPJ")
+    if (!formCliente.contato?.trim()) camposFaltando.push("Nome do Representante")
+    if (!formCliente.contato_email?.trim()) camposFaltando.push("Email do Contato")
+
+    if (camposFaltando.length > 0) {
+      toast({
+        title: "Campos obrigatórios",
+        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(", ")}`,
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
+    try {
+      const response = await clientesApi.criarCliente({
+        nome: formCliente.nome.trim(),
+        cnpj: formCliente.cnpj.replace(/\D/g, ""),
+        contato: formCliente.contato.trim(),
+        contato_email: formCliente.contato_email.trim(),
+        status: "ativo",
+        criar_usuario: false,
+      })
+      if (!response.success || !response.data) {
+        throw new Error(
+          response && typeof response === "object" && "message" in response
+            ? String((response as { message?: string }).message)
+            : "Resposta inválida da API",
+        )
+      }
+      const c = response.data
+      setFormCliente({ nome: "", cnpj: "", contato: "", contato_email: "" })
+      onSuccess({ id: c.id, nome: c.nome, cnpj: c.cnpj })
+      toast({
+        title: "Informação",
+        description: "Cliente cadastrado com sucesso e selecionado nesta nota fiscal.",
+        variant: "default",
+      })
+    } catch (error: unknown) {
+      console.error("Erro ao criar cliente:", error)
+      toast({
+        title: "Erro",
+        description: getApiErrorMessage(error, "Não foi possível cadastrar o cliente."),
+        variant: "destructive",
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Building2 className="w-5 h-5" />
+            Novo Cliente
+          </DialogTitle>
+          <DialogDescription>
+            Preencha apenas os dados obrigatórios. Para endereço completo e demais informações, edite o cliente em Clientes.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div className="sm:col-span-2">
+              <Label htmlFor="nf-cli-nome">Nome da Empresa *</Label>
+              <Input
+                id="nf-cli-nome"
+                value={formCliente.nome}
+                onChange={(e) => setFormCliente({ ...formCliente, nome: e.target.value })}
+                placeholder="Ex: Construtora ABC Ltda"
+                autoComplete="organization"
+              />
+            </div>
+            <div className="sm:col-span-2">
+              <Label htmlFor="nf-cli-cnpj">CNPJ *</Label>
+              <Input
+                id="nf-cli-cnpj"
+                value={formCliente.cnpj}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\D/g, "")
+                  if (value.length >= 2) {
+                    value = value.substring(0, 2) + "." + value.substring(2)
+                  }
+                  if (value.length >= 6) {
+                    value = value.substring(0, 6) + "." + value.substring(6)
+                  }
+                  if (value.length >= 10) {
+                    value = value.substring(0, 10) + "/" + value.substring(10)
+                  }
+                  if (value.length >= 15) {
+                    value = value.substring(0, 15) + "-" + value.substring(15, 17)
+                  }
+                  setFormCliente({ ...formCliente, cnpj: value })
+                }}
+                placeholder="00.000.000/0000-00"
+                maxLength={18}
+                inputMode="numeric"
+              />
+            </div>
+            <div>
+              <Label htmlFor="nf-cli-contato">Nome do Contato *</Label>
+              <Input
+                id="nf-cli-contato"
+                value={formCliente.contato}
+                onChange={(e) => setFormCliente({ ...formCliente, contato: e.target.value })}
+                placeholder="Nome do representante"
+                autoComplete="name"
+              />
+            </div>
+            <div>
+              <Label htmlFor="nf-cli-contato-email">Email do Contato *</Label>
+              <Input
+                id="nf-cli-contato-email"
+                type="email"
+                value={formCliente.contato_email}
+                onChange={(e) => setFormCliente({ ...formCliente, contato_email: e.target.value })}
+                placeholder="email@empresa.com"
+                autoComplete="email"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0 flex-col sm:flex-row">
+            <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting ? "Salvando…" : "Criar Cliente"}
+            </Button>
+          </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>

@@ -114,7 +114,8 @@ const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
 };
 
 /**
- * Notas fiscais vinculadas à medição (medicao_id). NFs canceladas não contam como faturado.
+ * Notas fiscais vinculadas à medição (medicao_id).
+ * Faturado = existe pelo menos uma NF com medicao_id preenchido, independente do status (pendente, paga, cancelada, etc.).
  */
 async function enriquecerMedicoesComResumoNotasFiscais(medicoes) {
   if (!medicoes?.length) return medicoes;
@@ -134,9 +135,8 @@ async function enriquecerMedicoesComResumoNotasFiscais(medicoes) {
     }));
   }
 
-  const validas = (notas || []).filter((n) => n.status !== 'cancelada');
   const byMedicao = {};
-  for (const n of validas) {
+  for (const n of notas || []) {
     const mid = n.medicao_id;
     if (!byMedicao[mid]) byMedicao[mid] = [];
     byMedicao[mid].push(n);

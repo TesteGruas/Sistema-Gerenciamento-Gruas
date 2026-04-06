@@ -2,21 +2,52 @@
  * API Client para Relatório de Performance de Gruas
  */
 
-import { getApiOrigin } from "./runtime-config"
-
-const API_URL = getApiOrigin()
+import { getApiBasePath } from "./runtime-config"
 
 function getAuthToken(): string | null {
-  if (typeof window !== 'undefined') {
-    return localStorage.getItem('access_token')
+  if (typeof window !== "undefined") {
+    return localStorage.getItem("access_token") || localStorage.getItem("token")
   }
   return null
 }
 
+function buildPerformanceExportUrl(
+  path: "pdf" | "excel" | "csv",
+  filtros: PerformanceGruasFiltros
+): string {
+  const base = getApiBasePath()
+  const params = new URLSearchParams()
+  if (filtros.data_inicio) params.append("data_inicio", filtros.data_inicio)
+  if (filtros.data_fim) params.append("data_fim", filtros.data_fim)
+  if (filtros.grua_id) params.append("grua_id", filtros.grua_id.toString())
+  if (filtros.obra_id) params.append("obra_id", filtros.obra_id.toString())
+  const q = params.toString()
+  return `${base}/relatorios/performance-gruas/export/${path}${q ? `?${q}` : ""}`
+}
+
+async function fetchExportBlob(path: "pdf" | "excel" | "csv", filtros: PerformanceGruasFiltros): Promise<Blob> {
+  const token = getAuthToken()
+  const url = buildPerformanceExportUrl(path, filtros)
+  const response = await fetch(url, {
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+  if (!response.ok) {
+    const ct = response.headers.get("content-type") || ""
+    if (ct.includes("application/json")) {
+      const err = await response.json().catch(() => ({}))
+      throw new Error(err.message || err.error || "Erro ao exportar relatório")
+    }
+    const text = await response.text().catch(() => "")
+    throw new Error(text.slice(0, 240) || `Erro ${response.status} ao exportar`)
+  }
+  return response.blob()
+}
+
 async function apiRequest(endpoint: string, options: RequestInit = {}) {
   const token = getAuthToken()
-  
-  const response = await fetch(`${API_URL}${endpoint}`, {
+  const path = endpoint.startsWith("/api") ? endpoint.slice(4) : endpoint
+  const url = `${getApiBasePath()}${path}`
+  const response = await fetch(url, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -77,75 +108,21 @@ export const performanceGruasApi = {
    * Exportar relatório em PDF
    */
   async exportarPDF(filtros: PerformanceGruasFiltros): Promise<Blob> {
-    const token = getAuthToken()
-    const params = new URLSearchParams()
-    if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio)
-    if (filtros.data_fim) params.append('data_fim', filtros.data_fim)
-    if (filtros.grua_id) params.append('grua_id', filtros.grua_id.toString())
-    if (filtros.obra_id) params.append('obra_id', filtros.obra_id.toString())
-
-    const query = params.toString()
-    const response = await fetch(`${API_URL}/api/relatorios/performance-gruas/export/pdf${query ? `?${query}` : ''}`, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('Erro ao exportar relatório')
-    }
-
-    return response.blob()
+    return fetchExportBlob("pdf", filtros)
   },
 
   /**
    * Exportar relatório em Excel
    */
   async exportarExcel(filtros: PerformanceGruasFiltros): Promise<Blob> {
-    const token = getAuthToken()
-    const params = new URLSearchParams()
-    if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio)
-    if (filtros.data_fim) params.append('data_fim', filtros.data_fim)
-    if (filtros.grua_id) params.append('grua_id', filtros.grua_id.toString())
-    if (filtros.obra_id) params.append('obra_id', filtros.obra_id.toString())
-
-    const query = params.toString()
-    const response = await fetch(`${API_URL}/api/relatorios/performance-gruas/export/excel${query ? `?${query}` : ''}`, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('Erro ao exportar relatório')
-    }
-
-    return response.blob()
+    return fetchExportBlob("excel", filtros)
   },
 
   /**
    * Exportar relatório em CSV
    */
   async exportarCSV(filtros: PerformanceGruasFiltros): Promise<Blob> {
-    const token = getAuthToken()
-    const params = new URLSearchParams()
-    if (filtros.data_inicio) params.append('data_inicio', filtros.data_inicio)
-    if (filtros.data_fim) params.append('data_fim', filtros.data_fim)
-    if (filtros.grua_id) params.append('grua_id', filtros.grua_id.toString())
-    if (filtros.obra_id) params.append('obra_id', filtros.obra_id.toString())
-
-    const query = params.toString()
-    const response = await fetch(`${API_URL}/api/relatorios/performance-gruas/export/csv${query ? `?${query}` : ''}`, {
-      headers: {
-        'Authorization': token ? `Bearer ${token}` : '',
-      },
-    })
-
-    if (!response.ok) {
-      throw new Error('Erro ao exportar relatório')
-    }
-
-    return response.blob()
+    return fetchExportBlob("csv", filtros)
   }
 }
 

@@ -5,8 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { DataInputBr } from "@/components/ui/data-input-br"
 import { 
   BarChart3, 
   Download, 
@@ -47,6 +46,7 @@ import {
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { apiRelatorios, RelatorioUtilizacao, RelatorioFinanceiro, RelatorioManutencao, DashboardRelatorios } from "@/lib/api-relatorios"
+import { exportRelatorioExcelServidor } from "@/lib/export-relatorios-client"
 import { performanceGruasApi, type PerformanceGruasFiltros } from "@/lib/api-relatorios-performance"
 import { PerformanceGruasFiltros as FiltrosComponent } from "@/components/relatorios/performance-gruas-filtros"
 import { PerformanceGruasTabela } from "@/components/relatorios/performance-gruas-tabela"
@@ -59,6 +59,288 @@ import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 import { impostosApi } from "@/lib/api-impostos"
 import { AlugueisAPI } from "@/lib/api-alugueis-residencias"
 import { apiContasBancarias } from "@/lib/api-contas-bancarias"
+import type { ReactNode } from "react"
+
+type FiltrosColunasRelatorios = {
+  financeiro: { origem: string; referencia: string; descricao: string; data: string; valor: string }
+  impostos: { tipo: string; total: string; pago: string; pendente: string }
+  boletos: { numero: string; descricao: string; valor: string; vencimento: string; status: string; obra: string }
+  medicoes: { numero: string; periodo: string; obra: string; valorTotal: string; status: string; data: string }
+  orcamentos: { numero: string; cliente: string; obra: string; valorTotal: string; status: string; data: string }
+  obras: { nome: string; cliente: string; endereco: string; status: string; dataInicio: string; gruas: string }
+  estoque: { nome: string; categoria: string; quantidade: string; valorUnit: string; valorTotal: string; status: string }
+  complemento: { nome: string; tipo: string; sku: string; preco: string; status: string; descricao: string }
+  documentos: { grua: string; status: string; proxima: string; dias: string; prioridade: string; valor: string; obra: string }
+  gruas: {
+    gruaNome: string
+    status: string
+    horas: string
+    taxa: string
+    receita: string
+    custo: string
+    lucro: string
+    margem: string
+    roi: string
+    receitaHora: string
+  }
+}
+
+const FILTROS_COLUNAS_INICIAL: FiltrosColunasRelatorios = {
+  financeiro: { origem: "all", referencia: "all", descricao: "all", data: "all", valor: "all" },
+  impostos: { tipo: "all", total: "all", pago: "all", pendente: "all" },
+  boletos: { numero: "all", descricao: "all", valor: "all", vencimento: "all", status: "all", obra: "all" },
+  medicoes: { numero: "all", periodo: "all", obra: "all", valorTotal: "all", status: "all", data: "all" },
+  orcamentos: { numero: "all", cliente: "all", obra: "all", valorTotal: "all", status: "all", data: "all" },
+  obras: { nome: "all", cliente: "all", endereco: "all", status: "all", dataInicio: "all", gruas: "all" },
+  estoque: { nome: "all", categoria: "all", quantidade: "all", valorUnit: "all", valorTotal: "all", status: "all" },
+  complemento: { nome: "all", tipo: "all", sku: "all", preco: "all", status: "all", descricao: "all" },
+  documentos: { grua: "all", status: "all", proxima: "all", dias: "all", prioridade: "all", valor: "all", obra: "all" },
+  gruas: {
+    gruaNome: "all",
+    status: "all",
+    horas: "all",
+    taxa: "all",
+    receita: "all",
+    custo: "all",
+    lucro: "all",
+    margem: "all",
+    roi: "all",
+    receitaHora: "all",
+  },
+}
+
+function uniqOpcoesStrings(
+  rows: any[],
+  pick: (row: any) => string | null | undefined,
+  max = 100
+): string[] {
+  const set = new Set<string>()
+  for (const row of rows) {
+    const v = pick(row)
+    const s = v == null || String(v).trim() === "" ? "N/A" : String(v).trim()
+    set.add(s)
+  }
+  return Array.from(set).sort((a, b) => a.localeCompare(b, "pt-BR")).slice(0, max)
+}
+
+function valorMonetarioNum(v: any): number {
+  if (typeof v === "number" && Number.isFinite(v)) return v
+  const s = String(v ?? "0").replace(/\s/g, "")
+  const n = parseFloat(s.replace(/\./g, "").replace(",", "."))
+  return Number.isFinite(n) ? n : 0
+}
+
+function matchPresetValorMonetario(raw: any, preset: string): boolean {
+  const v = Math.abs(valorMonetarioNum(raw))
+  if (preset === "all") return true
+  if (preset === "zero") return v < 0.005
+  if (preset === "positivo") return v >= 0.005
+  return true
+}
+
+const PRESET_VALOR_MONETARIO = [
+  { value: "all", label: "Todos" },
+  { value: "zero", label: "Igual a zero" },
+  { value: "positivo", label: "Maior que zero" },
+] as const
+
+const PRESET_HORAS_GRUA = [
+  { value: "all", label: "Todos" },
+  { value: "zero", label: "0 h" },
+  { value: "baixo", label: "1–49 h" },
+  { value: "medio", label: "50–200 h" },
+  { value: "alto", label: "200+ h" },
+] as const
+
+const PRESET_TAXA_UTIL = [
+  { value: "all", label: "Todos" },
+  { value: "baixa", label: "< 60%" },
+  { value: "medio", label: "60% – 80%" },
+  { value: "alta", label: "≥ 80%" },
+] as const
+
+const PRESET_ROI = [
+  { value: "all", label: "Todos" },
+  { value: "negativo", label: "Negativo" },
+  { value: "baixo", label: "0% – 20%" },
+  { value: "medio", label: "20% – 50%" },
+  { value: "alto", label: "≥ 50%" },
+] as const
+
+const PRESET_DIAS_MANUT = [
+  { value: "all", label: "Todos" },
+  { value: "urgente", label: "≤ 7 dias" },
+  { value: "atencao", label: "8 – 30 dias" },
+  { value: "tranquilo", label: "> 30 dias" },
+] as const
+
+const PRESET_QTD_ESTOQUE = [
+  { value: "all", label: "Todos" },
+  { value: "zero", label: "Zero" },
+  { value: "baixo", label: "1 – 10" },
+  { value: "alto", label: "10+" },
+] as const
+
+const PRESET_GRUAS_OBRA = [
+  { value: "all", label: "Todos" },
+  { value: "0", label: "0 gruas" },
+  { value: "1", label: "1 grua" },
+  { value: "2plus", label: "2 ou mais" },
+] as const
+
+const COMPLEMENTO_STATUS_OPCOES = ["Ativo", "Inativo"]
+
+function FiltroColunaOpcoes({
+  label,
+  value,
+  onChange,
+  opcoes,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  opcoes: string[]
+}) {
+  const enc = (s: string) => encodeURIComponent(s)
+  const dec = (s: string) => {
+    try {
+      return decodeURIComponent(s)
+    } catch {
+      return s
+    }
+  }
+  const selVal = value === "all" ? "all" : enc(value)
+  return (
+    <div className="min-w-[140px] flex-1">
+      <label className="text-sm font-medium block mb-1">{label}</label>
+      <Select value={selVal} onValueChange={(v) => onChange(v === "all" ? "all" : dec(v))}>
+        <SelectTrigger className="h-10">
+          <SelectValue placeholder="Todos" />
+        </SelectTrigger>
+        <SelectContent className="max-h-72">
+          <SelectItem value="all">Todos</SelectItem>
+          {opcoes.map((op, i) => (
+            <SelectItem key={`${i}-${enc(op).slice(0, 96)}`} value={enc(op)}>
+              {op.length > 44 ? `${op.slice(0, 44)}…` : op}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function FiltroColunaPresets({
+  label,
+  value,
+  onChange,
+  presets,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  presets: readonly { value: string; label: string }[]
+}) {
+  return (
+    <div className="min-w-[140px] flex-1">
+      <label className="text-sm font-medium block mb-1">{label}</label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger className="h-10">
+          <SelectValue placeholder="Todos" />
+        </SelectTrigger>
+        <SelectContent>
+          {presets.map((p) => (
+            <SelectItem key={p.value} value={p.value}>
+              {p.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  )
+}
+
+function fmtDataPtBR(v: any): string {
+  if (v == null || v === "") return ""
+  try {
+    const d = new Date(v)
+    if (Number.isNaN(d.getTime())) return String(v)
+    return format(d, "dd/MM/yyyy", { locale: ptBR })
+  } catch {
+    return String(v)
+  }
+}
+
+function somaTributosNotaFiscal(n: any): number {
+  const t = (x: any) => {
+    const num = typeof x === "number" ? x : parseFloat(String(x ?? "").replace(",", "."))
+    return Number.isFinite(num) ? num : 0
+  }
+  return (
+    t(n?.valor_icms) +
+    t(n?.valor_icms_st) +
+    t(n?.valor_fcp_st) +
+    t(n?.valor_ipi) +
+    t(n?.valor_pis) +
+    t(n?.valor_cofins) +
+    t(n?.valor_issqn) +
+    t(n?.valor_inss) +
+    t(n?.valor_ir) +
+    t(n?.valor_csll) +
+    t(n?.retencoes_federais) +
+    t(n?.outras_retencoes)
+  )
+}
+
+/** Linha única para Excel: mesmas colunas em todo o relatório financeiro integrado (campos vazios quando não aplicável). */
+function linhaExportFinanceiroIntegrado(item: any): Record<string, unknown> {
+  return {
+    Origem: item.origem ?? "",
+    Referencia: item.referencia ?? "",
+    Descricao: item.descricao ?? "",
+    Data: fmtDataPtBR(item.data),
+    Status: item.status ?? "",
+    Natureza: item.natureza ?? "",
+    Valor: item.valor ?? "",
+    Periodo_medicao: item.periodo ?? "",
+    Obra: item.obra ?? "",
+    Cliente: item.cliente ?? "",
+    Grua: item.grua ?? "",
+    Orcamento: item.orcamento ?? "",
+    Valor_bruto_medicao: item.valor_bruto ?? "",
+    Aditivos_medicao: item.aditivos ?? "",
+    Custos_extras_medicao: item.custos_extras ?? "",
+    Descontos_medicao: item.descontos ?? "",
+    Faturado_medicao: item.faturado ?? "",
+    Qtd_NFs_medicao: item.qtd_nfs ?? "",
+    NFs_medicao: item.nfs_numeros ?? "",
+    Status_aprovacao_medicao: item.status_aprovacao ?? "",
+    Mes_ano_referencia: item.mes_ano_ref ?? "",
+    Data_inicio_emissao: fmtDataPtBR(item.data_inicio_emissao),
+    Observacoes_medicao: item.observacoes ?? "",
+    Serie_NF: item.serie_nf ?? "",
+    Tipo_nota: item.tipo_nota ?? "",
+    Eletronica: item.eletronica ?? "",
+    Chave_acesso_NF: item.chave_acesso ?? "",
+    Valor_liquido_NF: item.valor_liquido ?? "",
+    Total_tributos_NF: item.total_tributos ?? "",
+    Cliente_NF: item.cliente_nf ?? "",
+    CNPJ_CPF_cliente_NF: item.cnpj_cliente ?? "",
+    Fornecedor_NF: item.fornecedor_nf ?? "",
+    Medicao_ID_vinculo: item.medicao_id ?? "",
+    Medicao_numero_vinculo: item.medicao_numero ?? "",
+    Medicao_periodo_vinculo: item.medicao_periodo ?? "",
+    Locacao_ID_NF: item.locacao_id ?? "",
+    Boletos_qtd_NF: item.boletos_qtd ?? "",
+    Boletos_resumo_NF: item.boletos_resumo ?? "",
+    Data_vencimento_NF: fmtDataPtBR(item.data_vencimento_nf),
+    Observacoes_NF: item.observacoes_nf ?? "",
+    Competencia_imposto: item.competencia_imposto ?? "",
+    Tipo_imposto_detalhe: item.tipo_imposto_det ?? "",
+    Cliente_ou_fornecedor_conta: item.cliente_conta ?? "",
+    Numero_documento_conta: item.numero_documento_conta ?? "",
+  }
+}
 
 export default function RelatoriosPage() {
   const { toast } = useToast()
@@ -99,6 +381,9 @@ export default function RelatoriosPage() {
 
   const [financeiroFiltroStatus, setFinanceiroFiltroStatus] = useState("all")
   const [financeiroFiltroNatureza, setFinanceiroFiltroNatureza] = useState("all")
+  const [filtrosColunas, setFiltrosColunas] = useState<FiltrosColunasRelatorios>(() =>
+    JSON.parse(JSON.stringify(FILTROS_COLUNAS_INICIAL)) as FiltrosColunasRelatorios
+  )
   
   // Estados de loading para cada relatório
   const [loadingImpostos, setLoadingImpostos] = useState(false)
@@ -109,6 +394,7 @@ export default function RelatoriosPage() {
   const [loadingEstoque, setLoadingEstoque] = useState(false)
   const [loadingComplementos, setLoadingComplementos] = useState(false)
   const [loadingResumoFinanceiro, setLoadingResumoFinanceiro] = useState(false)
+  const [exportandoRelatorio, setExportandoRelatorio] = useState(false)
   
   // Estado para controlar a aba ativa
   const [activeTab, setActiveTab] = useState("geral")
@@ -195,8 +481,8 @@ export default function RelatoriosPage() {
         bancosResp,
         movimentacoesResp
       ] = await Promise.all([
-        medicoesMensaisApi.listar({ data_inicio: dataInicio, data_fim: dataFim, page: 1, limit: 200 }).catch(() => ({ success: false, data: [] as any[] })),
-        notasFiscaisApi.list({ page: 1, limit: 200 }).catch(() => ({ data: [] as any[] })),
+        medicoesMensaisApi.listar({ data_inicio: dataInicio, data_fim: dataFim, page: 1, limit: 500 }).catch(() => ({ success: false, data: [] as any[] })),
+        notasFiscaisApi.list({ page: 1, limit: 500 }).catch(() => ({ data: [] as any[] })),
         impostosApi.list({ page: 1, limit: 200 }).catch(() => ({ impostos: [] as any[] })),
         api.get('/contas-receber?limite=200').catch(() => ({ data: { data: [] as any[] } })),
         api.get('/contas-pagar?limite=200').catch(() => ({ data: { data: [] as any[] } })),
@@ -216,27 +502,76 @@ export default function RelatoriosPage() {
 
       const linhasMedicoes = medicoes
         .filter((m: any) => isDataNoPeriodo(m.data_medicao || m.created_at, dataInicio, dataFim))
-        .map((m: any) => ({
-          origem: "Medição",
-          referencia: m.numero || `MED-${m.id}`,
-          descricao: m.obras?.nome || m.orcamentos?.clientes?.nome || "Medição mensal",
-          valor: toNumber(m.valor_total),
-          data: m.data_medicao || m.created_at,
-          status: m.status || "pendente",
-          natureza: "entrada"
-        }))
+        .map((m: any) => {
+          const mesAno =
+            m.mes_referencia != null && m.ano_referencia != null
+              ? `${String(m.mes_referencia).padStart(2, "0")}/${m.ano_referencia}`
+              : ""
+          const nfsNums = Array.isArray(m.notas_fiscais_numeros)
+            ? m.notas_fiscais_numeros.join("; ")
+            : ""
+          return {
+            origem: "Medição",
+            referencia: m.numero || `MED-${m.id}`,
+            descricao: m.obras?.nome || m.orcamentos?.clientes?.nome || "Medição mensal",
+            valor: toNumber(m.valor_total),
+            data: m.data_medicao || m.created_at,
+            status: m.status || "pendente",
+            natureza: "entrada",
+            periodo: m.periodo ?? "",
+            obra: m.obras?.nome ?? "",
+            cliente: m.obras?.clientes?.nome ?? m.orcamentos?.clientes?.nome ?? "",
+            grua: m.gruas?.name ?? m.gruas?.nome ?? "",
+            orcamento: m.orcamentos?.numero ?? "",
+            valor_bruto: toNumber(m.valor_mensal_bruto),
+            aditivos: toNumber(m.valor_aditivos),
+            custos_extras: toNumber(m.valor_custos_extras),
+            descontos: toNumber(m.valor_descontos),
+            faturado:
+              m.faturado === true ? "Sim" : m.faturado === false ? "Não" : "",
+            qtd_nfs: m.notas_fiscais_count ?? "",
+            nfs_numeros: nfsNums,
+            status_aprovacao: m.status_aprovacao ?? "",
+            mes_ano_ref: mesAno,
+            data_inicio_emissao: m.data_inicio_emissao ?? "",
+            observacoes: m.observacoes ? String(m.observacoes).slice(0, 800) : "",
+          }
+        })
 
       const linhasNotas = notas
         .filter((n: any) => isDataNoPeriodo(n.data_emissao || n.created_at, dataInicio, dataFim))
-        .map((n: any) => ({
-          origem: "Nota Fiscal",
-          referencia: n.numero_nf || `NF-${n.id}`,
-          descricao: n.clientes?.nome || n.fornecedores?.nome || "Nota fiscal",
-          valor: toNumber(n.valor_total),
-          data: n.data_emissao || n.created_at,
-          status: n.status || "pendente",
-          natureza: n.tipo === "entrada" ? "saida" : "entrada"
-        }))
+        .map((n: any) => {
+          const boletos = Array.isArray(n.boletos) ? n.boletos : []
+          const boletosResumo = boletos
+            .map((b: any) => `${b.numero_boleto ?? b.id}:${b.status ?? ""}`)
+            .join("; ")
+          return {
+            origem: "Nota Fiscal",
+            referencia: n.numero_nf || `NF-${n.id}`,
+            descricao: n.clientes?.nome || n.fornecedores?.nome || "Nota fiscal",
+            valor: toNumber(n.valor_total),
+            data: n.data_emissao || n.created_at,
+            status: n.status || "pendente",
+            natureza: n.tipo === "entrada" ? "saida" : "entrada",
+            serie_nf: n.serie ?? "",
+            tipo_nota: n.tipo_nota ?? "",
+            eletronica: n.eletronica === true ? "Sim" : n.eletronica === false ? "Não" : "",
+            chave_acesso: n.chave_acesso ?? "",
+            valor_liquido: toNumber(n.valor_liquido ?? n.valor_total),
+            total_tributos: somaTributosNotaFiscal(n),
+            cliente_nf: n.clientes?.nome ?? "",
+            cnpj_cliente: n.clientes?.cnpj ?? n.clientes?.cnpj_cpf ?? "",
+            fornecedor_nf: n.fornecedores?.nome ?? "",
+            medicao_id: n.medicao_id ?? "",
+            medicao_numero: n.medicoes?.numero ?? "",
+            medicao_periodo: n.medicoes?.periodo ?? "",
+            locacao_id: n.locacao_id ?? "",
+            boletos_qtd: boletos.length,
+            boletos_resumo: boletosResumo.slice(0, 500),
+            data_vencimento_nf: n.data_vencimento ?? "",
+            observacoes_nf: n.observacoes ? String(n.observacoes).slice(0, 500) : "",
+          }
+        })
 
       const linhasImpostos = impostos
         .filter((i: any) => isDataNoPeriodo(i.data_vencimento || i.created_at, dataInicio, dataFim))
@@ -247,7 +582,9 @@ export default function RelatoriosPage() {
           valor: toNumber(i.valor),
           data: i.data_vencimento || i.created_at,
           status: i.status || "pendente",
-          natureza: "saida"
+          natureza: "saida",
+          competencia_imposto: i.mes_competencia ?? i.competencia ?? i.competencia_referencia ?? "",
+          tipo_imposto_det: i.tipo_imposto ?? i.tipo ?? "",
         }))
 
       const linhasReceber = contasReceber
@@ -259,7 +596,9 @@ export default function RelatoriosPage() {
           valor: toNumber(c.valor || c.valor_total),
           data: c.data_vencimento || c.created_at,
           status: c.status || "pendente",
-          natureza: "entrada"
+          natureza: "entrada",
+          cliente_conta: c.cliente?.nome ?? c.clientes?.nome ?? "",
+          numero_documento_conta: c.numero ?? c.numero_nf ?? "",
         }))
 
       const linhasPagar = contasPagar
@@ -271,7 +610,9 @@ export default function RelatoriosPage() {
           valor: toNumber(c.valor || c.valor_total),
           data: c.data_vencimento || c.created_at,
           status: c.status || "pendente",
-          natureza: "saida"
+          natureza: "saida",
+          cliente_conta: c.fornecedor?.nome ?? c.fornecedores?.nome ?? "",
+          numero_documento_conta: c.numero ?? c.numero_nf ?? "",
         }))
 
       const linhasAlugueis = alugueis
@@ -475,10 +816,15 @@ export default function RelatoriosPage() {
       ordem: 'desc'
     })
     setPaginaPerformance(1)
+    setFiltrosColunas((prev) => ({
+      ...prev,
+      gruas: { ...FILTROS_COLUNAS_INICIAL.gruas },
+    }))
   }
 
   const handleExportPerformance = async (formato: 'pdf' | 'excel' | 'csv') => {
     try {
+      setExportandoRelatorio(true)
       let blob: Blob
       
       if (formato === 'pdf') {
@@ -509,6 +855,8 @@ export default function RelatoriosPage() {
         description: error.message || "Erro ao exportar relatório",
         variant: "destructive"
       })
+    } finally {
+      setExportandoRelatorio(false)
     }
   }
 
@@ -858,11 +1206,6 @@ export default function RelatoriosPage() {
     }
   }
 
-  const handleExport = (tipo: string) => {
-    // Aqui seria a lógica para exportar relatórios
-    console.log(`Exportando relatório: ${tipo}`)
-  }
-
   const aplicarFiltrosGlobais = async () => {
     if (activeTab === "geral") {
       await carregarRelatorioUtilizacao(1)
@@ -879,10 +1222,38 @@ export default function RelatoriosPage() {
     setLimitePorPagina(10)
     setFinanceiroFiltroStatus("all")
     setFinanceiroFiltroNatureza("all")
+    setFiltrosColunas(JSON.parse(JSON.stringify(FILTROS_COLUNAS_INICIAL)) as FiltrosColunasRelatorios)
   }
 
   const financeiroIntegradoFiltrado = useMemo(() => {
     let rows = financeiroIntegrado
+    const fc = filtrosColunas.financeiro
+    if (fc.origem !== "all") {
+      rows = rows.filter(
+        (item) => (String(item?.origem ?? "").trim() || "N/A") === fc.origem
+      )
+    }
+    if (fc.referencia !== "all") {
+      rows = rows.filter(
+        (item) => (String(item?.referencia ?? "").trim() || "N/A") === fc.referencia
+      )
+    }
+    if (fc.descricao !== "all") {
+      rows = rows.filter(
+        (item) => (String(item?.descricao ?? "").trim() || "N/A") === fc.descricao
+      )
+    }
+    if (fc.data !== "all") {
+      rows = rows.filter((item) => {
+        const ds = item?.data
+          ? format(new Date(item.data), "dd/MM/yyyy", { locale: ptBR })
+          : "N/A"
+        return ds === fc.data
+      })
+    }
+    if (fc.valor !== "all") {
+      rows = rows.filter((item) => matchPresetValorMonetario(item?.valor, fc.valor))
+    }
     if (financeiroFiltroNatureza !== "all") {
       const alvo = normalizarStatus(financeiroFiltroNatureza)
       rows = rows.filter((item) => normalizarStatus(item?.natureza) === alvo)
@@ -911,7 +1282,753 @@ export default function RelatoriosPage() {
       })
     }
     return rows
-  }, [financeiroIntegrado, financeiroFiltroStatus, financeiroFiltroNatureza])
+  }, [
+    financeiroIntegrado,
+    financeiroFiltroStatus,
+    financeiroFiltroNatureza,
+    filtrosColunas.financeiro,
+  ])
+
+  const opFinOrigem = useMemo(
+    () => uniqOpcoesStrings(financeiroIntegrado, (i) => i?.origem),
+    [financeiroIntegrado]
+  )
+  const opFinReferencia = useMemo(
+    () => uniqOpcoesStrings(financeiroIntegrado, (i) => i?.referencia),
+    [financeiroIntegrado]
+  )
+  const opFinDescricao = useMemo(
+    () => uniqOpcoesStrings(financeiroIntegrado, (i) => i?.descricao),
+    [financeiroIntegrado]
+  )
+  const opFinData = useMemo(
+    () =>
+      uniqOpcoesStrings(financeiroIntegrado, (i) =>
+        i?.data
+          ? format(new Date(i.data), "dd/MM/yyyy", { locale: ptBR })
+          : "N/A"
+      ),
+    [financeiroIntegrado]
+  )
+
+  const impostosPorTipoFiltrado = useMemo(() => {
+    const list = relatorioImpostos?.impostos_por_tipo || []
+    const f = filtrosColunas.impostos
+    return list.filter((item: any) => {
+      const tipo = String(item?.tipo ?? "").trim() || "N/A"
+      if (f.tipo !== "all" && tipo !== f.tipo) return false
+      if (!matchPresetValorMonetario(item?.valor_total, f.total)) return false
+      if (!matchPresetValorMonetario(item?.valor_pago, f.pago)) return false
+      if (!matchPresetValorMonetario(item?.valor_pendente, f.pendente)) return false
+      return true
+    })
+  }, [relatorioImpostos, filtrosColunas.impostos])
+
+  const opImpostoTipo = useMemo(
+    () => uniqOpcoesStrings(relatorioImpostos?.impostos_por_tipo || [], (i) => i?.tipo),
+    [relatorioImpostos]
+  )
+
+  const nomeObraBoleto = (b: any) =>
+    String(b?.obras?.nome || b?.medicoes?.obras?.nome || "").trim() || "N/A"
+
+  const dataVencimentoBoleto = (b: any) =>
+    b?.data_vencimento
+      ? format(new Date(b.data_vencimento), "dd/MM/yyyy", { locale: ptBR })
+      : "N/A"
+
+  const relatorioBoletosFiltrado = useMemo(() => {
+    const f = filtrosColunas.boletos
+    return relatorioBoletos.filter((b: any) => {
+      const num = String(b?.numero_boleto ?? "").trim() || "N/A"
+      if (f.numero !== "all" && num !== f.numero) return false
+      const desc = String(b?.descricao ?? "").trim() || "N/A"
+      if (f.descricao !== "all" && desc !== f.descricao) return false
+      if (f.valor !== "all" && !matchPresetValorMonetario(b?.valor, f.valor)) return false
+      const ven = dataVencimentoBoleto(b)
+      if (f.vencimento !== "all" && ven !== f.vencimento) return false
+      const st = String(b?.status ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      const ob = nomeObraBoleto(b)
+      if (f.obra !== "all" && ob !== f.obra) return false
+      return true
+    })
+  }, [relatorioBoletos, filtrosColunas.boletos])
+
+  const opBoletoNumero = useMemo(
+    () => uniqOpcoesStrings(relatorioBoletos, (b) => b?.numero_boleto),
+    [relatorioBoletos]
+  )
+  const opBoletoDescricao = useMemo(
+    () => uniqOpcoesStrings(relatorioBoletos, (b) => b?.descricao),
+    [relatorioBoletos]
+  )
+  const opBoletoStatus = useMemo(
+    () => uniqOpcoesStrings(relatorioBoletos, (b) => b?.status),
+    [relatorioBoletos]
+  )
+  const opBoletoObra = useMemo(
+    () => uniqOpcoesStrings(relatorioBoletos, (b) => nomeObraBoleto(b)),
+    [relatorioBoletos]
+  )
+  const opBoletoVencimento = useMemo(
+    () => uniqOpcoesStrings(relatorioBoletos, (b) => dataVencimentoBoleto(b)),
+    [relatorioBoletos]
+  )
+
+  const numMedicaoDisplay = (m: any) => {
+    const n = m?.numero
+    return n != null && String(n).trim() !== "" ? String(n).trim() : `MED-${m?.id ?? "?"}`
+  }
+
+  const dataMedicaoDisplay = (m: any) =>
+    m?.created_at
+      ? format(new Date(m.created_at), "dd/MM/yyyy", { locale: ptBR })
+      : "N/A"
+
+  const relatorioMedicoesFiltrado = useMemo(() => {
+    const f = filtrosColunas.medicoes
+    return relatorioMedicoes.filter((m: any) => {
+      if (f.numero !== "all" && numMedicaoDisplay(m) !== f.numero) return false
+      const per = String(m?.periodo ?? "").trim() || "N/A"
+      if (f.periodo !== "all" && per !== f.periodo) return false
+      const ob = String(m?.obras?.nome ?? "").trim() || "N/A"
+      if (f.obra !== "all" && ob !== f.obra) return false
+      if (f.valorTotal !== "all" && !matchPresetValorMonetario(m?.valor_total, f.valorTotal))
+        return false
+      const st = String(m?.status ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      const dt = dataMedicaoDisplay(m)
+      if (f.data !== "all" && dt !== f.data) return false
+      return true
+    })
+  }, [relatorioMedicoes, filtrosColunas.medicoes])
+
+  const opMedNumero = useMemo(
+    () => uniqOpcoesStrings(relatorioMedicoes, (m) => numMedicaoDisplay(m)),
+    [relatorioMedicoes]
+  )
+  const opMedPeriodo = useMemo(
+    () => uniqOpcoesStrings(relatorioMedicoes, (m) => m?.periodo),
+    [relatorioMedicoes]
+  )
+  const opMedObra = useMemo(
+    () => uniqOpcoesStrings(relatorioMedicoes, (m) => m?.obras?.nome),
+    [relatorioMedicoes]
+  )
+  const opMedStatus = useMemo(
+    () => uniqOpcoesStrings(relatorioMedicoes, (m) => m?.status),
+    [relatorioMedicoes]
+  )
+  const opMedData = useMemo(
+    () => uniqOpcoesStrings(relatorioMedicoes, (m) => dataMedicaoDisplay(m)),
+    [relatorioMedicoes]
+  )
+
+  const relatorioOrcamentosFiltrado = useMemo(() => {
+    const f = filtrosColunas.orcamentos
+    return relatorioOrcamentos.filter((o: any) => {
+      const num =
+        o?.numero != null && String(o.numero).trim() !== ""
+          ? String(o.numero).trim()
+          : `ORC-${o?.id ?? "?"}`
+      if (f.numero !== "all" && num !== f.numero) return false
+      const cli = String(o?.clientes?.nome ?? "").trim() || "N/A"
+      if (f.cliente !== "all" && cli !== f.cliente) return false
+      const ob = String(o?.obras?.nome ?? "").trim() || "N/A"
+      if (f.obra !== "all" && ob !== f.obra) return false
+      if (f.valorTotal !== "all" && !matchPresetValorMonetario(o?.valor_total, f.valorTotal))
+        return false
+      const st = String(o?.status ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      const dt = o?.created_at
+        ? format(new Date(o.created_at), "dd/MM/yyyy", { locale: ptBR })
+        : "N/A"
+      if (f.data !== "all" && dt !== f.data) return false
+      return true
+    })
+  }, [relatorioOrcamentos, filtrosColunas.orcamentos])
+
+  const numOrcDisplay = (o: any) =>
+    o?.numero != null && String(o.numero).trim() !== ""
+      ? String(o.numero).trim()
+      : `ORC-${o?.id ?? "?"}`
+
+  const opOrcNumero = useMemo(
+    () => uniqOpcoesStrings(relatorioOrcamentos, (o) => numOrcDisplay(o)),
+    [relatorioOrcamentos]
+  )
+  const opOrcCliente = useMemo(
+    () => uniqOpcoesStrings(relatorioOrcamentos, (o) => o?.clientes?.nome),
+    [relatorioOrcamentos]
+  )
+  const opOrcObra = useMemo(
+    () => uniqOpcoesStrings(relatorioOrcamentos, (o) => o?.obras?.nome),
+    [relatorioOrcamentos]
+  )
+  const opOrcStatus = useMemo(
+    () => uniqOpcoesStrings(relatorioOrcamentos, (o) => o?.status),
+    [relatorioOrcamentos]
+  )
+  const opOrcData = useMemo(
+    () =>
+      uniqOpcoesStrings(relatorioOrcamentos, (o) =>
+        o?.created_at
+          ? format(new Date(o.created_at), "dd/MM/yyyy", { locale: ptBR })
+          : "N/A"
+      ),
+    [relatorioOrcamentos]
+  )
+
+  const qtdGruasObra = (o: any) =>
+    toNumber(o?.grua_obra?.length ?? o?.gruas_obra?.length ?? 0)
+
+  const relatorioObrasFiltrado = useMemo(() => {
+    const f = filtrosColunas.obras
+    return relatorioObras.filter((o: any) => {
+      const nome = String(o?.nome ?? "").trim() || "N/A"
+      if (f.nome !== "all" && nome !== f.nome) return false
+      const cli = String(o?.clientes?.nome ?? "").trim() || "N/A"
+      if (f.cliente !== "all" && cli !== f.cliente) return false
+      const end = String(o?.endereco ?? "").trim() || "N/A"
+      if (f.endereco !== "all" && end !== f.endereco) return false
+      const st = String(o?.status ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      const di = o?.data_inicio
+        ? format(new Date(o.data_inicio), "dd/MM/yyyy", { locale: ptBR })
+        : "N/A"
+      if (f.dataInicio !== "all" && di !== f.dataInicio) return false
+      const nG = qtdGruasObra(o)
+      if (f.gruas !== "all") {
+        if (f.gruas === "0" && nG !== 0) return false
+        if (f.gruas === "1" && nG !== 1) return false
+        if (f.gruas === "2plus" && nG < 2) return false
+      }
+      return true
+    })
+  }, [relatorioObras, filtrosColunas.obras])
+
+  const opObraNome = useMemo(
+    () => uniqOpcoesStrings(relatorioObras, (o) => o?.nome),
+    [relatorioObras]
+  )
+  const opObraCliente = useMemo(
+    () => uniqOpcoesStrings(relatorioObras, (o) => o?.clientes?.nome),
+    [relatorioObras]
+  )
+  const opObraEndereco = useMemo(
+    () => uniqOpcoesStrings(relatorioObras, (o) => o?.endereco),
+    [relatorioObras]
+  )
+  const opObraStatus = useMemo(
+    () => uniqOpcoesStrings(relatorioObras, (o) => o?.status),
+    [relatorioObras]
+  )
+  const opObraDataInicio = useMemo(
+    () =>
+      uniqOpcoesStrings(relatorioObras, (o) =>
+        o?.data_inicio
+          ? format(new Date(o.data_inicio), "dd/MM/yyyy", { locale: ptBR })
+          : "N/A"
+      ),
+    [relatorioObras]
+  )
+
+  const qtdEstoqueRow = (item: any) => {
+    const est = item.estoque?.[0] || item.estoque || {}
+    return toNumber(est.quantidade_atual ?? est.quantidade_disponivel)
+  }
+
+  const relatorioEstoqueFiltrado = useMemo(() => {
+    const f = filtrosColunas.estoque
+    return relatorioEstoque.filter((item: any) => {
+      const nome = String(item?.nome || item?.name || "").trim() || "N/A"
+      if (f.nome !== "all" && nome !== f.nome) return false
+      const cat = String(item?.categorias?.nome || item?.categoria || "").trim() || "N/A"
+      if (f.categoria !== "all" && cat !== f.categoria) return false
+      const q = qtdEstoqueRow(item)
+      if (f.quantidade !== "all") {
+        if (f.quantidade === "zero" && q !== 0) return false
+        if (f.quantidade === "baixo" && (q < 1 || q > 10)) return false
+        if (f.quantidade === "alto" && q <= 10) return false
+      }
+      const vu = valorMonetarioNum(item?.preco ?? item?.valor_unitario)
+      if (f.valorUnit !== "all") {
+        if (f.valorUnit === "zero" && vu !== 0) return false
+        if (f.valorUnit === "positivo" && vu <= 0) return false
+      }
+      const est = item.estoque?.[0] || item.estoque || {}
+      const vt = valorMonetarioNum(est?.valor_total)
+      if (f.valorTotal !== "all") {
+        if (f.valorTotal === "zero" && vt !== 0) return false
+        if (f.valorTotal === "positivo" && vt <= 0) return false
+      }
+      const stLabel = item?.status || (item?.ativo ? "Ativo" : "Inativo")
+      const st = String(stLabel ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      return true
+    })
+  }, [relatorioEstoque, filtrosColunas.estoque])
+
+  const opEstNome = useMemo(
+    () =>
+      uniqOpcoesStrings(relatorioEstoque, (it) => String(it?.nome || it?.name || "")),
+    [relatorioEstoque]
+  )
+  const opEstCategoria = useMemo(
+    () =>
+      uniqOpcoesStrings(relatorioEstoque, (it) => it?.categorias?.nome || it?.categoria),
+    [relatorioEstoque]
+  )
+  const opEstStatus = useMemo(
+    () =>
+      uniqOpcoesStrings(relatorioEstoque, (it) => it?.status || (it?.ativo ? "Ativo" : "Inativo")),
+    [relatorioEstoque]
+  )
+
+  const statusComplementoLabel = (c: any) => (c?.ativo ? "Ativo" : "Inativo")
+
+  const relatorioComplementosFiltrado = useMemo(() => {
+    const f = filtrosColunas.complemento
+    return relatorioComplementos.filter((c: any) => {
+      const nome = String(c?.nome ?? "").trim() || "N/A"
+      if (f.nome !== "all" && nome !== f.nome) return false
+      const tipo = String(c?.tipo ?? "").trim() || "N/A"
+      if (f.tipo !== "all" && tipo !== f.tipo) return false
+      const sku = String(c?.sku ?? "").trim() || "N/A"
+      if (f.sku !== "all" && sku !== f.sku) return false
+      if (f.preco !== "all" && !matchPresetValorMonetario(obterValorComplemento(c), f.preco))
+        return false
+      const st = statusComplementoLabel(c)
+      if (f.status !== "all" && st !== f.status) return false
+      const desc = String(c?.descricao ?? "").trim() || "N/A"
+      if (f.descricao !== "all" && desc !== f.descricao) return false
+      return true
+    })
+  }, [relatorioComplementos, filtrosColunas.complemento])
+
+  const opCompNome = useMemo(
+    () => uniqOpcoesStrings(relatorioComplementos, (c) => c?.nome),
+    [relatorioComplementos]
+  )
+  const opCompTipo = useMemo(
+    () => uniqOpcoesStrings(relatorioComplementos, (c) => c?.tipo),
+    [relatorioComplementos]
+  )
+  const opCompSku = useMemo(
+    () => uniqOpcoesStrings(relatorioComplementos, (c) => c?.sku),
+    [relatorioComplementos]
+  )
+  const opCompDesc = useMemo(
+    () => uniqOpcoesStrings(relatorioComplementos, (c) => c?.descricao),
+    [relatorioComplementos]
+  )
+
+  const linhasManutencao = relatorioManutencao?.relatorio || []
+
+  const gruaManutencaoStr = (item: any) => {
+    const m = item?.grua?.modelo ?? ""
+    const fab = item?.grua?.fabricante ?? ""
+    const s = `${m} - ${fab}`.trim()
+    return s || "N/A"
+  }
+
+  const proxManutencaoStr = (item: any) =>
+    item?.manutencao?.proxima_manutencao
+      ? format(new Date(item.manutencao.proxima_manutencao), "dd/MM/yyyy", {
+          locale: ptBR,
+        })
+      : "N/A"
+
+  const linhasManutencaoFiltradas = useMemo(() => {
+    const f = filtrosColunas.documentos
+    return linhasManutencao.filter((item: any) => {
+      const gruaS = gruaManutencaoStr(item)
+      if (f.grua !== "all" && gruaS !== f.grua) return false
+      const st = String(item?.grua?.status ?? "").trim() || "N/A"
+      if (f.status !== "all" && st !== f.status) return false
+      const prox = proxManutencaoStr(item)
+      if (f.proxima !== "all" && prox !== f.proxima) return false
+      const dias = toNumber(item?.manutencao?.dias_restantes)
+      if (f.dias !== "all") {
+        if (f.dias === "urgente" && dias > 7) return false
+        if (f.dias === "atencao" && (dias <= 7 || dias > 30)) return false
+        if (f.dias === "tranquilo" && dias <= 30) return false
+      }
+      const pri = String(item?.manutencao?.prioridade ?? "").trim() || "N/A"
+      if (f.prioridade !== "all" && pri !== f.prioridade) return false
+      if (!matchPresetValorMonetario(item?.manutencao?.valor_estimado, f.valor)) return false
+      const obraN = String(item?.obra_atual?.nome ?? "").trim() || "N/A"
+      if (f.obra !== "all" && obraN !== f.obra) return false
+      return true
+    })
+  }, [relatorioManutencao, filtrosColunas.documentos])
+
+  const opManGrua = useMemo(
+    () => uniqOpcoesStrings(linhasManutencao, (row) => gruaManutencaoStr(row)),
+    [relatorioManutencao]
+  )
+  const opManStatus = useMemo(
+    () => uniqOpcoesStrings(linhasManutencao, (row) => row?.grua?.status),
+    [relatorioManutencao]
+  )
+  const opManProxima = useMemo(
+    () => uniqOpcoesStrings(linhasManutencao, (row) => proxManutencaoStr(row)),
+    [relatorioManutencao]
+  )
+  const opManPrioridade = useMemo(
+    () => uniqOpcoesStrings(linhasManutencao, (row) => row?.manutencao?.prioridade),
+    [relatorioManutencao]
+  )
+  const opManObra = useMemo(
+    () => uniqOpcoesStrings(linhasManutencao, (row) => row?.obra_atual?.nome),
+    [relatorioManutencao]
+  )
+
+  const performancePorGruaFiltrado = useMemo(() => {
+    const rows = dadosPerformance?.performance_por_grua || []
+    const f = filtrosColunas.gruas
+    return rows.filter((item: any) => {
+      const nomeG = String(item?.grua?.nome ?? "").trim() || "N/A"
+      if (f.gruaNome !== "all" && nomeG !== f.gruaNome) return false
+      const st = String(item?.grua?.status ?? "N/A")
+      if (f.status !== "all" && st !== f.status) return false
+      const h = toNumber(item?.metricas?.horas_trabalhadas)
+      if (f.horas !== "all") {
+        if (f.horas === "zero" && h !== 0) return false
+        if (f.horas === "baixo" && (h < 1 || h >= 50)) return false
+        if (f.horas === "medio" && (h < 50 || h > 200)) return false
+        if (f.horas === "alto" && h <= 200) return false
+      }
+      const taxa = toNumber(item?.metricas?.taxa_utilizacao)
+      if (f.taxa !== "all") {
+        if (f.taxa === "baixa" && taxa >= 60) return false
+        if (f.taxa === "medio" && (taxa < 60 || taxa >= 80)) return false
+        if (f.taxa === "alta" && taxa < 80) return false
+      }
+      const receita = toNumber(item?.financeiro?.receita_total)
+      if (f.receita !== "all") {
+        if (f.receita === "zero" && receita !== 0) return false
+        if (f.receita === "positivo" && receita <= 0) return false
+      }
+      const custo = toNumber(item?.financeiro?.custo_total)
+      if (f.custo !== "all") {
+        if (f.custo === "zero" && custo !== 0) return false
+        if (f.custo === "positivo" && custo <= 0) return false
+      }
+      const lucro = toNumber(item?.financeiro?.lucro_bruto)
+      if (f.lucro !== "all") {
+        if (f.lucro === "zero" && lucro !== 0) return false
+        if (f.lucro === "positivo" && lucro <= 0) return false
+      }
+      const margem = toNumber(item?.financeiro?.margem_lucro)
+      if (f.margem !== "all") {
+        if (f.margem === "zero" && Math.abs(margem) > 0.05) return false
+        if (f.margem === "positivo" && margem <= 0) return false
+      }
+      const roi = toNumber(item?.roi?.roi_percentual)
+      if (f.roi !== "all") {
+        if (f.roi === "negativo" && roi >= 0) return false
+        if (f.roi === "baixo" && (roi < 0 || roi >= 20)) return false
+        if (f.roi === "medio" && (roi < 20 || roi >= 50)) return false
+        if (f.roi === "alto" && roi < 50) return false
+      }
+      const rph = toNumber(item?.financeiro?.receita_por_hora)
+      if (f.receitaHora !== "all") {
+        if (f.receitaHora === "zero" && rph !== 0) return false
+        if (f.receitaHora === "positivo" && rph <= 0) return false
+      }
+      return true
+    })
+  }, [dadosPerformance, filtrosColunas.gruas])
+
+  const opGruaStatusPerf = useMemo(
+    () =>
+      uniqOpcoesStrings(dadosPerformance?.performance_por_grua || [], (row) => row?.grua?.status),
+    [dadosPerformance]
+  )
+  const opGruaNomePerf = useMemo(
+    () =>
+      uniqOpcoesStrings(dadosPerformance?.performance_por_grua || [], (row) => row?.grua?.nome),
+    [dadosPerformance]
+  )
+
+  const handleExport = async (tipo: string) => {
+    const { dataInicio, dataFim } = calcularDatasPeriodo()
+    let slug = tipo
+    const rows: Record<string, unknown>[] = []
+
+    switch (tipo) {
+      case "geral": {
+        slug = "visao-geral"
+        const rg = dashboardData?.resumo_geral
+        if (rg) {
+          rows.push(
+            { Secao: "Resumo do parque", Metrica: "Total de gruas", Valor: rg.total_gruas },
+            { Secao: "Resumo do parque", Metrica: "Gruas ocupadas", Valor: rg.gruas_ocupadas },
+            { Secao: "Resumo do parque", Metrica: "Gruas disponíveis", Valor: rg.gruas_disponiveis },
+            { Secao: "Resumo do parque", Metrica: "Taxa de utilização (%)", Valor: rg.taxa_utilizacao },
+            { Secao: "Resumo do parque", Metrica: "Receita mês atual", Valor: rg.receita_mes_atual }
+          )
+        }
+        for (const r of relatorioUtilizacao?.relatorio || []) {
+          rows.push({
+            Secao: "Utilização de gruas",
+            Modelo: r.grua?.modelo,
+            Fabricante: r.grua?.fabricante,
+            Status: r.grua?.status,
+            Dias_locacao: r.dias_total_locacao,
+            Receita: r.receita_total,
+            Taxa_utilizacao: r.taxa_utilizacao,
+          })
+        }
+        break
+      }
+      case "completo": {
+        slug = "relatorio-completo"
+        const rg = dashboardData?.resumo_geral
+        if (rg) {
+          rows.push(
+            { Secao: "Resumo", Metrica: "Total de gruas", Valor: rg.total_gruas },
+            { Secao: "Resumo", Metrica: "Taxa de utilização (%)", Valor: rg.taxa_utilizacao }
+          )
+        }
+        for (const r of relatorioUtilizacao?.relatorio || []) {
+          rows.push({
+            Secao: "Utilização",
+            Modelo: r.grua?.modelo,
+            Receita: r.receita_total,
+            Taxa: r.taxa_utilizacao,
+          })
+        }
+        for (const item of financeiroIntegradoFiltrado) {
+          rows.push({
+            Secao: "Financeiro",
+            ...linhaExportFinanceiroIntegrado(item),
+          })
+        }
+        for (const item of impostosPorTipoFiltrado) {
+          rows.push({
+            Secao: "Impostos",
+            Tipo_imposto: item.tipo,
+            Valor_total: item.valor_total,
+            Valor_pago: item.valor_pago,
+            Valor_pendente: item.valor_pendente,
+          })
+        }
+        for (const b of relatorioBoletosFiltrado) {
+          rows.push({
+            Secao: "Boletos",
+            Numero: b.numero_boleto,
+            Valor: b.valor,
+            Vencimento: b.data_vencimento,
+            Status: b.status,
+            Obra: nomeObraBoleto(b),
+          })
+        }
+        for (const m of relatorioMedicoesFiltrado) {
+          rows.push({
+            Secao: "Medições",
+            Numero: numMedicaoDisplay(m),
+            Obra: m?.obras?.nome,
+            Valor_total: m.valor_total,
+            Status: m.status,
+          })
+        }
+        for (const o of relatorioOrcamentosFiltrado) {
+          rows.push({
+            Secao: "Orçamentos",
+            Numero: o.numero,
+            Cliente: o.clientes?.nome,
+            Valor_total: o.valor_total,
+            Status: o.status,
+          })
+        }
+        for (const o of relatorioObrasFiltrado) {
+          rows.push({
+            Secao: "Obras",
+            Nome: o.nome,
+            Status: o.status,
+            Cliente: o.cliente_nome || o.clientes?.nome,
+          })
+        }
+        for (const e of relatorioEstoqueFiltrado) {
+          rows.push({
+            Secao: "Estoque",
+            Nome: e.nome,
+            Quantidade: e.quantidade,
+            Valor_total: e.valor_total,
+          })
+        }
+        for (const c of relatorioComplementosFiltrado) {
+          rows.push({
+            Secao: "Complementos",
+            Nome: c.nome,
+            Tipo: c.tipo,
+            Preco: c.preco,
+            Status: c.status,
+          })
+        }
+        for (const item of linhasManutencaoFiltradas) {
+          rows.push({
+            Secao: "Manutenção",
+            Grua: gruaManutencaoStr(item),
+            Proxima: item?.manutencao?.proxima_manutencao,
+            Dias: item?.manutencao?.dias_restantes,
+            Prioridade: item?.manutencao?.prioridade,
+            Valor_estimado: item?.manutencao?.valor_estimado,
+          })
+        }
+        break
+      }
+      case "financeiro":
+        for (const item of financeiroIntegradoFiltrado) {
+          rows.push(linhaExportFinanceiroIntegrado(item))
+        }
+        break
+      case "impostos":
+        rows.push({
+          Tipo: "TOTAIS",
+          Competencia: relatorioImpostos?.competencia,
+          Total_geral: relatorioImpostos?.total_impostos,
+          Total_pago: relatorioImpostos?.total_pago,
+          Total_pendente: relatorioImpostos?.total_pendente,
+        })
+        for (const item of impostosPorTipoFiltrado) {
+          rows.push({
+            Tipo: item.tipo,
+            Valor_total: item.valor_total,
+            Valor_pago: item.valor_pago,
+            Valor_pendente: item.valor_pendente,
+          })
+        }
+        break
+      case "boletos":
+        for (const b of relatorioBoletosFiltrado) {
+          rows.push({
+            Numero: b.numero_boleto,
+            Descricao: b.descricao,
+            Valor: b.valor,
+            Vencimento: b.data_vencimento,
+            Status: b.status,
+            Obra: nomeObraBoleto(b),
+          })
+        }
+        break
+      case "medicoes":
+        for (const m of relatorioMedicoesFiltrado) {
+          rows.push({
+            Numero: numMedicaoDisplay(m),
+            Periodo: m.periodo,
+            Obra: m?.obras?.nome,
+            Valor_total: m.valor_total,
+            Status: m.status,
+            Data: m.created_at,
+          })
+        }
+        break
+      case "orcamentos":
+        for (const o of relatorioOrcamentosFiltrado) {
+          rows.push({
+            Numero: o.numero,
+            Cliente: o.clientes?.nome,
+            Obra: o.obras?.nome,
+            Valor_total: o.valor_total,
+            Status: o.status,
+            Data: o.created_at,
+          })
+        }
+        break
+      case "obras":
+        for (const o of relatorioObrasFiltrado) {
+          rows.push({
+            Nome: o.nome,
+            Cliente: o.cliente_nome || o.clientes?.nome,
+            Endereco: o.endereco,
+            Status: o.status,
+            Data_inicio: o.data_inicio,
+            Qtd_gruas: o.grua_obra?.length ?? o.gruas_obra?.length ?? 0,
+          })
+        }
+        break
+      case "estoque":
+        for (const e of relatorioEstoqueFiltrado) {
+          rows.push({
+            Nome: e.nome,
+            Categoria: e.categoria,
+            Quantidade: e.quantidade,
+            Valor_unitario: e.valor_unitario,
+            Valor_total: e.valor_total,
+            Status: e.status,
+          })
+        }
+        break
+      case "complementos":
+        for (const c of relatorioComplementosFiltrado) {
+          rows.push({
+            Nome: c.nome,
+            Tipo: c.tipo,
+            SKU: c.sku,
+            Preco: c.preco,
+            Status: c.status,
+            Descricao: c.descricao,
+          })
+        }
+        break
+      case "manutencao":
+        for (const item of linhasManutencaoFiltradas) {
+          rows.push({
+            Grua_modelo: gruaManutencaoStr(item),
+            Status_grua: item?.grua?.status,
+            Proxima_manutencao: item?.manutencao?.proxima_manutencao,
+            Dias_restantes: item?.manutencao?.dias_restantes,
+            Prioridade: item?.manutencao?.prioridade,
+            Valor_estimado: item?.manutencao?.valor_estimado,
+            Obra: item?.obra_atual?.nome,
+          })
+        }
+        break
+      default:
+        toast({
+          title: "Exportação",
+          description: "Tipo de relatório não reconhecido.",
+          variant: "destructive",
+        })
+        return
+    }
+
+    if (rows.length === 0) {
+      toast({
+        title: "Sem dados",
+        description: "Não há linhas para exportar com os filtros atuais. Carregue o relatório ou ajuste o período.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      setExportandoRelatorio(true)
+      await exportRelatorioExcelServidor({
+        tipoSlug: slug,
+        data_inicio: dataInicio,
+        data_fim: dataFim,
+        dados: rows,
+      })
+      toast({
+        title: "Exportação concluída",
+        description: "Planilha Excel gerada com os dados visíveis na tela.",
+      })
+    } catch (err: any) {
+      console.error("Erro ao exportar relatório:", err)
+      toast({
+        title: "Erro ao exportar",
+        description: err?.message || "Não foi possível gerar o arquivo.",
+        variant: "destructive",
+      })
+    } finally {
+      setExportandoRelatorio(false)
+    }
+  }
 
   const dadosGraficoGruasStatus = dashboardData?.distribuicao?.por_status
     ? Object.entries(dashboardData.distribuicao.por_status).map(([status, count]) => ({
@@ -1006,11 +2123,11 @@ export default function RelatoriosPage() {
           )}
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => handleExport('geral')}>
+          <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('geral')}>
             <Download className="w-4 h-4 mr-2" />
             Exportar Geral
           </Button>
-          <Button onClick={() => handleExport('completo')}>
+          <Button type="button" disabled={exportandoRelatorio} onClick={() => handleExport('completo')}>
             <FileText className="w-4 h-4 mr-2" />
             Relatório Completo
           </Button>
@@ -1077,43 +2194,25 @@ export default function RelatoriosPage() {
             {/* Datas personalizadas */}
             {selectedPeriod === 'custom' && (
               <>
-                <div className="flex-1 min-w-[140px]">
+                <div className="flex-1 min-w-[160px]">
                   <label className="text-xs font-medium text-gray-600 mb-1 block">Data Início</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="h-9 w-full justify-start text-left font-normal text-xs">
-                        <CalendarIcon className="mr-2 h-3 w-3" />
-                        {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={startDate}
-                        onSelect={setStartDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <DataInputBr
+                    value={startDate}
+                    onChange={setStartDate}
+                    inputClassName="h-9 text-xs"
+                    buttonClassName="h-9 w-9"
+                    className="w-full"
+                  />
                 </div>
-                <div className="flex-1 min-w-[140px]">
+                <div className="flex-1 min-w-[160px]">
                   <label className="text-xs font-medium text-gray-600 mb-1 block">Data Fim</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="h-9 w-full justify-start text-left font-normal text-xs">
-                        <CalendarIcon className="mr-2 h-3 w-3" />
-                        {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={endDate}
-                        onSelect={setEndDate}
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <DataInputBr
+                    value={endDate}
+                    onChange={setEndDate}
+                    inputClassName="h-9 text-xs"
+                    buttonClassName="h-9 w-9"
+                    className="w-full"
+                  />
                 </div>
               </>
             )}
@@ -1399,15 +2498,15 @@ export default function RelatoriosPage() {
               <p className="text-gray-600">Análise detalhada da performance operacional e financeira</p>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => handleExportPerformance('pdf')} disabled={loadingPerformance}>
+              <Button type="button" variant="outline" onClick={() => handleExportPerformance('pdf')} disabled={loadingPerformance || exportandoRelatorio}>
                 <Download className="w-4 h-4 mr-2" />
                 PDF
               </Button>
-              <Button variant="outline" onClick={() => handleExportPerformance('excel')} disabled={loadingPerformance}>
+              <Button type="button" variant="outline" onClick={() => handleExportPerformance('excel')} disabled={loadingPerformance || exportandoRelatorio}>
                 <Download className="w-4 h-4 mr-2" />
                 Excel
               </Button>
-              <Button variant="outline" onClick={() => handleExportPerformance('csv')} disabled={loadingPerformance}>
+              <Button type="button" variant="outline" onClick={() => handleExportPerformance('csv')} disabled={loadingPerformance || exportandoRelatorio}>
                 <Download className="w-4 h-4 mr-2" />
                 CSV
               </Button>
@@ -1436,8 +2535,103 @@ export default function RelatoriosPage() {
           {/* Conteúdo do Relatório */}
           {!loadingPerformance && dadosPerformance && (
             <div className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2 text-sm">
+                    <Filter className="w-4 h-4" />
+                    Filtros por coluna (tabela)
+                  </CardTitle>
+                  <CardDescription>
+                    Refinam as linhas exibidas; use Limpar nos filtros de período para resetar também estes.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="overflow-x-auto">
+                  <div className="min-w-[2000px] flex flex-wrap items-end gap-3">
+                    <FiltroColunaOpcoes
+                      label="Grua"
+                      value={filtrosColunas.gruas.gruaNome}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, gruaNome: v } }))
+                      }
+                      opcoes={opGruaNomePerf}
+                    />
+                    <FiltroColunaOpcoes
+                      label="Status"
+                      value={filtrosColunas.gruas.status}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, status: v } }))
+                      }
+                      opcoes={opGruaStatusPerf}
+                    />
+                    <FiltroColunaPresets
+                      label="Horas trabalhadas"
+                      value={filtrosColunas.gruas.horas}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, horas: v } }))
+                      }
+                      presets={PRESET_HORAS_GRUA}
+                    />
+                    <FiltroColunaPresets
+                      label="Taxa utilização"
+                      value={filtrosColunas.gruas.taxa}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, taxa: v } }))
+                      }
+                      presets={PRESET_TAXA_UTIL}
+                    />
+                    <FiltroColunaPresets
+                      label="Receita total"
+                      value={filtrosColunas.gruas.receita}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, receita: v } }))
+                      }
+                      presets={PRESET_VALOR_MONETARIO}
+                    />
+                    <FiltroColunaPresets
+                      label="Custo total"
+                      value={filtrosColunas.gruas.custo}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, custo: v } }))
+                      }
+                      presets={PRESET_VALOR_MONETARIO}
+                    />
+                    <FiltroColunaPresets
+                      label="Lucro bruto"
+                      value={filtrosColunas.gruas.lucro}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, lucro: v } }))
+                      }
+                      presets={PRESET_VALOR_MONETARIO}
+                    />
+                    <FiltroColunaPresets
+                      label="Margem %"
+                      value={filtrosColunas.gruas.margem}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, margem: v } }))
+                      }
+                      presets={PRESET_VALOR_MONETARIO}
+                    />
+                    <FiltroColunaPresets
+                      label="ROI"
+                      value={filtrosColunas.gruas.roi}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, roi: v } }))
+                      }
+                      presets={PRESET_ROI}
+                    />
+                    <FiltroColunaPresets
+                      label="Receita/hora"
+                      value={filtrosColunas.gruas.receitaHora}
+                      onChange={(v) =>
+                        setFiltrosColunas((p) => ({ ...p, gruas: { ...p.gruas, receitaHora: v } }))
+                      }
+                      presets={PRESET_VALOR_MONETARIO}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
               <PerformanceGruasTabela
-                dados={dadosPerformance?.performance_por_grua || []}
+                dados={performancePorGruaFiltrado}
                 pagina={paginaPerformance}
                 totalPaginas={dadosPerformance?.paginacao?.total_paginas || 1}
                 limite={10}
@@ -1489,6 +2683,65 @@ export default function RelatoriosPage() {
             setFiltroStatus={setFinanceiroFiltroStatus}
             filtroNatureza={financeiroFiltroNatureza}
             setFiltroNatureza={setFinanceiroFiltroNatureza}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Origem"
+                  value={filtrosColunas.financeiro.origem}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({
+                      ...p,
+                      financeiro: { ...p.financeiro, origem: v },
+                    }))
+                  }
+                  opcoes={opFinOrigem}
+                />
+                <FiltroColunaOpcoes
+                  label="Referência"
+                  value={filtrosColunas.financeiro.referencia}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({
+                      ...p,
+                      financeiro: { ...p.financeiro, referencia: v },
+                    }))
+                  }
+                  opcoes={opFinReferencia}
+                />
+                <FiltroColunaOpcoes
+                  label="Descrição"
+                  value={filtrosColunas.financeiro.descricao}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({
+                      ...p,
+                      financeiro: { ...p.financeiro, descricao: v },
+                    }))
+                  }
+                  opcoes={opFinDescricao}
+                />
+                <FiltroColunaOpcoes
+                  label="Data"
+                  value={filtrosColunas.financeiro.data}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({
+                      ...p,
+                      financeiro: { ...p.financeiro, data: v },
+                    }))
+                  }
+                  opcoes={opFinData}
+                />
+                <FiltroColunaPresets
+                  label="Valor"
+                  value={filtrosColunas.financeiro.valor}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({
+                      ...p,
+                      financeiro: { ...p.financeiro, valor: v },
+                    }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+              </>
+            }
           />
           {/* Relatório Financeiro */}
           <Card>
@@ -1503,7 +2756,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('financeiro')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('financeiro')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1519,8 +2772,8 @@ export default function RelatoriosPage() {
                   {financeiroIntegradoFiltrado.length === 0 ? (
                     <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
                       <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-                      <p className="font-medium text-gray-700">Nenhum lançamento com status e natureza selecionados</p>
-                      <p className="text-sm mt-1">Ajuste os filtros acima ou clique em Limpar Filtros.</p>
+                      <p className="font-medium text-gray-700">Nenhum lançamento com os filtros selecionados</p>
+                      <p className="text-sm mt-1">Ajuste origem, referência, descrição, status ou natureza, ou clique em Limpar Filtros.</p>
                     </div>
                   ) : (
                   <Table>
@@ -1606,6 +2859,42 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingImpostos}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Tipo"
+                  value={filtrosColunas.impostos.tipo}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, impostos: { ...p.impostos, tipo: v } }))
+                  }
+                  opcoes={opImpostoTipo}
+                />
+                <FiltroColunaPresets
+                  label="Total"
+                  value={filtrosColunas.impostos.total}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, impostos: { ...p.impostos, total: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaPresets
+                  label="Pago"
+                  value={filtrosColunas.impostos.pago}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, impostos: { ...p.impostos, pago: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaPresets
+                  label="Pendente"
+                  value={filtrosColunas.impostos.pendente}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, impostos: { ...p.impostos, pendente: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -1619,7 +2908,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('impostos')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('impostos')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1632,7 +2921,7 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioImpostos ? (
                 <div className="space-y-4">
-                  {relatorioImpostos.impostos_por_tipo && relatorioImpostos.impostos_por_tipo.length > 0 ? (
+                  {impostosPorTipoFiltrado.length > 0 ? (
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -1643,7 +2932,7 @@ export default function RelatoriosPage() {
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {relatorioImpostos.impostos_por_tipo.map((item: any, index: number) => (
+                        {impostosPorTipoFiltrado.map((item: any, index: number) => (
                           <TableRow key={`${item.tipo || "tipo"}-${index}`}>
                             <TableCell className="font-medium">{item.tipo || "N/A"}</TableCell>
                             <TableCell className="text-blue-700 font-medium">{formatarMoeda(item.valor_total)}</TableCell>
@@ -1653,6 +2942,12 @@ export default function RelatoriosPage() {
                         ))}
                       </TableBody>
                     </Table>
+                  ) : relatorioImpostos.impostos_por_tipo?.length > 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhuma linha com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
                   ) : (
                     <div className="text-center py-8 text-gray-500">
                       <p>Nenhum item de imposto disponível</p>
@@ -1686,6 +2981,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingBoletos}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Número"
+                  value={filtrosColunas.boletos.numero}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, numero: v } }))
+                  }
+                  opcoes={opBoletoNumero}
+                />
+                <FiltroColunaOpcoes
+                  label="Descrição"
+                  value={filtrosColunas.boletos.descricao}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, descricao: v } }))
+                  }
+                  opcoes={opBoletoDescricao}
+                />
+                <FiltroColunaPresets
+                  label="Valor"
+                  value={filtrosColunas.boletos.valor}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, valor: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Vencimento"
+                  value={filtrosColunas.boletos.vencimento}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, vencimento: v } }))
+                  }
+                  opcoes={opBoletoVencimento}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.boletos.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, status: v } }))
+                  }
+                  opcoes={opBoletoStatus}
+                />
+                <FiltroColunaOpcoes
+                  label="Obra (tabela)"
+                  value={filtrosColunas.boletos.obra}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, boletos: { ...p.boletos, obra: v } }))
+                  }
+                  opcoes={opBoletoObra}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -1699,7 +3046,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('boletos')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('boletos')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1712,6 +3059,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioBoletos.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioBoletosFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhum boleto com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1724,7 +3078,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioBoletos.map((boleto: any, index: number) => (
+                      {relatorioBoletosFiltrado.map((boleto: any, index: number) => (
                         <TableRow key={boleto.id || index}>
                           <TableCell className="font-medium">{boleto.numero_boleto || 'N/A'}</TableCell>
                           <TableCell>{boleto.descricao || 'N/A'}</TableCell>
@@ -1744,6 +3098,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -1772,6 +3127,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingMedicoes}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Número"
+                  value={filtrosColunas.medicoes.numero}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, numero: v } }))
+                  }
+                  opcoes={opMedNumero}
+                />
+                <FiltroColunaOpcoes
+                  label="Período"
+                  value={filtrosColunas.medicoes.periodo}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, periodo: v } }))
+                  }
+                  opcoes={opMedPeriodo}
+                />
+                <FiltroColunaOpcoes
+                  label="Obra (tabela)"
+                  value={filtrosColunas.medicoes.obra}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, obra: v } }))
+                  }
+                  opcoes={opMedObra}
+                />
+                <FiltroColunaPresets
+                  label="Valor total"
+                  value={filtrosColunas.medicoes.valorTotal}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, valorTotal: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.medicoes.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, status: v } }))
+                  }
+                  opcoes={opMedStatus}
+                />
+                <FiltroColunaOpcoes
+                  label="Data"
+                  value={filtrosColunas.medicoes.data}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, medicoes: { ...p.medicoes, data: v } }))
+                  }
+                  opcoes={opMedData}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -1785,7 +3192,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('medicoes')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('medicoes')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1798,6 +3205,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioMedicoes.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioMedicoesFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhuma medição com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1810,7 +3224,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioMedicoes.map((medicao: any, index: number) => (
+                      {relatorioMedicoesFiltrado.map((medicao: any, index: number) => (
                         <TableRow key={medicao.id || index}>
                           <TableCell className="font-medium">{medicao.numero || `MED-${medicao.id}`}</TableCell>
                           <TableCell>{medicao.periodo || 'N/A'}</TableCell>
@@ -1831,6 +3245,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -1859,6 +3274,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingOrcamentos}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Número"
+                  value={filtrosColunas.orcamentos.numero}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, numero: v } }))
+                  }
+                  opcoes={opOrcNumero}
+                />
+                <FiltroColunaOpcoes
+                  label="Cliente"
+                  value={filtrosColunas.orcamentos.cliente}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, cliente: v } }))
+                  }
+                  opcoes={opOrcCliente}
+                />
+                <FiltroColunaOpcoes
+                  label="Obra (tabela)"
+                  value={filtrosColunas.orcamentos.obra}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, obra: v } }))
+                  }
+                  opcoes={opOrcObra}
+                />
+                <FiltroColunaPresets
+                  label="Valor total"
+                  value={filtrosColunas.orcamentos.valorTotal}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, valorTotal: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.orcamentos.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, status: v } }))
+                  }
+                  opcoes={opOrcStatus}
+                />
+                <FiltroColunaOpcoes
+                  label="Data"
+                  value={filtrosColunas.orcamentos.data}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, orcamentos: { ...p.orcamentos, data: v } }))
+                  }
+                  opcoes={opOrcData}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -1872,7 +3339,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('orcamentos')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('orcamentos')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1885,6 +3352,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioOrcamentos.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioOrcamentosFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhum orçamento com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1897,7 +3371,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioOrcamentos.map((orcamento: any, index: number) => (
+                      {relatorioOrcamentosFiltrado.map((orcamento: any, index: number) => (
                         <TableRow key={orcamento.id || index}>
                           <TableCell className="font-medium">{orcamento.numero || `ORC-${orcamento.id}`}</TableCell>
                           <TableCell>{orcamento.clientes?.nome || 'N/A'}</TableCell>
@@ -1918,6 +3392,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -1946,6 +3421,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingObras}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Nome"
+                  value={filtrosColunas.obras.nome}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, nome: v } }))
+                  }
+                  opcoes={opObraNome}
+                />
+                <FiltroColunaOpcoes
+                  label="Cliente"
+                  value={filtrosColunas.obras.cliente}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, cliente: v } }))
+                  }
+                  opcoes={opObraCliente}
+                />
+                <FiltroColunaOpcoes
+                  label="Endereço"
+                  value={filtrosColunas.obras.endereco}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, endereco: v } }))
+                  }
+                  opcoes={opObraEndereco}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.obras.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, status: v } }))
+                  }
+                  opcoes={opObraStatus}
+                />
+                <FiltroColunaOpcoes
+                  label="Data início"
+                  value={filtrosColunas.obras.dataInicio}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, dataInicio: v } }))
+                  }
+                  opcoes={opObraDataInicio}
+                />
+                <FiltroColunaPresets
+                  label="Gruas"
+                  value={filtrosColunas.obras.gruas}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, obras: { ...p.obras, gruas: v } }))
+                  }
+                  presets={PRESET_GRUAS_OBRA}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -1959,7 +3486,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('obras')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('obras')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -1972,6 +3499,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioObras.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioObrasFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhuma obra com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -1984,7 +3518,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioObras.map((obra: any, index: number) => (
+                      {relatorioObrasFiltrado.map((obra: any, index: number) => (
                         <TableRow key={obra.id || index}>
                           <TableCell className="font-medium">{obra.nome || 'N/A'}</TableCell>
                           <TableCell>{obra.clientes?.nome || 'N/A'}</TableCell>
@@ -2006,6 +3540,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -2034,6 +3569,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingEstoque}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Nome"
+                  value={filtrosColunas.estoque.nome}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, nome: v } }))
+                  }
+                  opcoes={opEstNome}
+                />
+                <FiltroColunaOpcoes
+                  label="Categoria"
+                  value={filtrosColunas.estoque.categoria}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, categoria: v } }))
+                  }
+                  opcoes={opEstCategoria}
+                />
+                <FiltroColunaPresets
+                  label="Quantidade"
+                  value={filtrosColunas.estoque.quantidade}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, quantidade: v } }))
+                  }
+                  presets={PRESET_QTD_ESTOQUE}
+                />
+                <FiltroColunaPresets
+                  label="Valor unitário"
+                  value={filtrosColunas.estoque.valorUnit}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, valorUnit: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaPresets
+                  label="Valor total"
+                  value={filtrosColunas.estoque.valorTotal}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, valorTotal: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.estoque.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, estoque: { ...p.estoque, status: v } }))
+                  }
+                  opcoes={opEstStatus}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -2047,7 +3634,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('estoque')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('estoque')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -2060,6 +3647,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioEstoque.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioEstoqueFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhum item com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -2072,7 +3666,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioEstoque.map((item: any, index: number) => {
+                      {relatorioEstoqueFiltrado.map((item: any, index: number) => {
                         const estoque = item.estoque?.[0] || item.estoque || {};
                         return (
                           <TableRow key={item.id || index}>
@@ -2094,6 +3688,7 @@ export default function RelatoriosPage() {
                       })}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -2122,6 +3717,58 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loadingComplementos}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Nome"
+                  value={filtrosColunas.complemento.nome}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, nome: v } }))
+                  }
+                  opcoes={opCompNome}
+                />
+                <FiltroColunaOpcoes
+                  label="Tipo"
+                  value={filtrosColunas.complemento.tipo}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, tipo: v } }))
+                  }
+                  opcoes={opCompTipo}
+                />
+                <FiltroColunaOpcoes
+                  label="SKU"
+                  value={filtrosColunas.complemento.sku}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, sku: v } }))
+                  }
+                  opcoes={opCompSku}
+                />
+                <FiltroColunaPresets
+                  label="Preço"
+                  value={filtrosColunas.complemento.preco}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, preco: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.complemento.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, status: v } }))
+                  }
+                  opcoes={COMPLEMENTO_STATUS_OPCOES}
+                />
+                <FiltroColunaOpcoes
+                  label="Descrição"
+                  value={filtrosColunas.complemento.descricao}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, complemento: { ...p.complemento, descricao: v } }))
+                  }
+                  opcoes={opCompDesc}
+                />
+              </>
+            }
           />
           <Card>
             <CardHeader>
@@ -2135,7 +3782,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('complementos')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('complementos')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -2148,6 +3795,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioComplementos.length > 0 ? (
                 <div className="space-y-4">
+                  {relatorioComplementosFiltrado.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhum complemento com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -2160,7 +3814,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioComplementos.map((complemento: any, index: number) => (
+                      {relatorioComplementosFiltrado.map((complemento: any, index: number) => (
                         <TableRow key={complemento.id || index}>
                           <TableCell className="font-medium">{complemento.nome || 'N/A'}</TableCell>
                           <TableCell>
@@ -2186,6 +3840,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -2213,6 +3868,66 @@ export default function RelatoriosPage() {
             onAplicar={aplicarFiltrosGlobais}
             onLimpar={limparFiltrosGlobais}
             loading={loading}
+            colunasExtras={
+              <>
+                <FiltroColunaOpcoes
+                  label="Grua"
+                  value={filtrosColunas.documentos.grua}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, grua: v } }))
+                  }
+                  opcoes={opManGrua}
+                />
+                <FiltroColunaOpcoes
+                  label="Status"
+                  value={filtrosColunas.documentos.status}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, status: v } }))
+                  }
+                  opcoes={opManStatus}
+                />
+                <FiltroColunaOpcoes
+                  label="Próxima manutenção"
+                  value={filtrosColunas.documentos.proxima}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, proxima: v } }))
+                  }
+                  opcoes={opManProxima}
+                />
+                <FiltroColunaPresets
+                  label="Dias restantes"
+                  value={filtrosColunas.documentos.dias}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, dias: v } }))
+                  }
+                  presets={PRESET_DIAS_MANUT}
+                />
+                <FiltroColunaOpcoes
+                  label="Prioridade"
+                  value={filtrosColunas.documentos.prioridade}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, prioridade: v } }))
+                  }
+                  opcoes={opManPrioridade}
+                />
+                <FiltroColunaPresets
+                  label="Valor estimado"
+                  value={filtrosColunas.documentos.valor}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, valor: v } }))
+                  }
+                  presets={PRESET_VALOR_MONETARIO}
+                />
+                <FiltroColunaOpcoes
+                  label="Obra atual"
+                  value={filtrosColunas.documentos.obra}
+                  onChange={(v) =>
+                    setFiltrosColunas((p) => ({ ...p, documentos: { ...p.documentos, obra: v } }))
+                  }
+                  opcoes={opManObra}
+                />
+              </>
+            }
           />
           {/* Relatório de Manutenção */}
           <Card>
@@ -2227,7 +3942,7 @@ export default function RelatoriosPage() {
             </CardHeader>
             <CardContent>
               <div className="flex gap-4 mb-6 justify-end">
-                <Button variant="outline" onClick={() => handleExport('manutencao')}>
+                <Button type="button" variant="outline" disabled={exportandoRelatorio} onClick={() => handleExport('manutencao')}>
                   <Download className="w-4 h-4 mr-2" />
                   Exportar
                 </Button>
@@ -2240,6 +3955,13 @@ export default function RelatoriosPage() {
                 </div>
               ) : relatorioManutencao ? (
                 <div className="space-y-4">
+                  {linhasManutencaoFiltradas.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500 border border-dashed border-gray-200 rounded-md">
+                      <Filter className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+                      <p className="font-medium text-gray-700">Nenhuma linha com os filtros de coluna selecionados</p>
+                      <p className="text-sm mt-1">Ajuste os filtros ou clique em Limpar Filtros.</p>
+                    </div>
+                  ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -2253,7 +3975,7 @@ export default function RelatoriosPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioManutencao.relatorio.map((item, index) => (
+                      {linhasManutencaoFiltradas.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">
                             {item.grua.modelo} - {item.grua.fabricante}
@@ -2286,6 +4008,7 @@ export default function RelatoriosPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  )}
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
@@ -2302,7 +4025,7 @@ export default function RelatoriosPage() {
 }
 
 // Estrutura em lista (substitui visual de cards)
-function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+function Card({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <section className={`w-full border border-gray-200 rounded-md bg-white ${className || ''}`}>
       {children}
@@ -2310,7 +4033,7 @@ function Card({ children, className }: { children: React.ReactNode; className?: 
   )
 }
 
-function CardHeader({ children, className }: { children: React.ReactNode; className?: string }) {
+function CardHeader({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={`px-4 py-3 border-b border-gray-200 space-y-1 ${className || ''}`}>
       {children}
@@ -2318,7 +4041,7 @@ function CardHeader({ children, className }: { children: React.ReactNode; classN
   )
 }
 
-function CardContent({ children, className }: { children: React.ReactNode; className?: string }) {
+function CardContent({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <div className={`px-4 py-3 ${className || ''}`}>
       {children}
@@ -2326,7 +4049,7 @@ function CardContent({ children, className }: { children: React.ReactNode; class
   )
 }
 
-function CardTitle({ children, className }: { children: React.ReactNode; className?: string }) {
+function CardTitle({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <h3 className={`text-sm font-semibold ${className || ''}`}>
       {children}
@@ -2334,7 +4057,7 @@ function CardTitle({ children, className }: { children: React.ReactNode; classNa
   )
 }
 
-function CardDescription({ children, className }: { children: React.ReactNode; className?: string }) {
+function CardDescription({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <p className={`text-xs text-gray-600 ${className || ''}`}>
       {children}
@@ -2344,7 +4067,7 @@ function CardDescription({ children, className }: { children: React.ReactNode; c
 
 type ResumoLinha = {
   label: string
-  valor: React.ReactNode
+  valor: ReactNode
   tone?: "default" | "green" | "red" | "blue" | "purple" | "orange" | "yellow"
 }
 
@@ -2394,7 +4117,8 @@ function FiltrosDemaisTabs({
   filtroStatus,
   setFiltroStatus,
   filtroNatureza,
-  setFiltroNatureza
+  setFiltroNatureza,
+  colunasExtras,
 }: {
   selectedObra: string
   setSelectedObra: (value: string) => void
@@ -2414,12 +4138,22 @@ function FiltrosDemaisTabs({
   setFiltroStatus?: (value: string) => void
   filtroNatureza?: string
   setFiltroNatureza?: (value: string) => void
+  colunasExtras?: ReactNode
 }) {
   const mostrarFiltrosFinanceiro =
     filtroStatus !== undefined &&
     setFiltroStatus &&
     filtroNatureza !== undefined &&
     setFiltroNatureza
+
+  const larguraMin =
+    colunasExtras && mostrarFiltrosFinanceiro
+      ? "min-w-[2100px]"
+      : colunasExtras
+        ? "min-w-[1600px]"
+        : mostrarFiltrosFinanceiro
+          ? "min-w-[1180px]"
+          : "min-w-[900px]"
 
   return (
     <Card>
@@ -2430,7 +4164,7 @@ function FiltrosDemaisTabs({
         </CardTitle>
       </CardHeader>
       <CardContent className="overflow-x-auto">
-        <div className={`${mostrarFiltrosFinanceiro ? "min-w-[1180px]" : "min-w-[900px]"} flex items-end gap-3`}>
+        <div className={`${larguraMin} flex items-end gap-3`}>
           <div className="min-w-[140px] flex-1">
             <label className="text-sm font-medium block mb-1">Período</label>
             <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
@@ -2447,56 +4181,26 @@ function FiltrosDemaisTabs({
             </Select>
           </div>
 
-          <div className="min-w-[160px] flex-1">
+          <div className="min-w-[200px] flex-1">
             <label className="text-sm font-medium block mb-1">Data Início</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {startDate ? format(startDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={startDate}
-                  onSelect={(date) => {
-                    setStartDate(date)
-                    setSelectedPeriod("custom")
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DataInputBr
+              value={startDate}
+              onChange={(d) => {
+                setStartDate(d)
+                if (d) setSelectedPeriod("custom")
+              }}
+            />
           </div>
 
-          <div className="min-w-[160px] flex-1">
+          <div className="min-w-[200px] flex-1">
             <label className="text-sm font-medium block mb-1">Data Fim</label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {endDate ? format(endDate, "dd/MM/yyyy", { locale: ptBR }) : "Selecionar"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0">
-                <Calendar
-                  mode="single"
-                  selected={endDate}
-                  onSelect={(date) => {
-                    setEndDate(date)
-                    setSelectedPeriod("custom")
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DataInputBr
+              value={endDate}
+              onChange={(d) => {
+                setEndDate(d)
+                if (d) setSelectedPeriod("custom")
+              }}
+            />
           </div>
 
           <div className="min-w-[180px] flex-1">
@@ -2515,6 +4219,8 @@ function FiltrosDemaisTabs({
               </SelectContent>
             </Select>
           </div>
+
+          {colunasExtras}
 
           {mostrarFiltrosFinanceiro && (
             <>
@@ -2584,7 +4290,7 @@ function FiltrosDemaisTabs({
 }
 
 // Componente de tabela simples para os relatórios
-function Table({ children }: { children: React.ReactNode }) {
+function Table({ children }: { children: ReactNode }) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full">
@@ -2594,7 +4300,7 @@ function Table({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TableHeader({ children }: { children: React.ReactNode }) {
+function TableHeader({ children }: { children: ReactNode }) {
   return (
     <thead className="bg-gray-50">
       {children}
@@ -2602,7 +4308,7 @@ function TableHeader({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TableBody({ children }: { children: React.ReactNode }) {
+function TableBody({ children }: { children: ReactNode }) {
   return (
     <tbody className="divide-y divide-gray-200">
       {children}
@@ -2610,7 +4316,7 @@ function TableBody({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TableRow({ children }: { children: React.ReactNode }) {
+function TableRow({ children }: { children: ReactNode }) {
   return (
     <tr className="hover:bg-gray-50">
       {children}
@@ -2618,7 +4324,7 @@ function TableRow({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TableHead({ children }: { children: React.ReactNode }) {
+function TableHead({ children }: { children: ReactNode }) {
   return (
     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
       {children}
@@ -2626,7 +4332,7 @@ function TableHead({ children }: { children: React.ReactNode }) {
   )
 }
 
-function TableCell({ children, className }: { children: React.ReactNode; className?: string }) {
+function TableCell({ children, className }: { children: ReactNode; className?: string }) {
   return (
     <td className={`px-6 py-4 whitespace-nowrap text-sm text-gray-900 ${className || ''}`}>
       {children}

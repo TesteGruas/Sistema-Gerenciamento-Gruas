@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -46,7 +47,6 @@ import {
 } from "recharts"
 import { useToast } from "@/hooks/use-toast"
 import apiContasBancarias from "@/lib/api-contas-bancarias"
-import { notasFiscaisApi } from "@/lib/api-notas-fiscais"
 import { getApiOrigin } from "@/lib/runtime-config"
 
 const API_URL = getApiOrigin()
@@ -88,6 +88,7 @@ interface Movimentacao {
 }
 
 export default function BancosPage() {
+  const router = useRouter()
   const { toast } = useToast()
   
   // Estados
@@ -98,9 +99,6 @@ export default function BancosPage() {
   const [isCreateMovimentacaoOpen, setIsCreateMovimentacaoOpen] = useState(false)
   const [isEditMovimentacaoOpen, setIsEditMovimentacaoOpen] = useState(false)
   const [editingMovimentacao, setEditingMovimentacao] = useState<Movimentacao | null>(null)
-  const [isNotaFiscalDialogOpen, setIsNotaFiscalDialogOpen] = useState(false)
-  const [notaFiscalDetalhes, setNotaFiscalDetalhes] = useState<any>(null)
-  const [loadingNotaFiscal, setLoadingNotaFiscal] = useState(false)
   
   // Filtros
   const [filtroDataInicio, setFiltroDataInicio] = useState("")
@@ -421,8 +419,7 @@ export default function BancosPage() {
     }
   }
 
-  const handleViewNotaFiscal = async (movimentacao: Movimentacao) => {
-    // Extrair ID da nota fiscal da referência (ex: "NF-58" -> 58)
+  const handleViewNotaFiscal = (movimentacao: Movimentacao) => {
     const referencia = movimentacao.referencia
     if (!referencia || !referencia.startsWith('NF-')) {
       toast({
@@ -433,8 +430,8 @@ export default function BancosPage() {
       return
     }
 
-    const notaFiscalId = parseInt(referencia.replace('NF-', ''))
-    if (isNaN(notaFiscalId)) {
+    const notaFiscalId = parseInt(referencia.replace('NF-', ''), 10)
+    if (!Number.isFinite(notaFiscalId)) {
       toast({
         title: "Erro",
         description: "Não foi possível identificar a nota fiscal",
@@ -443,28 +440,7 @@ export default function BancosPage() {
       return
     }
 
-    setIsNotaFiscalDialogOpen(true)
-    setLoadingNotaFiscal(true)
-    setNotaFiscalDetalhes(null)
-
-    try {
-      const response = await notasFiscaisApi.getById(notaFiscalId)
-      if (response.success && response.data) {
-        setNotaFiscalDetalhes(response.data)
-      } else {
-        throw new Error(response.message || 'Erro ao buscar nota fiscal')
-      }
-    } catch (error: any) {
-      console.error('Erro ao buscar nota fiscal:', error)
-      toast({
-        title: "Erro",
-        description: error.message || "Erro ao buscar detalhes da nota fiscal",
-        variant: "destructive"
-      })
-      setIsNotaFiscalDialogOpen(false)
-    } finally {
-      setLoadingNotaFiscal(false)
-    }
+    router.push(`/dashboard/financeiro/notas-fiscais?notaId=${notaFiscalId}`)
   }
 
   // Reset forms
@@ -1518,206 +1494,6 @@ export default function BancosPage() {
                 Atualizar
               </Button>
             </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog Detalhes Nota Fiscal */}
-      <Dialog open={isNotaFiscalDialogOpen} onOpenChange={setIsNotaFiscalDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Detalhes da Nota Fiscal</DialogTitle>
-            <DialogDescription>
-              Informações completas da nota fiscal vinculada a esta movimentação
-            </DialogDescription>
-          </DialogHeader>
-          
-          {loadingNotaFiscal ? (
-            <div className="flex items-center justify-center py-8">
-              <RefreshCw className="w-6 h-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-muted-foreground">Carregando detalhes...</span>
-            </div>
-          ) : notaFiscalDetalhes ? (
-            <div className="space-y-6">
-              {/* Informações Principais */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Número da NF</Label>
-                  <p className="font-semibold">{notaFiscalDetalhes.numero_nf || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Série</Label>
-                  <p className="font-semibold">{notaFiscalDetalhes.serie || 'N/A'}</p>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Tipo</Label>
-                  <Badge className={notaFiscalDetalhes.tipo === 'saida' ? 'bg-blue-500' : 'bg-orange-500'}>
-                    {notaFiscalDetalhes.tipo === 'saida' ? 'Saída' : 'Entrada'}
-                  </Badge>
-                </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground">Status</Label>
-                  <Badge 
-                    className={
-                      notaFiscalDetalhes.status === 'paga' ? 'bg-green-500' :
-                      notaFiscalDetalhes.status === 'vencida' ? 'bg-red-500' :
-                      notaFiscalDetalhes.status === 'cancelada' ? 'bg-gray-500' :
-                      'bg-yellow-500'
-                    }
-                  >
-                    {notaFiscalDetalhes.status === 'paga' ? 'Paga' :
-                     notaFiscalDetalhes.status === 'vencida' ? 'Vencida' :
-                     notaFiscalDetalhes.status === 'cancelada' ? 'Cancelada' :
-                     'Pendente'}
-                  </Badge>
-                </div>
-              </div>
-
-              {/* Datas */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label className="text-xs text-muted-foreground">Data de Emissão</Label>
-                  <p className="font-medium">{formatarData(notaFiscalDetalhes.data_emissao)}</p>
-                </div>
-                {notaFiscalDetalhes.data_vencimento && (
-                  <div>
-                    <Label className="text-xs text-muted-foreground">Data de Vencimento</Label>
-                    <p className="font-medium">{formatarData(notaFiscalDetalhes.data_vencimento)}</p>
-                  </div>
-                )}
-              </div>
-
-              {/* Valor Total */}
-              <div className="border-t pt-4">
-                <Label className="text-xs text-muted-foreground">Valor Total</Label>
-                <p className="text-2xl font-bold text-primary">{formatarMoeda(notaFiscalDetalhes.valor_total || 0)}</p>
-              </div>
-
-              {/* Cliente/Fornecedor */}
-              {(notaFiscalDetalhes.clientes || notaFiscalDetalhes.fornecedores) && (
-                <div className="border-t pt-4">
-                  <Label className="text-sm font-semibold mb-2 block">
-                    {notaFiscalDetalhes.tipo === 'saida' ? 'Cliente' : 'Fornecedor'}
-                  </Label>
-                  {notaFiscalDetalhes.clientes && (
-                    <div className="space-y-1">
-                      <p className="font-medium">{notaFiscalDetalhes.clientes.nome || 'N/A'}</p>
-                      {notaFiscalDetalhes.clientes.cnpj && (
-                        <p className="text-sm text-muted-foreground">CNPJ: {notaFiscalDetalhes.clientes.cnpj}</p>
-                      )}
-                      {notaFiscalDetalhes.clientes.telefone && (
-                        <p className="text-sm text-muted-foreground">Telefone: {notaFiscalDetalhes.clientes.telefone}</p>
-                      )}
-                      {notaFiscalDetalhes.clientes.email && (
-                        <p className="text-sm text-muted-foreground">Email: {notaFiscalDetalhes.clientes.email}</p>
-                      )}
-                    </div>
-                  )}
-                  {notaFiscalDetalhes.fornecedores && (
-                    <div className="space-y-1">
-                      <p className="font-medium">{notaFiscalDetalhes.fornecedores.nome || 'N/A'}</p>
-                      {notaFiscalDetalhes.fornecedores.cnpj && (
-                        <p className="text-sm text-muted-foreground">CNPJ: {notaFiscalDetalhes.fornecedores.cnpj}</p>
-                      )}
-                      {notaFiscalDetalhes.fornecedores.telefone && (
-                        <p className="text-sm text-muted-foreground">Telefone: {notaFiscalDetalhes.fornecedores.telefone}</p>
-                      )}
-                      {notaFiscalDetalhes.fornecedores.email && (
-                        <p className="text-sm text-muted-foreground">Email: {notaFiscalDetalhes.fornecedores.email}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Venda/Compra Vinculada */}
-              {(notaFiscalDetalhes.vendas || notaFiscalDetalhes.compras) && (
-                <div className="border-t pt-4">
-                  <Label className="text-sm font-semibold mb-2 block">
-                    {notaFiscalDetalhes.vendas ? 'Venda Vinculada' : 'Compra Vinculada'}
-                  </Label>
-                  {notaFiscalDetalhes.vendas && (
-                    <div>
-                      <p className="font-medium">Número da Venda: {notaFiscalDetalhes.vendas.numero_venda || 'N/A'}</p>
-                      {notaFiscalDetalhes.vendas.data_venda && (
-                        <p className="text-sm text-muted-foreground">Data: {formatarData(notaFiscalDetalhes.vendas.data_venda)}</p>
-                      )}
-                    </div>
-                  )}
-                  {notaFiscalDetalhes.compras && (
-                    <div>
-                      <p className="font-medium">Número do Pedido: {notaFiscalDetalhes.compras.numero_pedido || 'N/A'}</p>
-                      {notaFiscalDetalhes.compras.data_pedido && (
-                        <p className="text-sm text-muted-foreground">Data: {formatarData(notaFiscalDetalhes.compras.data_pedido)}</p>
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Boletos Vinculados */}
-              {notaFiscalDetalhes.boletos && Array.isArray(notaFiscalDetalhes.boletos) && notaFiscalDetalhes.boletos.length > 0 && (
-                <div className="border-t pt-4">
-                  <Label className="text-sm font-semibold mb-2 block">Boletos Vinculados</Label>
-                  <div className="space-y-2">
-                    {notaFiscalDetalhes.boletos.map((boleto: any) => (
-                      <div key={boleto.id} className="p-3 bg-muted rounded-lg">
-                        <p className="font-medium">Boleto: {boleto.numero_boleto || 'N/A'}</p>
-                        <div className="grid grid-cols-2 gap-2 mt-2 text-sm">
-                          <p>Valor: {formatarMoeda(boleto.valor || 0)}</p>
-                          {boleto.data_vencimento && (
-                            <p>Vencimento: {formatarData(boleto.data_vencimento)}</p>
-                          )}
-                          <p>Status: 
-                            <Badge className="ml-2" variant={
-                              boleto.status === 'pago' ? 'default' :
-                              boleto.status === 'vencido' ? 'destructive' :
-                              'secondary'
-                            }>
-                              {boleto.status === 'pago' ? 'Pago' :
-                               boleto.status === 'vencido' ? 'Vencido' :
-                               'Pendente'}
-                            </Badge>
-                          </p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Observações */}
-              {notaFiscalDetalhes.observacoes && (
-                <div className="border-t pt-4">
-                  <Label className="text-sm font-semibold mb-2 block">Observações</Label>
-                  <p className="text-sm whitespace-pre-wrap">{notaFiscalDetalhes.observacoes}</p>
-                </div>
-              )}
-
-              {/* Informações Adicionais */}
-              <div className="border-t pt-4 grid grid-cols-2 gap-4 text-sm text-muted-foreground">
-                <div>
-                  <Label className="text-xs">Criado em</Label>
-                  <p>{notaFiscalDetalhes.created_at ? new Date(notaFiscalDetalhes.created_at).toLocaleString('pt-BR') : 'N/A'}</p>
-                </div>
-                {notaFiscalDetalhes.updated_at && (
-                  <div>
-                    <Label className="text-xs">Atualizado em</Label>
-                    <p>{new Date(notaFiscalDetalhes.updated_at).toLocaleString('pt-BR')}</p>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : (
-            <div className="text-center py-8 text-muted-foreground">
-              Não foi possível carregar os detalhes da nota fiscal
-            </div>
-          )}
-
-          <div className="flex justify-end gap-2 mt-6">
-            <Button variant="outline" onClick={() => setIsNotaFiscalDialogOpen(false)}>
-              Fechar
-            </Button>
           </div>
         </DialogContent>
       </Dialog>

@@ -2421,6 +2421,60 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
 
 // ==================== ITENS DA NOTA FISCAL ====================
 
+/**
+ * Quando a migration `20260406_notas_fiscais_itens_iss_retido_fonte.sql` não foi aplicada no Supabase,
+ * o insert/update falha com "Could not find the 'iss_retido_fonte' column ... in the schema cache".
+ * Reenviamos o payload sem esse campo para não bloquear o fluxo (o flag deixa de persistir até migrar).
+ */
+function erroColunaIssRetidoFonteAusente(err) {
+  const msg = String(err?.message || err?.details || '');
+  return /iss_retido_fonte/i.test(msg);
+}
+
+async function insertNotaFiscalItemRow(supabaseClient, value) {
+  const payload = { ...value };
+  let { data, error } = await supabaseClient
+    .from('notas_fiscais_itens')
+    .insert([payload])
+    .select()
+    .single();
+  if (error && erroColunaIssRetidoFonteAusente(error) && Object.prototype.hasOwnProperty.call(payload, 'iss_retido_fonte')) {
+    console.warn(
+      '[notas-fiscais] Coluna iss_retido_fonte ausente em notas_fiscais_itens. Execute: backend-api/database/migrations/20260406_notas_fiscais_itens_iss_retido_fonte.sql'
+    );
+    delete payload.iss_retido_fonte;
+    ({ data, error } = await supabaseClient
+      .from('notas_fiscais_itens')
+      .insert([payload])
+      .select()
+      .single());
+  }
+  return { data, error };
+}
+
+async function updateNotaFiscalItemRow(supabaseClient, itemCompleto, itemId) {
+  const payload = { ...itemCompleto };
+  let { data, error } = await supabaseClient
+    .from('notas_fiscais_itens')
+    .update(payload)
+    .eq('id', itemId)
+    .select()
+    .single();
+  if (error && erroColunaIssRetidoFonteAusente(error) && Object.prototype.hasOwnProperty.call(payload, 'iss_retido_fonte')) {
+    console.warn(
+      '[notas-fiscais] Coluna iss_retido_fonte ausente em notas_fiscais_itens. Execute: backend-api/database/migrations/20260406_notas_fiscais_itens_iss_retido_fonte.sql'
+    );
+    delete payload.iss_retido_fonte;
+    ({ data, error } = await supabaseClient
+      .from('notas_fiscais_itens')
+      .update(payload)
+      .eq('id', itemId)
+      .select()
+      .single());
+  }
+  return { data, error };
+}
+
 // Schema de validação para imposto dinâmico
 const impostoDinamicoSchema = Joi.object({
   id: Joi.string().optional(),
@@ -2622,11 +2676,7 @@ router.post('/:id/itens', async (req, res) => {
       value.valor_liquido = value.preco_total - totalImpostosFixos - totalImpostosDinamicos;
     }
 
-    const { data, error } = await supabaseAdmin
-      .from('notas_fiscais_itens')
-      .insert([value])
-      .select()
-      .single();
+    const { data, error } = await insertNotaFiscalItemRow(supabaseAdmin, value);
 
     if (error) throw error;
 
@@ -2816,12 +2866,7 @@ router.put('/itens/:itemId', async (req, res) => {
     delete itemCompleto.id;
     delete itemCompleto.created_at;
 
-    const { data, error } = await supabaseAdmin
-      .from('notas_fiscais_itens')
-      .update(itemCompleto)
-      .eq('id', itemId)
-      .select()
-      .single();
+    const { data, error } = await updateNotaFiscalItemRow(supabaseAdmin, itemCompleto, itemId);
 
     if (error) throw error;
 
