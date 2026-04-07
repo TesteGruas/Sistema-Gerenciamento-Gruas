@@ -61,7 +61,11 @@ const upload = multer({
   }
 });
 
-/** Supabase Storage (bucket) costuma rejeitar text/xml; application/xml é aceito. */
+/**
+ * Normaliza Content-Type para o Storage.
+ * XML: unifica em application/xml (tipo lógico pdf/xml segue em file.mimetype no handler).
+ * Requer bucket arquivos-obras com MIME permitidos — ver migration 20260408_storage_bucket_arquivos_obras_allowed_mime.sql
+ */
 function contentTypeParaStorage(mimetype) {
   if (mimetype === 'text/xml' || mimetype === 'application/xml') {
     return 'application/xml';
@@ -212,7 +216,7 @@ const notaFiscalSchema = Joi.object({
   locacao_id: Joi.number().integer().positive().allow(null).optional(),
   tipo_nota: Joi.string().valid('nf_servico', 'nf_locacao', 'fatura', 'nfe_eletronica').allow(null, '').optional(),
   eletronica: Joi.boolean().allow(null).optional(),
-  chave_acesso: Joi.string().max(44).allow(null, '').optional(),
+  chave_acesso: Joi.string().max(512).allow(null, '').optional(),
   // Dados do Emitente/Destinatário
   emitente_inscricao_estadual: Joi.string().max(20).allow(null, '').optional(),
   destinatario_inscricao_estadual: Joi.string().max(20).allow(null, '').optional(),
@@ -1879,6 +1883,17 @@ const parseXMLNFSe = (xmlBuffer) => {
     // Calcular retenções federais
     const retencoesFederais = valorPis + valorCofins + valorInss + valorIr + valorCsll;
 
+    const infNfseIdAttr = infNfse['@_Id'] || infNfse['@_id'] || '';
+    const idNfseLimpo = String(infNfseIdAttr)
+      .replace(/^#/, '')
+      .replace(/^NFS-?/i, '')
+      .trim();
+    const partesChaveAcesso = [];
+    const cvLimpo = String(codigoVerificacao || '').trim();
+    if (cvLimpo) partesChaveAcesso.push(cvLimpo);
+    if (idNfseLimpo && !partesChaveAcesso.includes(idNfseLimpo)) partesChaveAcesso.push(idNfseLimpo);
+    const chaveAcessoComposta = partesChaveAcesso.length ? partesChaveAcesso.join(' · ') : null;
+
     // Formatar competência (de ISO para MM/AAAA)
     let competenciaFormatada = '';
     if (competencia) {
@@ -1907,6 +1922,7 @@ const parseXMLNFSe = (xmlBuffer) => {
       tipo: 'saida', // NFS-e são sempre de saída
       tipo_nota: tipoNota,
       eletronica: true,
+      chave_acesso: chaveAcessoComposta,
       codigo_verificacao: codigoVerificacao,
       // Prestador
       cnpj_prestador: prestadorCnpj,
@@ -2364,7 +2380,7 @@ router.post('/importar-xml', upload.single('arquivo'), async (req, res) => {
       const { error: uploadError } = await supabaseAdmin.storage
         .from('arquivos-obras')
         .upload(filePath, file.buffer, {
-          contentType: 'application/xml',
+          contentType: contentTypeParaStorage(file.mimetype),
           cacheControl: '3600',
           upsert: false
         });

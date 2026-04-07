@@ -23,7 +23,6 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { 
   Plus, 
   Search, 
@@ -49,43 +48,30 @@ import {
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 
-/** Preview no painel (valores como em Medições): em aberto vs liquidado + total + pizza por entidade */
-function calcularResumoNfPreview(
-  notas: NotaFiscal[],
-  agruparPor: "cliente" | "fornecedor"
-) {
-  const naoCancelada = (n: NotaFiscal) => n.status !== "cancelada"
+/**
+ * Resumo por situação: faturado = NF não cancelada; demais cards = valor por status.
+ */
+function calcularResumoNfPreview(notas: NotaFiscal[]) {
   const valor = (n: NotaFiscal) => Number(n.valor_total) || 0
-  const filtradas = notas.filter(naoCancelada)
+  const soma = (pred: (n: NotaFiscal) => boolean) =>
+    notas.filter(pred).reduce((acc, n) => acc + valor(n), 0)
 
-  const aFaturar = filtradas
-    .filter((n) => n.status === "pendente" || n.status === "vencida")
-    .reduce((acc, n) => acc + valor(n), 0)
-
-  const jaFaturado = filtradas
-    .filter((n) => n.status === "paga")
-    .reduce((acc, n) => acc + valor(n), 0)
-
-  const totalEsperado = filtradas.reduce((acc, n) => acc + valor(n), 0)
-
-  const mapa = new Map<string, number>()
-  for (const n of filtradas) {
-    const nome =
-      agruparPor === "cliente"
-        ? (n.clientes?.nome?.trim() || "Sem cliente")
-        : (n.fornecedores?.nome?.trim() || "Sem fornecedor")
-    mapa.set(nome, (mapa.get(nome) || 0) + valor(n))
+  return {
+    totalFaturado: soma((n) => n.status !== "cancelada"),
+    emAberto: soma((n) => n.status === "pendente"),
+    vencidos: soma((n) => n.status === "vencida"),
+    pagas: soma((n) => n.status === "paga"),
+    canceladas: soma((n) => n.status === "cancelada"),
   }
-  const totaisPorEntidade = Array.from(mapa.entries())
-    .map(([nome, total]) => ({ nome, total }))
-    .sort((a, b) => b.total - a.total)
-    .slice(0, 4)
-
-  return { aFaturar, jaFaturado, totalEsperado, totaisPorEntidade }
 }
 import { clientesApi } from "@/lib/api-clientes"
 import { fornecedoresApi } from "@/lib/api-fornecedores"
-import { medicoesMensaisApi, type MedicaoMensal, type MedicaoDocumento } from "@/lib/api-medicoes-mensais"
+import {
+  medicoesMensaisApi,
+  type MedicaoMensal,
+  type MedicaoDocumento,
+  type MedicaoAditivo,
+} from "@/lib/api-medicoes-mensais"
 import { locacoesApi, Locacao as LocacaoFull } from "@/lib/api-locacoes"
 import { gruasApi } from "@/lib/api-gruas"
 import { apiCompras } from "@/lib/api-compras"
@@ -171,6 +157,62 @@ interface Compra {
 }
 
 const NF_FROM_MEDICAO_STORAGE_KEY = "sgg_nf_prefill_medicao_id"
+
+type MedicaoImportSelecaoNotaFiscal = {
+  incluirLocacao: boolean
+  aditivoIds: number[]
+  incluirAditivosAgregado: boolean
+  incluirServico: boolean
+}
+
+function valorAditivoMedicaoAssinado(a: MedicaoAditivo): number {
+  const v = Math.abs(Number(a.valor) || 0)
+  return a.tipo === 'desconto' ? -v : v
+}
+
+/** Soma em R$ da seleção do diálogo de importação (espelha a lógica de `aplicarMedicaoComModoNaForma`). */
+function estimarTotalImportMedicaoSelecao(m: MedicaoMensal, sel: MedicaoImportSelecaoNotaFiscal): number {
+  let t = 0
+  const vLoc = Number(m.valor_mensal_bruto) || 0
+  const vAditAgg = Number(m.valor_aditivos) || 0
+  const ads = m.aditivos ?? []
+  if (sel.incluirLocacao && vLoc > 0) t += vLoc
+  if (ads.length > 0) {
+    const idSet = new Set(sel.aditivoIds)
+    for (const a of ads) {
+      if (idSet.has(a.id)) t += valorAditivoMedicaoAssinado(a)
+    }
+  } else if (sel.incluirAditivosAgregado && vAditAgg > 0) {
+    t += vAditAgg
+  }
+  const temDetalheServico =
+    (m.custos_mensais?.length || 0) > 0 ||
+    (m.horas_extras?.length || 0) > 0 ||
+    (m.servicos_adicionais?.length || 0) > 0
+  if (sel.incluirServico) {
+    if (temDetalheServico) {
+      for (const c of m.custos_mensais || []) {
+        const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
+        const vu = Number(c.valor_mensal) || 0
+        t += Number(c.valor_total) || qtd * vu
+      }
+      for (const h of m.horas_extras || []) {
+        const q = Number(h.quantidade_horas) || 0
+        const tot = Number(h.valor_total) || 0
+        const vu = q > 0 ? tot / q : Number(h.valor_hora) || 0
+        t += tot || vu
+      }
+      for (const s of m.servicos_adicionais || []) {
+        const q = Number(s.quantidade) > 0 ? Number(s.quantidade) : 1
+        const vu = Number(s.valor_unitario) || 0
+        t += Number(s.valor_total) || q * vu
+      }
+    } else {
+      t += Number(m.valor_custos_extras) || 0
+    }
+  }
+  return t
+}
 
 /**
  * NFS-e nacional (DPS): só preenche automaticamente códigos explícitos do layout.
@@ -267,6 +309,19 @@ async function anexarArquivosNotaNaMedicao(opts: {
   }
 }
 
+/** Junta identificadores de NFS-e (código de verificação, Id da nota, etc.) sem duplicar. */
+function montarChaveIdentificacaoNfse(...partes: (string | undefined | null)[]): string | undefined {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const p of partes) {
+    const t = String(p ?? '').trim()
+    if (!t || seen.has(t)) continue
+    seen.add(t)
+    out.push(t)
+  }
+  return out.length ? out.join(' · ') : undefined
+}
+
 export default function NotasFiscaisPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -337,7 +392,10 @@ export default function NotasFiscaisPage() {
   /** Após escolher Serviço vs Locação no diálogo */
   const [dialogEscolhaTipoImportOpen, setDialogEscolhaTipoImportOpen] = useState(false)
   const [medicaoParaEscolherTipo, setMedicaoParaEscolherTipo] = useState<MedicaoMensal | null>(null)
-  const [importModoSelecionado, setImportModoSelecionado] = useState<'servico' | 'locacao'>('locacao')
+  const [importIncluirLocacao, setImportIncluirLocacao] = useState(false)
+  const [importAditivoIdsSel, setImportAditivoIdsSel] = useState<Set<number>>(() => new Set())
+  const [importIncluirAditivosAgregado, setImportIncluirAditivosAgregado] = useState(false)
+  const [importIncluirServico, setImportIncluirServico] = useState(false)
   const [pendingImportCtx, setPendingImportCtx] = useState<{
     abrirDialogoNf: boolean
     origemUrl: boolean
@@ -353,6 +411,7 @@ export default function NotasFiscaisPage() {
   const [formData, setFormData] = useState<NotaFiscalCreate>({
     numero_nf: '',
     serie: '',
+    chave_acesso: '',
     data_emissao: new Date().toISOString().split('T')[0],
     data_vencimento: '',
     valor_total: 0,
@@ -563,11 +622,11 @@ export default function NotasFiscaisPage() {
     }
   }, [fromMedicaoQuery])
 
-  /** Aplica medição já carregada conforme o modo (Serviço = custos extras / detalhe; Locação = bruto + aditivos) */
+  /** Aplica medição conforme checkboxes: locação base, aditivos (lista ou agregado) e/ou serviço. */
   const aplicarMedicaoComModoNaForma = useCallback(
     (
       m: MedicaoMensal,
-      modo: 'servico' | 'locacao',
+      selecao: MedicaoImportSelecaoNotaFiscal,
       ctx: { abrirDialogoNf: boolean; origemUrl: boolean }
     ) => {
       const unwrapRel = <T,>(x: T | T[] | null | undefined): T | undefined => {
@@ -619,33 +678,46 @@ export default function NotasFiscaisPage() {
         : new Date().toISOString().split('T')[0]
 
       const itensMedicao: NotaFiscalItem[] = []
-      let valorTotalForm = 0
-      let tipoNota: 'nf_servico' | 'nf_locacao' = 'nf_locacao'
-
       const descontoMed = Number(m.valor_descontos) || 0
 
-      if (modo === 'locacao') {
-        tipoNota = 'nf_locacao'
-        const vLoc = Number(m.valor_mensal_bruto) || 0
-        const vAdit = Number(m.valor_aditivos) || 0
-        if (vLoc > 0) {
-          itensMedicao.push(
-            mkItem(`Locação — período ${m.periodo} (ref. medição ${m.numero || m.id})`, 1, vLoc, vLoc)
-          )
-        }
-        if (vAdit > 0) {
-          itensMedicao.push(
-            mkItem(`Aditivos — ref. medição ${m.numero || m.id} (${m.periodo})`, 1, vAdit, vAdit)
-          )
-        }
-        valorTotalForm = vLoc + vAdit
-      } else {
-        tipoNota = 'nf_servico'
-        const temDetalheServico =
-          (m.custos_mensais?.length || 0) > 0 ||
-          (m.horas_extras?.length || 0) > 0 ||
-          (m.servicos_adicionais?.length || 0) > 0
+      const vLoc = Number(m.valor_mensal_bruto) || 0
+      const vAditAgg = Number(m.valor_aditivos) || 0
+      const aditivosLista = m.aditivos ?? []
 
+      if (selecao.incluirLocacao && vLoc > 0) {
+        itensMedicao.push(
+          mkItem(`Locação — período ${m.periodo} (ref. medição ${m.numero || m.id})`, 1, vLoc, vLoc)
+        )
+      }
+
+      if (aditivosLista.length > 0) {
+        const idSet = new Set(selecao.aditivoIds)
+        for (const a of aditivosLista) {
+          if (!idSet.has(a.id)) continue
+          const signed = valorAditivoMedicaoAssinado(a)
+          if (signed === 0) continue
+          const rotulo = a.descricao?.trim() || (a.tipo === 'desconto' ? 'Desconto' : 'Aditivo')
+          itensMedicao.push(
+            mkItem(
+              `${rotulo} — ref. medição ${m.numero || m.id} (${m.periodo})`,
+              1,
+              signed,
+              signed
+            )
+          )
+        }
+      } else if (selecao.incluirAditivosAgregado && vAditAgg > 0) {
+        itensMedicao.push(
+          mkItem(`Aditivos (consolidado) — ref. medição ${m.numero || m.id} (${m.periodo})`, 1, vAditAgg, vAditAgg)
+        )
+      }
+
+      const temDetalheServico =
+        (m.custos_mensais?.length || 0) > 0 ||
+        (m.horas_extras?.length || 0) > 0 ||
+        (m.servicos_adicionais?.length || 0) > 0
+
+      if (selecao.incluirServico) {
         if (temDetalheServico) {
           for (const c of m.custos_mensais || []) {
             const qtd = Number(c.quantidade_meses) > 0 ? Number(c.quantidade_meses) : 1
@@ -673,7 +745,6 @@ export default function NotasFiscaisPage() {
             const tot = Number(s.valor_total) || q * vu
             itensMedicao.push(mkItem(s.descricao || 'Serviço adicional', q, vu, tot))
           }
-          valorTotalForm = itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
         } else {
           const vServ = Number(m.valor_custos_extras) || 0
           if (vServ > 0) {
@@ -686,12 +757,25 @@ export default function NotasFiscaisPage() {
               )
             )
           }
-          valorTotalForm = vServ
         }
       }
 
+      const valorTotalForm = itensMedicao.reduce((acc, it) => acc + (Number(it.preco_total) || 0), 0)
+
+      const temBlocoLocacao =
+        (selecao.incluirLocacao && vLoc > 0) ||
+        (aditivosLista.length > 0 && selecao.aditivoIds.some((id) => aditivosLista.some((a) => a.id === id))) ||
+        (aditivosLista.length === 0 && selecao.incluirAditivosAgregado && vAditAgg > 0)
+      const tipoNota: 'nf_servico' | 'nf_locacao' = temBlocoLocacao ? 'nf_locacao' : 'nf_servico'
+
+      const rotulosImp: string[] = []
+      if (selecao.incluirLocacao && vLoc > 0) rotulosImp.push('locação')
+      if (aditivosLista.length > 0 && selecao.aditivoIds.length > 0) rotulosImp.push('aditivos')
+      if (aditivosLista.length === 0 && selecao.incluirAditivosAgregado && vAditAgg > 0) rotulosImp.push('aditivos consolidados')
+      if (selecao.incluirServico) rotulosImp.push('serviço')
+
       const obsLinhas = [
-        `Importação (${modo === 'locacao' ? 'Locação' : 'Serviço'}) — medição ${m.numero || '#' + m.id} (período ${m.periodo}).`,
+        `Importação (${rotulosImp.join(', ') || 'medição'}) — medição ${m.numero || '#' + m.id} (período ${m.periodo}).`,
         obra?.nome ? `Obra: ${obra.nome}.` : '',
         cliente?.nome ? `Cliente: ${cliente.nome}.` : '',
         descontoMed > 0
@@ -699,12 +783,19 @@ export default function NotasFiscaisPage() {
           : ''
       ].filter(Boolean)
 
-      const numeroSugerido = `REF-MED-${m.id}-${modo === 'locacao' ? 'LOC' : 'SRV'}`
+      const suf =
+        tipoNota === 'nf_locacao' && selecao.incluirServico
+          ? 'MIX'
+          : tipoNota === 'nf_locacao'
+            ? 'LOC'
+            : 'SRV'
+      const numeroSugerido = `REF-MED-${m.id}-${suf}`
 
       setActiveTab('saida')
       setFormData({
         numero_nf: numeroSugerido,
         serie: '',
+        chave_acesso: '',
         data_emissao: dataEmissao,
         data_vencimento: '',
         valor_total: valorTotalForm,
@@ -811,7 +902,13 @@ export default function NotasFiscaisPage() {
 
         setMedicaoParaEscolherTipo(m)
         setPendingImportCtx({ abrirDialogoNf: opts.abrirDialogoNf, origemUrl: opts.origemUrl })
-        setImportModoSelecionado(podeLocacao ? 'locacao' : 'servico')
+        const ads = m.aditivos ?? []
+        const vLocInit = Number(m.valor_mensal_bruto) || 0
+        const vAditAggInit = Number(m.valor_aditivos) || 0
+        setImportIncluirLocacao(vLocInit > 0)
+        setImportAditivoIdsSel(new Set(ads.map((a) => a.id)))
+        setImportIncluirAditivosAgregado(ads.length === 0 && vAditAggInit > 0)
+        setImportIncluirServico(!podeLocacao && podeServico)
         setDialogEscolhaTipoImportOpen(true)
       } catch (e: any) {
         if (!opts.isCancelled?.()) {
@@ -829,38 +926,63 @@ export default function NotasFiscaisPage() {
   const confirmarImportacaoTipoMedicao = useCallback(() => {
     if (!medicaoParaEscolherTipo || !pendingImportCtx) return
     const m = medicaoParaEscolherTipo
-    const podeLocacao =
-      (Number(m.valor_mensal_bruto) || 0) > 0 || (Number(m.valor_aditivos) || 0) > 0
     const temDetalheServico =
       (m.custos_mensais?.length || 0) > 0 ||
       (m.horas_extras?.length || 0) > 0 ||
       (m.servicos_adicionais?.length || 0) > 0
     const podeServico = temDetalheServico || (Number(m.valor_custos_extras) || 0) > 0
-    if (importModoSelecionado === 'locacao' && !podeLocacao) {
+
+    const selecao: MedicaoImportSelecaoNotaFiscal = {
+      incluirLocacao: importIncluirLocacao,
+      aditivoIds: [...importAditivoIdsSel],
+      incluirAditivosAgregado: importIncluirAditivosAgregado,
+      incluirServico: importIncluirServico,
+    }
+
+    if (importIncluirLocacao && (Number(m.valor_mensal_bruto) || 0) <= 0) {
       toastNotify({
-        title: 'Valor de locação indisponível',
-        description: 'Não há valor de locação ou aditivos nesta medição.',
+        title: 'Locação indisponível',
+        description: 'Não há valor de locação mensal nesta medição.',
         variant: 'destructive'
       })
       return
     }
-    if (importModoSelecionado === 'servico' && !podeServico) {
+    if (importIncluirServico && !podeServico) {
       toastNotify({
-        title: 'Valor de serviço indisponível',
+        title: 'Serviço indisponível',
         description: 'Não há custos extras nem itens de serviço nesta medição.',
         variant: 'destructive'
       })
       return
     }
+    const totalEst = estimarTotalImportMedicaoSelecao(m, selecao)
+    if (totalEst <= 0) {
+      toastNotify({
+        title: 'Nada selecionado',
+        description: 'Marque locação, aditivos e/ou serviço com valor para compor a nota.',
+        variant: 'destructive'
+      })
+      return
+    }
+
     ignorarCloseEscolhaImportTipo.current = true
-    aplicarMedicaoComModoNaForma(medicaoParaEscolherTipo, importModoSelecionado, pendingImportCtx)
+    aplicarMedicaoComModoNaForma(medicaoParaEscolherTipo, selecao, pendingImportCtx)
     setDialogEscolhaTipoImportOpen(false)
     setMedicaoParaEscolherTipo(null)
     setPendingImportCtx(null)
     queueMicrotask(() => {
       ignorarCloseEscolhaImportTipo.current = false
     })
-  }, [medicaoParaEscolherTipo, pendingImportCtx, importModoSelecionado, aplicarMedicaoComModoNaForma])
+  }, [
+    medicaoParaEscolherTipo,
+    pendingImportCtx,
+    importIncluirLocacao,
+    importAditivoIdsSel,
+    importIncluirAditivosAgregado,
+    importIncluirServico,
+    aplicarMedicaoComModoNaForma,
+    toastNotify,
+  ])
 
   const cancelarDialogEscolhaTipoImport = useCallback(() => {
     if (ignorarCloseEscolhaImportTipo.current) return
@@ -1168,7 +1290,12 @@ export default function NotasFiscaisPage() {
           dadosLimpos[key] = null
         }
         // Campos opcionais de texto vazios podem ser omitidos ou null
-        else if (key.includes('observacoes') || key.includes('descricao') || key.includes('serie')) {
+        else if (
+          key.includes('observacoes') ||
+          key.includes('descricao') ||
+          key.includes('serie') ||
+          key === 'chave_acesso'
+        ) {
           dadosLimpos[key] = null
         }
         // Outros campos opcionais são omitidos
@@ -1258,6 +1385,9 @@ export default function NotasFiscaisPage() {
         ...formData,
         tipo: tipoNotaFiscal
       })
+      if (tipoNotaFiscal === 'saida') {
+        dadosLimpos.chave_acesso = null
+      }
 
       console.log('📋 [NOTAS-FISCAIS] Dados limpos para envio:', dadosLimpos)
 
@@ -1710,6 +1840,9 @@ export default function NotasFiscaisPage() {
 
       // Limpar dados antes de enviar
       const dadosLimpos = limparDadosNotaFiscal(formData)
+      if (formData.tipo === 'saida') {
+        dadosLimpos.chave_acesso = null
+      }
 
       const response = await notasFiscaisApi.update(editingNota.id, dadosLimpos)
       
@@ -1843,6 +1976,7 @@ export default function NotasFiscaisPage() {
     setFormData({
       numero_nf: nota.numero_nf,
       serie: nota.serie || '',
+      chave_acesso: nota.chave_acesso || '',
       data_emissao: nota.data_emissao,
       data_vencimento: nota.data_vencimento || '',
       valor_total: nota.valor_total,
@@ -2183,6 +2317,7 @@ export default function NotasFiscaisPage() {
     setFormData({
       numero_nf: '',
       serie: '',
+      chave_acesso: '',
       data_emissao: new Date().toISOString().split('T')[0],
       data_vencimento: '',
       valor_total: 0,
@@ -2565,6 +2700,11 @@ export default function NotasFiscaisPage() {
           const idNf = infNfse.getAttribute('Id')
           if (idNf) chaveAcessoNfse = idNf.replace(/^NFS/i, '')
 
+          codigoVerificacao =
+            getTagValue(infNfse, 'CodigoVerificacao') ||
+            getTagValue(infNfse, 'codigoVerificacao') ||
+            ''
+
           const tribEl = valoresDps ? getTagElement(valoresDps, 'trib') : null
           const tribMun = tribEl ? getTagElement(tribEl, 'tribMun') : null
           const tpRetISSQN = tribMun ? getTagValue(tribMun, 'tpRetISSQN') : ''
@@ -2651,7 +2791,7 @@ export default function NotasFiscaisPage() {
           status: 'pendente',
           tipo_nota: 'nf_servico',
           eletronica: true,
-          chave_acesso: codigoVerificacao || chaveAcessoNfse || undefined,
+          chave_acesso: montarChaveIdentificacaoNfse(codigoVerificacao, chaveAcessoNfse),
           observacoes:
             [normalizeImportedText(discriminacao), xDocReembolso, infoComplObs].filter(Boolean).join('\n\n') ||
             undefined
@@ -3101,11 +3241,11 @@ export default function NotasFiscaisPage() {
   }
 
   const resumoNfSaida = useMemo(
-    () => calcularResumoNfPreview(notasPreviewSaida, "cliente"),
+    () => calcularResumoNfPreview(notasPreviewSaida),
     [notasPreviewSaida]
   )
   const resumoNfEntrada = useMemo(
-    () => calcularResumoNfPreview(notasPreviewEntrada, "fornecedor"),
+    () => calcularResumoNfPreview(notasPreviewEntrada),
     [notasPreviewEntrada]
   )
 
@@ -3142,7 +3282,7 @@ export default function NotasFiscaisPage() {
 
   const getStatusBadge = (status: string) => {
     const statusMap: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-      pendente: { label: "Pendente", variant: "outline" },
+      pendente: { label: "Em aberto", variant: "outline" },
       paga: { label: "Paga", variant: "default" },
       vencida: { label: "Vencida", variant: "destructive" },
       cancelada: { label: "Cancelada", variant: "secondary" }
@@ -3305,7 +3445,7 @@ export default function NotasFiscaisPage() {
 
       const statusTxt = (s: string) => {
         const m: Record<string, string> = {
-          pendente: "Pendente",
+          pendente: "Em aberto",
           paga: "Paga",
           vencida: "Vencida",
           cancelada: "Cancelada",
@@ -3507,153 +3647,79 @@ export default function NotasFiscaisPage() {
           <TabsTrigger value="entrada">Resumo Notas de Entrada</TabsTrigger>
         </TabsList>
         <TabsContent value="saida" className="mt-4 space-y-0">
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-            <Card className="xl:col-span-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">A Faturar</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.aFaturar)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Pendente ou vencida</p>
+                <p className="text-sm text-gray-500">Faturado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.totalFaturado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">NF emitidas (não canceladas)</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-1">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">Já Faturado</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.jaFaturado)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Status pago</p>
+                <p className="text-sm text-gray-500">Em aberto</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.emAberto)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status pendente</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-1">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">Total esperado</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.totalEsperado)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Já faturado + a faturar</p>
+                <p className="text-sm text-gray-500">Vencidos</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.vencidos)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status vencida</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-2">
-              <CardContent className="p-4 flex items-center justify-between gap-4">
-                <div className="space-y-2 min-w-0">
-                  <p className="text-sm text-gray-500">Totais por Cliente</p>
-                  {resumoNfSaida.totaisPorEntidade.length === 0 ? (
-                    <p className="text-sm text-gray-400">Sem dados</p>
-                  ) : (
-                    resumoNfSaida.totaisPorEntidade.map((item, idx) => {
-                      const cores = ["bg-blue-500", "bg-emerald-500", "bg-amber-400", "bg-indigo-500"]
-                      const percentual =
-                        resumoNfSaida.totalEsperado > 0
-                          ? ((item.total / resumoNfSaida.totalEsperado) * 100).toFixed(1)
-                          : "0.0"
-                      return (
-                        <div key={`saida-${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cores[idx % cores.length]}`} />
-                            <span className="text-gray-700 truncate" title={item.nome}>{item.nome}</span>
-                          </div>
-                          <span className="font-medium text-gray-600 shrink-0">{percentual}%</span>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-                {resumoNfSaida.totaisPorEntidade.length > 0 && (
-                  <div
-                    className="w-28 h-28 rounded-full shrink-0"
-                    style={{
-                      background: (() => {
-                        const cores = ["#3b82f6", "#10b981", "#f59e0b", "#6366f1"]
-                        let inicio = 0
-                        const fatias = resumoNfSaida.totaisPorEntidade.map((item, idx) => {
-                          const pct =
-                            resumoNfSaida.totalEsperado > 0 ? (item.total / resumoNfSaida.totalEsperado) * 100 : 0
-                          const fim = inicio + pct
-                          const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
-                          inicio = fim
-                          return trecho
-                        })
-                        return `conic-gradient(${fatias.join(", ")})`
-                      })(),
-                    }}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-14 h-14 rounded-full bg-white dark:bg-card" />
-                    </div>
-                  </div>
-                )}
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Pagas</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.pagas)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status paga</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Canceladas</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfSaida.canceladas)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status cancelada</p>
               </CardContent>
             </Card>
           </div>
         </TabsContent>
         <TabsContent value="entrada" className="mt-4 space-y-0">
-          <div className="grid grid-cols-1 xl:grid-cols-5 gap-4">
-            <Card className="xl:col-span-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">A Faturar</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.aFaturar)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Pendente ou vencida</p>
+                <p className="text-sm text-gray-500">Faturado</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.totalFaturado)}</p>
+                <p className="text-xs text-muted-foreground mt-1">NF emitidas (não canceladas)</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-1">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">Já Faturado</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.jaFaturado)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Status pago</p>
+                <p className="text-sm text-gray-500">Em aberto</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.emAberto)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status pendente</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-1">
+            <Card>
               <CardContent className="p-4">
-                <p className="text-sm text-gray-500">Total esperado</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.totalEsperado)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Já faturado + a faturar</p>
+                <p className="text-sm text-gray-500">Vencidos</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.vencidos)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status vencida</p>
               </CardContent>
             </Card>
-            <Card className="xl:col-span-2">
-              <CardContent className="p-4 flex items-center justify-between gap-4">
-                <div className="space-y-2 min-w-0">
-                  <p className="text-sm text-gray-500">Totais por Fornecedor</p>
-                  {resumoNfEntrada.totaisPorEntidade.length === 0 ? (
-                    <p className="text-sm text-gray-400">Sem dados</p>
-                  ) : (
-                    resumoNfEntrada.totaisPorEntidade.map((item, idx) => {
-                      const cores = ["bg-blue-500", "bg-emerald-500", "bg-amber-400", "bg-indigo-500"]
-                      const percentual =
-                        resumoNfEntrada.totalEsperado > 0
-                          ? ((item.total / resumoNfEntrada.totalEsperado) * 100).toFixed(1)
-                          : "0.0"
-                      return (
-                        <div key={`entrada-${item.nome}-${idx}`} className="flex items-center justify-between gap-3 text-sm">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${cores[idx % cores.length]}`} />
-                            <span className="text-gray-700 truncate" title={item.nome}>{item.nome}</span>
-                          </div>
-                          <span className="font-medium text-gray-600 shrink-0">{percentual}%</span>
-                        </div>
-                      )
-                    })
-                  )}
-                </div>
-                {resumoNfEntrada.totaisPorEntidade.length > 0 && (
-                  <div
-                    className="w-28 h-28 rounded-full shrink-0"
-                    style={{
-                      background: (() => {
-                        const cores = ["#3b82f6", "#10b981", "#f59e0b", "#6366f1"]
-                        let inicio = 0
-                        const fatias = resumoNfEntrada.totaisPorEntidade.map((item, idx) => {
-                          const pct =
-                            resumoNfEntrada.totalEsperado > 0 ? (item.total / resumoNfEntrada.totalEsperado) * 100 : 0
-                          const fim = inicio + pct
-                          const trecho = `${cores[idx % cores.length]} ${inicio}% ${fim}%`
-                          inicio = fim
-                          return trecho
-                        })
-                        return `conic-gradient(${fatias.join(", ")})`
-                      })(),
-                    }}
-                  >
-                    <div className="w-full h-full flex items-center justify-center">
-                      <div className="w-14 h-14 rounded-full bg-white dark:bg-card" />
-                    </div>
-                  </div>
-                )}
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Pagas</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.pagas)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status paga</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardContent className="p-4">
+                <p className="text-sm text-gray-500">Canceladas</p>
+                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.canceladas)}</p>
+                <p className="text-xs text-muted-foreground mt-1">Status cancelada</p>
               </CardContent>
             </Card>
           </div>
@@ -3703,11 +3769,11 @@ export default function NotasFiscaisPage() {
                   <div className="w-full min-[480px]:w-[11rem] shrink-0">
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Status" />
+                        <SelectValue placeholder="Pagamento" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos os Status</SelectItem>
-                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="pendente">Em aberto</SelectItem>
                         <SelectItem value="paga">Paga</SelectItem>
                         <SelectItem value="vencida">Vencida</SelectItem>
                         <SelectItem value="cancelada">Cancelada</SelectItem>
@@ -3919,11 +3985,11 @@ export default function NotasFiscaisPage() {
                   <div className="w-full min-[480px]:w-[11rem] shrink-0">
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                       <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Status" />
+                        <SelectValue placeholder="Pagamento" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">Todos os Status</SelectItem>
-                        <SelectItem value="pendente">Pendente</SelectItem>
+                        <SelectItem value="all">Todos</SelectItem>
+                        <SelectItem value="pendente">Em aberto</SelectItem>
                         <SelectItem value="paga">Paga</SelectItem>
                         <SelectItem value="vencida">Vencida</SelectItem>
                         <SelectItem value="cancelada">Cancelada</SelectItem>
@@ -4184,7 +4250,7 @@ export default function NotasFiscaisPage() {
                       input.click()
                     }}
                     className="bg-blue-50 hover:bg-blue-100 text-blue-700 border-blue-300"
-                    title="Importar dados de um XML de NFe/NFS-e"
+                    title="Importar XML (NF-e ou NFS-e): número, valores, tributos e chave de acesso / identificadores eletrônicos quando existirem no arquivo"
                   >
                     {parseandoXmlNfe ? (
                       <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -4314,6 +4380,20 @@ export default function NotasFiscaisPage() {
                 />
               </div>
             </div>
+
+            {(formData.tipo || activeTab) === 'entrada' && (
+              <div className="space-y-1.5">
+                <Label htmlFor="chave_acesso">Chave de acesso / identificador eletrônico</Label>
+                <Input
+                  id="chave_acesso"
+                  value={formData.chave_acesso ?? ''}
+                  onChange={(e) => setFormData({ ...formData, chave_acesso: e.target.value })}
+                  maxLength={512}
+                  placeholder="Preenchido ao importar XML ou digite manualmente"
+                  autoComplete="off"
+                />
+              </div>
+            )}
 
             {(formData.tipo || activeTab) === 'saida' && (
               <>
@@ -4600,16 +4680,16 @@ export default function NotasFiscaisPage() {
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="status">Status</Label>
+                <Label htmlFor="status">Situação do pagamento</Label>
                 <Select 
                   value={formData.status || 'pendente'} 
                   onValueChange={(value) => setFormData({ ...formData, status: value as any })}
                 >
-                  <SelectTrigger>
+                  <SelectTrigger id="status">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="pendente">Pendente</SelectItem>
+                    <SelectItem value="pendente">Em aberto</SelectItem>
                     <SelectItem value="paga">Paga</SelectItem>
                     <SelectItem value="vencida">Vencida</SelectItem>
                     <SelectItem value="cancelada">Cancelada</SelectItem>
@@ -5040,12 +5120,12 @@ export default function NotasFiscaisPage() {
           if (!open) cancelarDialogEscolhaTipoImport()
         }}
       >
-        <DialogContent className="sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg md:max-w-xl max-h-[min(90vh,720px)] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Tipo de importação</DialogTitle>
+            <DialogTitle>O que importar na nota</DialogTitle>
             <DialogDescription>
-              Escolha o que esta nota deve registrar: valores de <strong>locação</strong> (mensal + aditivos) ou de{' '}
-              <strong>serviço</strong> (custos extras e itens de serviço, quando houver).
+              Combine <strong>locação</strong>, <strong>aditivos</strong> (um, vários ou todos) e <strong>serviço</strong>{' '}
+              na mesma nota, conforme a medição.
             </DialogDescription>
           </DialogHeader>
           {medicaoParaEscolherTipo ? (() => {
@@ -5053,13 +5133,13 @@ export default function NotasFiscaisPage() {
             const fmt = (n: number) =>
               n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
             const vLoc = Number(m.valor_mensal_bruto) || 0
-            const vAdit = Number(m.valor_aditivos) || 0
+            const vAditAgg = Number(m.valor_aditivos) || 0
             const vServ = Number(m.valor_custos_extras) || 0
+            const ads = m.aditivos ?? []
             const temDetalheServico =
               (m.custos_mensais?.length || 0) > 0 ||
               (m.horas_extras?.length || 0) > 0 ||
               (m.servicos_adicionais?.length || 0) > 0
-            /** Mesma regra que `aplicarMedicaoComModoNaForma` (modo serviço). */
             const totalServicoImport = (() => {
               if (!temDetalheServico) return vServ
               let acc = 0
@@ -5081,62 +5161,147 @@ export default function NotasFiscaisPage() {
               }
               return acc
             })()
-            const podeLocacao = vLoc > 0 || vAdit > 0
             const podeServico = temDetalheServico || vServ > 0
-            const totalLoc = vLoc + vAdit
+            const sel: MedicaoImportSelecaoNotaFiscal = {
+              incluirLocacao: importIncluirLocacao,
+              aditivoIds: [...importAditivoIdsSel],
+              incluirAditivosAgregado: importIncluirAditivosAgregado,
+              incluirServico: importIncluirServico,
+            }
+            const totalSel = estimarTotalImportMedicaoSelecao(m, sel)
+            const marcarTodosAditivos = () => setImportAditivoIdsSel(new Set(ads.map((a) => a.id)))
+            const limparAditivos = () => setImportAditivoIdsSel(new Set())
             return (
-              <RadioGroup
-                value={importModoSelecionado}
-                onValueChange={(v) => setImportModoSelecionado(v as 'servico' | 'locacao')}
-                className="gap-3"
-              >
-                <div
-                  className={`flex gap-3 rounded-md border p-3 text-left ${importModoSelecionado === 'locacao' ? 'border-primary/50 bg-muted/30' : 'border-border'}`}
-                >
-                  <RadioGroupItem value="locacao" id="nf-imp-loc" className="mt-1 shrink-0" disabled={!podeLocacao} />
-                  <Label htmlFor="nf-imp-loc" className="flex-1 cursor-pointer font-normal leading-snug">
-                    <span className="text-sm font-medium text-foreground">Locação</span>
-                    <p className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                      <span>Valor de locação (R$) + Valor de aditivos (R$)</span>
-                      <span className="block text-foreground/90">
-                        R$ {fmt(vLoc)} + R$ {fmt(vAdit)} ={' '}
-                        <strong className="text-foreground">R$ {fmt(totalLoc)}</strong>
-                      </span>
+              <div className="space-y-4 overflow-y-auto pr-1 -mr-1 min-h-0 flex-1">
+                <div className="flex items-start gap-3 rounded-md border p-3">
+                  <Checkbox
+                    id="nf-imp-loc"
+                    className="mt-1"
+                    checked={importIncluirLocacao}
+                    disabled={vLoc <= 0}
+                    onCheckedChange={(c) => setImportIncluirLocacao(c === true)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="nf-imp-loc" className="text-sm font-medium cursor-pointer">
+                      Locação (mensal)
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Valor do período: <strong className="text-foreground">R$ {fmt(vLoc)}</strong>
                     </p>
-                  </Label>
+                  </div>
                 </div>
-                <div
-                  className={`flex gap-3 rounded-md border p-3 text-left ${importModoSelecionado === 'servico' ? 'border-primary/50 bg-muted/30' : 'border-border'}`}
-                >
-                  <RadioGroupItem value="servico" id="nf-imp-srv" className="mt-1 shrink-0" disabled={!podeServico} />
-                  <Label htmlFor="nf-imp-srv" className="flex-1 cursor-pointer font-normal leading-snug">
-                    <span className="text-sm font-medium text-foreground">Serviço</span>
-                    <p className="text-xs text-muted-foreground mt-1 space-y-0.5">
-                      <span>Valor de serviço (R$)</span>
-                      <span className="block text-foreground/90">
-                        {temDetalheServico ? (
-                          <>
-                            Soma dos itens (custos mensais, horas extras e serviços adicionais):{' '}
-                            <strong className="text-foreground">R$ {fmt(totalServicoImport)}</strong>
-                          </>
-                        ) : (
-                          <>
-                            Consolidado em custos extras:{' '}
-                            <strong className="text-foreground">R$ {fmt(vServ)}</strong>
-                          </>
-                        )}
-                      </span>
+
+                {ads.length > 0 ? (
+                  <div className="rounded-md border p-3 space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-medium">Aditivos</span>
+                      <div className="flex gap-2">
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={marcarTodosAditivos}>
+                          Marcar todos
+                        </Button>
+                        <Button type="button" variant="ghost" size="sm" className="h-8 text-xs" onClick={limparAditivos}>
+                          Limpar
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="max-h-40 overflow-y-auto space-y-2 pr-1">
+                      {ads.map((a) => {
+                        const signed = valorAditivoMedicaoAssinado(a)
+                        const checked = importAditivoIdsSel.has(a.id)
+                        return (
+                          <div key={a.id} className="flex items-start gap-2">
+                            <Checkbox
+                              id={`nf-adit-${a.id}`}
+                              className="mt-0.5"
+                              checked={checked}
+                              onCheckedChange={(c) => {
+                                setImportAditivoIdsSel((prev) => {
+                                  const n = new Set(prev)
+                                  if (c === true) n.add(a.id)
+                                  else n.delete(a.id)
+                                  return n
+                                })
+                              }}
+                            />
+                            <Label htmlFor={`nf-adit-${a.id}`} className="text-sm font-normal cursor-pointer flex-1 leading-snug">
+                              <span className="text-foreground">{a.descricao?.trim() || a.tipo}</span>
+                              <span className="text-muted-foreground"> — R$ {fmt(signed)}</span>
+                            </Label>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                ) : vAditAgg > 0 ? (
+                  <div className="flex items-start gap-3 rounded-md border p-3">
+                    <Checkbox
+                      id="nf-imp-adit-ag"
+                      className="mt-1"
+                      checked={importIncluirAditivosAgregado}
+                      onCheckedChange={(c) => setImportIncluirAditivosAgregado(c === true)}
+                    />
+                    <div className="flex-1 min-w-0">
+                      <Label htmlFor="nf-imp-adit-ag" className="text-sm font-medium cursor-pointer">
+                        Aditivos (valor consolidado)
+                      </Label>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Total na medição: <strong className="text-foreground">R$ {fmt(vAditAgg)}</strong>
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="flex items-start gap-3 rounded-md border p-3">
+                  <Checkbox
+                    id="nf-imp-srv"
+                    className="mt-1"
+                    checked={importIncluirServico}
+                    disabled={!podeServico}
+                    onCheckedChange={(c) => setImportIncluirServico(c === true)}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <Label htmlFor="nf-imp-srv" className="text-sm font-medium cursor-pointer">
+                      Serviço
+                    </Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {temDetalheServico ? (
+                        <>
+                          Soma custos mensais, horas extras e serviços adicionais:{' '}
+                          <strong className="text-foreground">R$ {fmt(totalServicoImport)}</strong>
+                        </>
+                      ) : (
+                        <>
+                          Custos extras consolidados: <strong className="text-foreground">R$ {fmt(vServ)}</strong>
+                        </>
+                      )}
                     </p>
-                  </Label>
+                  </div>
                 </div>
-              </RadioGroup>
+
+                <p className="text-sm font-medium border-t pt-3">
+                  Total selecionado:{' '}
+                  <span className={totalSel > 0 ? 'text-foreground' : 'text-destructive'}>R$ {fmt(totalSel)}</span>
+                </p>
+              </div>
             )
           })() : null}
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-0 flex-shrink-0 border-t pt-4 mt-2">
             <Button type="button" variant="outline" onClick={cancelarDialogEscolhaTipoImport}>
               Cancelar
             </Button>
-            <Button type="button" onClick={confirmarImportacaoTipoMedicao}>
+            <Button
+              type="button"
+              onClick={confirmarImportacaoTipoMedicao}
+              disabled={
+                !medicaoParaEscolherTipo ||
+                estimarTotalImportMedicaoSelecao(medicaoParaEscolherTipo, {
+                  incluirLocacao: importIncluirLocacao,
+                  aditivoIds: [...importAditivoIdsSel],
+                  incluirAditivosAgregado: importIncluirAditivosAgregado,
+                  incluirServico: importIncluirServico,
+                }) <= 0
+              }
+            >
               Importar
             </Button>
           </DialogFooter>
@@ -5179,6 +5344,20 @@ export default function NotasFiscaisPage() {
                   <p className="text-lg">{viewingNota.serie || '-'}</p>
                 </div>
               </div>
+
+              {viewingNota.tipo === 'entrada' && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-500">
+                    Chave de acesso / identificador eletrônico
+                  </Label>
+                  <p className="mt-1 text-sm font-mono break-all whitespace-pre-wrap rounded-md bg-muted/50 px-3 py-2">
+                    {viewingNota.chave_acesso?.trim() ? viewingNota.chave_acesso : '—'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    NF-e: 44 dígitos. NFS-e: código de verificação, Id ou demais identificadores do XML.
+                  </p>
+                </div>
+              )}
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -5254,7 +5433,7 @@ export default function NotasFiscaisPage() {
               </div>
 
               <div>
-                <Label className="text-sm font-medium text-gray-500">Status</Label>
+                <Label className="text-sm font-medium text-gray-500">Situação do pagamento</Label>
                 <div className="mt-2">{getStatusBadge(viewingNota.status)}</div>
               </div>
 

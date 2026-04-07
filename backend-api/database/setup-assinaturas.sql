@@ -75,13 +75,14 @@ CREATE INDEX IF NOT EXISTS idx_historico_data_acao ON obras_documento_historico(
 
 -- 5. Configurar Supabase Storage
 -- Executar no Supabase Dashboard > Storage
+-- allowed_mime_types NULL = aceitar PDF, XML, imagens e demais anexos do sistema (evita erro "mime type ... is not supported").
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 VALUES (
   'arquivos-obras', 
   'arquivos-obras', 
   true, 
   52428800, -- 50MB
-  ARRAY['application/pdf']
+  NULL
 ) ON CONFLICT (id) DO NOTHING;
 
 -- 6. Configurar políticas RLS para storage
