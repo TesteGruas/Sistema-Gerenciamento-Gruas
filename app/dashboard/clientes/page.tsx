@@ -51,6 +51,35 @@ const UFS = [
   "RS", "RO", "RR", "SC", "SP", "SE", "TO"
 ]
 
+function createEmptyClienteFormData(): ClienteFormData {
+  return {
+    nome: "",
+    inscricao_estadual: "",
+    inscricao_municipal: "",
+    email: "",
+    telefone: "",
+    cnpj: "",
+    endereco: "",
+    endereco_complemento: "",
+    endereco_obra: "",
+    endereco_obra_complemento: "",
+    cidade: "",
+    estado: "",
+    cep: "",
+    cidade_obra: "",
+    estado_obra: "",
+    cep_obra: "",
+    contato: "",
+    contato_cargo: "",
+    contato_email: "",
+    contato_cpf: "",
+    contato_telefone: "",
+    status: "ativo",
+    criar_usuario: true,
+    usuario_senha: "",
+  }
+}
+
 export default function ClientesPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -63,32 +92,11 @@ export default function ClientesPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [clienteToDelete, setClienteToDelete] = useState<Cliente | null>(null)
-  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>({
-    nome: '',
-    inscricao_estadual: '',
-    inscricao_municipal: '',
-    email: '',
-    telefone: '',
-    cnpj: '',
-    endereco: '',
-    endereco_complemento: '',
-    endereco_obra: '',
-    endereco_obra_complemento: '',
-    cidade: '',
-    estado: '',
-    cep: '',
-    cidade_obra: '',
-    estado_obra: '',
-    cep_obra: '',
-    contato: '',
-    contato_cargo: '',
-    contato_email: '',
-    contato_cpf: '',
-    contato_telefone: '',
-    status: 'ativo',
-    criar_usuario: true,
-    usuario_senha: '' // Não será usado - backend gera senha automaticamente
-  })
+  const [clienteFormData, setClienteFormData] = useState<ClienteFormData>(() =>
+    createEmptyClienteFormData(),
+  )
+  /** Incrementado ao abrir "Novo Cliente"; reseta rascunho dentro do ClienteForm sem subir estado para a página. */
+  const [clienteCreateResetNonce, setClienteCreateResetNonce] = useState(0)
   
   // Estados para gerenciar dados da API
   const [clientes, setClientes] = useState<Cliente[]>([])
@@ -112,11 +120,14 @@ export default function ClientesPage() {
   const prevSearchRef = useRef(searchTerm)
   const prevStatusRef = useRef(statusFilter)
   
-  // Estados para upload de arquivos
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [uploadingFiles, setUploadingFiles] = useState(false)
   const [clienteArquivos, setClienteArquivos] = useState<any[]>([])
   const [loadingArquivos, setLoadingArquivos] = useState(false)
+
+  const abrirDialogNovoCliente = useCallback(() => {
+    setClienteCreateResetNonce((n) => n + 1)
+    setIsCreateDialogOpen(true)
+  }, [])
 
   const [destinatariosNotificacaoClientes, setDestinatariosNotificacaoClientes] = useState<
     Array<{ id: number; nome: string; info?: string }>
@@ -166,6 +177,7 @@ export default function ClientesPage() {
   useEffect(() => {
     const createParam = searchParams.get('create')
     if (createParam === 'true' && dadosIniciaisCarregados) {
+      setClienteCreateResetNonce((n) => n + 1)
       setIsCreateDialogOpen(true)
       // Remover query param da URL sem recarregar a página
       router.replace('/dashboard/clientes', { scroll: false })
@@ -509,7 +521,6 @@ export default function ClientesPage() {
       criar_usuario: cliente.usuario_existe || false,
       usuario_senha: ''
     })
-    setSelectedFiles([])
     setIsEditDialogOpen(true)
     
     // Carregar arquivos do cliente
@@ -553,23 +564,27 @@ export default function ClientesPage() {
   }
 
   // Função para fazer upload de arquivos após criar/atualizar cliente
-  const uploadClienteFiles = async (clienteId: number, clienteNome?: string) => {
-    if (selectedFiles.length === 0) {
+  const uploadClienteFiles = async (
+    clienteId: number,
+    clienteNome: string | undefined,
+    files: File[],
+  ) => {
+    if (files.length === 0) {
       console.log('⚠️ Nenhum arquivo selecionado para upload')
       return
     }
 
     try {
       setUploadingFiles(true)
-      console.log(`📤 Iniciando upload de ${selectedFiles.length} arquivo(s) para cliente ID: ${clienteId}`)
+      console.log(`📤 Iniciando upload de ${files.length} arquivo(s) para cliente ID: ${clienteId}`)
       
       const uploadResults = await Promise.allSettled(
-        selectedFiles.map(async (file) => {
+        files.map(async (file) => {
           try {
             console.log(`📤 Fazendo upload do arquivo: ${file.name} (${(file.size / 1024).toFixed(2)} KB)`)
             const result = await apiArquivos.upload(file, {
               nome: file.name,
-              descricao: `Arquivo do cliente: ${clienteNome || clienteFormData.nome || ''}`,
+              descricao: `Arquivo do cliente: ${clienteNome || ''}`,
               modulo: 'clientes',
               entidade_id: clienteId,
               entidade_tipo: 'cliente',
@@ -604,7 +619,6 @@ export default function ClientesPage() {
         })
       }
       
-      setSelectedFiles([])
     } catch (error) {
       console.error('❌ Erro geral ao fazer upload dos arquivos:', error)
       toast({
@@ -617,55 +631,11 @@ export default function ClientesPage() {
     }
   }
 
-  // Função para adicionar arquivos
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || [])
-    const validFiles = files.filter(file => {
-      const maxSize = 10 * 1024 * 1024 // 10MB
-      if (file.size > maxSize) {
-        toast({
-          title: "Arquivo muito grande",
-          description: `${file.name} excede o tamanho máximo de 10MB`,
-          variant: "destructive"
-        })
-        return false
-      }
-      return true
-    })
-    
-    setSelectedFiles(prev => [...prev, ...validFiles])
-    
-    // Limpar o input para permitir selecionar o mesmo arquivo novamente
-    if (e.target) {
-      e.target.value = ''
-    }
-  }
-
-  // Função para remover arquivo da lista
-  const handleRemoveFile = (index: number) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
-  // Função para formatar tamanho do arquivo
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  }
-
-  // Função para obter ícone do arquivo
-  const getFileIcon = (file: File) => {
-    const type = file.type
-    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />
-    if (type === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />
-    if (type.includes('word') || type.includes('document')) return <FileText className="h-4 w-4 text-blue-600" />
-    if (type.includes('excel') || type.includes('spreadsheet')) return <FileText className="h-4 w-4 text-green-600" />
-    return <File className="h-4 w-4 text-gray-500" />
-  }
-
-  const handleCreateCliente = async (e: React.FormEvent, formDataOverride?: ClienteFormData) => {
+  const handleCreateCliente = async (
+    e: React.FormEvent,
+    formDataOverride?: ClienteFormData,
+    arquivosPendentes: File[] = [],
+  ) => {
     e.preventDefault()
     const dadosForm = formDataOverride || clienteFormData
     
@@ -708,7 +678,7 @@ export default function ClientesPage() {
         contato_cpf: dadosForm.contato_cpf ? dadosForm.contato_cpf.replace(/\D/g, '') : '',
         contato_telefone: dadosForm.contato_telefone ? dadosForm.contato_telefone.replace(/\D/g, '') : '',
         // Incluir campos de usuário se estiver criando
-        criar_usuario: clienteFormData.criar_usuario || false,
+        criar_usuario: dadosForm.criar_usuario || false,
         // Backend gera senha automaticamente quando criar_usuario é true
         // Não enviar senha - será gerada pelo backend e enviada por email/WhatsApp
       }
@@ -717,14 +687,14 @@ export default function ClientesPage() {
       
       console.log('📦 Resposta da criação do cliente:', response)
       console.log('📦 ID do cliente criado:', response.data?.id)
-      console.log('📦 Arquivos selecionados:', selectedFiles.length)
+      console.log('📦 Arquivos selecionados:', arquivosPendentes.length)
       
       // Fazer upload dos arquivos se houver
-      if (selectedFiles.length > 0) {
+      if (arquivosPendentes.length > 0) {
         const clienteId = response.data?.id
         if (clienteId) {
           console.log('📤 Iniciando upload de arquivos para cliente ID:', clienteId)
-          await uploadClienteFiles(clienteId, dadosForm.nome)
+          await uploadClienteFiles(clienteId, dadosForm.nome, arquivosPendentes)
         } else {
           console.error('❌ ID do cliente não encontrado na resposta:', response)
           toast({
@@ -738,34 +708,8 @@ export default function ClientesPage() {
       // Recarregar lista de clientes
       await carregarClientes()
       
-      // Resetar formulário e fechar dialog
-      setClienteFormData({
-        nome: '',
-        inscricao_estadual: '',
-        inscricao_municipal: '',
-        email: '',
-        telefone: '',
-        cnpj: '',
-        endereco: '',
-        endereco_complemento: '',
-        endereco_obra: '',
-        endereco_obra_complemento: '',
-        cidade: '',
-        estado: '',
-        cep: '',
-        cidade_obra: '',
-        estado_obra: '',
-        cep_obra: '',
-        contato: '',
-        contato_cargo: '',
-        contato_email: '',
-        contato_cpf: '',
-        contato_telefone: '',
-        status: 'ativo',
-        criar_usuario: true,
-        usuario_senha: '' // Não será usado - backend gera senha automaticamente
-      })
-      setSelectedFiles([])
+      setClienteFormData(createEmptyClienteFormData())
+      setClienteCreateResetNonce((n) => n + 1)
       setIsCreateDialogOpen(false)
       
       const message = response.data?.usuario_criado 
@@ -789,7 +733,11 @@ export default function ClientesPage() {
     }
   }
 
-  const handleUpdateCliente = async (e: React.FormEvent, formDataOverride?: ClienteFormData) => {
+  const handleUpdateCliente = async (
+    e: React.FormEvent,
+    formDataOverride?: ClienteFormData,
+    arquivosPendentes: File[] = [],
+  ) => {
     e.preventDefault()
     const dadosForm = formDataOverride || clienteFormData
     
@@ -840,9 +788,8 @@ export default function ClientesPage() {
       
       await clientesApi.atualizarCliente(selectedCliente.id, dadosFormatados)
       
-      // Fazer upload dos arquivos se houver
-      if (selectedFiles.length > 0) {
-        await uploadClienteFiles(selectedCliente.id, dadosForm.nome)
+      if (arquivosPendentes.length > 0) {
+        await uploadClienteFiles(selectedCliente.id, dadosForm.nome, arquivosPendentes)
       }
       
       // Recarregar lista de clientes
@@ -854,7 +801,6 @@ export default function ClientesPage() {
       }
       
       setIsEditDialogOpen(false)
-      setSelectedFiles([])
       
       toast({
         title: "Informação",
@@ -1049,7 +995,7 @@ export default function ClientesPage() {
                 Enviar mensagem ({destinatariosNotificacaoClientes.length})
               </Button>
             )}
-            <Button className="flex items-center gap-2" onClick={() => setIsCreateDialogOpen(true)}>
+            <Button type="button" className="flex items-center gap-2" onClick={abrirDialogNovoCliente}>
               <Plus className="w-4 h-4" />
               Novo Cliente
             </Button>
@@ -1449,7 +1395,7 @@ export default function ClientesPage() {
                 <p className="text-muted-foreground mb-4">
                   {searchTerm ? "Tente ajustar os filtros de busca." : "Comece criando seu primeiro cliente."}
                 </p>
-                <Button onClick={() => setIsCreateDialogOpen(true)}>
+                <Button type="button" onClick={abrirDialogNovoCliente}>
                   <Plus className="w-4 h-4 mr-2" />
                   Novo Cliente
                 </Button>
@@ -1460,8 +1406,15 @@ export default function ClientesPage() {
       )}
 
       {/* Dialog de Criação de Cliente */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <Dialog
+        open={isCreateDialogOpen}
+        onOpenChange={setIsCreateDialogOpen}
+      >
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Building2 className="w-5 h-5" />
@@ -1470,24 +1423,23 @@ export default function ClientesPage() {
           </DialogHeader>
           <ClienteForm 
             formData={clienteFormData}
+            createResetNonce={clienteCreateResetNonce}
             onSubmit={handleCreateCliente}
             onClose={() => setIsCreateDialogOpen(false)}
             isEdit={false}
             isSubmitting={isSubmitting}
-            selectedFiles={selectedFiles}
-            setSelectedFiles={setSelectedFiles}
             uploadingFiles={uploadingFiles}
-            handleFileSelect={handleFileSelect}
-            handleRemoveFile={handleRemoveFile}
-            getFileIcon={getFileIcon}
-            formatFileSize={formatFileSize}
           />
         </DialogContent>
       </Dialog>
 
       {/* Dialog de Edição de Cliente */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent
+          className="max-w-4xl max-h-[90vh] overflow-y-auto"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit className="w-5 h-5" />
@@ -1503,13 +1455,7 @@ export default function ClientesPage() {
             }}
             isEdit={true}
             isSubmitting={isSubmitting}
-            selectedFiles={selectedFiles}
-            setSelectedFiles={setSelectedFiles}
             uploadingFiles={uploadingFiles}
-            handleFileSelect={handleFileSelect}
-            handleRemoveFile={handleRemoveFile}
-            getFileIcon={getFileIcon}
-            formatFileSize={formatFileSize}
             clienteArquivos={clienteArquivos}
             loadingArquivos={loadingArquivos}
             onRemoverArquivo={handleRemoverArquivoCliente}
@@ -1604,46 +1550,103 @@ export default function ClientesPage() {
 
 function ClienteForm({ 
   formData, 
+  createResetNonce = 0,
   onSubmit, 
   onClose, 
   isEdit, 
   isSubmitting,
-  selectedFiles,
-  setSelectedFiles,
   uploadingFiles,
-  handleFileSelect,
-  handleRemoveFile,
-  getFileIcon,
-  formatFileSize,
   clienteArquivos = [],
   loadingArquivos = false,
   onRemoverArquivo
 }: { 
-  formData: ClienteFormData; 
-  onSubmit: (e: React.FormEvent, formData: ClienteFormData) => void; 
+  formData: ClienteFormData;
+  /** Só criação: ao incrementar, zera rascunho e arquivos pendentes (estado fica neste componente, não na página). */
+  createResetNonce?: number;
+  onSubmit: (e: React.FormEvent, formData: ClienteFormData, arquivosPendentes: File[]) => void | Promise<void>;
   onClose: () => void;
   isEdit: boolean;
   isSubmitting: boolean;
-  selectedFiles: File[];
-  setSelectedFiles: (files: File[]) => void;
   uploadingFiles: boolean;
-  handleFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  handleRemoveFile: (index: number) => void;
-  getFileIcon: (file: File) => React.ReactNode;
-  formatFileSize: (bytes: number) => string;
   clienteArquivos?: any[];
   loadingArquivos?: boolean;
   onRemoverArquivo?: (arquivoId: number) => void;
 }) {
-  const [localFormData, setLocalFormData] = useState<ClienteFormData>(formData)
+  const { toast } = useToast()
+  const [createDraft, setCreateDraft] = useState<ClienteFormData>(() => createEmptyClienteFormData())
+  const [editDraft, setEditDraft] = useState<ClienteFormData>(() => formData)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [buscandoCepCliente, setBuscandoCepCliente] = useState(false)
   const [buscandoCepObra, setBuscandoCepObra] = useState(false)
   const [erroCepCliente, setErroCepCliente] = useState('')
   const [erroCepObra, setErroCepObra] = useState('')
 
   useEffect(() => {
-    setLocalFormData(formData)
-  }, [formData])
+    if (isEdit) {
+      setEditDraft(formData)
+      setSelectedFiles([])
+    }
+  }, [formData, isEdit])
+
+  useEffect(() => {
+    if (isEdit) return
+    setCreateDraft(createEmptyClienteFormData())
+    setSelectedFiles([])
+  }, [createResetNonce, isEdit])
+
+  const fd = isEdit ? editDraft : createDraft
+  const fdRef = useRef(fd)
+  fdRef.current = fd
+
+  const setFd = useCallback(
+    (action: React.SetStateAction<ClienteFormData>) => {
+      if (isEdit) setEditDraft(action)
+      else setCreateDraft(action)
+    },
+    [isEdit],
+  )
+
+  const formatFileSize = useCallback((bytes: number) => {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }, [])
+
+  const getFileIcon = useCallback((file: File) => {
+    const type = file.type
+    if (type.startsWith('image/')) return <Image className="h-4 w-4 text-blue-500" />
+    if (type === 'application/pdf') return <FileText className="h-4 w-4 text-red-500" />
+    if (type.includes('word') || type.includes('document')) return <FileText className="h-4 w-4 text-blue-600" />
+    if (type.includes('excel') || type.includes('spreadsheet')) return <FileText className="h-4 w-4 text-green-600" />
+    return <File className="h-4 w-4 text-gray-500" />
+  }, [])
+
+  const handleFileSelect = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files || [])
+      const validFiles = files.filter((file) => {
+        const maxSize = 10 * 1024 * 1024
+        if (file.size > maxSize) {
+          toast({
+            title: 'Arquivo muito grande',
+            description: `${file.name} excede o tamanho máximo de 10MB`,
+            variant: 'destructive',
+          })
+          return false
+        }
+        return true
+      })
+      setSelectedFiles((prev) => [...prev, ...validFiles])
+      if (e.target) e.target.value = ''
+    },
+    [toast],
+  )
+
+  const handleRemoveFile = useCallback((index: number) => {
+    setSelectedFiles((prev) => prev.filter((_, i) => i !== index))
+  }, [])
 
   const formatarCep = (rawValue: string) => {
     const numeric = rawValue.replace(/\D/g, '').slice(0, 8)
@@ -1667,7 +1670,7 @@ function ClienteForm({
       const data = await buscarViaCep(cepNumerico)
 
       if (tipo === 'cliente') {
-        setLocalFormData((prev) => ({
+        setFd((prev) => ({
           ...prev,
           endereco: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco,
           cidade: data.localidade || prev.cidade,
@@ -1678,7 +1681,7 @@ function ClienteForm({
         return
       }
 
-      setLocalFormData((prev) => ({
+      setFd((prev) => ({
         ...prev,
         endereco_obra: [data.logradouro, data.bairro].filter(Boolean).join(' - ') || prev.endereco_obra,
         cidade_obra: data.localidade || prev.cidade_obra,
@@ -1691,14 +1694,15 @@ function ClienteForm({
       if (tipo === 'cliente') {
         setErroCepCliente('CEP não encontrado. Verifique o número informado.')
       } else {
-        const cepClienteNumerico = (localFormData.cep || '').replace(/\D/g, '')
+        const prev = fdRef.current
+        const cepClienteNumerico = (prev.cep || '').replace(/\D/g, '')
         // Fallback: se CEP da obra for igual ao da empresa, reaproveita os dados já preenchidos da empresa
-        if (cepClienteNumerico === cepNumerico && (localFormData.endereco || localFormData.cidade || localFormData.estado)) {
-          setLocalFormData((prev) => ({
-            ...prev,
-            endereco_obra: prev.endereco || prev.endereco_obra,
-            cidade_obra: prev.cidade || prev.cidade_obra,
-            estado_obra: prev.estado || prev.estado_obra,
+        if (cepClienteNumerico === cepNumerico && (prev.endereco || prev.cidade || prev.estado)) {
+          setFd((p) => ({
+            ...p,
+            endereco_obra: p.endereco || p.endereco_obra,
+            cidade_obra: p.cidade || p.cidade_obra,
+            estado_obra: p.estado || p.estado_obra,
             cep_obra: formatarCep(cepNumerico)
           }))
           setErroCepObra('')
@@ -1740,7 +1744,7 @@ function ClienteForm({
   }
 
   const preencherDadosDebug = () => {
-    setLocalFormData({
+    setFd({
       nome: 'Construtora ABC Ltda',
       cnpj: gerarCnpjAleatorioFormatado(),
       inscricao_estadual: '110.042.490.114',
@@ -1768,7 +1772,7 @@ function ClienteForm({
   }
 
   return (
-    <form onSubmit={(e) => onSubmit(e, localFormData)} className="space-y-2">
+    <form onSubmit={(e) => void onSubmit(e, fd, selectedFiles)} className="space-y-2">
       <div className="flex justify-end mb-4">
         <DebugButton
           onClick={preencherDadosDebug}
@@ -1786,8 +1790,8 @@ function ClienteForm({
             <Label htmlFor="nome">Nome da Empresa *</Label>
             <Input
               id="nome"
-              value={localFormData.nome}
-              onChange={(e) => setLocalFormData({ ...localFormData, nome: e.target.value })}
+              value={fd.nome}
+              onChange={(e) => setFd((prev) => ({ ...prev, nome: e.target.value }))}
               placeholder="Ex: Construtora ABC Ltda"
               required
             />
@@ -1796,7 +1800,7 @@ function ClienteForm({
             <Label htmlFor="cnpj">CNPJ *</Label>
             <Input
               id="cnpj"
-              value={localFormData.cnpj}
+              value={fd.cnpj}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '')
                 if (value.length >= 2) {
@@ -1811,7 +1815,7 @@ function ClienteForm({
                 if (value.length >= 15) {
                   value = value.substring(0, 15) + '-' + value.substring(15, 17)
                 }
-                setLocalFormData({ ...localFormData, cnpj: value })
+                setFd((prev) => ({ ...prev, cnpj: value }))
               }}
               placeholder="00.000.000/0000-00"
               maxLength={18}
@@ -1825,8 +1829,8 @@ function ClienteForm({
             <Label htmlFor="inscricao_estadual">Inscrição Estadual</Label>
             <Input
               id="inscricao_estadual"
-              value={localFormData.inscricao_estadual || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, inscricao_estadual: e.target.value })}
+              value={fd.inscricao_estadual || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, inscricao_estadual: e.target.value }))}
               placeholder="Opcional"
             />
           </div>
@@ -1834,16 +1838,16 @@ function ClienteForm({
             <Label htmlFor="inscricao_municipal">Inscrição Municipal</Label>
             <Input
               id="inscricao_municipal"
-              value={localFormData.inscricao_municipal || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, inscricao_municipal: e.target.value })}
+              value={fd.inscricao_municipal || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, inscricao_municipal: e.target.value }))}
               placeholder="Opcional"
             />
           </div>
           <div>
             <Label htmlFor="status">Status *</Label>
             <Select
-              value={localFormData.status || 'ativo'}
-              onValueChange={(value) => setLocalFormData({ ...localFormData, status: value })}
+              value={fd.status || 'ativo'}
+              onValueChange={(value) => setFd((prev) => ({ ...prev, status: value }))}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o status" />
@@ -1864,8 +1868,8 @@ function ClienteForm({
             <Input
               id="email"
               type="email"
-              value={localFormData.email || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, email: e.target.value })}
+              value={fd.email || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, email: e.target.value }))}
               placeholder="contato@empresa.com.br"
             />
           </div>
@@ -1873,7 +1877,7 @@ function ClienteForm({
             <Label htmlFor="telefone">Telefone da Empresa</Label>
             <Input
               id="telefone"
-              value={localFormData.telefone || ''}
+              value={fd.telefone || ''}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '')
                 if (value.length >= 2) {
@@ -1882,7 +1886,7 @@ function ClienteForm({
                 if (value.length >= 10) {
                   value = value.substring(0, 10) + '-' + value.substring(10, 14)
                 }
-                setLocalFormData({ ...localFormData, telefone: value })
+                setFd((prev) => ({ ...prev, telefone: value }))
               }}
               placeholder="(11) 99999-9999"
               maxLength={15}
@@ -1900,19 +1904,18 @@ function ClienteForm({
             <Label htmlFor="cep">CEP</Label>
             <Input
               id="cep"
-              value={localFormData.cep || ''}
+              value={fd.cep || ''}
               onChange={(e) => {
                 const value = formatarCep(e.target.value)
-                setLocalFormData({ ...localFormData, cep: value })
+                setFd((prev) => ({ ...prev, cep: value }))
                 setErroCepCliente('')
                 if (value.length === 9) {
                   aplicarEnderecoPorCep(value, 'cliente')
                 }
               }}
               onBlur={() => {
-                if ((localFormData.cep || '').length === 9) {
-                  aplicarEnderecoPorCep(localFormData.cep || '', 'cliente')
-                }
+                const c = fdRef.current.cep || ''
+                if (c.length === 9) aplicarEnderecoPorCep(c, 'cliente')
               }}
               placeholder="01234-567"
               maxLength={9}
@@ -1927,8 +1930,8 @@ function ClienteForm({
             <Label htmlFor="endereco">Endereço</Label>
             <Input
               id="endereco"
-              value={localFormData.endereco || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, endereco: e.target.value })}
+              value={fd.endereco || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, endereco: e.target.value }))}
               placeholder="Rua, número e bairro"
             />
           </div>
@@ -1936,8 +1939,8 @@ function ClienteForm({
             <Label htmlFor="endereco_complemento">Complemento</Label>
             <Input
               id="endereco_complemento"
-              value={localFormData.endereco_complemento || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, endereco_complemento: e.target.value })}
+              value={fd.endereco_complemento || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, endereco_complemento: e.target.value }))}
               placeholder="Sala, bloco, andar (opcional)"
             />
           </div>
@@ -1948,16 +1951,16 @@ function ClienteForm({
             <Label htmlFor="cidade">Cidade</Label>
             <Input
               id="cidade"
-              value={localFormData.cidade || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, cidade: e.target.value })}
+              value={fd.cidade || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, cidade: e.target.value }))}
               placeholder="São Paulo"
             />
           </div>
           <div>
             <Label htmlFor="estado">Estado</Label>
             <Select
-              value={localFormData.estado || undefined}
-              onValueChange={(value) => setLocalFormData({ ...localFormData, estado: value })}
+              value={fd.estado || undefined}
+              onValueChange={(value) => setFd((prev) => ({ ...prev, estado: value }))}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o estado" />
@@ -1982,8 +1985,8 @@ function ClienteForm({
             <Label htmlFor="contato">Nome do Contato *</Label>
             <Input
               id="contato"
-              value={localFormData.contato || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, contato: e.target.value })}
+              value={fd.contato || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, contato: e.target.value }))}
               placeholder="João Silva"
               required
             />
@@ -1992,8 +1995,8 @@ function ClienteForm({
             <Label htmlFor="contato_cargo">Cargo do Contato</Label>
             <Input
               id="contato_cargo"
-              value={localFormData.contato_cargo || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, contato_cargo: e.target.value })}
+              value={fd.contato_cargo || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, contato_cargo: e.target.value }))}
               placeholder="Ex: Engenheiro, Comprador, Administrador"
             />
           </div>
@@ -2005,8 +2008,8 @@ function ClienteForm({
             <Input
               id="contato_email"
               type="email"
-              value={localFormData.contato_email || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, contato_email: e.target.value })}
+              value={fd.contato_email || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, contato_email: e.target.value }))}
               placeholder="joao.silva@empresa.com"
               required
             />
@@ -2015,7 +2018,7 @@ function ClienteForm({
             <Label htmlFor="contato_telefone">Telefone do Contato</Label>
             <Input
               id="contato_telefone"
-              value={localFormData.contato_telefone || ''}
+              value={fd.contato_telefone || ''}
               onChange={(e) => {
                 let value = e.target.value.replace(/\D/g, '')
                 if (value.length >= 2) {
@@ -2024,7 +2027,7 @@ function ClienteForm({
                 if (value.length >= 10) {
                   value = value.substring(0, 10) + '-' + value.substring(10, 14)
                 }
-                setLocalFormData({ ...localFormData, contato_telefone: value })
+                setFd((prev) => ({ ...prev, contato_telefone: value }))
               }}
               placeholder="(11) 99999-9999"
               maxLength={15}
@@ -2041,19 +2044,18 @@ function ClienteForm({
             <Label htmlFor="cep_obra">CEP</Label>
             <Input
               id="cep_obra"
-              value={localFormData.cep_obra || ''}
+              value={fd.cep_obra || ''}
               onChange={(e) => {
                 const value = formatarCep(e.target.value)
-                setLocalFormData({ ...localFormData, cep_obra: value })
+                setFd((prev) => ({ ...prev, cep_obra: value }))
                 setErroCepObra('')
                 if (value.length === 9) {
                   aplicarEnderecoPorCep(value, 'obra')
                 }
               }}
               onBlur={() => {
-                if ((localFormData.cep_obra || '').length === 9) {
-                  aplicarEnderecoPorCep(localFormData.cep_obra || '', 'obra')
-                }
+                const c = fdRef.current.cep_obra || ''
+                if (c.length === 9) aplicarEnderecoPorCep(c, 'obra')
               }}
               placeholder="01234-567"
               maxLength={9}
@@ -2068,8 +2070,8 @@ function ClienteForm({
             <Label htmlFor="endereco_obra">Endereço</Label>
             <Input
               id="endereco_obra"
-              value={localFormData.endereco_obra || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, endereco_obra: e.target.value })}
+              value={fd.endereco_obra || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, endereco_obra: e.target.value }))}
               placeholder="Rua, número e bairro"
             />
           </div>
@@ -2077,8 +2079,8 @@ function ClienteForm({
             <Label htmlFor="endereco_obra_complemento">Complemento</Label>
             <Input
               id="endereco_obra_complemento"
-              value={localFormData.endereco_obra_complemento || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, endereco_obra_complemento: e.target.value })}
+              value={fd.endereco_obra_complemento || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, endereco_obra_complemento: e.target.value }))}
               placeholder="Sala, bloco, andar (opcional)"
             />
           </div>
@@ -2089,16 +2091,16 @@ function ClienteForm({
             <Label htmlFor="cidade_obra">Cidade</Label>
             <Input
               id="cidade_obra"
-              value={localFormData.cidade_obra || ''}
-              onChange={(e) => setLocalFormData({ ...localFormData, cidade_obra: e.target.value })}
+              value={fd.cidade_obra || ''}
+              onChange={(e) => setFd((prev) => ({ ...prev, cidade_obra: e.target.value }))}
               placeholder="São Paulo"
             />
           </div>
           <div>
             <Label htmlFor="estado_obra">Estado</Label>
             <Select
-              value={localFormData.estado_obra || undefined}
-              onValueChange={(value) => setLocalFormData({ ...localFormData, estado_obra: value })}
+              value={fd.estado_obra || undefined}
+              onValueChange={(value) => setFd((prev) => ({ ...prev, estado_obra: value }))}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Selecione o estado" />
@@ -2121,20 +2123,20 @@ function ClienteForm({
           <input
             type="checkbox"
             id="criar_usuario"
-            checked={localFormData.criar_usuario || false}
-            onChange={(e) => setLocalFormData({ ...localFormData, criar_usuario: e.target.checked })}
-            disabled={isEdit && localFormData.criar_usuario}
+            checked={fd.criar_usuario || false}
+            onChange={(e) => setFd((prev) => ({ ...prev, criar_usuario: e.target.checked }))}
+            disabled={isEdit && fd.criar_usuario}
             className="rounded border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
           />
-          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && localFormData.criar_usuario ? 'text-gray-500' : ''}`}>
-            {isEdit && localFormData.criar_usuario 
+          <Label htmlFor="criar_usuario" className={`text-sm font-medium ${isEdit && fd.criar_usuario ? 'text-gray-500' : ''}`}>
+            {isEdit && fd.criar_usuario 
               ? 'Usuário já criado para o representante' 
               : 'Criar usuário para o representante'
             }
           </Label>
         </div>
 
-        {localFormData.criar_usuario && (
+        {fd.criar_usuario && (
           <div className={`border rounded-lg p-4 ${isEdit ? 'bg-green-50 border-green-200' : 'bg-blue-50 border-blue-200'}`}>
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0">
