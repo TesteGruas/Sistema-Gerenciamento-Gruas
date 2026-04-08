@@ -982,6 +982,205 @@ router.post('/tipos', async (req, res) => {
   }
 })
 
+const tipoGruaIdParamSchema = Joi.object({
+  id: Joi.string().uuid().required()
+})
+
+/**
+ * Atualizar nome de um tipo de grua (propaga para gruas que usam o nome antigo).
+ */
+router.put('/tipos/:id', async (req, res) => {
+  try {
+    const { error: paramErr, value: paramVal } = tipoGruaIdParamSchema.validate(req.params, {
+      abortEarly: false
+    })
+    if (paramErr) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'Informe um UUID válido'
+      })
+    }
+
+    const { error: validationError, value } = tipoGruaCreateSchema.validate(req.body, {
+      abortEarly: false,
+      stripUnknown: true
+    })
+    if (validationError) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: validationError.details.map((d) => d.message)
+      })
+    }
+
+    const nomeNovo = value.nome.trim()
+
+    const { data: atual, error: fetchErr } = await supabaseAdmin
+      .from('tipos_grua')
+      .select('id, nome, ordem, created_at')
+      .eq('id', paramVal.id)
+      .maybeSingle()
+
+    if (fetchErr) {
+      return res.status(500).json({
+        error: 'Erro ao buscar tipo de grua',
+        message: fetchErr.message
+      })
+    }
+    if (!atual) {
+      return res.status(404).json({
+        error: 'Não encontrado',
+        message: 'Tipo de grua não encontrado'
+      })
+    }
+
+    const nomeAntigo = atual.nome
+    if (nomeAntigo === nomeNovo) {
+      return res.json({
+        success: true,
+        data: atual
+      })
+    }
+
+    const { data: dup, error: dupErr } = await supabaseAdmin
+      .from('tipos_grua')
+      .select('id')
+      .eq('nome', nomeNovo)
+      .neq('id', paramVal.id)
+      .maybeSingle()
+
+    if (dupErr) {
+      return res.status(500).json({
+        error: 'Erro ao validar nome',
+        message: dupErr.message
+      })
+    }
+    if (dup) {
+      return res.status(409).json({
+        error: 'Tipo já cadastrado',
+        message: 'Já existe um tipo com este nome'
+      })
+    }
+
+    const { error: updGruasErr } = await supabaseAdmin
+      .from('gruas')
+      .update({ tipo: nomeNovo })
+      .eq('tipo', nomeAntigo)
+
+    if (updGruasErr) {
+      return res.status(500).json({
+        error: 'Erro ao atualizar gruas',
+        message: updGruasErr.message
+      })
+    }
+
+    const { data: atualizado, error: updTipoErr } = await supabaseAdmin
+      .from('tipos_grua')
+      .update({ nome: nomeNovo })
+      .eq('id', paramVal.id)
+      .select('id, nome, ordem, created_at')
+      .single()
+
+    if (updTipoErr) {
+      await supabaseAdmin.from('gruas').update({ tipo: nomeAntigo }).eq('tipo', nomeNovo)
+      if (updTipoErr.code === '23505') {
+        return res.status(409).json({
+          error: 'Tipo já cadastrado',
+          message: 'Já existe um tipo com este nome'
+        })
+      }
+      return res.status(500).json({
+        error: 'Erro ao atualizar tipo de grua',
+        message: updTipoErr.message
+      })
+    }
+
+    res.json({
+      success: true,
+      data: atualizado
+    })
+  } catch (error) {
+    console.error('Erro ao atualizar tipo de grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
+/**
+ * Remover tipo de grua do catálogo (somente se nenhuma grua usar esse nome).
+ */
+router.delete('/tipos/:id', async (req, res) => {
+  try {
+    const { error: paramErr, value: paramVal } = tipoGruaIdParamSchema.validate(req.params, {
+      abortEarly: false
+    })
+    if (paramErr) {
+      return res.status(400).json({
+        error: 'ID inválido',
+        message: 'Informe um UUID válido'
+      })
+    }
+
+    const { data: atual, error: fetchErr } = await supabaseAdmin
+      .from('tipos_grua')
+      .select('id, nome')
+      .eq('id', paramVal.id)
+      .maybeSingle()
+
+    if (fetchErr) {
+      return res.status(500).json({
+        error: 'Erro ao buscar tipo de grua',
+        message: fetchErr.message
+      })
+    }
+    if (!atual) {
+      return res.status(404).json({
+        error: 'Não encontrado',
+        message: 'Tipo de grua não encontrado'
+      })
+    }
+
+    const { count, error: countErr } = await supabaseAdmin
+      .from('gruas')
+      .select('*', { count: 'exact', head: true })
+      .eq('tipo', atual.nome)
+
+    if (countErr) {
+      return res.status(500).json({
+        error: 'Erro ao verificar uso do tipo',
+        message: countErr.message
+      })
+    }
+    if (count && count > 0) {
+      return res.status(409).json({
+        error: 'Tipo em uso',
+        message: `Existem ${count} grua(s) com este tipo. Altere o tipo dessas gruas antes de excluir.`
+      })
+    }
+
+    const { error: delErr } = await supabaseAdmin.from('tipos_grua').delete().eq('id', paramVal.id)
+
+    if (delErr) {
+      return res.status(500).json({
+        error: 'Erro ao excluir tipo de grua',
+        message: delErr.message
+      })
+    }
+
+    res.json({
+      success: true,
+      message: 'Tipo removido'
+    })
+  } catch (error) {
+    console.error('Erro ao excluir tipo de grua:', error)
+    res.status(500).json({
+      error: 'Erro interno do servidor',
+      message: error.message
+    })
+  }
+})
+
 /**
  * @swagger
  * /api/gruas/{id}:

@@ -181,6 +181,25 @@ export const gruasApi = {
     };
   },
 
+  atualizarTipoGrua: async (
+    id: string,
+    nome: string,
+  ): Promise<{ success: boolean; data: TipoGrua }> => {
+    const response = await api.put(`/gruas/tipos/${id}`, { nome: nome.trim() });
+    return {
+      success: true,
+      data: response.data.data,
+    };
+  },
+
+  excluirTipoGrua: async (id: string): Promise<{ success: boolean; message?: string }> => {
+    const response = await api.delete(`/gruas/tipos/${id}`);
+    return {
+      success: true,
+      message: response.data?.message,
+    };
+  },
+
   /**
    * Listar gruas com filtros opcionais
    */

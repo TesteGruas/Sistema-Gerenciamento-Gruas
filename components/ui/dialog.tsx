@@ -5,8 +5,21 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { scheduleReleaseStaleBodyPointerLock } from "@/lib/release-stale-modal-body-lock"
 
-const Dialog = DialogPrimitive.Root
+function Dialog(props: React.ComponentProps<typeof DialogPrimitive.Root>) {
+  const { onOpenChange, ...rest } = props
+  return (
+    <DialogPrimitive.Root
+      data-slot="dialog"
+      {...rest}
+      onOpenChange={(open) => {
+        onOpenChange?.(open)
+        if (!open) scheduleReleaseStaleBodyPointerLock()
+      }}
+    />
+  )
+}
 
 const DialogTrigger = DialogPrimitive.Trigger
 

@@ -36,6 +36,7 @@ import {
   Banknote,
   Download,
   Loader2,
+  Tags,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { gruasApi, type GruaBackend, type TipoGrua } from "@/lib/api-gruas"
@@ -43,6 +44,7 @@ import { ExportButton } from "@/components/export-button"
 import { Loading, PageLoading, TableLoading, CardLoading, useLoading } from "@/components/ui/loading"
 import { ProtectedRoute } from "@/components/protected-route"
 import { DebugButton } from "@/components/debug-button"
+import { GruasGerenciarTiposDialog } from "@/components/gruas-gerenciar-tipos-dialog"
 
 // Interface para o formato da grua usado no componente
 interface GruaFrontend extends GruaBackend {
@@ -208,6 +210,7 @@ export default function GruasPage() {
 
   const [tiposGrua, setTiposGrua] = useState<TipoGrua[]>([])
   const [isTipoModalOpen, setIsTipoModalOpen] = useState(false)
+  const [isGerenciarTiposOpen, setIsGerenciarTiposOpen] = useState(false)
   const [novoTipoNome, setNovoTipoNome] = useState("")
   const [savingTipo, setSavingTipo] = useState(false)
 
@@ -252,10 +255,11 @@ export default function GruasPage() {
     return s
   }
 
-  const montarParamsListagemGruas = (page: number, limit: number) => {
+  const montarParamsListagemGruas = (page: number, limit: number, tipoOverride?: string) => {
     const params: Record<string, unknown> = { page, limit }
     if (selectedStatus !== "all") params.status = selectedStatus
-    if (selectedTipo !== "all") params.tipo = selectedTipo
+    const tipoEfetivo = tipoOverride !== undefined ? tipoOverride : selectedTipo
+    if (tipoEfetivo !== "all") params.tipo = tipoEfetivo
     if (searchTerm.trim()) {
       params.search = searchTerm.trim()
       if (searchTerm.trim().match(/^G[A-Z0-9-]+$/)) {
@@ -267,12 +271,12 @@ export default function GruasPage() {
   }
 
   // Função para carregar gruas da API
-  const carregarGruas = async () => {
+  const carregarGruas = async (opts?: { tipoOverride?: string }) => {
     try {
       startLoading()
       setError(null)
       
-      const params = montarParamsListagemGruas(currentPage, itemsPerPage) as any
+      const params = montarParamsListagemGruas(currentPage, itemsPerPage, opts?.tipoOverride) as any
       
       const response = await gruasApi.listarGruas(params) as unknown as GruasApiResponse
       
@@ -312,6 +316,19 @@ export default function GruasPage() {
         variant: "destructive",
       })
     }
+  }
+
+  const handleTiposCatalogoAlterado = async () => {
+    const r = await gruasApi.listarTiposGrua()
+    let tipoOverride: string | undefined
+    if (r.success) {
+      setTiposGrua(r.data)
+      if (selectedTipo !== "all" && !r.data.some((t) => t.nome === selectedTipo)) {
+        setSelectedTipo("all")
+        tipoOverride = "all"
+      }
+    }
+    await carregarGruas(tipoOverride !== undefined ? { tipoOverride } : undefined)
   }
 
   useEffect(() => {
@@ -1512,6 +1529,16 @@ export default function GruasPage() {
             titulo="Relatório de Gruas"
             onExport={handleExportGruas}
           />
+          <Button
+            type="button"
+            variant="outline"
+            className="flex items-center gap-2"
+            onClick={() => setIsGerenciarTiposOpen(true)}
+            title="Adicionar, editar ou excluir tipos do catálogo"
+          >
+            <Tags className="w-4 h-4" />
+            Gerenciar tipos
+          </Button>
           <Button 
             className="flex items-center gap-2"
             onClick={() => setIsCreateDialogOpen(true)}
@@ -2270,6 +2297,12 @@ export default function GruasPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <GruasGerenciarTiposDialog
+        open={isGerenciarTiposOpen}
+        onOpenChange={setIsGerenciarTiposOpen}
+        onCatalogoAlterado={handleTiposCatalogoAlterado}
+      />
 
       {/* Dialog de Edição de Grua */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
