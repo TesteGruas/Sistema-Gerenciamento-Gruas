@@ -90,6 +90,52 @@ async function resolverUsuarioPorDestinatarioFuncionario(destinatarioId) {
   return selecionarUsuarioPreferencial(candidatos)
 }
 
+/** Admin, Gestores e (se ainda existir no banco) Supervisores — exclui Operários e Clientes. */
+const PERFIS_NOMES_GESTAO = ['Admin', 'Gestores', 'Supervisores']
+
+async function listarUsuarioIdsComPerfilGestao() {
+  const { data: perfisRows, error: perfisError } = await supabaseAdmin
+    .from('perfis')
+    .select('id')
+    .in('nome', PERFIS_NOMES_GESTAO)
+    .eq('status', 'Ativo')
+
+  if (perfisError) {
+    return { ids: [], error: perfisError }
+  }
+  if (!perfisRows?.length) {
+    return { ids: [], error: null }
+  }
+
+  const perfilIds = perfisRows.map((p) => p.id)
+  const { data: vinculos, error: upError } = await supabaseAdmin
+    .from('usuario_perfis')
+    .select('usuario_id')
+    .eq('status', 'Ativa')
+    .in('perfil_id', perfilIds)
+
+  if (upError) {
+    return { ids: [], error: upError }
+  }
+
+  const { data: usuariosAtivos, error: uaError } = await supabaseAdmin
+    .from('usuarios')
+    .select('id')
+    .eq('status', 'Ativo')
+
+  if (uaError) {
+    return { ids: [], error: uaError }
+  }
+
+  const ativos = new Set((usuariosAtivos || []).map((u) => u.id))
+  const ids = [
+    ...new Set(
+      (vinculos || []).map((v) => v.usuario_id).filter((id) => ativos.has(id))
+    )
+  ]
+  return { ids, error: null }
+}
+
 // Schema de validação para notificações
 const notificacaoSchema = Joi.object({
   titulo: Joi.string().min(1).max(255).required(),
@@ -105,7 +151,14 @@ const notificacaoSchema = Joi.object({
       info: Joi.string().allow('').optional()
     })
   ).optional(),
-  remetente: Joi.string().max(255).allow('').optional()
+  remetente: Joi.string().max(255).allow('').optional(),
+  /** Se true, não envia WhatsApp a usuários com usuarios.funcionario_id (conta vinculada ao colaborador). */
+  omitir_whatsapp_usuarios_funcionario: Joi.boolean().optional().default(false),
+  /**
+   * Com destino "geral": cria notificação/push/WhatsApp só para usuários com perfil Admin, Gestores ou Supervisores
+   * (ativos). Operários e Clientes não recebem.
+   */
+  apenas_perfis_gestao: Joi.boolean().optional().default(false)
 })
 
 /**
@@ -917,21 +970,39 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
 
     // Processar destinatários e determinar usuários que receberão a notificação
     if (destinatarios.length === 0 || destinatarios.some(d => d.tipo === 'geral')) {
-      // Notificação geral - enviar para todos os usuários
-      const { data: usuarios, error: usuariosError } = await supabaseAdmin
-        .from('usuarios')
-        .select('id')
-        .eq('status', 'Ativo')
+      if (value.apenas_perfis_gestao) {
+        const { ids: idsGestao, error: gestaoError } = await listarUsuarioIdsComPerfilGestao()
+        if (gestaoError) {
+          return res.status(500).json({
+            success: false,
+            error: 'Erro ao buscar usuários de gestão',
+            message: gestaoError.message
+          })
+        }
+        if (idsGestao.length === 0) {
+          return res.status(400).json({
+            success: false,
+            error: 'Nenhum destinatário válido encontrado',
+            message: 'Não há usuários ativos com perfil de gestão para receber a notificação'
+          })
+        }
+        destinatariosUsuarios.push(...idsGestao)
+      } else {
+        const { data: usuarios, error: usuariosError } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('status', 'Ativo')
 
-      if (usuariosError) {
-        return res.status(500).json({
-          success: false,
-          error: 'Erro ao buscar usuários',
-          message: usuariosError.message
-        })
+        if (usuariosError) {
+          return res.status(500).json({
+            success: false,
+            error: 'Erro ao buscar usuários',
+            message: usuariosError.message
+          })
+        }
+
+        destinatariosUsuarios.push(...usuarios.map(u => u.id))
       }
-
-      destinatariosUsuarios.push(...usuarios.map(u => u.id))
     } else {
       // Processar destinatários específicos
       for (const dest of destinatarios) {
@@ -1097,7 +1168,26 @@ router.post('/', authenticateToken, requirePermission('notificacoes:criar'), asy
       // Executar envio de WhatsApp de forma assíncrona (não bloqueia a resposta)
       (async () => {
         try {
-          console.log(`[notificacoes] 🚀 Iniciando envio de WhatsApp para ${usuariosUnicos.length} usuário(s)`)
+          let usuarioIdsWhatsapp = usuariosUnicos
+          if (value.omitir_whatsapp_usuarios_funcionario && usuariosUnicos.length > 0) {
+            const { data: usuariosWa, error: errWa } = await supabaseAdmin
+              .from('usuarios')
+              .select('id, funcionario_id')
+              .in('id', usuariosUnicos)
+
+            if (errWa) {
+              console.error('[notificacoes] Erro ao filtrar WhatsApp (usuários funcionário):', errWa.message)
+            } else {
+              usuarioIdsWhatsapp = (usuariosWa || [])
+                .filter((u) => u.funcionario_id == null)
+                .map((u) => u.id)
+              console.log(
+                `[notificacoes] WhatsApp sem colaboradores: ${usuariosUnicos.length} → ${usuarioIdsWhatsapp.length} destinatário(s)`
+              )
+            }
+          }
+
+          console.log(`[notificacoes] 🚀 Iniciando envio de WhatsApp para ${usuarioIdsWhatsapp.length} usuário(s)`)
           
           // Formatar mensagem para WhatsApp
           const baseUrl = getPublicFrontendUrl()
@@ -1118,7 +1208,7 @@ _Enviado por: ${value.remetente || 'Sistema'}_`
 
           // Enviar WhatsApp para cada destinatário único
           const telefonesProcessados = new Set()
-          for (const usuarioId of usuariosUnicos) {
+          for (const usuarioId of usuarioIdsWhatsapp) {
             try {
               console.log(`[notificacoes] 🔍 [${usuarioId}] Buscando telefone WhatsApp...`)
               const telefone = await buscarTelefoneWhatsAppUsuario(usuarioId)
@@ -1158,7 +1248,7 @@ _Enviado por: ${value.remetente || 'Sistema'}_`
             }
           }
           
-          console.log(`[notificacoes] 📊 Resumo WhatsApp: ${whatsappEnviados} enviados, ${whatsappErros} erros, ${usuariosUnicos.length} total`)
+          console.log(`[notificacoes] 📊 Resumo WhatsApp: ${whatsappEnviados} enviados, ${whatsappErros} erros, ${usuarioIdsWhatsapp.length} total`)
         } catch (error) {
           console.error(`[notificacoes] ❌ Erro geral ao processar WhatsApp:`, error.message)
           console.error(`[notificacoes] Stack trace:`, error.stack)

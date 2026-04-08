@@ -112,6 +112,10 @@ export interface CriarNotificacaoInput {
   icone?: string;
   destinatarios?: Destinatario[];
   remetente?: string;
+  /** Não dispara WhatsApp para contas de colaborador (login do app). */
+  omitir_whatsapp_usuarios_funcionario?: boolean;
+  /** Com tipo "geral": só Admin, Gestores e Supervisores (ativos) — sem Operários/Clientes na central nem push. */
+  apenas_perfis_gestao?: boolean;
 }
 
 // ============================================

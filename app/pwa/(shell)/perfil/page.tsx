@@ -52,7 +52,7 @@ import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
-import { getApiOrigin } from "@/lib/runtime-config"
+import { getApiBasePath, getApiOrigin } from "@/lib/runtime-config"
 import { sessionPersistence } from "@/lib/session-persistence"
 
 // Função helper para calcular dias até vencimento
@@ -412,10 +412,9 @@ function PWAPerfilPageContent() {
 
     setAlterandoSenha(true)
     try {
-      const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
 
-      const response = await fetch(`${apiUrl}/auth/change-password`, {
+      const response = await fetch(`${getApiBasePath()}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -428,7 +427,17 @@ function PWAPerfilPageContent() {
         })
       })
 
-      const data = await response.json()
+      const raw = await response.text()
+      let data: { success?: boolean; error?: string; reauth_required?: boolean; data?: { access_token?: string; refresh_token?: string }; message?: string } = {}
+      try {
+        data = raw ? JSON.parse(raw) : {}
+      } catch {
+        throw new Error(
+          response.status === 404
+            ? 'Serviço de alteração de senha não encontrado. Atualize o app ou contate o suporte.'
+            : 'Resposta inválida do servidor ao alterar a senha.'
+        )
+      }
 
       if (response.ok && data.success) {
         if (data.reauth_required) {

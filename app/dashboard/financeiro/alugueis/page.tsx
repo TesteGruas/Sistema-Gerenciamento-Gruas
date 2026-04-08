@@ -234,7 +234,8 @@ export default function AlugueisIntegradoPage() {
           tipo: 'financeiro',
           link: '/dashboard/financeiro/alugueis',
           icone: '⚠️',
-          destinatarios: [{ tipo: 'geral' }]
+          destinatarios: [{ tipo: 'geral' }],
+          apenas_perfis_gestao: true
         })
       } else {
         // Se houver múltiplos, criar notificação consolidada
@@ -263,7 +264,8 @@ export default function AlugueisIntegradoPage() {
           tipo: 'financeiro',
           link: '/dashboard/financeiro/alugueis',
           icone: '⚠️',
-          destinatarios: [{ tipo: 'geral' }]
+          destinatarios: [{ tipo: 'geral' }],
+          apenas_perfis_gestao: true
         })
       }
     } catch (error) {
