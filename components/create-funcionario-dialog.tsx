@@ -13,6 +13,13 @@ import { FuncionarioCreateData } from "@/lib/api-funcionarios"
 import { useCargos } from "@/hooks/use-cargos"
 import { formatarCargo } from "@/lib/utils/cargos-predefinidos"
 import { useToast } from "@/hooks/use-toast"
+import { cn } from "@/lib/utils"
+import {
+  aplicarMascaraCpf,
+  cpfValido,
+  gerarCpfValidoFormatado,
+  somenteDigitosCpf,
+} from "@/lib/validar-cpf"
 
 interface CreateFuncionarioDialogProps {
   open: boolean
@@ -32,7 +39,8 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   const [mostrarInputNovoCargo, setMostrarInputNovoCargo] = useState(false)
   const [novoCargo, setNovoCargo] = useState("")
   const [ehSupervisor, setEhSupervisor] = useState(false)
-  
+  const [cpfErro, setCpfErro] = useState<string | null>(null)
+
   const [form, setForm] = useState({
     name: "",
     email: "",
@@ -50,7 +58,12 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
   const previousOpenRef = useRef<boolean>(false)
 
   const handleChange = useCallback((field: string, value: any) => {
-    setForm(prev => ({ ...prev, [field]: value }))
+    if (field === "cpf") {
+      setCpfErro(null)
+      setForm((prev) => ({ ...prev, cpf: aplicarMascaraCpf(String(value)) }))
+      return
+    }
+    setForm((prev) => ({ ...prev, [field]: value }))
   }, [])
 
   // Supervisor não é mais um cargo, é uma atribuição que pode ser dada a qualquer funcionário
@@ -105,8 +118,12 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       camposFaltando.push('Nome Completo (mínimo 2 caracteres)')
     }
 
-    if (!form.cpf || !form.cpf.trim()) {
+    const cpfDigitos = somenteDigitosCpf(form.cpf)
+    if (!cpfDigitos) {
       camposFaltando.push('CPF')
+    } else if (!cpfValido(form.cpf)) {
+      setCpfErro("CPF inválido")
+      return
     }
 
     if (!form.role || !form.role.trim()) {
@@ -147,7 +164,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       cargo: form.role, // Enviar cargo exatamente como está (já formatado corretamente)
       telefone: form.phone,
       email: form.email,
-      cpf: form.cpf,
+      cpf: cpfDigitos,
       turno: form.turno,
       status: form.status,
       data_admissao: form.hireDate,
@@ -167,14 +184,6 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
     const dataAdmissao = new Date()
     dataAdmissao.setMonth(dataAdmissao.getMonth() - 6) // 6 meses atrás
     
-    // Gerar CPF válido para teste (formato: XXX.XXX.XXX-XX)
-    const gerarCPF = () => {
-      const num1 = Math.floor(Math.random() * 900) + 100
-      const num2 = Math.floor(Math.random() * 900) + 100
-      const num3 = Math.floor(Math.random() * 900) + 100
-      const dig = Math.floor(Math.random() * 90) + 10
-      return `${num1}.${num2}.${num3}-${dig}`
-    }
     
     // Gerar telefone aleatório formatado (celular com 9 dígitos)
     const gerarTelefone = () => {
@@ -205,7 +214,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       name: nomeAleatorio,
       email: email,
       phone: gerarTelefone(),
-      cpf: gerarCPF(),
+      cpf: gerarCpfValidoFormatado(),
       role: cargosAtivos.length > 0 ? cargosAtivos[0].nome : "Operador de Grua",
       status: "Ativo",
       turno: "Diurno",
@@ -246,6 +255,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       setMostrarInputNovoCargo(false)
       setNovoCargo("")
       setEhSupervisor(false)
+      setCpfErro(null)
     }
   }, [open])
 
@@ -275,8 +285,23 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
               <Input
                 id="cpf"
                 value={form.cpf}
-                onChange={(e) => handleChange('cpf', e.target.value)}
+                inputMode="numeric"
+                autoComplete="off"
+                placeholder="000.000.000-00"
+                maxLength={14}
+                onChange={(e) => handleChange("cpf", e.target.value)}
+                onBlur={() => {
+                  const d = somenteDigitosCpf(form.cpf)
+                  if (d && !cpfValido(form.cpf)) setCpfErro("CPF inválido")
+                }}
+                aria-invalid={!!cpfErro}
+                className={cn(cpfErro && "border-destructive focus-visible:ring-destructive/30")}
               />
+              {cpfErro ? (
+                <p className="text-sm text-destructive" role="alert">
+                  {cpfErro}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">
