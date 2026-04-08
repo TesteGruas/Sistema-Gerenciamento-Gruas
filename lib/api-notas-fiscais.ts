@@ -105,6 +105,8 @@ export const notasFiscaisApi = {
     tipo?: 'entrada' | 'saida'
     status?: string
     search?: string
+    /** Filtro adicional por chave de acesso / identificador eletrônico (ilike) */
+    chave_acesso?: string
     cliente_id?: number
     fornecedor_id?: number
     medicao_id?: number
@@ -117,6 +119,7 @@ export const notasFiscaisApi = {
     if (params?.tipo) searchParams.append('tipo', params.tipo)
     if (params?.status) searchParams.append('status', params.status)
     if (params?.search) searchParams.append('search', params.search)
+    if (params?.chave_acesso?.trim()) searchParams.append('chave_acesso', params.chave_acesso.trim())
     if (params?.cliente_id) searchParams.append('cliente_id', params.cliente_id.toString())
     if (params?.fornecedor_id) searchParams.append('fornecedor_id', params.fornecedor_id.toString())
     if (params?.medicao_id) searchParams.append('medicao_id', params.medicao_id.toString())
@@ -136,12 +139,14 @@ export const notasFiscaisApi = {
     tipo?: 'entrada' | 'saida'
     status?: string
     search?: string
+    chave_acesso?: string
     tipo_nota?: string
   }) {
     const searchParams = new URLSearchParams()
     if (params?.tipo) searchParams.append('tipo', params.tipo)
     if (params?.status) searchParams.append('status', params.status)
     if (params?.search) searchParams.append('search', params.search)
+    if (params?.chave_acesso?.trim()) searchParams.append('chave_acesso', params.chave_acesso.trim())
     if (params?.tipo_nota && params.tipo_nota !== 'all') {
       searchParams.append('tipo_nota', params.tipo_nota)
     }

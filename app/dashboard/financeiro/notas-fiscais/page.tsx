@@ -45,6 +45,7 @@ import {
   Zap,
   Loader2,
   ClipboardList,
+  KeyRound,
 } from "lucide-react"
 import { notasFiscaisApi, NotaFiscal, NotaFiscalCreate } from "@/lib/api-notas-fiscais"
 
@@ -82,6 +83,7 @@ import { DebugButton } from "@/components/debug-button"
 import { formatBrlMoneyInputValue, parseBrlMoneyDigitsInput } from "@/lib/medicoes-utils"
 import { tiposImpostosApi } from "@/lib/api-tipos-impostos"
 import { getApiErrorMessage } from "@/lib/api"
+import { buscarEnderecoPorCep, formatarCepBr } from "@/lib/api-cep"
 
 interface Cliente {
   id: number
@@ -309,6 +311,27 @@ async function anexarArquivosNotaNaMedicao(opts: {
   }
 }
 
+/** Anexo da NF no formulário / upload: PDF, XML ou imagem (alinhado ao multer em notas-fiscais.js). */
+const NF_ANEXO_MIME = new Set([
+  "application/pdf",
+  "application/xml",
+  "text/xml",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+])
+const NF_ANEXO_EXT = new Set([".pdf", ".xml", ".jpg", ".jpeg", ".png", ".webp", ".gif"])
+
+function arquivoValidoAnexoNotaFiscal(file: File): boolean {
+  const t = (file.type || "").toLowerCase().trim()
+  if (t && NF_ANEXO_MIME.has(t)) return true
+  const i = file.name.lastIndexOf(".")
+  const ext = i >= 0 ? file.name.slice(i).toLowerCase() : ""
+  return NF_ANEXO_EXT.has(ext)
+}
+
 /** Junta identificadores de NFS-e (código de verificação, Id da nota, etc.) sem duplicar. */
 function montarChaveIdentificacaoNfse(...partes: (string | undefined | null)[]): string | undefined {
   const seen = new Set<string>()
@@ -333,9 +356,7 @@ export default function NotasFiscaisPage() {
   /** Fallback se a query atrasar no primeiro paint ou for perdida na navegação */
   const [medicaoIdFallback, setMedicaoIdFallback] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'saida' | 'entrada'>('saida')
-  /** Aba do bloco de resumo financeiro (preview) */
-  const [resumoPreviewTab, setResumoPreviewTab] = useState<'saida' | 'entrada'>('saida')
-  
+
   // Estados
   const [notasFiscais, setNotasFiscais] = useState<NotaFiscal[]>([])
   /** Amostras para cards de resumo (sem filtros da tabela) */
@@ -365,6 +386,8 @@ export default function NotasFiscaisPage() {
   
   // Filtros
   const [searchTerm, setSearchTerm] = useState("")
+  /** Filtro extra na aba Entrada (chave NFe / identificador salvo em chave_acesso) */
+  const [searchChaveEntrada, setSearchChaveEntrada] = useState("")
   const [statusFilter, setStatusFilter] = useState("all")
   const [tipoNotaFilter, setTipoNotaFilter] = useState("all")
   
@@ -420,6 +443,18 @@ export default function NotasFiscaisPage() {
     tipo_nota: 'nf_servico',
     observacoes: ''
   })
+
+  /** Resumo + lista de notas: mesma aba (saída / entrada) sempre sincronizada */
+  const handleAbaTipoNotasChange = useCallback(
+    (v: string) => {
+      const novoActiveTab = v as "saida" | "entrada"
+      setActiveTab(novoActiveTab)
+      if (!isCreateDialogOpen && !isEditDialogOpen) {
+        setFormData((prev) => ({ ...prev, tipo: novoActiveTab }))
+      }
+    },
+    [isCreateDialogOpen, isEditDialogOpen]
+  )
 
   // Itens da nota fiscal
   interface ImpostoDinamico {
@@ -1058,7 +1093,7 @@ export default function NotasFiscaisPage() {
 
   useEffect(() => {
     carregarNotasFiscais()
-  }, [activeTab, currentPage, statusFilter, searchTerm])
+  }, [activeTab, currentPage, statusFilter, searchTerm, searchChaveEntrada])
 
   // Estado para armazenar informações da grua carregada
   const [gruaInfo, setGruaInfo] = useState<{id: string, modelo?: string, fabricante?: string} | null>(null)
@@ -1250,6 +1285,10 @@ export default function NotasFiscaisPage() {
         tipo: activeTab,
         status: statusFilter !== 'all' ? statusFilter : undefined,
         search: searchTerm || undefined,
+        chave_acesso:
+          activeTab === 'entrada' && searchChaveEntrada.trim()
+            ? searchChaveEntrada.trim()
+            : undefined,
         page: currentPage,
         limit: itemsPerPage
       })
@@ -1273,7 +1312,15 @@ export default function NotasFiscaisPage() {
       setLoading(false)
     }
     void carregarPreviewResumos()
-  }, [activeTab, currentPage, statusFilter, searchTerm, toast, carregarPreviewResumos])
+  }, [
+    activeTab,
+    currentPage,
+    statusFilter,
+    searchTerm,
+    searchChaveEntrada,
+    toast,
+    carregarPreviewResumos,
+  ])
 
   // Função helper para limpar dados antes de enviar (converter strings vazias para null)
   const limparDadosNotaFiscal = (data: any) => {
@@ -2089,7 +2136,6 @@ export default function NotasFiscaisPage() {
           const tipo = detalhesResponse.data.tipo
           const aba = tipo === 'entrada' ? 'entrada' : 'saida'
           setActiveTab(aba)
-          setResumoPreviewTab(aba)
         }
       } else {
         console.warn('⚠️ [NOTAS-FISCAIS] Não foi possível buscar detalhes completos, usando dados disponíveis')
@@ -3406,6 +3452,10 @@ export default function NotasFiscaisPage() {
         tipo: activeTab,
         status: statusFilter !== "all" ? statusFilter : undefined,
         search: searchTerm || undefined,
+        chave_acesso:
+          activeTab === "entrada" && searchChaveEntrada.trim()
+            ? searchChaveEntrada.trim()
+            : undefined,
         tipo_nota: tipoNotaFilter,
       })
 
@@ -3638,8 +3688,8 @@ export default function NotasFiscaisPage() {
 
       {/* Preview de valores (como em Medições): abas saída / entrada */}
       <Tabs
-        value={resumoPreviewTab}
-        onValueChange={(v) => setResumoPreviewTab(v as "saida" | "entrada")}
+        value={activeTab}
+        onValueChange={handleAbaTipoNotasChange}
         className="w-full min-w-0"
       >
         <TabsList className="grid w-full max-w-md grid-cols-2 sm:w-auto sm:inline-flex">
@@ -3686,14 +3736,7 @@ export default function NotasFiscaisPage() {
           </div>
         </TabsContent>
         <TabsContent value="entrada" className="mt-4 space-y-0">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-            <Card>
-              <CardContent className="p-4">
-                <p className="text-sm text-gray-500">Faturado</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(resumoNfEntrada.totalFaturado)}</p>
-                <p className="text-xs text-muted-foreground mt-1">NF emitidas (não canceladas)</p>
-              </CardContent>
-            </Card>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card>
               <CardContent className="p-4">
                 <p className="text-sm text-gray-500">Em aberto</p>
@@ -3727,14 +3770,7 @@ export default function NotasFiscaisPage() {
       </Tabs>
 
       {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={(v) => {
-        const novoActiveTab = v as 'saida' | 'entrada'
-        setActiveTab(novoActiveTab)
-        // Sincronizar formData.tipo quando mudar de aba (apenas se o modal não estiver aberto)
-        if (!isCreateDialogOpen && !isEditDialogOpen) {
-          setFormData(prev => ({ ...prev, tipo: novoActiveTab }))
-        }
-      }}>
+      <Tabs value={activeTab} onValueChange={handleAbaTipoNotasChange}>
         <TabsList>
           <TabsTrigger value="saida">Notas Fiscais de Saída</TabsTrigger>
           <TabsTrigger value="entrada">Notas Fiscais de Entrada</TabsTrigger>
@@ -3982,6 +4018,23 @@ export default function NotasFiscaisPage() {
                       className="pl-10"
                     />
                   </div>
+                  <div className="relative min-w-[180px] flex-1 basis-[min(100%,20rem)]">
+                    <Label htmlFor="nf-entrada-chave-acesso" className="sr-only">
+                      Chave de acesso / identificador eletrônico
+                    </Label>
+                    <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 pointer-events-none" />
+                    <Input
+                      id="nf-entrada-chave-acesso"
+                      className="pl-9"
+                      placeholder="Chave NFe, protocolo ou identificador…"
+                      value={searchChaveEntrada}
+                      onChange={(e) => {
+                        setCurrentPage(1)
+                        setSearchChaveEntrada(e.target.value)
+                      }}
+                      autoComplete="off"
+                    />
+                  </div>
                   <div className="w-full min-[480px]:w-[11rem] shrink-0">
                     <Select value={statusFilter} onValueChange={setStatusFilter}>
                       <SelectTrigger className="w-full">
@@ -4041,15 +4094,16 @@ export default function NotasFiscaisPage() {
                   <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[11%] min-w-[7rem]">Número</TableHead>
-                        <TableHead className="w-[5%] min-w-[3rem]">Série</TableHead>
-                        <TableHead className="w-[20%] min-w-[10rem]">Fornecedor</TableHead>
-                        <TableHead className="w-[12%] min-w-[7rem]">Compra</TableHead>
-                        <TableHead className="w-[9%] whitespace-nowrap">Data Emissão</TableHead>
-                        <TableHead className="w-[9%] whitespace-nowrap">Vencimento</TableHead>
-                        <TableHead className="w-[10%] whitespace-nowrap text-right">Valor</TableHead>
-                        <TableHead className="w-[15%] min-w-0">Cobrança</TableHead>
-                        <TableHead className="w-[8%] whitespace-nowrap">Status</TableHead>
+                        <TableHead className="w-[9%] min-w-[6rem]">Número</TableHead>
+                        <TableHead className="w-[4%] min-w-[2.5rem]">Série</TableHead>
+                        <TableHead className="w-[14%] min-w-[7rem]">Chave / ID eletrônico</TableHead>
+                        <TableHead className="w-[17%] min-w-[8rem]">Fornecedor</TableHead>
+                        <TableHead className="w-[11%] min-w-[6rem]">Compra</TableHead>
+                        <TableHead className="w-[8%] whitespace-nowrap">Data Emissão</TableHead>
+                        <TableHead className="w-[8%] whitespace-nowrap">Vencimento</TableHead>
+                        <TableHead className="w-[9%] whitespace-nowrap text-right">Valor</TableHead>
+                        <TableHead className="w-[13%] min-w-0">Cobrança</TableHead>
+                        <TableHead className="w-[7%] whitespace-nowrap">Status</TableHead>
                         <TableHead className="w-[88px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -4058,6 +4112,18 @@ export default function NotasFiscaisPage() {
                         <TableRow key={nota.id}>
                           <TableCell className="font-medium align-top">{nota.numero_nf}</TableCell>
                           <TableCell className="align-top">{nota.serie || '-'}</TableCell>
+                          <TableCell className="align-top min-w-0">
+                            {nota.chave_acesso ? (
+                              <span
+                                className="block font-mono text-[11px] leading-snug break-all line-clamp-2 sm:line-clamp-3"
+                                title={nota.chave_acesso}
+                              >
+                                {nota.chave_acesso}
+                              </span>
+                            ) : (
+                              <span className="text-gray-400">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="align-top min-w-0">
                             {nota.fornecedores ? (
                               <div className="flex items-start gap-2 min-w-0">
@@ -5028,14 +5094,14 @@ export default function NotasFiscaisPage() {
             </div>
 
             <div>
-              <Label htmlFor="arquivo_nf">Arquivo da Nota Fiscal (apenas anexo PDF/XML)</Label>
+              <Label htmlFor="arquivo_nf">Arquivo da Nota Fiscal (PDF, XML ou imagem)</Label>
               <p className="text-xs text-muted-foreground mb-1">
-                Este campo somente anexa o arquivo (PDF ou XML).
+                Anexe PDF, XML da nota ou foto/scan (JPEG, PNG, WebP, GIF). Máx. 10&nbsp;MB.
               </p>
               <Input
                 id="arquivo_nf"
                 type="file"
-                accept=".pdf,.xml,.PDF,.XML"
+                accept=".pdf,.xml,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/xml,text/xml,image/jpeg,image/png,image/webp,image/gif"
                 onChange={(e) => {
                   const file = e.target.files?.[0]
                   if (file) {
@@ -5048,13 +5114,10 @@ export default function NotasFiscaisPage() {
                       e.target.value = ''
                       return
                     }
-                    const validTypes = ['application/pdf', 'application/xml', 'text/xml']
-                    const validExtensions = ['.pdf', '.xml']
-                    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
-                    if (!validTypes.includes(file.type) && !validExtensions.includes(fileExtension)) {
+                    if (!arquivoValidoAnexoNotaFiscal(file)) {
                       toast({
                         title: "Erro",
-                        description: "Tipo de arquivo inválido. Use PDF ou XML",
+                        description: "Tipo inválido. Use PDF, XML ou imagem (JPEG, PNG, WebP, GIF).",
                         variant: "destructive"
                       })
                       e.target.value = ''
@@ -5685,7 +5748,7 @@ export default function NotasFiscaisPage() {
           <DialogHeader>
             <DialogTitle>Upload de Arquivo</DialogTitle>
             <DialogDescription>
-              Envie o arquivo da nota fiscal (PDF ou XML)
+              Envie o arquivo da nota fiscal (PDF, XML ou imagem JPEG/PNG/WebP/GIF)
             </DialogDescription>
           </DialogHeader>
           
@@ -5699,11 +5762,11 @@ export default function NotasFiscaisPage() {
               </div>
               
               <div>
-                <Label htmlFor="arquivo">Arquivo (PDF ou XML) *</Label>
+                <Label htmlFor="arquivo">Arquivo (PDF, XML ou imagem) *</Label>
                 <Input
                   id="arquivo"
                   type="file"
-                  accept=".pdf,.xml,.PDF,.XML"
+                  accept=".pdf,.xml,.jpg,.jpeg,.png,.webp,.gif,application/pdf,application/xml,text/xml,image/jpeg,image/png,image/webp,image/gif"
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
@@ -5714,16 +5777,16 @@ export default function NotasFiscaisPage() {
                           description: "Arquivo muito grande. Tamanho máximo: 10MB",
                           variant: "destructive"
                         })
+                        e.target.value = ""
                         return
                       }
-                      // Validar tipo
-                      const validTypes = ['application/pdf', 'application/xml', 'text/xml']
-                      if (!validTypes.includes(file.type) && !file.name.toLowerCase().endsWith('.pdf') && !file.name.toLowerCase().endsWith('.xml')) {
+                      if (!arquivoValidoAnexoNotaFiscal(file)) {
                         toast({
                           title: "Erro",
-                          description: "Tipo de arquivo inválido. Use PDF ou XML",
+                          description: "Tipo inválido. Use PDF, XML ou imagem (JPEG, PNG, WebP, GIF).",
                           variant: "destructive"
                         })
+                        e.target.value = ""
                         return
                       }
                       setUploadFile(file)
@@ -6492,6 +6555,7 @@ function CreateFornecedorDialog({
     status: 'ativo' as 'ativo' | 'inativo'
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [buscandoCepFornecedor, setBuscandoCepFornecedor] = useState(false)
 
   // Função para formatar CNPJ
   const formatarCNPJ = (value: string) => {
@@ -6506,13 +6570,44 @@ function CreateFornecedorDialog({
     return value
   }
 
-  // Função para formatar CEP
-  const formatarCEP = (value: string) => {
-    const numbers = value.replace(/\D/g, '')
-    if (numbers.length <= 8) {
-      return numbers.replace(/^(\d{5})(\d)/, '$1-$2')
+  const handleBuscarCepFornecedor = async (cepRaw?: string) => {
+    const cepLimpo = String(cepRaw ?? formData.cep ?? "").replace(/\D/g, "")
+    if (cepLimpo.length !== 8) {
+      toast({
+        title: "CEP inválido",
+        description: "Informe 8 dígitos.",
+        variant: "destructive",
+      })
+      return
     }
-    return value
+    setBuscandoCepFornecedor(true)
+    try {
+      const d = await buscarEnderecoPorCep(cepLimpo)
+      const base = [d.logradouro, d.bairro].filter(Boolean).join(", ")
+      const comp = (d.complemento || "").trim()
+      const enderecoPreenchido = comp && base ? `${base} — ${comp}` : base || comp
+
+      setFormData((prev) => ({
+        ...prev,
+        cep: formatarCepBr(String(d.cep || cepLimpo)),
+        endereco: enderecoPreenchido || prev.endereco,
+        cidade: (d.localidade || "").trim() || prev.cidade,
+        estado: ((d.uf || prev.estado || "") as string).slice(0, 2).toUpperCase(),
+      }))
+      toast({
+        title: "CEP encontrado",
+        description: "Endereço, cidade e UF foram preenchidos. Ajuste número e complemento no campo endereço se necessário.",
+      })
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Não foi possível buscar o CEP."
+      toast({
+        title: "CEP não encontrado",
+        description: msg,
+        variant: "destructive",
+      })
+    } finally {
+      setBuscandoCepFornecedor(false)
+    }
   }
 
   // Função para formatar telefone
@@ -6672,6 +6767,47 @@ function CreateFornecedorDialog({
           </div>
 
           <div>
+            <Label htmlFor="cep">CEP</Label>
+            <div className="flex flex-col sm:flex-row gap-2 mt-1">
+              <Input
+                id="cep"
+                inputMode="numeric"
+                autoComplete="postal-code"
+                value={formData.cep}
+                onChange={(e) =>
+                  setFormData({ ...formData, cep: formatarCepBr(e.target.value) })
+                }
+                onBlur={(e) => {
+                  const c = e.target.value.replace(/\D/g, "")
+                  if (c.length === 8) void handleBuscarCepFornecedor(e.target.value)
+                }}
+                placeholder="00000-000"
+                maxLength={9}
+                className="sm:max-w-xs"
+                disabled={buscandoCepFornecedor}
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="shrink-0"
+                disabled={buscandoCepFornecedor}
+                onClick={() => void handleBuscarCepFornecedor()}
+              >
+                {buscandoCepFornecedor ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Search className="h-4 w-4 mr-1" />
+                )}
+                Buscar CEP
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              Com 8 dígitos, saia do campo ou clique em Buscar para preencher endereço, cidade e UF (ViaCEP).
+            </p>
+          </div>
+
+          <div>
             <Label htmlFor="endereco">Endereço</Label>
             <Input
               id="endereco"
@@ -6681,7 +6817,7 @@ function CreateFornecedorDialog({
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 gap-4">
             <div>
               <Label htmlFor="cidade">Cidade</Label>
               <Input
@@ -6699,16 +6835,6 @@ function CreateFornecedorDialog({
                 onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
                 placeholder="UF"
                 maxLength={2}
-              />
-            </div>
-            <div>
-              <Label htmlFor="cep">CEP</Label>
-              <Input
-                id="cep"
-                value={formData.cep}
-                onChange={(e) => setFormData({ ...formData, cep: formatarCEP(e.target.value) })}
-                placeholder="00000-000"
-                maxLength={9}
               />
             </div>
           </div>

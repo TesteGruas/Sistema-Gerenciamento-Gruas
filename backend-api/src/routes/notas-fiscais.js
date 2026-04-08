@@ -50,13 +50,15 @@ const upload = multer({
       'text/xml',
       'image/jpeg',
       'image/jpg',
-      'image/png'
+      'image/png',
+      'image/webp',
+      'image/gif'
     ];
     
     if (allowedTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Tipo de arquivo não permitido. Use PDF ou XML.'), false);
+      cb(new Error('Tipo de arquivo não permitido. Use PDF, XML ou imagem (JPEG, PNG, WebP, GIF).'), false);
     }
   }
 });
@@ -405,7 +407,7 @@ router.get('/', async (req, res) => {
     const offset = (page - 1) * limit;
     
     // Filtros opcionais
-    const { tipo, status, search } = req.query;
+    const { tipo, status, search, chave_acesso: chaveAcessoQuery } = req.query;
     
     // Usar select com formatação de datas para evitar problemas de timezone
     // O PostgreSQL DATE pode ser convertido incorretamente pelo Supabase
@@ -431,9 +433,16 @@ router.get('/', async (req, res) => {
     
     if (search) {
       const searchTerm = `%${search}%`;
-      query = query.or(`numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm}`);
+      query = query.or(
+        `numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm},chave_acesso.ilike.${searchTerm}`
+      );
     }
-    
+
+    const chaveFiltro = chaveAcessoQuery != null ? String(chaveAcessoQuery).trim() : '';
+    if (chaveFiltro) {
+      query = query.ilike('chave_acesso', `%${chaveFiltro}%`);
+    }
+
     // Aplicar ordenação e paginação
     query = query
       .order('created_at', { ascending: false })
@@ -531,11 +540,11 @@ router.get('/', async (req, res) => {
  * Exportação completa: notas com os mesmos filtros da listagem + itens (impostos por linha, custos).
  * Deve ficar registrado ANTES de GET /:id para não ser capturado como id.
  *
- * Query: tipo, status, search, tipo_nota (opcional; use "all" ou omita para todos)
+ * Query: tipo, status, search, chave_acesso, tipo_nota (opcional; use "all" ou omita para todos)
  */
 router.get('/exportacao-completa', async (req, res) => {
   try {
-    const { tipo, status, search, tipo_nota } = req.query;
+    const { tipo, status, search, tipo_nota, chave_acesso: chaveAcessoQuery } = req.query;
 
     const PAGE = 200;
     let pageIdx = 0;
@@ -568,10 +577,16 @@ router.get('/exportacao-completa', async (req, res) => {
       }
       if (search) {
         const searchTerm = `%${search}%`;
-        query = query.or(`numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm}`);
+        query = query.or(
+          `numero_nf.ilike.${searchTerm},serie.ilike.${searchTerm},observacoes.ilike.${searchTerm},chave_acesso.ilike.${searchTerm}`
+        );
       }
       if (tipo_nota && tipo_nota !== 'all') {
         query = query.eq('tipo_nota', tipo_nota);
+      }
+      const chaveFiltro = chaveAcessoQuery != null ? String(chaveAcessoQuery).trim() : '';
+      if (chaveFiltro) {
+        query = query.ilike('chave_acesso', `%${chaveFiltro}%`);
       }
 
       query = query.order('created_at', { ascending: false }).range(offset, offset + PAGE - 1);
@@ -1421,7 +1436,7 @@ router.delete('/:id', async (req, res) => {
  * @swagger
  * /api/notas-fiscais/{id}/upload:
  *   post:
- *     summary: Faz upload de arquivo PDF/XML para uma nota fiscal
+ *     summary: Faz upload de arquivo PDF, XML ou imagem para uma nota fiscal
  *     tags: [Notas Fiscais]
  *     security:
  *       - bearerAuth: []
@@ -1451,7 +1466,7 @@ router.delete('/:id', async (req, res) => {
  *                 description: Tamanho do arquivo em bytes
  *               tipo_arquivo:
  *                 type: string
- *                 enum: [pdf, xml]
+ *                 enum: [pdf, xml, imagem]
  *                 description: Tipo do arquivo
  *     responses:
  *       200:
@@ -3063,10 +3078,19 @@ router.post('/:id/enviar-email', authenticateToken, requirePermission('financeir
     const attachments = [];
     try {
       const nfBuf = await fetchUrlBufferForEmail(nota.arquivo_nf);
+      const extFallback =
+        nota.tipo_arquivo === 'xml'
+          ? 'xml'
+          : nota.tipo_arquivo === 'imagem'
+            ? 'jpg'
+            : 'pdf';
       const nfName =
         nota.nome_arquivo && String(nota.nome_arquivo).trim()
           ? String(nota.nome_arquivo).trim()
-          : filenameFromStorageUrl(nota.arquivo_nf, `NotaFiscal_${nota.numero_nf || notaId}.pdf`);
+          : filenameFromStorageUrl(
+              nota.arquivo_nf,
+              `NotaFiscal_${nota.numero_nf || notaId}.${extFallback}`
+            );
       attachments.push({ filename: nfName, content: nfBuf });
     } catch (e) {
       console.error('[notas-fiscais/enviar-email] Erro ao baixar arquivo da NF:', e);

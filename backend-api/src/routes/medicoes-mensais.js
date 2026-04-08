@@ -1309,17 +1309,23 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
 
           const { data: notasMedicao } = await supabaseAdmin
             .from('notas_fiscais')
-            .select('id, numero_nf, nome_arquivo, arquivo_nf')
+            .select('id, numero_nf, nome_arquivo, arquivo_nf, tipo_arquivo')
             .eq('medicao_id', medicao.id);
 
           const notaIds = (notasMedicao || []).map((n) => n.id).filter(Boolean);
 
           for (const nota of notasMedicao || []) {
             if (!nota.arquivo_nf) continue;
+            const extMed =
+              nota.tipo_arquivo === 'xml'
+                ? 'xml'
+                : nota.tipo_arquivo === 'imagem'
+                  ? 'jpg'
+                  : 'pdf';
             const fallback =
               nota.nome_arquivo && String(nota.nome_arquivo).trim()
                 ? String(nota.nome_arquivo).trim()
-                : `NotaFiscal_medicao_${medicao.id}_${nota.numero_nf || nota.id}.pdf`;
+                : `NotaFiscal_medicao_${medicao.id}_${nota.numero_nf || nota.id}.${extMed}`;
             const att = await tryEmailAttachmentFromUrl(nota.arquivo_nf, fallback, seenAttachmentUrls);
             if (att) attachments.push(att);
           }
