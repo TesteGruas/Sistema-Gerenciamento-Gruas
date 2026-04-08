@@ -513,6 +513,29 @@ export default function AlugueisIntegradoPage() {
     }
   }
 
+  const deletarAluguel = async (aluguel: AluguelResidencia) => {
+    const detalhe =
+      aluguel.status === 'ativo'
+        ? 'Excluir remove permanentemente este contrato, cobranças e histórico vinculados. Deseja continuar?'
+        : 'Excluir permanentemente este registro de aluguel? Esta ação não pode ser desfeita.'
+    if (!confirm(detalhe)) return
+
+    try {
+      await AlugueisAPI.deletar(aluguel.id)
+      await carregar()
+      toast({
+        title: 'Aluguel excluído',
+        description: 'O registro foi removido do sistema.',
+      })
+    } catch (error) {
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível excluir o aluguel.',
+        variant: 'destructive',
+      })
+    }
+  }
+
   const deletarResidencia = async (id: string) => {
     if (!confirm('Deseja deletar esta residência?')) return
 
@@ -1603,11 +1626,21 @@ export default function AlugueisIntegradoPage() {
                                 <Button
                                   variant="destructive"
                                   size="sm"
+                                  title="Encerrar contrato"
                                   onClick={() => encerrarAluguel(aluguel.id)}
                                 >
                                   <XCircle className="h-3 w-3" />
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                                title="Excluir permanentemente"
+                                onClick={() => deletarAluguel(aluguel)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
                             </div>
                           </td>
                         </tr>

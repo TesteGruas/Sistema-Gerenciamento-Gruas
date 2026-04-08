@@ -5,6 +5,143 @@ import Joi from 'joi';
 
 const router = express.Router();
 
+/** Observações geradas em cobrancas-aluguel.js: "Cobrança de aluguel ID: <uuid>. ..." */
+function parseCobrancaAluguelIdFromObservacoes(observacoes) {
+  if (!observacoes || typeof observacoes !== 'string') return null;
+  const m = observacoes.match(/Cobran[cç]a de aluguel ID:\s*([0-9a-fA-F-]{36})/i);
+  return m ? m[1] : null;
+}
+
+function mapBoletoDetalhes(boleto) {
+  if (!boleto) return null;
+  return {
+    id: boleto.id,
+    numero_boleto: boleto.numero_boleto,
+    descricao: boleto.descricao,
+    valor: parseFloat(boleto.valor ?? 0),
+    data_emissao: boleto.data_emissao,
+    data_vencimento: boleto.data_vencimento,
+    data_pagamento: boleto.data_pagamento,
+    status: boleto.status,
+    linha_digitavel: boleto.linha_digitavel,
+    codigo_barras: boleto.codigo_barras,
+    nosso_numero: boleto.nosso_numero,
+    banco: boleto.banco,
+    agencia: boleto.agencia,
+    conta: boleto.conta,
+    forma_pagamento: boleto.forma_pagamento,
+    observacoes: boleto.observacoes,
+    arquivo_boleto: boleto.arquivo_boleto || null
+  };
+}
+
+function buildAluguelNestedFromCobranca(cobranca) {
+  const boleto = cobranca.boletos;
+  const ar = cobranca.alugueis_residencias;
+  const res = ar?.residencias;
+  const func = ar?.funcionarios;
+  const contaBancaria = cobranca.contas_bancarias;
+
+  return {
+    cobranca_id: cobranca.id,
+    aluguel_contrato_id: cobranca.aluguel_id,
+    mes_competencia: cobranca.mes,
+    valor_aluguel: parseFloat(cobranca.valor_aluguel ?? 0),
+    valor_custos: parseFloat(cobranca.valor_custos ?? 0),
+    valor_total_cobranca: parseFloat(cobranca.valor_total ?? 0),
+    status_cobranca: cobranca.status,
+    residencia: res
+      ? {
+          id: res.id,
+          nome: res.nome,
+          endereco: res.endereco,
+          cidade: res.cidade,
+          estado: res.estado,
+          cep: res.cep
+        }
+      : null,
+    funcionario: func
+      ? {
+          id: func.id,
+          nome: func.nome,
+          cargo: func.cargo,
+          cpf: func.cpf
+        }
+      : null,
+    contrato: ar
+      ? {
+          data_inicio: ar.data_inicio,
+          data_fim: ar.data_fim,
+          valor_mensal: ar.valor_mensal != null ? parseFloat(ar.valor_mensal) : null,
+          desconto_folha: ar.desconto_folha,
+          porcentagem_desconto:
+            ar.porcentagem_desconto != null ? parseFloat(ar.porcentagem_desconto) : null,
+          status: ar.status,
+          observacoes_contrato: ar.observacoes
+        }
+      : null,
+    conta_bancaria: contaBancaria
+      ? {
+          id: contaBancaria.id,
+          nome: contaBancaria.nome,
+          banco: contaBancaria.banco,
+          agencia: contaBancaria.agencia,
+          conta: contaBancaria.conta,
+          tipo_conta: contaBancaria.tipo_conta
+        }
+      : null,
+    boleto: mapBoletoDetalhes(boleto)
+  };
+}
+
+const COBRANCA_ALUGUEL_SELECT = `
+  id,
+  aluguel_id,
+  mes,
+  valor_aluguel,
+  valor_custos,
+  valor_total,
+  data_vencimento,
+  data_pagamento,
+  status,
+  observacoes,
+  conta_bancaria_id,
+  created_at,
+  updated_at,
+  alugueis_residencias (
+    id,
+    data_inicio,
+    data_fim,
+    valor_mensal,
+    desconto_folha,
+    porcentagem_desconto,
+    status,
+    observacoes,
+    residencias (id, nome, endereco, cidade, estado, cep),
+    funcionarios (id, nome, cargo, cpf)
+  ),
+  contas_bancarias (id, nome, banco, agencia, conta, tipo_conta),
+  boletos (
+    id,
+    numero_boleto,
+    descricao,
+    valor,
+    data_emissao,
+    data_vencimento,
+    data_pagamento,
+    status,
+    linha_digitavel,
+    codigo_barras,
+    nosso_numero,
+    banco,
+    agencia,
+    conta,
+    forma_pagamento,
+    observacoes,
+    arquivo_boleto
+  )
+`;
+
 // Schema de validação
 const contaPagarSchema = Joi.object({
   fornecedor_id: Joi.number().integer().allow(null),
@@ -181,38 +318,32 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       };
     });
 
-    // Buscar cobranças de aluguel pendentes
+    // Buscar cobranças de aluguel pendentes (lista agregada)
     const { data: cobrancasAluguel, error: cobrancasError } = await supabaseAdmin
       .from('cobrancas_aluguel')
-      .select(`
-        id,
-        mes,
-        valor_total,
-        data_vencimento,
-        data_pagamento,
-        status,
-        observacoes,
-        created_at,
-        updated_at,
-        alugueis_residencias (
-          residencias (nome),
-          funcionarios (nome)
-        ),
-        boletos (id, numero_boleto, descricao, valor, data_vencimento, status)
-      `)
+      .select(COBRANCA_ALUGUEL_SELECT)
       .in('status', ['pendente', 'atrasado']);
 
+    if (cobrancasError) {
+      console.error('Erro ao buscar cobranças de aluguel (contas a pagar):', cobrancasError.message);
+    }
+
     const cobrancasFormatadas = (cobrancasAluguel || []).map(cobranca => {
+      const ar = cobranca.alugueis_residencias;
+      const res = ar?.residencias;
+      const func = ar?.funcionarios;
       const boleto = cobranca.boletos;
-      const residencia = cobranca.alugueis_residencias?.residencias?.nome || 'Residência';
-      const funcionario = cobranca.alugueis_residencias?.funcionarios?.nome || '';
-      
+
+      const residenciaNome = res?.nome || 'Residência';
+      const funcionarioNome = func?.nome || '';
+      const aluguel = buildAluguelNestedFromCobranca(cobranca);
+
       return {
         id: boleto ? `boleto_${boleto.id}` : `cobranca_aluguel_${cobranca.id}`,
         tipo: boleto ? 'boleto' : 'cobranca_aluguel',
-        descricao: boleto 
-          ? `Boleto ${boleto.numero_boleto} - Aluguel ${residencia} - ${cobranca.mes}`
-          : `Aluguel ${residencia}${funcionario ? ` - ${funcionario}` : ''} - ${cobranca.mes}`,
+        descricao: boleto
+          ? `Boleto ${boleto.numero_boleto} - Aluguel ${residenciaNome} - ${cobranca.mes}`
+          : `Aluguel ${residenciaNome}${funcionarioNome ? ` - ${funcionarioNome}` : ''} - ${cobranca.mes}`,
         valor: parseFloat(cobranca.valor_total || 0),
         data_vencimento: boleto ? boleto.data_vencimento : cobranca.data_vencimento,
         data_pagamento: cobranca.data_pagamento || (boleto && boleto.status === 'pago' ? boleto.data_pagamento : null),
@@ -222,17 +353,59 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
         observacoes: cobranca.observacoes,
         created_at: cobranca.created_at,
         updated_at: cobranca.updated_at,
-        // Campos específicos
         cobranca_aluguel_id: cobranca.id,
         mes: cobranca.mes,
         numero_boleto: boleto?.numero_boleto,
-        boleto_id: boleto?.id
+        boleto_id: boleto?.id,
+        aluguel
+      };
+    });
+
+    // Enriquecer linhas de contas_pagar criadas por cobranças de aluguel (mesmo ID na observação)
+    const idsCobrancaDasContas = [
+      ...new Set(
+        (contasData || [])
+          .filter((c) => c.categoria === 'Aluguel')
+          .map((c) => parseCobrancaAluguelIdFromObservacoes(c.observacoes))
+          .filter(Boolean)
+      )
+    ];
+
+    let cobrancaPorId = {};
+    if (idsCobrancaDasContas.length > 0) {
+      const { data: cobrancasExtras, error: extraErr } = await supabaseAdmin
+        .from('cobrancas_aluguel')
+        .select(COBRANCA_ALUGUEL_SELECT)
+        .in('id', idsCobrancaDasContas);
+
+      if (extraErr) {
+        console.error('Erro ao enriquecer contas a pagar (cobrança aluguel):', extraErr.message);
+      } else {
+        cobrancaPorId = Object.fromEntries((cobrancasExtras || []).map((c) => [c.id, c]));
+      }
+    }
+
+    const contasComTipo = (contasData || []).map((conta) => {
+      const base = { ...conta, tipo: 'conta_pagar' };
+      if (conta.categoria !== 'Aluguel') return base;
+      const cid = parseCobrancaAluguelIdFromObservacoes(conta.observacoes);
+      if (!cid || !cobrancaPorId[cid]) return base;
+      const cob = cobrancaPorId[cid];
+      const boleto = cob.boletos;
+      const aluguel = buildAluguelNestedFromCobranca(cob);
+      return {
+        ...base,
+        cobranca_aluguel_id: cob.id,
+        mes: cob.mes,
+        numero_boleto: boleto?.numero_boleto,
+        boleto_id: boleto?.id,
+        aluguel
       };
     });
 
     // Combinar contas, notas fiscais e cobranças de aluguel
     const todasContas = [
-      ...(contasData || []).map(conta => ({ ...conta, tipo: 'conta_pagar' })),
+      ...contasComTipo,
       ...notasFormatadas,
       ...cobrancasFormatadas
     ];

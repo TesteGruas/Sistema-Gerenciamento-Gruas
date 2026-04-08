@@ -5,6 +5,21 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js'
 
 const router = express.Router()
 
+/** Embed do boleto vinculado à cobrança (PDF, linha digitável, etc.) */
+const BOLETOS_COBRANCA_SELECT = `
+  boletos (
+    id,
+    numero_boleto,
+    descricao,
+    valor,
+    data_emissao,
+    data_vencimento,
+    status,
+    arquivo_boleto,
+    linha_digitavel
+  )
+`
+
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
@@ -29,15 +44,6 @@ const cobrancaSchema = Joi.object({
   }
   return value
 })
-
-const calcularDataVencimentoConta = (dataBase, diaVencimento) => {
-  const base = new Date(dataBase)
-  const ano = base.getFullYear()
-  const mes = base.getMonth()
-  const ultimoDiaMes = new Date(ano, mes + 1, 0).getDate()
-  const diaAjustado = Math.min(Math.max(parseInt(diaVencimento) || 1, 1), ultimoDiaMes)
-  return new Date(ano, mes, diaAjustado).toISOString().split('T')[0]
-}
 
 /**
  * @swagger
@@ -86,7 +92,7 @@ router.get('/', requirePermission('financeiro:visualizar'), async (req, res) => 
         ),
         contas_bancarias (id, banco, agencia, conta),
         movimentacoes_bancarias (id, valor, descricao),
-        boletos (id, numero_boleto, descricao, valor, data_vencimento, status)
+        ${BOLETOS_COBRANCA_SELECT}
       `)
       .order('mes', { ascending: false })
       .order('data_vencimento', { ascending: false })
@@ -203,42 +209,48 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
       })
     }
 
-    // Verificar se já existe cobrança para este mês
-    const { data: cobrancaExistente } = await supabaseAdmin
+    // Permite duas fichas no mesmo mês: uma só aluguel e outra só custos (não combinadas em dois POSTs separados)
+    const { data: existentesMes = [] } = await supabaseAdmin
       .from('cobrancas_aluguel')
-      .select('id')
+      .select('id, valor_aluguel, valor_custos')
       .eq('aluguel_id', value.aluguel_id)
       .eq('mes', value.mes)
-      .eq('status', 'cancelado', { foreignTable: null })
-      .single()
+      .neq('status', 'cancelado')
 
-    if (cobrancaExistente) {
-      return res.status(400).json({
-        success: false,
-        message: 'Já existe cobrança para este mês'
-      })
+    const va = Number(value.valor_aluguel || 0)
+    const vc = Number(value.valor_custos || 0)
+
+    if (va > 0 && vc === 0) {
+      const conflito = (existentesMes || []).some((c) => Number(c.valor_aluguel || 0) > 0)
+      if (conflito) {
+        return res.status(400).json({
+          success: false,
+          message: 'Já existe cobrança de aluguel para este mês'
+        })
+      }
+    } else if (va === 0 && vc > 0) {
+      const conflito = (existentesMes || []).some(
+        (c) => Number(c.valor_aluguel || 0) === 0 && Number(c.valor_custos || 0) > 0
+      )
+      if (conflito) {
+        return res.status(400).json({
+          success: false,
+          message: 'Já existe cobrança de custos mensais para este mês'
+        })
+      }
+    } else if (va > 0 && vc > 0) {
+      if ((existentesMes || []).length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'Já existe cobrança para este mês. Use cobrança só de aluguel ou só de custos, ou cancele a existente.'
+        })
+      }
     }
 
-    // Buscar contas recorrentes ativas do aluguel (luz, agua, energia etc.)
-    const { data: contasRecorrentes = [] } = await supabaseAdmin
-      .from('aluguel_contas_recorrentes')
-      .select('id, nome_conta, tipo_conta, valor_mensal, dia_vencimento, arquivo_pdf, observacoes')
-      .eq('aluguel_id', value.aluguel_id)
-      .eq('ativo', true)
-
-    const totalContasRecorrentes = (contasRecorrentes || []).reduce(
-      (sum, conta) => sum + parseFloat(conta.valor_mensal || 0),
-      0
-    )
-
-    // Cobranças com valor_aluguel > 0 são consideradas cobrança mensal.
-    // Neste caso, adicionamos automaticamente as contas recorrentes cadastradas.
+    // Custos do mês informados manualmente no payload (luz, água etc.) — sem recorrência automática
     const valorCustosBase = parseFloat(value.valor_custos || 0)
-    const incluirRecorrentes = parseFloat(value.valor_aluguel || 0) > 0
-    const valorCustosFinal = valorCustosBase + (incluirRecorrentes ? totalContasRecorrentes : 0)
-
-    // Calcular valor total
-    const valorTotal = parseFloat(value.valor_aluguel) + valorCustosFinal
+    const valorCustosFinal = valorCustosBase
+    const valorTotal = parseFloat(value.valor_aluguel || 0) + valorCustosFinal
 
     const userId = req.user?.id
 
@@ -337,33 +349,15 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
       })
     }
 
-    // 2) Contas recorrentes (N contas por aluguel)
-    if (incluirRecorrentes && Array.isArray(contasRecorrentes)) {
-      for (const conta of contasRecorrentes) {
-        const vencimentoConta = conta.dia_vencimento
-          ? calcularDataVencimentoConta(value.data_vencimento, conta.dia_vencimento)
-          : value.data_vencimento
-
-        contasPagarParaCriar.push({
-          descricao: `${conta.nome_conta} - ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
-          valor: parseFloat(conta.valor_mensal || 0),
-          data_vencimento: vencimentoConta,
-          status: 'pendente',
-          categoria: 'Aluguel',
-          observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Conta recorrente ID: ${conta.id}. Arquivo PDF: ${conta.arquivo_pdf || 'não informado'}. ${conta.observacoes || ''}`.trim()
-        })
-      }
-    }
-
-    // 3) Custo avulso informado no payload (sem conta recorrente)
-    if (!incluirRecorrentes && valorCustosBase > 0) {
+    // 2) Custos do mês (valor único informado na cobrança)
+    if (valorCustosBase > 0) {
       contasPagarParaCriar.push({
-        descricao: `Custos avulsos do aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
+        descricao: `Custos aluguel ${aluguel.residencias?.nome || 'Residência'} - ${value.mes}`,
         valor: valorCustosBase,
         data_vencimento: value.data_vencimento,
         status: 'pendente',
         categoria: 'Aluguel',
-        observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: custo_avulso. ${value.observacoes || ''}`.trim()
+        observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: custos_mensais. ${value.observacoes || ''}`.trim()
       })
     }
 
@@ -392,7 +386,7 @@ router.post('/', requirePermission('financeiro:editar'), async (req, res) => {
         ),
         contas_bancarias (id, banco, agencia, conta),
         movimentacoes_bancarias (id, valor, descricao),
-        boletos (id, numero_boleto, descricao, valor, data_vencimento, status)
+        ${BOLETOS_COBRANCA_SELECT}
       `)
       .eq('id', cobranca.id)
       .single()
@@ -458,18 +452,18 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
 
     for (const aluguel of alugueis || []) {
       try {
-        // Verificar se já existe cobrança para este mês
-        const { data: cobrancaExistente } = await supabaseAdmin
+        const { data: existentesG = [] } = await supabaseAdmin
           .from('cobrancas_aluguel')
-          .select('id')
+          .select('id, valor_aluguel')
           .eq('aluguel_id', aluguel.id)
           .eq('mes', mesParaGerar)
-          .single()
+          .neq('status', 'cancelado')
 
-        if (cobrancaExistente) {
+        const jaTemAluguel = (existentesG || []).some((c) => Number(c.valor_aluguel || 0) > 0)
+        if (jaTemAluguel) {
           erros.push({
             aluguel_id: aluguel.id,
-            mensagem: 'Cobrança já existe para este mês'
+            mensagem: 'Já existe cobrança de aluguel para este mês'
           })
           continue
         }
@@ -499,21 +493,9 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
         const diaVencimento = aluguel.dia_vencimento || 5
         const dataVencimento = new Date(ano, mesNum - 1, diaVencimento).toISOString().split('T')[0]
 
-        // Buscar contas recorrentes ativas do aluguel
-        const { data: contasRecorrentes = [] } = await supabaseAdmin
-          .from('aluguel_contas_recorrentes')
-          .select('id, nome_conta, valor_mensal, dia_vencimento, arquivo_pdf, observacoes')
-          .eq('aluguel_id', aluguel.id)
-          .eq('ativo', true)
+        const valorTotal = parseFloat(aluguel.valor_mensal || 0)
 
-        const valorCustosRecorrentes = (contasRecorrentes || []).reduce(
-          (sum, conta) => sum + parseFloat(conta.valor_mensal || 0),
-          0
-        )
-
-        const valorTotal = parseFloat(aluguel.valor_mensal || 0) + valorCustosRecorrentes
-
-        // Criar cobrança
+        // Criar cobrança (somente mensalidade do contrato; custos entram manualmente mês a mês)
         const { data: cobranca, error: cobrancaError } = await supabaseAdmin
           .from('cobrancas_aluguel')
           .insert({
@@ -521,7 +503,7 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
             mes: mesParaGerar,
             conta_bancaria_id: contaId,
             valor_aluguel: parseFloat(aluguel.valor_mensal || 0),
-            valor_custos: valorCustosRecorrentes,
+            valor_custos: 0,
             valor_total: valorTotal,
             data_vencimento: dataVencimento,
             created_by: req.user?.id,
@@ -558,7 +540,6 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
             .eq('id', cobranca.id)
         }
 
-        // Criar contas a pagar da mensalidade + contas recorrentes
         const contasPagarParaCriar = [
           {
             descricao: `Mensalidade Aluguel ${aluguel.residencias?.nome || 'Residência'} - ${mesParaGerar}`,
@@ -569,21 +550,6 @@ router.post('/gerar-mensais', requirePermission('financeiro:editar'), async (req
             observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Tipo: mensalidade.`
           }
         ]
-
-        for (const conta of contasRecorrentes || []) {
-          const dataVencimentoConta = conta.dia_vencimento
-            ? calcularDataVencimentoConta(dataVencimento, conta.dia_vencimento)
-            : dataVencimento
-
-          contasPagarParaCriar.push({
-            descricao: `${conta.nome_conta} - ${aluguel.residencias?.nome || 'Residência'} - ${mesParaGerar}`,
-            valor: parseFloat(conta.valor_mensal || 0),
-            data_vencimento: dataVencimentoConta,
-            status: 'pendente',
-            categoria: 'Aluguel',
-            observacoes: `Cobrança de aluguel ID: ${cobranca.id}. Conta recorrente ID: ${conta.id}. Arquivo PDF: ${conta.arquivo_pdf || 'não informado'}. ${conta.observacoes || ''}`.trim()
-          })
-        }
 
         const { error: contaPagarError } = await supabaseAdmin
           .from('contas_pagar')
@@ -651,7 +617,7 @@ router.get('/:id', requirePermission('financeiro:visualizar'), async (req, res) 
         ),
         contas_bancarias (id, banco, agencia, conta),
         movimentacoes_bancarias (id, valor, descricao),
-        boletos (id, numero_boleto, descricao, valor, data_vencimento, status)
+        ${BOLETOS_COBRANCA_SELECT}
       `)
       .eq('id', id)
       .single()
@@ -774,7 +740,8 @@ router.put('/:id', requirePermission('financeiro:editar'), async (req, res) => {
           funcionarios (nome, cpf)
         ),
         contas_bancarias (id, banco, agencia, conta),
-        movimentacoes_bancarias (id, valor, descricao)
+        movimentacoes_bancarias (id, valor, descricao),
+        ${BOLETOS_COBRANCA_SELECT}
       `)
       .single()
 

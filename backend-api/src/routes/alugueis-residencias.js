@@ -96,16 +96,6 @@ const pagamentoSchema = Joi.object({
   observacoes: Joi.string().allow('', null).optional()
 })
 
-const contaRecorrenteSchema = Joi.object({
-  nome_conta: Joi.string().min(2).max(150).required(),
-  tipo_conta: Joi.string().valid('luz', 'agua', 'energia', 'internet', 'gas', 'condominio', 'outros').default('outros'),
-  valor_mensal: Joi.number().min(0).required(),
-  dia_vencimento: Joi.number().integer().min(1).max(31).allow(null).optional(),
-  arquivo_pdf: Joi.string().allow('', null).optional(),
-  observacoes: Joi.string().allow('', null).optional(),
-  ativo: Joi.boolean().default(true)
-})
-
 // ==================== RESIDÊNCIAS ====================
 
 /**
@@ -597,197 +587,6 @@ router.get('/funcionario/:funcionarioId', async (req, res) => {
       success: false,
       error: 'Erro interno do servidor', 
       message: error.message 
-    })
-  }
-})
-
-// ==================== CONTAS RECORRENTES DO ALUGUEL ====================
-
-/**
- * GET /api/alugueis-residencias/:aluguelId/contas-recorrentes
- * Lista contas recorrentes de um aluguel
- */
-router.get('/:aluguelId/contas-recorrentes', async (req, res) => {
-  try {
-    const { aluguelId } = req.params
-    const { ativo } = req.query
-
-    let query = supabaseAdmin
-      .from('aluguel_contas_recorrentes')
-      .select('*')
-      .eq('aluguel_id', aluguelId)
-      .order('created_at', { ascending: false })
-
-    if (ativo !== undefined) {
-      query = query.eq('ativo', ativo === 'true')
-    }
-
-    const { data, error } = await query
-    if (error) throw error
-
-    res.json({ success: true, data: data || [] })
-  } catch (error) {
-    console.error('Erro ao listar contas recorrentes do aluguel:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      message: error.message
-    })
-  }
-})
-
-/**
- * POST /api/alugueis-residencias/:aluguelId/contas-recorrentes
- * Cria conta recorrente para um aluguel
- */
-router.post('/:aluguelId/contas-recorrentes', requirePermission('rh:editar'), async (req, res) => {
-  try {
-    const { aluguelId } = req.params
-    const { error: validationError, value } = contaRecorrenteSchema.validate(req.body)
-
-    if (validationError) {
-      return res.status(400).json({
-        success: false,
-        error: 'Dados inválidos',
-        details: validationError.details[0].message
-      })
-    }
-
-    const { data: aluguel, error: aluguelError } = await supabaseAdmin
-      .from('alugueis_residencias')
-      .select('id')
-      .eq('id', aluguelId)
-      .single()
-
-    if (aluguelError || !aluguel) {
-      return res.status(404).json({
-        success: false,
-        error: 'Aluguel não encontrado'
-      })
-    }
-
-    const userId = req.user?.id
-    const { data, error } = await supabaseAdmin
-      .from('aluguel_contas_recorrentes')
-      .insert({
-        aluguel_id: aluguelId,
-        ...value,
-        created_by: userId,
-        updated_by: userId
-      })
-      .select()
-      .single()
-
-    if (error) throw error
-
-    res.status(201).json({ success: true, data })
-  } catch (error) {
-    console.error('Erro ao criar conta recorrente do aluguel:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      message: error.message
-    })
-  }
-})
-
-/**
- * PUT /api/alugueis-residencias/contas-recorrentes/:id
- * Atualiza conta recorrente
- */
-router.put('/contas-recorrentes/:id', requirePermission('rh:editar'), async (req, res) => {
-  try {
-    const { id } = req.params
-
-    const contaRecorrenteUpdateSchema = Joi.object({
-      nome_conta: Joi.string().min(2).max(150).optional(),
-      tipo_conta: Joi.string().valid('luz', 'agua', 'energia', 'internet', 'gas', 'condominio', 'outros').optional(),
-      valor_mensal: Joi.number().min(0).optional(),
-      dia_vencimento: Joi.number().integer().min(1).max(31).allow(null).optional(),
-      arquivo_pdf: Joi.string().allow('', null).optional(),
-      observacoes: Joi.string().allow('', null).optional(),
-      ativo: Joi.boolean().optional()
-    })
-
-    const { error: validationError, value } = contaRecorrenteUpdateSchema.validate(req.body)
-    if (validationError) {
-      return res.status(400).json({
-        success: false,
-        error: 'Dados inválidos',
-        details: validationError.details[0].message
-      })
-    }
-
-    const userId = req.user?.id
-    const { data, error } = await supabaseAdmin
-      .from('aluguel_contas_recorrentes')
-      .update({
-        ...value,
-        updated_by: userId,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          error: 'Conta recorrente não encontrada'
-        })
-      }
-      throw error
-    }
-
-    res.json({ success: true, data })
-  } catch (error) {
-    console.error('Erro ao atualizar conta recorrente do aluguel:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      message: error.message
-    })
-  }
-})
-
-/**
- * DELETE /api/alugueis-residencias/contas-recorrentes/:id
- * Inativa conta recorrente (soft delete)
- */
-router.delete('/contas-recorrentes/:id', requirePermission('rh:editar'), async (req, res) => {
-  try {
-    const { id } = req.params
-    const userId = req.user?.id
-
-    const { data, error } = await supabaseAdmin
-      .from('aluguel_contas_recorrentes')
-      .update({
-        ativo: false,
-        updated_by: userId,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', id)
-      .select()
-      .single()
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          success: false,
-          error: 'Conta recorrente não encontrada'
-        })
-      }
-      throw error
-    }
-
-    res.json({ success: true, data, message: 'Conta recorrente inativada com sucesso' })
-  } catch (error) {
-    console.error('Erro ao inativar conta recorrente do aluguel:', error)
-    res.status(500).json({
-      success: false,
-      error: 'Erro interno do servidor',
-      message: error.message
     })
   }
 })
@@ -1647,6 +1446,72 @@ router.delete('/arquivos/:id', requirePermission('rh:editar'), async (req, res) 
       success: false,
       error: 'Erro interno do servidor', 
       message: error.message 
+    })
+  }
+})
+
+/**
+ * DELETE /api/alugueis-residencias/:id
+ * Remove o contrato de aluguel. Deve ficar após rotas mais específicas (ex.: /arquivos/:id).
+ * Libera a residência se não houver outro aluguel ativo para o mesmo imóvel.
+ */
+router.delete('/:id', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data: aluguel, error: fetchError } = await supabaseAdmin
+      .from('alugueis_residencias')
+      .select('id, residencia_id, status')
+      .eq('id', id)
+      .single()
+
+    if (fetchError || !aluguel) {
+      return res.status(404).json({
+        success: false,
+        error: 'Aluguel não encontrado'
+      })
+    }
+
+    const residenciaId = aluguel.residencia_id
+
+    const { error: delPagError } = await supabaseAdmin
+      .from('pagamentos_aluguel')
+      .delete()
+      .eq('aluguel_id', id)
+
+    if (delPagError && delPagError.code !== '42P01') {
+      console.warn('Aviso ao excluir pagamentos_aluguel:', delPagError.message)
+    }
+
+    const { error: deleteError } = await supabaseAdmin
+      .from('alugueis_residencias')
+      .delete()
+      .eq('id', id)
+
+    if (deleteError) {
+      throw deleteError
+    }
+
+    const { count, error: countError } = await supabaseAdmin
+      .from('alugueis_residencias')
+      .select('id', { count: 'exact', head: true })
+      .eq('residencia_id', residenciaId)
+      .eq('status', 'ativo')
+
+    if (!countError && count === 0) {
+      await supabaseAdmin
+        .from('residencias')
+        .update({ disponivel: true })
+        .eq('id', residenciaId)
+    }
+
+    res.json({ success: true, data: { id } })
+  } catch (error) {
+    console.error('Erro ao excluir aluguel:', error)
+    res.status(500).json({
+      success: false,
+      error: 'Erro interno do servidor',
+      message: error.message
     })
   }
 })

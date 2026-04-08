@@ -32,7 +32,8 @@ import {
   TrendingDown,
   Receipt,
   AlertTriangle,
-  Loader2
+  Loader2,
+  Home
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { custosApi, custosUtils, Custo, CustoCreate, CustoUpdate } from "@/lib/api-custos"
@@ -76,7 +77,7 @@ interface CustoComRelacionamentos extends Custo {
 // Interface para contas a pagar
 interface ContaPagar {
   id: number | string // Pode ser número ou string (ex: "nf_123" para notas fiscais)
-  tipo?: 'conta_pagar' | 'nota_fiscal' // Tipo do registro
+  tipo?: 'conta_pagar' | 'nota_fiscal' | 'boleto' | 'cobranca_aluguel' // Tipo do registro na API unificada
   nota_fiscal_id?: number | string
   descricao: string
   valor: number
@@ -93,6 +94,70 @@ interface ContaPagar {
   data_emissao?: string
   valor_total?: number
   valor_liquido?: number
+  categoria?: string | null
+  cobranca_aluguel_id?: string
+  mes?: string
+  numero_boleto?: string
+  boleto_id?: number
+  aluguel?: {
+    cobranca_id?: string
+    aluguel_contrato_id?: string
+    mes_competencia?: string
+    valor_aluguel?: number
+    valor_custos?: number
+    valor_total_cobranca?: number
+    status_cobranca?: string
+    residencia?: {
+      id?: string
+      nome?: string
+      endereco?: string
+      cidade?: string
+      estado?: string
+      cep?: string
+    } | null
+    funcionario?: {
+      id?: number | string
+      nome?: string
+      cargo?: string
+      cpf?: string
+    } | null
+    contrato?: {
+      data_inicio?: string
+      data_fim?: string | null
+      valor_mensal?: number | null
+      desconto_folha?: boolean
+      porcentagem_desconto?: number | null
+      status?: string
+      observacoes_contrato?: string | null
+    } | null
+    conta_bancaria?: {
+      id?: number
+      nome?: string
+      banco?: string
+      agencia?: string
+      conta?: string
+      tipo_conta?: string
+    } | null
+    boleto?: {
+      id?: number
+      numero_boleto?: string
+      descricao?: string
+      valor?: number
+      data_emissao?: string
+      data_vencimento?: string
+      data_pagamento?: string | null
+      status?: string
+      linha_digitavel?: string | null
+      codigo_barras?: string | null
+      nosso_numero?: string | null
+      banco?: string | null
+      agencia?: string | null
+      conta?: string | null
+      forma_pagamento?: string | null
+      observacoes?: string | null
+      arquivo_boleto?: string | null
+    } | null
+  } | null
 }
 
 interface Alertas {
@@ -662,6 +727,41 @@ export default function ContasPagarPage() {
     }
   }
 
+  const excluirContaPagar = async (id: number | string) => {
+    try {
+      const token = getAuthToken()
+      const response = await fetch(`${API_URL}/api/contas-pagar/${id}`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      })
+      const body = await response.json().catch(() => ({}))
+      if (response.ok) {
+        carregarContas()
+        carregarAlertas()
+        toast({
+          title: "Sucesso",
+          description: "Conta a pagar excluída com sucesso",
+        })
+      } else {
+        throw new Error(
+          (body as { message?: string }).message ||
+            (body as { error?: string }).error ||
+            "Erro ao excluir conta a pagar"
+        )
+      }
+    } catch (error) {
+      console.error("Erro ao excluir conta a pagar:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error ? error.message : "Erro ao excluir conta a pagar",
+        variant: "destructive",
+      })
+    }
+  }
+
   // Utilitários
   const getStatusColor = custosUtils.getStatusColor
   const getStatusIcon = (status: string) => {
@@ -696,6 +796,75 @@ export default function ContasPagarPage() {
     } catch {
       return data
     }
+  }
+
+  const formatarMesCompetencia = (mes: string | undefined) => {
+    if (!mes || !/^\d{4}-\d{2}$/.test(mes)) return mes || '—'
+    const [y, mm] = mes.split('-').map(Number)
+    return new Date(y, mm - 1, 1).toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+  }
+
+  const extrairMesDaDescricaoAluguel = (descricao: string | undefined) => {
+    if (!descricao) return undefined
+    const m = descricao.match(/- (\d{4}-\d{2})\s*$/)
+    return m ? m[1] : undefined
+  }
+
+  const labelStatusCobrancaAluguel = (s: string | undefined) => {
+    const m: Record<string, string> = {
+      pendente: 'Pendente',
+      pago: 'Pago',
+      atrasado: 'Atrasado',
+      cancelado: 'Cancelado'
+    }
+    return (s && m[s]) || s || '—'
+  }
+
+  /** Texto gerado em cobrancas-aluguel: "Arquivo PDF: https://..." */
+  const extrairUrlPdfDasObservacoesAluguel = (texto: string | undefined): string | null => {
+    if (!texto) return null
+    const m = texto.match(/Arquivo PDF:\s*(https?:\/\/\S+)/i)
+    if (!m?.[1]) return null
+    return m[1].replace(/[.,;:)]+$/g, '')
+  }
+
+  const observacoesSemCampoArquivoPdf = (texto: string) =>
+    texto.replace(/\s*Arquivo PDF:\s*https?:\/\/\S+/gi, '').trim()
+
+  const renderBlocoObservacoesComPdfOpcional = (texto: string | undefined, labelNotas = 'Observações') => {
+    if (!texto?.trim()) return null
+    const urlPdf = extrairUrlPdfDasObservacoesAluguel(texto)
+    const corpo = observacoesSemCampoArquivoPdf(texto)
+    if (!urlPdf) {
+      return (
+        <div>
+          <Label className="text-sm font-semibold">{labelNotas}</Label>
+          <p className="mt-1 text-gray-700 whitespace-pre-wrap">{texto}</p>
+        </div>
+      )
+    }
+    return (
+      <div className="space-y-3">
+        <div>
+          <Label className="text-sm font-semibold">Arquivo em PDF</Label>
+          <a
+            href={urlPdf}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-2 inline-flex items-center gap-2 text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/90 break-all"
+          >
+            <FileText className="h-4 w-4 shrink-0" />
+            Abrir ou baixar PDF
+          </a>
+        </div>
+        {corpo.length > 0 && (
+          <div>
+            <Label className="text-sm font-semibold">{labelNotas}</Label>
+            <p className="mt-1 text-gray-700 whitespace-pre-wrap text-sm">{corpo}</p>
+          </div>
+        )}
+      </div>
+    )
   }
 
   const escapeCsvCelula = (valor: unknown) => {
@@ -1393,12 +1562,22 @@ export default function ContasPagarPage() {
                     // Renderizar Conta a Pagar
                     if (registro.tipo === 'conta') {
                       const conta = registro.data as ContaPagar
+                      const alug = conta.aluguel
+                      const isAluguel = conta.categoria === 'Aluguel' && alug
+                      const podeExcluirContaPagar = conta.tipo === 'conta_pagar'
                       return (
                         <TableRow key={`conta-${conta.id}`}>
                           <TableCell>
-                            <Badge className="bg-blue-100 text-blue-800">
-                              Conta a Pagar
-                            </Badge>
+                            {isAluguel ? (
+                              <Badge className="bg-amber-100 text-amber-900 border-amber-200">
+                                <Home className="w-3 h-3 mr-1" />
+                                Aluguel
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-blue-100 text-blue-800">
+                                Conta a Pagar
+                              </Badge>
+                            )}
                           </TableCell>
                           <TableCell className="font-medium">
                             {conta.descricao}
@@ -1406,11 +1585,15 @@ export default function ContasPagarPage() {
                           <TableCell>
                             <div className="flex items-center gap-2">
                               <Building2 className="w-4 h-4 text-gray-400" />
-                              {conta.obra?.nome || 'N/A'}
+                              {isAluguel
+                                ? alug.residencia?.nome || 'N/A'
+                                : conta.obra?.nome || 'N/A'}
                             </div>
                           </TableCell>
                           <TableCell>
-                            {conta.fornecedor?.nome || conta.cliente?.nome || 'N/A'}
+                            {isAluguel
+                              ? alug.funcionario?.nome || 'N/A'
+                              : conta.fornecedor?.nome || conta.cliente?.nome || 'N/A'}
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-2">
@@ -1448,6 +1631,37 @@ export default function ContasPagarPage() {
                                   <CheckCircle className="w-4 h-4 mr-1" />
                                   Pagar
                                 </Button>
+                              )}
+                              {podeExcluirContaPagar && (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      className="text-red-600 hover:text-red-700"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Excluir conta a pagar</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        Tem certeza que deseja excluir &quot;{conta.descricao}&quot;?
+                                        Esta ação não pode ser desfeita.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                        onClick={() => excluirContaPagar(conta.id)}
+                                      >
+                                        Excluir
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
                               )}
                             </div>
                           </TableCell>
@@ -2255,51 +2469,417 @@ export default function ContasPagarPage() {
 
               {viewingItem.tipo === 'conta' && (
                 <>
-                  <div>
-                    <Label className="text-sm font-semibold">Descrição</Label>
-                    <p className="mt-1 text-gray-700">{viewingItem.data.descricao}</p>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Status</Label>
-                      <p className="mt-1">
+                  {(viewingItem.data.categoria === 'Aluguel' || viewingItem.data.cobranca_aluguel_id) ? (
+                    viewingItem.data.aluguel ? (
+                    <>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge className="bg-amber-100 text-amber-900 border-amber-200">
+                          <Home className="w-3 h-3 mr-1" />
+                          Aluguel residencial
+                        </Badge>
                         {getStatusBadge(viewingItem.data.status)}
-                      </p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold">Valor</Label>
-                      <p className="mt-1 text-lg font-bold text-red-600">
-                        {formatarMoeda(viewingItem.data.valor)}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Data de Vencimento</Label>
-                      <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_vencimento)}</p>
-                    </div>
-                    {viewingItem.data.data_pagamento && (
-                      <div>
-                        <Label className="text-sm font-semibold">Data de Pagamento</Label>
-                        <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_pagamento)}</p>
+                        {viewingItem.data.aluguel.status_cobranca && (
+                          <span className="text-xs text-muted-foreground">
+                            Cobrança: {labelStatusCobrancaAluguel(viewingItem.data.aluguel.status_cobranca)}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label className="text-sm font-semibold">Fornecedor</Label>
-                      <p className="mt-1 text-gray-700">{viewingItem.data.fornecedor?.nome || viewingItem.data.cliente?.nome || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <Label className="text-sm font-semibold">Obra</Label>
-                      <p className="mt-1 text-gray-700">{viewingItem.data.obra?.nome || 'N/A'}</p>
-                    </div>
-                  </div>
-                  {viewingItem.data.observacoes && (
-                    <div>
-                      <Label className="text-sm font-semibold">Observações</Label>
-                      <p className="mt-1 text-gray-700 whitespace-pre-wrap">{viewingItem.data.observacoes}</p>
-                    </div>
+                      <div>
+                        <Label className="text-sm font-semibold">Descrição</Label>
+                        <p className="mt-1 text-gray-700">{viewingItem.data.descricao}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-semibold">Competência</Label>
+                          <p className="mt-1 text-gray-700 capitalize">
+                            {formatarMesCompetencia(viewingItem.data.aluguel.mes_competencia || viewingItem.data.mes)}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-0.5">
+                            {viewingItem.data.aluguel.mes_competencia || viewingItem.data.mes || '—'}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Valor total</Label>
+                          <p className="mt-1 text-lg font-bold text-red-600">
+                            {formatarMoeda(viewingItem.data.valor)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div>
+                          <Label className="text-sm font-semibold">Valor do aluguel</Label>
+                          <p className="mt-1 text-gray-700">
+                            {formatarMoeda(viewingItem.data.aluguel.valor_aluguel ?? 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Custos adicionais</Label>
+                          <p className="mt-1 text-gray-700">
+                            {formatarMoeda(viewingItem.data.aluguel.valor_custos ?? 0)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Data de vencimento</Label>
+                          <p className="mt-1 text-gray-700">
+                            {viewingItem.data.data_vencimento
+                              ? formatarData(viewingItem.data.data_vencimento)
+                              : '—'}
+                          </p>
+                        </div>
+                      </div>
+                      {viewingItem.data.data_pagamento && (
+                        <div>
+                          <Label className="text-sm font-semibold">Data de pagamento</Label>
+                          <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_pagamento)}</p>
+                        </div>
+                      )}
+
+                      {viewingItem.data.aluguel.residencia && (
+                        <div className="rounded-md border bg-muted/30 p-3 space-y-1">
+                          <Label className="text-sm font-semibold">Residência</Label>
+                          <p className="text-gray-900 font-medium">
+                            {viewingItem.data.aluguel.residencia.nome || '—'}
+                          </p>
+                          {viewingItem.data.aluguel.residencia.endereco && (
+                            <p className="text-sm text-gray-700">{viewingItem.data.aluguel.residencia.endereco}</p>
+                          )}
+                          <p className="text-sm text-gray-700">
+                            {[
+                              viewingItem.data.aluguel.residencia.cidade,
+                              viewingItem.data.aluguel.residencia.estado
+                            ]
+                              .filter(Boolean)
+                              .join(' / ') || '—'}
+                            {viewingItem.data.aluguel.residencia.cep
+                              ? ` · CEP ${viewingItem.data.aluguel.residencia.cep}`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
+
+                      {viewingItem.data.aluguel.funcionario && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm font-semibold">Colaborador</Label>
+                            <p className="mt-1 text-gray-700">
+                              {viewingItem.data.aluguel.funcionario.nome || '—'}
+                            </p>
+                          </div>
+                          <div>
+                            <Label className="text-sm font-semibold">Cargo</Label>
+                            <p className="mt-1 text-gray-700">
+                              {viewingItem.data.aluguel.funcionario.cargo || '—'}
+                            </p>
+                          </div>
+                          {viewingItem.data.aluguel.funcionario.cpf && (
+                            <div>
+                              <Label className="text-sm font-semibold">CPF</Label>
+                              <p className="mt-1 text-gray-700 font-mono text-sm">
+                                {viewingItem.data.aluguel.funcionario.cpf}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {viewingItem.data.aluguel.contrato && (
+                        <div className="rounded-md border p-3 space-y-2">
+                          <h4 className="text-sm font-semibold text-gray-800">Contrato de aluguel</h4>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Início</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.contrato.data_inicio
+                                  ? formatarData(viewingItem.data.aluguel.contrato.data_inicio)
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Término</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.contrato.data_fim
+                                  ? formatarData(viewingItem.data.aluguel.contrato.data_fim)
+                                  : 'Em aberto'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Valor mensal (contrato)</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.contrato.valor_mensal != null
+                                  ? formatarMoeda(viewingItem.data.aluguel.contrato.valor_mensal)
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Status do contrato</Label>
+                              <p className="text-gray-700 capitalize">
+                                {viewingItem.data.aluguel.contrato.status || '—'}
+                              </p>
+                            </div>
+                            <div className="col-span-2">
+                              <Label className="text-xs text-muted-foreground">Desconto em folha</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.contrato.desconto_folha
+                                  ? `Sim${
+                                      viewingItem.data.aluguel.contrato.porcentagem_desconto != null
+                                        ? ` (${viewingItem.data.aluguel.contrato.porcentagem_desconto}%)`
+                                        : ''
+                                    }`
+                                  : 'Não'}
+                              </p>
+                            </div>
+                          </div>
+                          {viewingItem.data.aluguel.contrato.observacoes_contrato && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Obs. do contrato</Label>
+                              <p className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">
+                                {viewingItem.data.aluguel.contrato.observacoes_contrato}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {viewingItem.data.aluguel.conta_bancaria && (
+                        <div className="rounded-md border p-3 space-y-1">
+                          <h4 className="text-sm font-semibold text-gray-800">Conta bancária (cobrança)</h4>
+                          <p className="text-sm text-gray-700">
+                            {viewingItem.data.aluguel.conta_bancaria.nome || viewingItem.data.aluguel.conta_bancaria.banco}
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            {viewingItem.data.aluguel.conta_bancaria.banco}
+                            {viewingItem.data.aluguel.conta_bancaria.agencia
+                              ? ` · Ag. ${viewingItem.data.aluguel.conta_bancaria.agencia}`
+                              : ''}
+                            {viewingItem.data.aluguel.conta_bancaria.conta
+                              ? ` · Conta ${viewingItem.data.aluguel.conta_bancaria.conta}`
+                              : ''}
+                            {viewingItem.data.aluguel.conta_bancaria.tipo_conta
+                              ? ` (${viewingItem.data.aluguel.conta_bancaria.tipo_conta})`
+                              : ''}
+                          </p>
+                        </div>
+                      )}
+
+                      {!viewingItem.data.aluguel.boleto && viewingItem.data.aluguel.cobranca_id && (
+                        <div className="rounded-md border border-dashed p-3 text-sm text-muted-foreground">
+                          Nenhum boleto vinculado a esta cobrança. Cadastre ou anexe o boleto na cobrança de aluguel para exibir linha digitável e PDF aqui.
+                        </div>
+                      )}
+
+                      {viewingItem.data.aluguel.boleto && (
+                        <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 space-y-2">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h4 className="text-sm font-semibold text-amber-950">Boleto</h4>
+                            {viewingItem.data.aluguel.boleto.arquivo_boleto && (
+                              <a
+                                href={viewingItem.data.aluguel.boleto.arquivo_boleto}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-2 text-sm font-medium text-primary underline underline-offset-4 hover:text-primary/90 break-all"
+                              >
+                                <FileText className="h-4 w-4 shrink-0" />
+                                Abrir ou baixar PDF
+                              </a>
+                            )}
+                          </div>
+                          <div className="grid grid-cols-2 gap-3 text-sm">
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Número</Label>
+                              <p className="font-mono text-gray-900">
+                                {viewingItem.data.aluguel.boleto.numero_boleto || '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Valor (boleto)</Label>
+                              <p className="text-gray-700">
+                                {formatarMoeda(viewingItem.data.aluguel.boleto.valor ?? 0)}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Emissão</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.boleto.data_emissao
+                                  ? formatarData(viewingItem.data.aluguel.boleto.data_emissao)
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Vencimento</Label>
+                              <p className="text-gray-700">
+                                {viewingItem.data.aluguel.boleto.data_vencimento
+                                  ? formatarData(viewingItem.data.aluguel.boleto.data_vencimento)
+                                  : '—'}
+                              </p>
+                            </div>
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Status (boleto)</Label>
+                              <p className="text-gray-700 capitalize">
+                                {viewingItem.data.aluguel.boleto.status || '—'}
+                              </p>
+                            </div>
+                            {viewingItem.data.aluguel.boleto.data_pagamento && (
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Pagamento (boleto)</Label>
+                                <p className="text-gray-700">
+                                  {formatarData(viewingItem.data.aluguel.boleto.data_pagamento)}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                          {viewingItem.data.aluguel.boleto.linha_digitavel && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Linha digitável</Label>
+                              <p className="mt-1 font-mono text-xs break-all text-gray-900 bg-white/80 p-2 rounded border">
+                                {viewingItem.data.aluguel.boleto.linha_digitavel}
+                              </p>
+                            </div>
+                          )}
+                          {viewingItem.data.aluguel.boleto.codigo_barras && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Código de barras</Label>
+                              <p className="mt-1 font-mono text-xs break-all text-gray-800">
+                                {viewingItem.data.aluguel.boleto.codigo_barras}
+                              </p>
+                            </div>
+                          )}
+                          {(viewingItem.data.aluguel.boleto.nosso_numero ||
+                            viewingItem.data.aluguel.boleto.banco) && (
+                            <div className="grid grid-cols-2 gap-2 text-sm">
+                              {viewingItem.data.aluguel.boleto.nosso_numero && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Nosso número</Label>
+                                  <p className="font-mono text-gray-800">
+                                    {viewingItem.data.aluguel.boleto.nosso_numero}
+                                  </p>
+                                </div>
+                              )}
+                              {viewingItem.data.aluguel.boleto.banco && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Banco (boleto)</Label>
+                                  <p className="text-gray-700">{viewingItem.data.aluguel.boleto.banco}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          {viewingItem.data.aluguel.boleto.observacoes && (
+                            <div>
+                              <Label className="text-xs text-muted-foreground">Obs. do boleto</Label>
+                              <p className="mt-1 text-sm whitespace-pre-wrap text-gray-700">
+                                {viewingItem.data.aluguel.boleto.observacoes}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {renderBlocoObservacoesComPdfOpcional(viewingItem.data.observacoes, 'Observações (cobrança)')}
+                    </>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge className="bg-amber-100 text-amber-900 border-amber-200">
+                            <Home className="w-3 h-3 mr-1" />
+                            Aluguel residencial
+                          </Badge>
+                          {getStatusBadge(viewingItem.data.status)}
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Descrição</Label>
+                          <p className="mt-1 text-gray-700">{viewingItem.data.descricao}</p>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                          <Label className="text-sm font-semibold">Competência</Label>
+                          <p className="mt-1 text-gray-700 capitalize">
+                            {formatarMesCompetencia(
+                              viewingItem.data.mes || extrairMesDaDescricaoAluguel(viewingItem.data.descricao)
+                            )}
+                          </p>
+                            {(viewingItem.data.mes || extrairMesDaDescricaoAluguel(viewingItem.data.descricao)) && (
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                {viewingItem.data.mes || extrairMesDaDescricaoAluguel(viewingItem.data.descricao)}
+                              </p>
+                            )}
+                          </div>
+                          <div>
+                            <Label className="text-sm font-semibold">Valor</Label>
+                            <p className="mt-1 text-lg font-bold text-red-600">
+                              {formatarMoeda(viewingItem.data.valor)}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <Label className="text-sm font-semibold">Data de vencimento</Label>
+                            <p className="mt-1 text-gray-700">
+                              {viewingItem.data.data_vencimento
+                                ? formatarData(viewingItem.data.data_vencimento)
+                                : '—'}
+                            </p>
+                          </div>
+                          {viewingItem.data.data_pagamento && (
+                            <div>
+                              <Label className="text-sm font-semibold">Data de pagamento</Label>
+                              <p className="mt-1 text-gray-700">
+                                {formatarData(viewingItem.data.data_pagamento)}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        {viewingItem.data.numero_boleto && (
+                          <div>
+                            <Label className="text-sm font-semibold">Número do boleto</Label>
+                            <p className="mt-1 font-mono text-sm text-gray-800">{viewingItem.data.numero_boleto}</p>
+                          </div>
+                        )}
+                        {renderBlocoObservacoesComPdfOpcional(viewingItem.data.observacoes)}
+                      </>
+                    )
+                  ) : (
+                    <>
+                      <div>
+                        <Label className="text-sm font-semibold">Descrição</Label>
+                        <p className="mt-1 text-gray-700">{viewingItem.data.descricao}</p>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-semibold">Status</Label>
+                          <p className="mt-1">
+                            {getStatusBadge(viewingItem.data.status)}
+                          </p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Valor</Label>
+                          <p className="mt-1 text-lg font-bold text-red-600">
+                            {formatarMoeda(viewingItem.data.valor)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-semibold">Data de Vencimento</Label>
+                          <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_vencimento)}</p>
+                        </div>
+                        {viewingItem.data.data_pagamento && (
+                          <div>
+                            <Label className="text-sm font-semibold">Data de Pagamento</Label>
+                            <p className="mt-1 text-gray-700">{formatarData(viewingItem.data.data_pagamento)}</p>
+                          </div>
+                        )}
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-semibold">Fornecedor</Label>
+                          <p className="mt-1 text-gray-700">{viewingItem.data.fornecedor?.nome || viewingItem.data.cliente?.nome || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-semibold">Obra</Label>
+                          <p className="mt-1 text-gray-700">{viewingItem.data.obra?.nome || 'N/A'}</p>
+                        </div>
+                      </div>
+                      {renderBlocoObservacoesComPdfOpcional(viewingItem.data.observacoes)}
+                    </>
                   )}
                 </>
               )}

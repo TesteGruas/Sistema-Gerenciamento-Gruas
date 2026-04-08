@@ -106,20 +106,6 @@ export interface Residencia {
   fotos?: string[]
 }
 
-export interface ContaRecorrenteAluguel {
-  id: string
-  aluguel_id: string
-  nome_conta: string
-  tipo_conta: 'luz' | 'agua' | 'energia' | 'internet' | 'gas' | 'condominio' | 'outros'
-  valor_mensal: number
-  dia_vencimento?: number | null
-  arquivo_pdf?: string | null
-  observacoes?: string | null
-  ativo: boolean
-  created_at: string
-  updated_at: string
-}
-
 // Função auxiliar para transformar dados do backend para o formato esperado pelo frontend
 function transformarAluguelBackendParaFrontend(aluguelBackend: any): AluguelResidencia {
   return {
@@ -346,10 +332,20 @@ export const AlugueisAPI = {
     }
   },
 
-  // Deletar aluguel (não implementado no backend, mas mantido para compatibilidade)
   deletar: async (id: string): Promise<boolean> => {
-    console.warn('Deletar aluguel não está implementado no backend. Use encerrar() ao invés.')
-    return false
+    const token = getAuthToken()
+    const response = await fetch(`${API_BASE_URL}/api/alugueis-residencias/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: token ? `Bearer ${token}` : '',
+      },
+    })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Erro na requisição' }))
+      throw new Error(error.message || error.error || 'Erro ao excluir aluguel')
+    }
+    return true
   },
 
   // Gerenciar arquivos do aluguel
@@ -402,103 +398,6 @@ export const AlugueisAPI = {
       return true
     } catch (error) {
       console.error('Erro ao deletar arquivo:', error)
-      throw error
-    }
-  },
-
-  // Contas recorrentes por aluguel
-  listarContasRecorrentes: async (aluguelId: string, somenteAtivas = false): Promise<ContaRecorrenteAluguel[]> => {
-    try {
-      const query = somenteAtivas ? '?ativo=true' : ''
-      const data = await apiRequest(`/api/alugueis-residencias/${aluguelId}/contas-recorrentes${query}`)
-      return Array.isArray(data) ? data.map((conta: any) => ({
-        ...conta,
-        valor_mensal: parseFloat(conta.valor_mensal || 0)
-      })) : []
-    } catch (error) {
-      console.error('Erro ao listar contas recorrentes do aluguel:', error)
-      throw error
-    }
-  },
-
-  criarContaRecorrente: async (
-    aluguelId: string,
-    payload: Omit<ContaRecorrenteAluguel, 'id' | 'aluguel_id' | 'created_at' | 'updated_at'>
-  ): Promise<ContaRecorrenteAluguel> => {
-    try {
-      const data = await apiRequest(`/api/alugueis-residencias/${aluguelId}/contas-recorrentes`, {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      })
-      return {
-        ...data,
-        valor_mensal: parseFloat(data.valor_mensal || 0)
-      }
-    } catch (error) {
-      console.error('Erro ao criar conta recorrente do aluguel:', error)
-      throw error
-    }
-  },
-
-  atualizarContaRecorrente: async (
-    contaId: string,
-    payload: Partial<Omit<ContaRecorrenteAluguel, 'id' | 'aluguel_id' | 'created_at' | 'updated_at'>>
-  ): Promise<ContaRecorrenteAluguel> => {
-    try {
-      const data = await apiRequest(`/api/alugueis-residencias/contas-recorrentes/${contaId}`, {
-        method: 'PUT',
-        body: JSON.stringify(payload)
-      })
-      return {
-        ...data,
-        valor_mensal: parseFloat(data.valor_mensal || 0)
-      }
-    } catch (error) {
-      console.error('Erro ao atualizar conta recorrente do aluguel:', error)
-      throw error
-    }
-  },
-
-  inativarContaRecorrente: async (contaId: string): Promise<boolean> => {
-    try {
-      await apiRequest(`/api/alugueis-residencias/contas-recorrentes/${contaId}`, {
-        method: 'DELETE'
-      })
-      return true
-    } catch (error) {
-      console.error('Erro ao inativar conta recorrente do aluguel:', error)
-      throw error
-    }
-  },
-
-  uploadArquivoContaRecorrente: async (file: File): Promise<string> => {
-    try {
-      const formData = new FormData()
-      formData.append('arquivo', file)
-      formData.append('categoria', 'alugueis-contas')
-
-      const token = getAuthToken()
-      const response = await fetch(`${API_BASE_URL}/api/arquivos/upload`, {
-        method: 'POST',
-        headers: {
-          'Authorization': token ? `Bearer ${token}` : '',
-        },
-        body: formData
-      })
-
-      if (!response.ok) {
-        const error = await response.json().catch(() => ({ message: 'Erro na requisição' }))
-        throw new Error(error.message || error.error || 'Erro no upload do arquivo')
-      }
-
-      const result = await response.json()
-      const url = result?.data?.arquivo || result?.data?.caminho
-      if (!url) {
-        throw new Error('Upload concluído, mas URL do arquivo não foi retornada')
-      }
-      return url
-    } catch (error) {
-      console.error('Erro ao subir arquivo da conta recorrente:', error)
       throw error
     }
   }

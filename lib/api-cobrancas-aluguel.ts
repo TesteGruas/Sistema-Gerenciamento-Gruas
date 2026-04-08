@@ -71,6 +71,17 @@ export interface CobrancaAluguel {
     valor: number
     descricao: string
   }
+  boletos?: {
+    id: number
+    numero_boleto?: string
+    descricao?: string
+    valor?: number
+    data_emissao?: string
+    data_vencimento?: string
+    status?: string
+    arquivo_boleto?: string | null
+    linha_digitavel?: string | null
+  } | null
 }
 
 export interface CriarCobrancaAluguel {
