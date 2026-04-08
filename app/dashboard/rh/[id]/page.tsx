@@ -813,6 +813,16 @@ export default function FuncionarioDetalhesPage() {
       return
     }
 
+    if (documento.arquivoUrl.trim().startsWith("blob:")) {
+      toast({
+        title: "Arquivo indisponível",
+        description:
+          "Este documento foi salvo com link temporário. Abra Documentos admissionais, edite e reenvie o arquivo.",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
       const apiUrl = getApiOrigin()
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
@@ -852,6 +862,16 @@ export default function FuncionarioDetalhesPage() {
         title: "Aviso",
         description: "Arquivo do documento não disponível",
         variant: "default"
+      })
+      return
+    }
+
+    if (documento.arquivoUrl.trim().startsWith("blob:")) {
+      toast({
+        title: "Download indisponível",
+        description:
+          "Link temporário (blob) não pode ser baixado pelo servidor. Reenvie o arquivo em Documentos admissionais.",
+        variant: "destructive",
       })
       return
     }

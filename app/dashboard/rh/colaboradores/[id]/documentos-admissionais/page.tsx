@@ -15,6 +15,10 @@ import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, Loade
 import { useToast } from "@/hooks/use-toast"
 import { colaboradoresDocumentosApi, type DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getApiOrigin } from "@/lib/runtime-config"
+import {
+  arquivoReferenciaEhBlobInvalida,
+  caminhoStorageAPartirDoUpload,
+} from "@/lib/caminho-storage-arquivos"
 
 // Tipos de documentos admissionais
 export const tiposDocumentos = [
@@ -99,45 +103,96 @@ export default function DocumentosAdmissionaisPage() {
     setIsDialogOpen(true)
   }
 
+  const handleDownloadDocumento = async (documento: DocumentoAdmissional) => {
+    if (arquivoReferenciaEhBlobInvalida(documento.arquivo)) {
+      toast({
+        title: "Arquivo inválido",
+        description:
+          "Este registro usa link temporário (blob). Edite o documento e envie o PDF novamente.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      const blob = await colaboradoresDocumentosApi.documentosAdmissionais.baixar(
+        String(documento.id),
+        false
+      )
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const nome = String(documento.tipo || "documento").replace(/[^\w.-]+/g, "_")
+      a.download = `${nome}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Não foi possível baixar o arquivo."
+      toast({
+        title: "Erro ao baixar",
+        description: msg,
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleSave = async () => {
-    if (!formData.tipo || !formData.arquivo) {
+    if (!formData.tipo) {
       toast({
         title: "Erro",
-        description: "Preencha todos os campos obrigatórios",
-        variant: "destructive"
+        description: "Selecione o tipo do documento",
+        variant: "destructive",
+      })
+      return
+    }
+    if (!editingDocumento && !formData.arquivo) {
+      toast({
+        title: "Erro",
+        description: "Anexe o arquivo do documento (PDF ou imagem).",
+        variant: "destructive",
       })
       return
     }
 
     try {
-      let arquivoUrl = editingDocumento?.arquivo || ''
-      
-      // Se tiver arquivo novo, fazer upload primeiro
+      let arquivoUrl = editingDocumento?.arquivo?.trim() || ""
+
       if (formData.arquivo) {
-        try {
-          const formDataUpload = new FormData()
-          formDataUpload.append('arquivo', formData.arquivo)
-          
-          const apiUrl = getApiOrigin()
-          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-          
-          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            body: formDataUpload
-          })
-          
-          if (uploadResponse.ok) {
-            const uploadResult = await uploadResponse.json()
-            arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || URL.createObjectURL(formData.arquivo)
-          } else {
-            arquivoUrl = URL.createObjectURL(formData.arquivo)
-          }
-        } catch (uploadError) {
-          arquivoUrl = URL.createObjectURL(formData.arquivo)
+        const formDataUpload = new FormData()
+        formDataUpload.append("arquivo", formData.arquivo)
+
+        const apiUrl = getApiOrigin()
+        const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+
+        const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formDataUpload,
+        })
+
+        const uploadResult = await uploadResponse.json().catch(() => ({}))
+        if (!uploadResponse.ok) {
+          throw new Error(uploadResult.message || uploadResult.error || "Falha no upload do arquivo")
         }
+
+        const path = caminhoStorageAPartirDoUpload(uploadResult.data ?? uploadResult)
+        if (!path) {
+          throw new Error(
+            "Upload não retornou caminho válido no storage. Verifique a API (bucket arquivos-obras)."
+          )
+        }
+        arquivoUrl = path
+      } else if (editingDocumento && arquivoReferenciaEhBlobInvalida(editingDocumento.arquivo)) {
+        toast({
+          title: "Arquivo inválido",
+          description:
+            "Este documento está com link temporário (blob). Envie o arquivo novamente ao editar.",
+          variant: "destructive",
+        })
+        return
       }
 
       if (editingDocumento) {
@@ -153,26 +208,39 @@ export default function DocumentosAdmissionaisPage() {
         if (response.success) {
           toast({
             title: "Sucesso",
-            description: "Documento atualizado com sucesso"
+            description: "Documento atualizado com sucesso",
+          })
+          setIsDialogOpen(false)
+          loadDocumentos()
+        } else {
+          toast({
+            title: "Erro",
+            description: response.message || "Não foi possível atualizar o documento",
+            variant: "destructive",
           })
         }
       } else {
         const response = await colaboradoresDocumentosApi.documentosAdmissionais.criar(colaboradorId, {
           tipo: formData.tipo,
           data_validade: formData.data_validade || undefined,
-          arquivo: arquivoUrl
+          arquivo: arquivoUrl,
         })
-        
+
         if (response.success) {
           toast({
             title: "Sucesso",
-            description: "Documento criado com sucesso"
+            description: "Documento criado com sucesso",
+          })
+          setIsDialogOpen(false)
+          loadDocumentos()
+        } else {
+          toast({
+            title: "Erro",
+            description: response.message || "Não foi possível criar o documento",
+            variant: "destructive",
           })
         }
       }
-
-      setIsDialogOpen(false)
-      loadDocumentos()
     } catch (error: any) {
       toast({
         title: "Erro",
@@ -299,7 +367,12 @@ export default function DocumentosAdmissionaisPage() {
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           {documento.arquivo && (
-                            <Button variant="ghost" size="sm">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleDownloadDocumento(documento)}
+                              title="Baixar"
+                            >
                               <Download className="w-4 h-4" />
                             </Button>
                           )}

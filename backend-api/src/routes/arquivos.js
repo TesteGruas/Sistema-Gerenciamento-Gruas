@@ -1193,13 +1193,64 @@ router.get('/url-assinada', authenticateToken, async (req, res) => {
       })
     }
 
+    let storagePath = String(caminho).trim()
+    try {
+      storagePath = decodeURIComponent(storagePath)
+    } catch {
+      /* query já decodificada */
+    }
+
+    if (/^blob:/i.test(storagePath)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          'Caminho inválido: link temporário do navegador (blob). Reenvie o arquivo pelo painel para gravar o caminho correto no storage.'
+      })
+    }
+
+    if (/^https?:\/\//i.test(storagePath)) {
+      try {
+        const u = new URL(storagePath)
+        let pathname = u.pathname
+        try {
+          pathname = decodeURIComponent(u.pathname)
+        } catch {
+          /* ignore */
+        }
+        const needle = '/arquivos-obras/'
+        const idx = pathname.indexOf(needle)
+        if (idx === -1) {
+          return res.status(400).json({
+            success: false,
+            message:
+              'A URL não aponta para o bucket arquivos-obras. Informe o caminho relativo no storage ou a URL pública do arquivo.'
+          })
+        }
+        storagePath = pathname.slice(idx + needle.length) || ''
+        if (!storagePath) {
+          return res.status(400).json({
+            success: false,
+            message: 'Não foi possível extrair o caminho do arquivo a partir da URL.'
+          })
+        }
+      } catch (e) {
+        return res.status(400).json({
+          success: false,
+          message: 'URL do arquivo inválida.',
+          error: e.message
+        })
+      }
+    } else {
+      storagePath = storagePath.replace(/^\/+/, '')
+    }
+
     // Usar bucket fornecido ou padrão
     const bucketName = bucket || 'arquivos-obras'
 
     // Gerar URL assinada para download
     const { data: signedUrl, error: urlError } = await supabaseAdmin.storage
       .from(bucketName)
-      .createSignedUrl(caminho, 3600) // URL válida por 1 hora
+      .createSignedUrl(storagePath, 3600) // URL válida por 1 hora
 
     if (urlError) {
       console.error('Erro ao gerar URL:', urlError)

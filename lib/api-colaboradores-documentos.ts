@@ -55,6 +55,9 @@ export interface DocumentoAdmissionalBackend {
   data_validade?: string
   arquivo: string
   alerta_enviado: boolean
+  assinatura_digital?: string
+  assinado_por?: number
+  assinado_em?: string
   created_at: string
   updated_at: string
 }
@@ -69,6 +72,10 @@ export interface DocumentoAdmissionalUpdateData {
   tipo?: string
   data_validade?: string
   arquivo?: string
+}
+
+export interface DocumentoAdmissionalAssinaturaData {
+  assinatura_digital: string
 }
 
 export interface DocumentosAdmissionaisResponse {
@@ -268,6 +275,27 @@ export const colaboradoresDocumentosApi = {
       return apiRequest(url, {
         method: 'DELETE',
       })
+    },
+
+    async assinar(documentoId: string, data: DocumentoAdmissionalAssinaturaData): Promise<DocumentoAdmissionalResponse> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-admissionais/${documentoId}/assinatura`)
+      return apiRequest(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    },
+
+    async baixar(documentoId: string, comAssinatura: boolean = false): Promise<Blob> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-admissionais/${documentoId}/download`)
+      const params = comAssinatura ? { comAssinatura: 'true' } : {}
+      const qs = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''
+      const response = await fetchWithAuth(url + qs, { method: 'GET' })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || `Erro ${response.status}`)
+      }
+      return response.blob()
     },
 
     // Listar documentos admissionais vencendo em até 30 dias

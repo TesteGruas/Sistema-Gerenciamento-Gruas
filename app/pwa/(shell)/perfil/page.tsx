@@ -43,7 +43,9 @@ import {
   Receipt,
   Loader2,
   Lock,
-  EyeOff
+  EyeOff,
+  PenTool,
+  FileSignature
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -53,7 +55,9 @@ import { useEmpresa } from "@/hooks/use-empresa"
 import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
 import { getApiBasePath, getApiOrigin } from "@/lib/runtime-config"
+import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
 import { sessionPersistence } from "@/lib/session-persistence"
+import { SignaturePad } from "@/components/signature-pad"
 
 // Função helper para calcular dias até vencimento
 function calcularDiasParaVencimento(dataValidade: string): number {
@@ -214,7 +218,10 @@ function PWAPerfilPageContent() {
   const [loadingBeneficios, setLoadingBeneficios] = useState(false)
   const [loadingCertificados, setLoadingCertificados] = useState(false)
   const [loadingDocumentosAdmissionais, setLoadingDocumentosAdmissionais] = useState(false)
-  
+  const [modalAssinaturaAdmissionalOpen, setModalAssinaturaAdmissionalOpen] = useState(false)
+  const [docAdmissionalAssinando, setDocAdmissionalAssinando] = useState<DocumentoAdmissionalBackend | null>(null)
+  const [enviandoAssinaturaAdmissional, setEnviandoAssinaturaAdmissional] = useState(false)
+
   // Estados para modais e visualização
   const [documentoSelecionado, setDocumentoSelecionado] = useState<{ tipo: 'certificado' | 'admissional', data: any } | null>(null)
   const [isModalDocumentoOpen, setIsModalDocumentoOpen] = useState(false)
@@ -611,6 +618,61 @@ function PWAPerfilPageContent() {
     }
   }
 
+  const admissionalJaAssinado = (doc: DocumentoAdmissionalBackend) =>
+    Boolean(doc.assinatura_digital && doc.assinado_em)
+
+  const abrirAssinaturaAdmissional = (doc: DocumentoAdmissionalBackend) => {
+    setDocAdmissionalAssinando(doc)
+    setModalAssinaturaAdmissionalOpen(true)
+  }
+
+  const handleAssinaturaAdmissionalSalva = async (dataUrl: string) => {
+    if (!docAdmissionalAssinando || enviandoAssinaturaAdmissional) return
+    setEnviandoAssinaturaAdmissional(true)
+    try {
+      await colaboradoresDocumentosApi.documentosAdmissionais.assinar(docAdmissionalAssinando.id, {
+        assinatura_digital: dataUrl,
+      })
+      toast({
+        title: 'Documento assinado',
+        description: 'Sua assinatura foi registrada com sucesso.',
+      })
+      setModalAssinaturaAdmissionalOpen(false)
+      setDocAdmissionalAssinando(null)
+      await carregarDocumentosAdmissionais()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível concluir a assinatura.'
+      toast({
+        title: 'Erro ao assinar',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoAssinaturaAdmissional(false)
+    }
+  }
+
+  const handleDownloadAdmissionalComAssinatura = async (doc: DocumentoAdmissionalBackend) => {
+    try {
+      const blob = await colaboradoresDocumentosApi.documentosAdmissionais.baixar(doc.id, true)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${String(doc.tipo || 'documento').replace(/[^\w.-]+/g, '_')}_assinado.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Tente novamente.'
+      toast({
+        title: 'Erro ao baixar PDF assinado',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
+
   // Função para fazer upload do arquivo e criar documento admissional
   const handleUploadDocumento = async () => {
     if (!funcionarioId || !arquivoSelecionado || !tipoDocumento) {
@@ -649,12 +711,12 @@ function PWAPerfilPageContent() {
       }
 
       const uploadData = await uploadResponse.json()
-      // O endpoint retorna data.caminho (caminho no storage) e data.arquivo (URL pública)
-      // Para documentos admissionais, precisamos do caminho no storage (data.caminho)
-      const arquivoCaminho = uploadData.data?.caminho || uploadData.caminho
+      const arquivoCaminho = caminhoStorageAPartirDoUpload(uploadData.data ?? uploadData)
 
       if (!arquivoCaminho) {
-        throw new Error('Caminho do arquivo não retornado pelo servidor')
+        throw new Error(
+          "Caminho do arquivo no storage não retornado. Verifique o upload (bucket arquivos-obras)."
+        )
       }
 
       // Depois, criar o documento admissional com o caminho do arquivo
@@ -1854,38 +1916,53 @@ function PWAPerfilPageContent() {
                           : 'border-gray-100'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-3">
-                            <h4 className="font-semibold text-lg">
+                      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                        <div className="min-w-0 flex-1 space-y-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                            <h4 className="min-w-0 shrink font-semibold text-lg leading-tight">
                               {doc.tipo}
                             </h4>
-                            {avisoVencimento && IconComponent && (
-                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
-                                <IconComponent className="w-3 h-3" />
-                                {avisoVencimento.texto}
-                              </Badge>
-                            )}
-                          </div>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            {doc.data_validade && (
-                              <div>
-                                <p className="text-gray-500 text-xs mb-1">Validade</p>
-                                <p className="font-medium text-xs">
-                                  {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
-                                </p>
-                              </div>
-                            )}
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Criado em</p>
-                              <p className="font-medium text-xs">
-                                {new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                              </p>
+                            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                              {admissionalJaAssinado(doc) && (
+                                <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
+                                  Assinado
+                                </Badge>
+                              )}
+                              {avisoVencimento && IconComponent && (
+                                <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                  <IconComponent className="w-3 h-3" />
+                                  {avisoVencimento.texto}
+                                </Badge>
+                              )}
                             </div>
                           </div>
+                          <dl className="flex min-w-0 flex-col gap-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3">
+                            {doc.data_validade && (
+                              <div className="min-w-0">
+                                <dt className="text-gray-500 text-xs">Validade</dt>
+                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                  {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
+                                </dd>
+                              </div>
+                            )}
+                            <div className="min-w-0">
+                              <dt className="text-gray-500 text-xs">Criado em</dt>
+                              <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                              </dd>
+                            </div>
+                            {doc.assinado_em && (
+                              <div className="min-w-0 sm:col-span-2">
+                                <dt className="text-gray-500 text-xs">Assinado em</dt>
+                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                  {new Date(doc.assinado_em).toLocaleString('pt-BR')}
+                                </dd>
+                              </div>
+                            )}
+                          </dl>
                         </div>
                         {doc.arquivo && (
-                          <div className="flex gap-2 ml-4">
+                          <div className="flex min-w-0 w-full flex-wrap gap-2 border-t border-gray-100 pt-3 sm:w-auto sm:shrink-0 sm:border-t-0 sm:pt-0 sm:justify-end">
                             <Button
                               variant="outline"
                               size="sm"
@@ -1900,6 +1977,27 @@ function PWAPerfilPageContent() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
+                            {!admissionalJaAssinado(doc) && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="bg-cyan-600 hover:bg-cyan-700"
+                                onClick={() => abrirAssinaturaAdmissional(doc)}
+                              >
+                                <PenTool className="w-4 h-4 mr-1" />
+                                Assinar
+                              </Button>
+                            )}
+                            {admissionalJaAssinado(doc) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadAdmissionalComAssinatura(doc)}
+                              >
+                                <FileSignature className="w-4 h-4 mr-1" />
+                                PDF assinado
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -2109,6 +2207,54 @@ function PWAPerfilPageContent() {
                   </CardContent>
                 </Card>
               )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assinatura digital — documento admissional */}
+      <Dialog
+        open={modalAssinaturaAdmissionalOpen}
+        onOpenChange={(open) => {
+          setModalAssinaturaAdmissionalOpen(open)
+          if (!open) setDocAdmissionalAssinando(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5" />
+              Assinar documento
+            </DialogTitle>
+            <DialogDescription>
+              {docAdmissionalAssinando
+                ? `Desenhe sua assinatura para confirmar leitura e concordância: ${docAdmissionalAssinando.tipo}`
+                : 'Selecione um documento na lista.'}
+            </DialogDescription>
+          </DialogHeader>
+          {enviandoAssinaturaAdmissional && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Enviando assinatura…
+            </div>
+          )}
+          {docAdmissionalAssinando && (
+            <div className={enviandoAssinaturaAdmissional ? 'pointer-events-none opacity-60' : ''}>
+              <SignaturePad
+                compact
+                compactDense
+                showCancelButton
+                applyLabel="Enviar assinatura"
+                title=""
+                description=""
+                className="pt-2"
+                onSave={handleAssinaturaAdmissionalSalva}
+                onCancel={() => {
+                  if (enviandoAssinaturaAdmissional) return
+                  setModalAssinaturaAdmissionalOpen(false)
+                  setDocAdmissionalAssinando(null)
+                }}
+              />
             </div>
           )}
         </DialogContent>

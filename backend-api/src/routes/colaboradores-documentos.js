@@ -12,6 +12,81 @@ import { baixarEAdicionarAssinatura, adicionarAssinaturaEmTodasPaginas } from '.
 
 const router = express.Router()
 
+/**
+ * Obtém o path dentro do bucket a partir de caminho relativo ou URL do Supabase.
+ */
+function resolveArquivosObrasStoragePath(urlOrPath) {
+  const raw = String(urlOrPath || '').trim()
+  if (!raw) return null
+  if (/^blob:/i.test(raw)) return null
+  if (!/^https?:\/\//i.test(raw)) {
+    const p = raw.replace(/^\/+/, '')
+    return p || null
+  }
+  try {
+    const u = new URL(raw)
+    let pathname = u.pathname
+    try {
+      pathname = decodeURIComponent(u.pathname)
+    } catch {
+      /* path já decodificado ou inválido para decode */
+    }
+    const needle = '/arquivos-obras/'
+    const idx = pathname.indexOf(needle)
+    if (idx !== -1) {
+      const rest = pathname.slice(idx + needle.length)
+      return rest || null
+    }
+  } catch (_) {
+    /* URL inválida */
+  }
+  return null
+}
+
+/**
+ * Baixa bytes do bucket arquivos-obras usando o client admin (bucket privado).
+ * Caminho relativo (ex.: geral/arq.pdf) ou URL Supabase contendo /arquivos-obras/.
+ * Nunca chama fetch() com caminho relativo (isso gera "fetch failed" no Node).
+ */
+async function downloadArquivosObrasBuffer(urlOrPath) {
+  const raw = String(urlOrPath || '').trim()
+  if (!raw) {
+    throw new Error('Caminho do arquivo vazio')
+  }
+  if (/^blob:/i.test(raw)) {
+    throw new Error(
+      'Este documento foi gravado com URL temporária do navegador (blob), que não existe no storage. Edite o documento no RH e envie o arquivo novamente.'
+    )
+  }
+
+  const storagePath = resolveArquivosObrasStoragePath(raw)
+
+  if (storagePath) {
+    const { data, error } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .download(storagePath)
+
+    if (!error && data) {
+      return Buffer.from(await data.arrayBuffer())
+    }
+
+    const msg = error?.message || String(error || 'download falhou')
+    throw new Error(`Storage (${storagePath.slice(0, 96)}): ${msg}`)
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    const res = await fetch(raw)
+    if (!res.ok) {
+      throw new Error(`Download HTTP ${res.status}`)
+    }
+    return Buffer.from(await res.arrayBuffer())
+  }
+
+  throw new Error(
+    'Referência de arquivo inválida (esperado caminho no bucket ou URL do Supabase com /arquivos-obras/)'
+  )
+}
+
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
@@ -498,6 +573,190 @@ router.get('/:id/documentos-admissionais', async (req, res) => {
   } catch (error) {
     console.error('Erro ao listar documentos admissionais:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/colaboradores/documentos-admissionais/:id/assinatura
+ * Colaborador assina o próprio documento admissional (ou RH com permissão).
+ */
+router.put('/documentos-admissionais/:id/assinatura', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { assinatura_digital } = req.body
+    const userId = req.user.id
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const schema = Joi.object({
+      assinatura_digital: Joi.string().required()
+    })
+
+    const { error: validationError } = schema.validate({ assinatura_digital })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const idLimpo = String(id || '').trim()
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from('documentos_admissionais')
+      .select('*')
+      .eq('id', idLimpo)
+      .maybeSingle()
+
+    if (docError) {
+      console.error('[documentos-admissionais/assinatura] Erro ao buscar documento:', docError)
+      const hint =
+        docError.message?.includes('assinatura_digital') || docError.message?.includes('assinado')
+          ? 'Execute a migration que adiciona assinatura_digital/assinado_em/assinado_por em documentos_admissionais.'
+          : ''
+      return res.status(500).json({
+        error: 'Erro ao buscar documento',
+        message: docError.message || 'Falha na consulta',
+        ...(hint ? { hint } : {})
+      })
+    }
+
+    if (!doc) {
+      return res.status(404).json({
+        error: 'Documento não encontrado',
+        message: 'O documento admissional não foi encontrado'
+      })
+    }
+
+    if (doc.assinatura_digital && doc.assinado_em) {
+      return res.status(400).json({
+        error: 'Documento já assinado',
+        message: 'Este documento já foi assinado.',
+        data: { assinado_em: doc.assinado_em }
+      })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const docFuncionarioId = Number(doc.funcionario_id)
+    const isSigningOwn =
+      userFuncionarioIdNum !== null &&
+      !Number.isNaN(docFuncionarioId) &&
+      userFuncionarioIdNum === docFuncionarioId
+
+    if (!hasRHEditPermission && !isSigningOwn) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Você só pode assinar seus próprios documentos admissionais.',
+        required: 'rh:editar ou ser o funcionário dono do documento'
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_admissionais')
+      .update({
+        assinatura_digital,
+        assinado_em: new Date().toISOString(),
+        assinado_por: userId
+      })
+      .eq('id', idLimpo)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao assinar documento admissional:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/colaboradores/documentos-admissionais/:id/download
+ * Query: comAssinatura=true para embutir assinatura no PDF
+ */
+router.get('/documentos-admissionais/:id/download', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comAssinatura } = req.query
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const idLimpoDl = String(id || '').trim()
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from('documentos_admissionais')
+      .select('*')
+      .eq('id', idLimpoDl)
+      .maybeSingle()
+
+    if (docError) {
+      console.error('[documentos-admissionais/download] Erro ao buscar documento:', docError)
+      return res.status(500).json({
+        success: false,
+        message: docError.message || 'Erro ao buscar documento'
+      })
+    }
+
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Documento não encontrado' })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const docFuncionarioId = Number(doc.funcionario_id)
+    const canAccess =
+      hasRHEditPermission ||
+      (userFuncionarioIdNum !== null &&
+        !Number.isNaN(docFuncionarioId) &&
+        userFuncionarioIdNum === docFuncionarioId)
+
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Sem permissão para baixar este documento'
+      })
+    }
+
+    if (!doc.arquivo) {
+      return res.status(404).json({ success: false, message: 'Arquivo não encontrado' })
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await downloadArquivosObrasBuffer(doc.arquivo)
+    } catch (dlErr) {
+      console.error('[documentos-admissionais/download] Falha ao obter bytes:', dlErr)
+      return res.status(502).json({
+        success: false,
+        message: 'Arquivo não pôde ser baixado',
+        details: process.env.NODE_ENV === 'development' ? String(dlErr?.message || dlErr) : undefined
+      })
+    }
+
+    if ((comAssinatura === 'true' || comAssinatura === '1') && doc.assinatura_digital) {
+      try {
+        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, doc.assinatura_digital, {
+          horizontalAlign: 'left',
+          marginLeft: 56,
+          marginBottom: 52,
+          height: 88,
+          pages: 'last',
+          opacity: 1.0
+        })
+      } catch (signatureError) {
+        console.error('Erro ao compor assinatura no PDF (admissional):', signatureError)
+      }
+    }
+
+    const nomeArquivo = `admissional_${String(doc.tipo || 'doc').replace(/[^a-zA-Z0-9._-]/g, '_')}${doc.assinatura_digital ? '_assinado' : ''}.pdf`
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('Erro ao baixar documento admissional:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
   }
 })
 

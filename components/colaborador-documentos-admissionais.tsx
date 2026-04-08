@@ -10,11 +10,13 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DocumentoUpload } from "./documento-upload"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileText } from "lucide-react"
+import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
+import { getApiBasePath } from "@/lib/runtime-config"
+import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
 
 export interface DocumentoAdmissional {
-  id?: number
+  id?: string | number
   colaborador_id: number
   tipo: 'ASO' | 'eSocial' | 'Ficha de Registro'
   nome: string
@@ -23,6 +25,8 @@ export interface DocumentoAdmissional {
   arquivo?: File | null
   arquivo_url?: string
   alerta_enviado?: boolean
+  assinatura_digital?: string
+  assinado_em?: string
 }
 
 const tiposDocumentos = [
@@ -70,7 +74,9 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
           data: doc.created_at || new Date().toISOString(),
           data_validade: doc.data_validade || undefined,
           arquivo_url: doc.arquivo,
-          alerta_enviado: doc.alerta_enviado
+          alerta_enviado: doc.alerta_enviado,
+          assinatura_digital: doc.assinatura_digital,
+          assinado_em: doc.assinado_em,
         }))
         setDocumentos(documentosConvertidos)
       }
@@ -108,6 +114,44 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     setIsDialogOpen(true)
   }
 
+  const documentoAdmissionalAssinado = (d: DocumentoAdmissional) =>
+    Boolean(d.assinatura_digital && d.assinado_em)
+
+  const handleDownloadDocumento = async (documento: DocumentoAdmissional, comAssinatura: boolean) => {
+    if (!documento.id) return
+    if (comAssinatura && !documentoAdmissionalAssinado(documento)) {
+      toast({
+        title: "Sem assinatura",
+        description: "Este documento ainda não foi assinado pelo colaborador.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+      const blob = await colaboradoresDocumentosApi.documentosAdmissionais.baixar(
+        String(documento.id),
+        comAssinatura
+      )
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement("a")
+      a.href = url
+      const nome = String(documento.tipo || documento.nome || "documento").replace(/[^\w.-]+/g, "_")
+      a.download = `${nome}${comAssinatura ? "_assinado" : ""}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Não foi possível baixar o arquivo."
+      toast({
+        title: "Erro ao baixar",
+        description: msg,
+        variant: "destructive",
+      })
+    }
+  }
+
   const handleSave = async () => {
     if (!formData.tipo || !formData.data) {
       toast({
@@ -118,34 +162,52 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
       return
     }
 
+    if (!editingDocumento && !formData.arquivo) {
+      toast({
+        title: "Erro",
+        description: "Anexe o arquivo do documento (PDF ou imagem).",
+        variant: "destructive",
+      })
+      return
+    }
+
     try {
-      let arquivoUrl = editingDocumento?.arquivo_url || ''
-      
-      // Se tiver arquivo novo, fazer upload primeiro
+      let arquivoUrl = editingDocumento?.arquivo_url?.trim() || ""
+
       if (formData.arquivo) {
-        try {
-          const formDataUpload = new FormData()
-          formDataUpload.append('arquivo', formData.arquivo)
-          
-          const apiUrl = getApiOrigin()
-          const token = localStorage.getItem('access_token') || localStorage.getItem('token')
-          
-          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
-            body: formDataUpload
+        const formDataUpload = new FormData()
+        formDataUpload.append("arquivo", formData.arquivo)
+
+        const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+        const uploadResponse = await fetch(`${getApiBasePath()}/arquivos/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token || ""}`,
+          },
+          body: formDataUpload,
+        })
+
+        const uploadResult = await uploadResponse.json().catch(() => ({}))
+        if (!uploadResponse.ok) {
+          throw new Error(uploadResult.message || uploadResult.error || "Falha no upload do arquivo")
+        }
+
+        const path = caminhoStorageAPartirDoUpload(uploadResult.data ?? uploadResult)
+        if (!path) {
+          throw new Error(
+            "Upload não retornou caminho válido no storage. Verifique a resposta da API (caminho no bucket arquivos-obras)."
+          )
+        }
+        arquivoUrl = path
+      } else if (editingDocumento) {
+        if (!arquivoUrl || arquivoUrl.startsWith("blob:")) {
+          toast({
+            title: "Arquivo inválido",
+            description:
+              "Este registro não tem arquivo no servidor. Envie o documento novamente ao editar.",
+            variant: "destructive",
           })
-          
-          if (uploadResponse.ok) {
-            const uploadResult = await uploadResponse.json()
-            arquivoUrl = uploadResult.data?.caminho || uploadResult.data?.arquivo || URL.createObjectURL(formData.arquivo)
-          } else {
-            arquivoUrl = URL.createObjectURL(formData.arquivo)
-          }
-        } catch (uploadError) {
-          arquivoUrl = URL.createObjectURL(formData.arquivo)
+          return
         }
       }
 
@@ -184,7 +246,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     }
   }
 
-  const handleDelete = async (id: number) => {
+  const handleDelete = async (id: string | number) => {
     if (!confirm("Tem certeza que deseja excluir este documento?")) return
 
     try {
@@ -358,9 +420,29 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-2">
                           {documento.arquivo_url && (
-                            <Button variant="ghost" size="sm">
-                              <Download className="w-4 h-4" />
-                            </Button>
+                            <>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
+                                title="Baixar PDF original"
+                                onClick={() => handleDownloadDocumento(documento, false)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              {documentoAdmissionalAssinado(documento) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  title="Baixar PDF com assinatura embutida"
+                                  className="text-emerald-700"
+                                  onClick={() => handleDownloadDocumento(documento, true)}
+                                >
+                                  <FileSignature className="w-4 h-4" />
+                                </Button>
+                              )}
+                            </>
                           )}
                           {!readOnly && (
                             <>
@@ -374,7 +456,8 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => documento.id && handleDelete(documento.id)}
+                                type="button"
+                                onClick={() => documento.id != null && handleDelete(documento.id)}
                                 className="text-red-600"
                               >
                                 <Trash2 className="w-4 h-4" />
