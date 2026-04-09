@@ -40,6 +40,7 @@ import {
   Gift,
   Award,
   FileCheck,
+  FileWarning,
   Receipt,
   Loader2,
   Lock,
@@ -52,7 +53,12 @@ import { useToast } from "@/hooks/use-toast"
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import { useEmpresa } from "@/hooks/use-empresa"
-import { colaboradoresDocumentosApi, CertificadoBackend, DocumentoAdmissionalBackend } from "@/lib/api-colaboradores-documentos"
+import {
+  colaboradoresDocumentosApi,
+  CertificadoBackend,
+  DocumentoAdmissionalBackend,
+  DocumentoDemissaoBackend,
+} from "@/lib/api-colaboradores-documentos"
 import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
 import { getApiBasePath, getApiOrigin } from "@/lib/runtime-config"
 import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
@@ -214,16 +220,27 @@ function PWAPerfilPageContent() {
   const [beneficios, setBeneficios] = useState<FuncionarioBeneficio[]>([])
   const [certificados, setCertificados] = useState<CertificadoBackend[]>([])
   const [documentosAdmissionais, setDocumentosAdmissionais] = useState<DocumentoAdmissionalBackend[]>([])
+  const [documentosDemissao, setDocumentosDemissao] = useState<DocumentoDemissaoBackend[]>([])
   const [loadingSalarios, setLoadingSalarios] = useState(false)
   const [loadingBeneficios, setLoadingBeneficios] = useState(false)
   const [loadingCertificados, setLoadingCertificados] = useState(false)
   const [loadingDocumentosAdmissionais, setLoadingDocumentosAdmissionais] = useState(false)
+  const [loadingDocumentosDemissao, setLoadingDocumentosDemissao] = useState(false)
   const [modalAssinaturaAdmissionalOpen, setModalAssinaturaAdmissionalOpen] = useState(false)
   const [docAdmissionalAssinando, setDocAdmissionalAssinando] = useState<DocumentoAdmissionalBackend | null>(null)
   const [enviandoAssinaturaAdmissional, setEnviandoAssinaturaAdmissional] = useState(false)
+  const [modalAssinaturaCertificadoOpen, setModalAssinaturaCertificadoOpen] = useState(false)
+  const [certificadoAssinando, setCertificadoAssinando] = useState<CertificadoBackend | null>(null)
+  const [enviandoAssinaturaCertificado, setEnviandoAssinaturaCertificado] = useState(false)
+  const [modalAssinaturaDemissaoOpen, setModalAssinaturaDemissaoOpen] = useState(false)
+  const [docDemissaoAssinando, setDocDemissaoAssinando] = useState<DocumentoDemissaoBackend | null>(null)
+  const [enviandoAssinaturaDemissao, setEnviandoAssinaturaDemissao] = useState(false)
 
   // Estados para modais e visualização
-  const [documentoSelecionado, setDocumentoSelecionado] = useState<{ tipo: 'certificado' | 'admissional', data: any } | null>(null)
+  const [documentoSelecionado, setDocumentoSelecionado] = useState<{
+    tipo: 'certificado' | 'admissional' | 'demissao'
+    data: any
+  } | null>(null)
   const [isModalDocumentoOpen, setIsModalDocumentoOpen] = useState(false)
   const [urlArquivo, setUrlArquivo] = useState<string | null>(null)
   const [carregandoUrl, setCarregandoUrl] = useState(false)
@@ -618,6 +635,33 @@ function PWAPerfilPageContent() {
     }
   }
 
+  const carregarDocumentosDemissao = async () => {
+    const funcionarioIdParaBusca = resolverFuncionarioIdUpload()
+    if (!funcionarioIdParaBusca) {
+      setDocumentosDemissao([])
+      return
+    }
+
+    if (funcionarioId !== funcionarioIdParaBusca) {
+      setFuncionarioId(funcionarioIdParaBusca)
+    }
+
+    setLoadingDocumentosDemissao(true)
+    try {
+      const response = await colaboradoresDocumentosApi.documentosDemissao.listar(funcionarioIdParaBusca)
+      if (response.success && response.data) {
+        setDocumentosDemissao(response.data)
+      } else {
+        setDocumentosDemissao([])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar documentos de demissão:', error)
+      setDocumentosDemissao([])
+    } finally {
+      setLoadingDocumentosDemissao(false)
+    }
+  }
+
   const admissionalJaAssinado = (doc: DocumentoAdmissionalBackend) =>
     Boolean(doc.assinatura_digital && doc.assinado_em)
 
@@ -652,6 +696,61 @@ function PWAPerfilPageContent() {
     }
   }
 
+  const demissaoJaAssinado = (doc: DocumentoDemissaoBackend) =>
+    Boolean(doc.assinatura_digital && doc.assinado_em)
+
+  const abrirAssinaturaDemissao = (doc: DocumentoDemissaoBackend) => {
+    setDocDemissaoAssinando(doc)
+    setModalAssinaturaDemissaoOpen(true)
+  }
+
+  const handleAssinaturaDemissaoSalva = async (dataUrl: string) => {
+    if (!docDemissaoAssinando || enviandoAssinaturaDemissao) return
+    setEnviandoAssinaturaDemissao(true)
+    try {
+      await colaboradoresDocumentosApi.documentosDemissao.assinar(docDemissaoAssinando.id, {
+        assinatura_digital: dataUrl,
+      })
+      toast({
+        title: 'Documento assinado',
+        description: 'Sua assinatura foi registrada com sucesso.',
+      })
+      setModalAssinaturaDemissaoOpen(false)
+      setDocDemissaoAssinando(null)
+      await carregarDocumentosDemissao()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível concluir a assinatura.'
+      toast({
+        title: 'Erro ao assinar',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoAssinaturaDemissao(false)
+    }
+  }
+
+  const handleDownloadDemissaoComAssinatura = async (doc: DocumentoDemissaoBackend) => {
+    try {
+      const blob = await colaboradoresDocumentosApi.documentosDemissao.baixar(doc.id, true)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${String(doc.tipo || 'documento').replace(/[^\w.-]+/g, '_')}_assinado.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Tente novamente.'
+      toast({
+        title: 'Erro ao baixar PDF assinado',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
+
   const handleDownloadAdmissionalComAssinatura = async (doc: DocumentoAdmissionalBackend) => {
     try {
       const blob = await colaboradoresDocumentosApi.documentosAdmissionais.baixar(doc.id, true)
@@ -659,6 +758,61 @@ function PWAPerfilPageContent() {
       const a = document.createElement('a')
       a.href = url
       a.download = `${String(doc.tipo || 'documento').replace(/[^\w.-]+/g, '_')}_assinado.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Tente novamente.'
+      toast({
+        title: 'Erro ao baixar PDF assinado',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const certificadoJaAssinado = (c: CertificadoBackend) =>
+    Boolean(c.assinatura_digital && c.assinado_em)
+
+  const abrirAssinaturaCertificado = (c: CertificadoBackend) => {
+    setCertificadoAssinando(c)
+    setModalAssinaturaCertificadoOpen(true)
+  }
+
+  const handleAssinaturaCertificadoSalva = async (dataUrl: string) => {
+    if (!certificadoAssinando || enviandoAssinaturaCertificado) return
+    setEnviandoAssinaturaCertificado(true)
+    try {
+      await colaboradoresDocumentosApi.certificados.assinar(certificadoAssinando.id, {
+        assinatura_digital: dataUrl,
+      })
+      toast({
+        title: 'Certificado assinado',
+        description: 'Sua assinatura foi registrada com sucesso.',
+      })
+      setModalAssinaturaCertificadoOpen(false)
+      setCertificadoAssinando(null)
+      await carregarCertificados()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível concluir a assinatura.'
+      toast({
+        title: 'Erro ao assinar',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoAssinaturaCertificado(false)
+    }
+  }
+
+  const handleDownloadCertificadoComAssinatura = async (c: CertificadoBackend) => {
+    try {
+      const blob = await colaboradoresDocumentosApi.certificados.baixar(c.id, true)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${String(c.tipo || 'cert').replace(/[^\w.-]+/g, '_')}_${String(c.nome || '').replace(/[^\w.-]+/g, '_')}_assinado.pdf`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -892,11 +1046,13 @@ function PWAPerfilPageContent() {
       carregarCertificados()
     } else if (activeTab === 'documentos-admissionais') {
       carregarDocumentosAdmissionais()
+    } else if (activeTab === 'documentos-demissao') {
+      carregarDocumentosDemissao()
     }
   }, [activeTab, funcionarioId])
 
   // Função para visualizar documento
-  const handleVisualizarDocumento = async (tipo: 'certificado' | 'admissional', documento: any) => {
+  const handleVisualizarDocumento = async (tipo: 'certificado' | 'admissional' | 'demissao', documento: any) => {
     setDocumentoSelecionado({ tipo, data: documento })
     setIsModalDocumentoOpen(true)
     setUrlArquivo(null)
@@ -1571,6 +1727,33 @@ function PWAPerfilPageContent() {
 
           {!isClientRole() && (
             <button
+              onClick={() => setActiveTab('documentos-demissao')}
+              className={`p-4 rounded-xl border-2 transition-all text-left ${
+                activeTab === 'documentos-demissao'
+                  ? 'border-rose-600 bg-rose-50'
+                  : 'border-gray-200 bg-white hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-2">
+                <div className={`p-2 rounded-lg ${
+                  activeTab === 'documentos-demissao' ? 'bg-rose-100' : 'bg-gray-100'
+                }`}>
+                  <FileWarning className={`w-5 h-5 ${
+                    activeTab === 'documentos-demissao' ? 'text-rose-600' : 'text-gray-600'
+                  }`} />
+                </div>
+                <span className={`font-semibold text-sm ${
+                  activeTab === 'documentos-demissao' ? 'text-rose-600' : 'text-gray-900'
+                }`}>
+                  Demissão
+                </span>
+              </div>
+              <p className="text-xs text-gray-500">Documentos de rescisão</p>
+            </button>
+          )}
+
+          {!isClientRole() && (
+            <button
               onClick={() => setActiveTab('holerites')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
                 activeTab === 'holerites'
@@ -1815,16 +1998,23 @@ function PWAPerfilPageContent() {
                     >
                       <div className="flex items-center justify-between">
                         <div className="flex-1">
-                          <div className="flex items-start justify-between mb-3">
+                          <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
                             <h4 className="font-semibold text-lg">
                               {certificado.nome}
                             </h4>
-                            {avisoVencimento && IconComponent && (
-                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
-                                <IconComponent className="w-3 h-3" />
-                                {avisoVencimento.texto}
-                              </Badge>
-                            )}
+                            <div className="flex flex-wrap gap-1.5 justify-end">
+                              {certificadoJaAssinado(certificado) ? (
+                                <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">Assinado</Badge>
+                              ) : (
+                                <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">Pendente assinatura</Badge>
+                              )}
+                              {avisoVencimento && IconComponent && (
+                                <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                  <IconComponent className="w-3 h-3" />
+                                  {avisoVencimento.texto}
+                                </Badge>
+                              )}
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
@@ -1842,7 +2032,7 @@ function PWAPerfilPageContent() {
                           </div>
                         </div>
                         {certificado.arquivo && (
-                          <div className="flex gap-2 ml-4">
+                          <div className="flex flex-wrap gap-2 ml-4 justify-end">
                             <Button
                               variant="outline"
                               size="sm"
@@ -1857,6 +2047,27 @@ function PWAPerfilPageContent() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
+                            {!certificadoJaAssinado(certificado) && (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="bg-amber-600 hover:bg-amber-700"
+                                onClick={() => abrirAssinaturaCertificado(certificado)}
+                              >
+                                <PenTool className="w-4 h-4 mr-1" />
+                                Assinar
+                              </Button>
+                            )}
+                            {certificadoJaAssinado(certificado) && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownloadCertificadoComAssinatura(certificado)}
+                              >
+                                <FileSignature className="w-4 h-4 mr-1" />
+                                PDF assinado
+                              </Button>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1923,9 +2134,13 @@ function PWAPerfilPageContent() {
                               {doc.tipo}
                             </h4>
                             <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
-                              {admissionalJaAssinado(doc) && (
+                              {admissionalJaAssinado(doc) ? (
                                 <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
                                   Assinado
+                                </Badge>
+                              ) : (
+                                <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">
+                                  Pendente assinatura
                                 </Badge>
                               )}
                               {avisoVencimento && IconComponent && (
@@ -2009,6 +2224,138 @@ function PWAPerfilPageContent() {
             </div>
             )}
 
+            {/* Seção Documentos de demissão */}
+            {activeTab === 'documentos-demissao' && !isClientRole() && (
+            <div className="mt-0">
+              {loadingDocumentosDemissao ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                  <span className="ml-2 text-gray-600">Carregando documentos...</span>
+                </div>
+              ) : documentosDemissao.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileWarning className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                  <p className="text-gray-600">Nenhum documento de demissão disponível</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {documentosDemissao.map((doc) => {
+                    const diasParaVencimento = doc.data_validade
+                      ? calcularDiasParaVencimento(doc.data_validade)
+                      : Infinity
+                    const avisoVencimento = diasParaVencimento !== Infinity
+                      ? getAvisoVencimento(diasParaVencimento)
+                      : null
+                    const IconComponent = avisoVencimento ? avisoVencimento.icon : null
+                    return (
+                      <div
+                        key={doc.id}
+                        className={`bg-white rounded-xl p-4 hover:shadow-md transition-shadow border ${
+                          diasParaVencimento < 0
+                            ? 'border-red-200 bg-red-50'
+                            : diasParaVencimento <= 7
+                              ? 'border-orange-200 bg-orange-50'
+                              : diasParaVencimento <= 30
+                                ? 'border-yellow-200 bg-yellow-50'
+                                : 'border-gray-100'
+                        }`}
+                      >
+                        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+                          <div className="min-w-0 flex-1 space-y-3">
+                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
+                              <h4 className="min-w-0 shrink font-semibold text-lg leading-tight">{doc.tipo}</h4>
+                              <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
+                                {demissaoJaAssinado(doc) && (
+                                  <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
+                                    Assinado
+                                  </Badge>
+                                )}
+                                {!demissaoJaAssinado(doc) && (
+                                  <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">
+                                    Pendente assinatura
+                                  </Badge>
+                                )}
+                                {avisoVencimento && IconComponent && (
+                                  <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                    <IconComponent className="w-3 h-3" />
+                                    {avisoVencimento.texto}
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                            <dl className="flex min-w-0 flex-col gap-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3">
+                              {doc.data_validade && (
+                                <div className="min-w-0">
+                                  <dt className="text-gray-500 text-xs">Validade</dt>
+                                  <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                    {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
+                                  </dd>
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <dt className="text-gray-500 text-xs">Recebido em</dt>
+                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                  {new Date(doc.created_at).toLocaleDateString('pt-BR')}
+                                </dd>
+                              </div>
+                              {doc.assinado_em && (
+                                <div className="min-w-0 sm:col-span-2">
+                                  <dt className="text-gray-500 text-xs">Assinado em</dt>
+                                  <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
+                                    {new Date(doc.assinado_em).toLocaleString('pt-BR')}
+                                  </dd>
+                                </div>
+                              )}
+                            </dl>
+                          </div>
+                          {doc.arquivo && (
+                            <div className="flex min-w-0 w-full flex-wrap gap-2 border-t border-gray-100 pt-3 sm:w-auto sm:shrink-0 sm:border-t-0 sm:pt-0 sm:justify-end">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleVisualizarDocumento('demissao', doc)}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => handleDownload(doc.arquivo, doc.tipo)}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              {!demissaoJaAssinado(doc) && (
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-rose-600 hover:bg-rose-700"
+                                  onClick={() => abrirAssinaturaDemissao(doc)}
+                                >
+                                  <PenTool className="w-4 h-4 mr-1" />
+                                  Assinar
+                                </Button>
+                              )}
+                              {demissaoJaAssinado(doc) && (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadDemissaoComAssinatura(doc)}
+                                >
+                                  <FileSignature className="w-4 h-4 mr-1" />
+                                  PDF assinado
+                                </Button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+            )}
+
             {/* Seção Holerites */}
             {activeTab === 'holerites' && !isClientRole() && (
             <div className="mt-0">
@@ -2039,7 +2386,11 @@ function PWAPerfilPageContent() {
         <DialogContent className="sm:max-w-[800px] p-0">
           <DialogHeader className="p-6 pb-4">
             <DialogTitle>
-              {documentoSelecionado?.tipo === 'certificado' ? 'Certificado' : 'Documento Admissional'}
+              {documentoSelecionado?.tipo === 'certificado'
+                ? 'Certificado'
+                : documentoSelecionado?.tipo === 'demissao'
+                  ? 'Documento de demissão'
+                  : 'Documento Admissional'}
             </DialogTitle>
             <DialogDescription>
               {documentoSelecionado?.data.nome || documentoSelecionado?.data.tipo}
@@ -2253,6 +2604,102 @@ function PWAPerfilPageContent() {
                   if (enviandoAssinaturaAdmissional) return
                   setModalAssinaturaAdmissionalOpen(false)
                   setDocAdmissionalAssinando(null)
+                }}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assinatura digital — certificado */}
+      <Dialog
+        open={modalAssinaturaCertificadoOpen}
+        onOpenChange={(open) => {
+          setModalAssinaturaCertificadoOpen(open)
+          if (!open) setCertificadoAssinando(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5" />
+              Assinar certificado
+            </DialogTitle>
+            <DialogDescription>
+              {certificadoAssinando
+                ? `Desenhe sua assinatura para confirmar leitura e concordância: ${certificadoAssinando.tipo} — ${certificadoAssinando.nome}`
+                : 'Selecione um certificado na lista.'}
+            </DialogDescription>
+          </DialogHeader>
+          {enviandoAssinaturaCertificado && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Enviando assinatura…
+            </div>
+          )}
+          {certificadoAssinando && (
+            <div className={enviandoAssinaturaCertificado ? 'pointer-events-none opacity-60' : ''}>
+              <SignaturePad
+                compact
+                compactDense
+                showCancelButton
+                applyLabel="Enviar assinatura"
+                title=""
+                description=""
+                className="pt-2"
+                onSave={handleAssinaturaCertificadoSalva}
+                onCancel={() => {
+                  if (enviandoAssinaturaCertificado) return
+                  setModalAssinaturaCertificadoOpen(false)
+                  setCertificadoAssinando(null)
+                }}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assinatura digital — documento de demissão */}
+      <Dialog
+        open={modalAssinaturaDemissaoOpen}
+        onOpenChange={(open) => {
+          setModalAssinaturaDemissaoOpen(open)
+          if (!open) setDocDemissaoAssinando(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5" />
+              Assinar documento de demissão
+            </DialogTitle>
+            <DialogDescription>
+              {docDemissaoAssinando
+                ? `Desenhe sua assinatura para confirmar leitura e concordância: ${docDemissaoAssinando.tipo}`
+                : 'Selecione um documento na lista.'}
+            </DialogDescription>
+          </DialogHeader>
+          {enviandoAssinaturaDemissao && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Enviando assinatura…
+            </div>
+          )}
+          {docDemissaoAssinando && (
+            <div className={enviandoAssinaturaDemissao ? 'pointer-events-none opacity-60' : ''}>
+              <SignaturePad
+                compact
+                compactDense
+                showCancelButton
+                applyLabel="Enviar assinatura"
+                title=""
+                description=""
+                className="pt-2"
+                onSave={handleAssinaturaDemissaoSalva}
+                onCancel={() => {
+                  if (enviandoAssinaturaDemissao) return
+                  setModalAssinaturaDemissaoOpen(false)
+                  setDocDemissaoAssinando(null)
                 }}
               />
             </div>

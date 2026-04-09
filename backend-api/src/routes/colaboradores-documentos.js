@@ -309,30 +309,35 @@ router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) =
   try {
     const { id } = req.params
     const { assinatura_digital } = req.body
+    const userId = req.user.id
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
 
-    if (!assinatura_digital) {
+    const schema = Joi.object({
+      assinatura_digital: Joi.string().required()
+    })
+    const { error: validationError } = schema.validate({ assinatura_digital })
+    if (validationError) {
       return res.status(400).json({
         success: false,
-        message: 'Assinatura digital é obrigatória'
+        message: validationError.details[0].message
       })
     }
 
-    // Validar que o ID é um UUID válido
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     if (!uuidRegex.test(id)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        error: 'ID inválido', 
-        message: 'O ID do certificado deve ser um UUID válido' 
+        error: 'ID inválido',
+        message: 'O ID do certificado deve ser um UUID válido'
       })
     }
 
-    // Verificar se o certificado existe
     const { data: certificado, error: certificadoError } = await supabaseAdmin
       .from('certificados_colaboradores')
       .select('*')
       .eq('id', id)
-      .single()
+      .maybeSingle()
 
     if (certificadoError || !certificado) {
       return res.status(404).json({
@@ -341,12 +346,35 @@ router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) =
       })
     }
 
-    // Atualizar certificado com assinatura
+    if (certificado.assinatura_digital && certificado.assinado_em) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este certificado já foi assinado.',
+        data: { assinado_em: certificado.assinado_em }
+      })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const certFuncionarioId = Number(certificado.funcionario_id)
+    const isSigningOwn =
+      userFuncionarioIdNum !== null &&
+      !Number.isNaN(certFuncionarioId) &&
+      userFuncionarioIdNum === certFuncionarioId
+
+    if (!hasRHEditPermission && !isSigningOwn) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você só pode assinar seus próprios certificados.',
+        required: 'rh:editar ou ser o funcionário dono do certificado'
+      })
+    }
+
     const { data: updatedCertificado, error: updateError } = await supabaseAdmin
       .from('certificados_colaboradores')
       .update({
         assinatura_digital,
-        assinado_por: req.user.id,
+        assinado_por: userId,
         assinado_em: new Date().toISOString()
       })
       .eq('id', id)
@@ -407,6 +435,24 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
       return res.status(404).json({
         success: false,
         message: 'Arquivo do certificado não encontrado'
+      })
+    }
+
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const certFuncionarioId = Number(certificado.funcionario_id)
+    const canAccess =
+      hasRHEditPermission ||
+      (userFuncionarioIdNum !== null &&
+        !Number.isNaN(certFuncionarioId) &&
+        userFuncionarioIdNum === certFuncionarioId)
+
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Sem permissão para baixar este certificado'
       })
     }
 
@@ -839,6 +885,311 @@ router.get('/documentos-admissionais/vencendo', async (req, res) => {
     res.json({ success: true, data: data || [] })
   } catch (error) {
     console.error('Erro ao listar documentos admissionais vencendo:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+// ==================== DOCUMENTOS DE DEMISSÃO ====================
+
+/**
+ * POST /api/colaboradores/:id/documentos-demissao
+ */
+router.post('/:id/documentos-demissao', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { tipo, data_validade, arquivo } = req.body
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const funcionarioId = parseInt(id, 10)
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const isCreatingForSelf =
+      userFuncionarioIdNum !== null &&
+      !isNaN(funcionarioId) &&
+      funcionarioId === userFuncionarioIdNum
+
+    if (!hasRHEditPermission && !isCreatingForSelf) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message:
+          'Sem permissão para criar documentos de demissão para outro funcionário.',
+        required: 'rh:editar ou criar para si mesmo'
+      })
+    }
+
+    const schema = Joi.object({
+      tipo: Joi.string().required(),
+      data_validade: Joi.date().allow(null).optional(),
+      arquivo: Joi.string().required()
+    })
+
+    const { error: validationError } = schema.validate({ tipo, data_validade, arquivo })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_demissao')
+      .insert({
+        funcionario_id: funcionarioId,
+        tipo,
+        data_validade,
+        arquivo
+      })
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao criar documento de demissão:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/colaboradores/:id/documentos-demissao
+ */
+router.get('/:id/documentos-demissao', async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_demissao')
+      .select('*')
+      .eq('funcionario_id', id)
+      .order('created_at', { ascending: false })
+
+    if (error) throw error
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('Erro ao listar documentos de demissão:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * PUT /api/colaboradores/documentos-demissao/:id/assinatura
+ */
+router.put('/documentos-demissao/:id/assinatura', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { assinatura_digital } = req.body
+    const userId = req.user.id
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const schema = Joi.object({
+      assinatura_digital: Joi.string().required()
+    })
+
+    const { error: validationError } = schema.validate({ assinatura_digital })
+    if (validationError) {
+      return res.status(400).json({ error: validationError.details[0].message })
+    }
+
+    const idLimpo = String(id || '').trim()
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from('documentos_demissao')
+      .select('*')
+      .eq('id', idLimpo)
+      .maybeSingle()
+
+    if (docError) {
+      console.error('[documentos-demissao/assinatura] Erro ao buscar documento:', docError)
+      return res.status(500).json({
+        error: 'Erro ao buscar documento',
+        message: docError.message || 'Falha na consulta'
+      })
+    }
+
+    if (!doc) {
+      return res.status(404).json({
+        error: 'Documento não encontrado',
+        message: 'O documento não foi encontrado'
+      })
+    }
+
+    if (doc.assinatura_digital && doc.assinado_em) {
+      return res.status(400).json({
+        error: 'Documento já assinado',
+        message: 'Este documento já foi assinado.',
+        data: { assinado_em: doc.assinado_em }
+      })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const docFuncionarioId = Number(doc.funcionario_id)
+    const isSigningOwn =
+      userFuncionarioIdNum !== null &&
+      !Number.isNaN(docFuncionarioId) &&
+      userFuncionarioIdNum === docFuncionarioId
+
+    if (!hasRHEditPermission && !isSigningOwn) {
+      return res.status(403).json({
+        error: 'Acesso negado',
+        message: 'Você só pode assinar seus próprios documentos.',
+        required: 'rh:editar ou ser o funcionário dono do documento'
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_demissao')
+      .update({
+        assinatura_digital,
+        assinado_em: new Date().toISOString(),
+        assinado_por: userId
+      })
+      .eq('id', idLimpo)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao assinar documento de demissão:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * GET /api/colaboradores/documentos-demissao/:id/download
+ */
+router.get('/documentos-demissao/:id/download', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comAssinatura } = req.query
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const idLimpoDl = String(id || '').trim()
+    const { data: doc, error: docError } = await supabaseAdmin
+      .from('documentos_demissao')
+      .select('*')
+      .eq('id', idLimpoDl)
+      .maybeSingle()
+
+    if (docError) {
+      return res.status(500).json({
+        success: false,
+        message: docError.message || 'Erro ao buscar documento'
+      })
+    }
+
+    if (!doc) {
+      return res.status(404).json({ success: false, message: 'Documento não encontrado' })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const docFuncionarioId = Number(doc.funcionario_id)
+    const canAccess =
+      hasRHEditPermission ||
+      (userFuncionarioIdNum !== null &&
+        !Number.isNaN(docFuncionarioId) &&
+        userFuncionarioIdNum === docFuncionarioId)
+
+    if (!canAccess) {
+      return res.status(403).json({
+        success: false,
+        message: 'Sem permissão para baixar este documento'
+      })
+    }
+
+    if (!doc.arquivo) {
+      return res.status(404).json({ success: false, message: 'Arquivo não encontrado' })
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await downloadArquivosObrasBuffer(doc.arquivo)
+    } catch (dlErr) {
+      console.error('[documentos-demissao/download] Falha ao obter bytes:', dlErr)
+      return res.status(502).json({
+        success: false,
+        message: 'Arquivo não pôde ser baixado',
+        details: process.env.NODE_ENV === 'development' ? String(dlErr?.message || dlErr) : undefined
+      })
+    }
+
+    if ((comAssinatura === 'true' || comAssinatura === '1') && doc.assinatura_digital) {
+      try {
+        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, doc.assinatura_digital, {
+          horizontalAlign: 'left',
+          marginLeft: 56,
+          marginBottom: 52,
+          height: 88,
+          pages: 'last',
+          opacity: 1.0
+        })
+      } catch (signatureError) {
+        console.error('Erro ao compor assinatura no PDF (demissão):', signatureError)
+      }
+    }
+
+    const nomeArquivo = `demissao_${String(doc.tipo || 'doc').replace(/[^a-zA-Z0-9._-]/g, '_')}${doc.assinatura_digital ? '_assinado' : ''}.pdf`
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('Erro ao baixar documento de demissão:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * PUT /api/colaboradores/documentos-demissao/:id
+ */
+router.put('/documentos-demissao/:id', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+    const { tipo, data_validade, arquivo } = req.body
+
+    const updateData = {}
+    if (tipo !== undefined) updateData.tipo = tipo
+    if (data_validade !== undefined) updateData.data_validade = data_validade
+    if (arquivo !== undefined) updateData.arquivo = arquivo
+
+    const { data, error } = await supabaseAdmin
+      .from('documentos_demissao')
+      .update(updateData)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao atualizar documento de demissão:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * DELETE /api/colaboradores/documentos-demissao/:id
+ */
+router.delete('/documentos-demissao/:id', requirePermission('rh:editar'), async (req, res) => {
+  try {
+    const { id } = req.params
+
+    const { error } = await supabaseAdmin.from('documentos_demissao').delete().eq('id', id)
+
+    if (error) throw error
+
+    res.json({ success: true, message: 'Documento excluído com sucesso' })
+  } catch (error) {
+    console.error('Erro ao excluir documento de demissão:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
   }
 })

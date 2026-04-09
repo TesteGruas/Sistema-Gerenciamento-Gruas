@@ -88,6 +88,48 @@ export interface DocumentoAdmissionalResponse {
   data: DocumentoAdmissionalBackend
 }
 
+// ==================== DOCUMENTOS DE DEMISSÃO ====================
+
+export interface DocumentoDemissaoBackend {
+  id: string
+  funcionario_id: number
+  tipo: string
+  data_validade?: string
+  arquivo: string
+  alerta_enviado: boolean
+  assinatura_digital?: string
+  assinado_por?: number
+  assinado_em?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface DocumentoDemissaoCreateData {
+  tipo: string
+  data_validade?: string
+  arquivo: string
+}
+
+export interface DocumentoDemissaoUpdateData {
+  tipo?: string
+  data_validade?: string
+  arquivo?: string
+}
+
+export interface DocumentoDemissaoAssinaturaData {
+  assinatura_digital: string
+}
+
+export interface DocumentosDemissaoResponse {
+  success: boolean
+  data: DocumentoDemissaoBackend[]
+}
+
+export interface DocumentoDemissaoResponse {
+  success: boolean
+  data: DocumentoDemissaoBackend
+}
+
 // ==================== HOLERITES ====================
 
 export interface HoleriteBackend {
@@ -302,6 +344,57 @@ export const colaboradoresDocumentosApi = {
     async listarVencendo(): Promise<DocumentosAdmissionaisResponse> {
       const url = buildColaboradoresUrl('colaboradores/documentos-admissionais/vencendo')
       return apiRequest(url)
+    },
+  },
+
+  documentosDemissao: {
+    async listar(colaboradorId: number): Promise<DocumentosDemissaoResponse> {
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/documentos-demissao`)
+      return apiRequest(url)
+    },
+
+    async criar(colaboradorId: number, data: DocumentoDemissaoCreateData): Promise<DocumentoDemissaoResponse> {
+      const url = buildColaboradoresUrl(`colaboradores/${colaboradorId}/documentos-demissao`)
+      return apiRequest(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    },
+
+    async atualizar(documentoId: string, data: DocumentoDemissaoUpdateData): Promise<DocumentoDemissaoResponse> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-demissao/${documentoId}`)
+      return apiRequest(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    },
+
+    async excluir(documentoId: string): Promise<{ success: boolean; message: string }> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-demissao/${documentoId}`)
+      return apiRequest(url, { method: 'DELETE' })
+    },
+
+    async assinar(documentoId: string, data: DocumentoDemissaoAssinaturaData): Promise<DocumentoDemissaoResponse> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-demissao/${documentoId}/assinatura`)
+      return apiRequest(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      })
+    },
+
+    async baixar(documentoId: string, comAssinatura: boolean = false): Promise<Blob> {
+      const url = buildColaboradoresUrl(`colaboradores/documentos-demissao/${documentoId}/download`)
+      const params = comAssinatura ? { comAssinatura: 'true' } : {}
+      const qs = Object.keys(params).length > 0 ? `?${new URLSearchParams(params).toString()}` : ''
+      const response = await fetchWithAuth(url + qs, { method: 'GET' })
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.message || errorData.error || `Erro ${response.status}`)
+      }
+      return response.blob()
     },
   },
 

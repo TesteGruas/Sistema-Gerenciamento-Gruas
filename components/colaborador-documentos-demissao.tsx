@@ -14,35 +14,33 @@ import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileS
 import { useToast } from "@/hooks/use-toast"
 import { getApiBasePath } from "@/lib/runtime-config"
 import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
-import { TIPOS_DOCUMENTOS_ADMISSIONAIS } from "@/lib/rh-documentos-tipos"
+import { TIPOS_DOCUMENTOS_DEMISSAO } from "@/lib/rh-documentos-tipos"
 
-export interface DocumentoAdmissional {
+export interface DocumentoDemissao {
   id?: string | number
   colaborador_id: number
   tipo: string
   nome: string
   data: string
   data_validade?: string
-  arquivo?: File | null
   arquivo_url?: string
-  alerta_enviado?: boolean
   assinatura_digital?: string
   assinado_em?: string
 }
 
-const tiposDocumentos: string[] = [...TIPOS_DOCUMENTOS_ADMISSIONAIS]
+const tiposDocumentos: string[] = [...TIPOS_DOCUMENTOS_DEMISSAO]
 
-interface ColaboradorDocumentosAdmissionaisProps {
+interface ColaboradorDocumentosDemissaoProps {
   colaboradorId: number
   readOnly?: boolean
 }
 
-export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = false }: ColaboradorDocumentosAdmissionaisProps) {
+export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false }: ColaboradorDocumentosDemissaoProps) {
   const { toast } = useToast()
-  const [documentos, setDocumentos] = useState<DocumentoAdmissional[]>([])
+  const [documentos, setDocumentos] = useState<DocumentoDemissao[]>([])
   const [loading, setLoading] = useState(true)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [editingDocumento, setEditingDocumento] = useState<DocumentoAdmissional | null>(null)
+  const [editingDocumento, setEditingDocumento] = useState<DocumentoDemissao | null>(null)
   const [formData, setFormData] = useState<{
     tipo: string
     nome: string
@@ -50,28 +48,27 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     data_validade: string
     arquivo: File | null
   }>({
-    tipo: '',
-    nome: '',
-    data: '',
-    data_validade: '',
-    arquivo: null
+    tipo: "",
+    nome: "",
+    data: "",
+    data_validade: "",
+    arquivo: null,
   })
 
   const loadDocumentos = async () => {
     setLoading(true)
     try {
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
-      const response = await colaboradoresDocumentosApi.documentosAdmissionais.listar(colaboradorId)
+      const response = await colaboradoresDocumentosApi.documentosDemissao.listar(colaboradorId)
       if (response.success && response.data) {
-        const documentosConvertidos: DocumentoAdmissional[] = response.data.map((doc: any) => ({
+        const documentosConvertidos: DocumentoDemissao[] = response.data.map((doc: any) => ({
           id: doc.id,
           colaborador_id: doc.funcionario_id,
           tipo: doc.tipo,
-          nome: doc.tipo, // Usar tipo como nome se não houver nome separado
+          nome: doc.tipo,
           data: doc.created_at || new Date().toISOString(),
           data_validade: doc.data_validade || undefined,
           arquivo_url: doc.arquivo,
-          alerta_enviado: doc.alerta_enviado,
           assinatura_digital: doc.assinatura_digital,
           assinado_em: doc.assinado_em,
         }))
@@ -80,43 +77,42 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     } catch (error: any) {
       toast({
         title: "Erro",
-        description: error.message || "Erro ao carregar documentos admissionais",
-        variant: "destructive"
+        description: error.message || "Erro ao carregar documentos de demissão",
+        variant: "destructive",
       })
     } finally {
       setLoading(false)
     }
   }
 
-  const handleOpenDialog = (documento?: DocumentoAdmissional) => {
+  const handleOpenDialog = (documento?: DocumentoDemissao) => {
     if (documento) {
       setEditingDocumento(documento)
       setFormData({
         tipo: documento.tipo,
         nome: documento.nome,
         data: documento.data,
-        data_validade: documento.data_validade || '',
-        arquivo: null
+        data_validade: documento.data_validade || "",
+        arquivo: null,
       })
     } else {
       setEditingDocumento(null)
       setFormData({
-        tipo: '',
-        nome: '',
-        data: '',
-        data_validade: '',
-        arquivo: null
+        tipo: "",
+        nome: "",
+        data: "",
+        data_validade: "",
+        arquivo: null,
       })
     }
     setIsDialogOpen(true)
   }
 
-  const documentoAdmissionalAssinado = (d: DocumentoAdmissional) =>
-    Boolean(d.assinatura_digital && d.assinado_em)
+  const documentoAssinado = (d: DocumentoDemissao) => Boolean(d.assinatura_digital && d.assinado_em)
 
-  const handleDownloadDocumento = async (documento: DocumentoAdmissional, comAssinatura: boolean) => {
+  const handleDownloadDocumento = async (documento: DocumentoDemissao, comAssinatura: boolean) => {
     if (!documento.id) return
-    if (comAssinatura && !documentoAdmissionalAssinado(documento)) {
+    if (comAssinatura && !documentoAssinado(documento)) {
       toast({
         title: "Sem assinatura",
         description: "Este documento ainda não foi assinado pelo colaborador.",
@@ -126,10 +122,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     }
     try {
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
-      const blob = await colaboradoresDocumentosApi.documentosAdmissionais.baixar(
-        String(documento.id),
-        comAssinatura
-      )
+      const blob = await colaboradoresDocumentosApi.documentosDemissao.baixar(String(documento.id), comAssinatura)
       const url = window.URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -154,7 +147,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
       toast({
         title: "Erro",
         description: "Preencha todos os campos obrigatórios",
-        variant: "destructive"
+        variant: "destructive",
       })
       return
     }
@@ -200,8 +193,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
         if (!arquivoUrl || arquivoUrl.startsWith("blob:")) {
           toast({
             title: "Arquivo inválido",
-            description:
-              "Este registro não tem arquivo no servidor. Envie o documento novamente ao editar.",
+            description: "Este registro não tem arquivo no servidor. Envie o documento novamente ao editar.",
             variant: "destructive",
           })
           return
@@ -209,27 +201,24 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
       }
 
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
-      
+
       if (editingDocumento && editingDocumento.id) {
-        await colaboradoresDocumentosApi.documentosAdmissionais.atualizar(
-          editingDocumento.id.toString(),
-          {
-            tipo: formData.tipo,
-            data_validade: formData.data_validade || undefined,
-            arquivo: arquivoUrl
-          }
-        )
-      } else {
-        await colaboradoresDocumentosApi.documentosAdmissionais.criar(colaboradorId, {
+        await colaboradoresDocumentosApi.documentosDemissao.atualizar(editingDocumento.id.toString(), {
           tipo: formData.tipo,
           data_validade: formData.data_validade || undefined,
-          arquivo: arquivoUrl
+          arquivo: arquivoUrl,
+        })
+      } else {
+        await colaboradoresDocumentosApi.documentosDemissao.criar(colaboradorId, {
+          tipo: formData.tipo,
+          data_validade: formData.data_validade || undefined,
+          arquivo: arquivoUrl,
         })
       }
 
       toast({
         title: "Sucesso",
-        description: editingDocumento ? "Documento atualizado com sucesso" : "Documento criado com sucesso"
+        description: editingDocumento ? "Documento atualizado com sucesso" : "Documento criado com sucesso",
       })
 
       setIsDialogOpen(false)
@@ -238,7 +227,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
       toast({
         title: "Erro",
         description: error.message || "Erro ao salvar documento",
-        variant: "destructive"
+        variant: "destructive",
       })
     }
   }
@@ -248,24 +237,28 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
 
     try {
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
-      await colaboradoresDocumentosApi.documentosAdmissionais.excluir(id.toString())
+      await colaboradoresDocumentosApi.documentosDemissao.excluir(id.toString())
       toast({
         title: "Sucesso",
-        description: "Documento excluído"
+        description: "Documento excluído",
       })
       loadDocumentos()
     } catch (error: any) {
       toast({
         title: "Erro",
         description: error.message || "Erro ao excluir documento",
-        variant: "destructive"
+        variant: "destructive",
       })
     }
   }
 
-  const getStatusBadge = (documento: DocumentoAdmissional) => {
+  const getStatusBadge = (documento: DocumentoDemissao) => {
     if (!documento.data_validade) {
-      return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" /> Válido</Badge>
+      return (
+        <Badge className="bg-green-500">
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Válido
+        </Badge>
+      )
     }
 
     const hoje = new Date()
@@ -273,12 +266,24 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     const trintaDias = new Date(hoje.getTime() + 30 * 24 * 60 * 60 * 1000)
 
     if (dataValidade < hoje) {
-      return <Badge variant="destructive"><AlertTriangle className="w-3 h-3 mr-1" /> Vencido</Badge>
+      return (
+        <Badge variant="destructive">
+          <AlertTriangle className="w-3 h-3 mr-1" /> Vencido
+        </Badge>
+      )
     } else if (dataValidade <= trintaDias) {
       const dias = Math.ceil((dataValidade.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-      return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300"><Clock className="w-3 h-3 mr-1" /> Vencendo em {dias} dias</Badge>
+      return (
+        <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-300">
+          <Clock className="w-3 h-3 mr-1" /> Vencendo em {dias} dias
+        </Badge>
+      )
     } else {
-      return <Badge className="bg-green-500"><CheckCircle2 className="w-3 h-3 mr-1" /> Válido</Badge>
+      return (
+        <Badge className="bg-green-500">
+          <CheckCircle2 className="w-3 h-3 mr-1" /> Válido
+        </Badge>
+      )
     }
   }
 
@@ -296,12 +301,11 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     }
   }, [colaboradorId])
 
-  const documentosVencendo = documentos.filter(d => {
+  const documentosVencendo = documentos.filter((d) => {
     const dias = diasParaVencimento(d.data_validade)
     return dias !== null && dias >= 0 && dias <= 30
   })
 
-  // Validar colaboradorId antes de renderizar
   if (!colaboradorId || colaboradorId <= 0) {
     return (
       <Card>
@@ -314,13 +318,12 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
 
   return (
     <div className="space-y-4">
-      {/* Alerta de documentos vencendo */}
       {documentosVencendo.length > 0 && (
         <Card className="border-yellow-300 bg-yellow-50">
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <AlertTriangle className="w-5 h-5 text-yellow-600" />
-              Atenção: Documentos Vencendo
+              Atenção: documentos vencendo
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -334,16 +337,12 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                       <p className="text-sm text-gray-600">
                         {doc.data_validade && (
                           <>
-                            Vence em {dias} dia{dias !== 1 ? 's' : ''} - {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
+                            Vence em {dias} dia{dias !== 1 ? "s" : ""} - {new Date(doc.data_validade).toLocaleDateString("pt-BR")}
                           </>
                         )}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleOpenDialog(doc)}
-                    >
+                    <Button size="sm" variant="outline" onClick={() => handleOpenDialog(doc)}>
                       <Edit className="w-4 h-4 mr-1" />
                       Renovar
                     </Button>
@@ -359,15 +358,15 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Documentos Admissionais</CardTitle>
+              <CardTitle>Documentos de demissão</CardTitle>
               <CardDescription>
-                {documentos.length} documento(s) cadastrado(s). O colaborador assina pelo aplicativo (Perfil), como nos holerites.
+                {documentos.length} documento(s). O colaborador pode assinar pelo aplicativo (Perfil), como nos holerites.
               </CardDescription>
             </div>
             {!readOnly && (
               <Button onClick={() => handleOpenDialog()}>
                 <Plus className="w-4 h-4 mr-2" />
-                Novo Documento
+                Novo documento
               </Button>
             )}
           </div>
@@ -376,9 +375,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
           {loading ? (
             <div className="text-center py-8">Carregando...</div>
           ) : documentos.length === 0 ? (
-            <div className="text-center py-8 text-gray-500">
-              Nenhum documento admissional cadastrado
-            </div>
+            <div className="text-center py-8 text-gray-500">Nenhum documento de demissão cadastrado</div>
           ) : (
             <Table>
               <TableHeader>
@@ -386,7 +383,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                   <TableHead>Tipo</TableHead>
                   <TableHead>Nome</TableHead>
                   <TableHead>Data</TableHead>
-                  <TableHead>Data de Validade</TableHead>
+                  <TableHead>Data de validade</TableHead>
                   <TableHead>Validade doc.</TableHead>
                   <TableHead>Assinatura</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
@@ -399,15 +396,13 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                     <TableRow key={documento.id}>
                       <TableCell className="font-medium">{documento.tipo}</TableCell>
                       <TableCell>{documento.nome}</TableCell>
-                      <TableCell>{new Date(documento.data).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>{new Date(documento.data).toLocaleDateString("pt-BR")}</TableCell>
                       <TableCell>
                         {documento.data_validade ? (
                           <>
-                            {new Date(documento.data_validade).toLocaleDateString('pt-BR')}
+                            {new Date(documento.data_validade).toLocaleDateString("pt-BR")}
                             {dias !== null && dias >= 0 && dias <= 30 && (
-                              <span className="text-xs text-yellow-600 ml-2">
-                                ({dias} dias)
-                              </span>
+                              <span className="text-xs text-yellow-600 ml-2">({dias} dias)</span>
                             )}
                           </>
                         ) : (
@@ -416,7 +411,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                       </TableCell>
                       <TableCell>{getStatusBadge(documento)}</TableCell>
                       <TableCell>
-                        {documentoAdmissionalAssinado(documento) ? (
+                        {documentoAssinado(documento) ? (
                           <Badge className="bg-emerald-600">
                             <CheckCircle2 className="w-3 h-3 mr-1" />
                             Assinado
@@ -441,7 +436,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                               >
                                 <Download className="w-4 h-4" />
                               </Button>
-                              {documentoAdmissionalAssinado(documento) && (
+                              {documentoAssinado(documento) && (
                                 <Button
                                   variant="ghost"
                                   size="sm"
@@ -457,11 +452,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                           )}
                           {!readOnly && (
                             <>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleOpenDialog(documento)}
-                              >
+                              <Button variant="ghost" size="sm" onClick={() => handleOpenDialog(documento)}>
                                 <Edit className="w-4 h-4" />
                               </Button>
                               <Button
@@ -486,27 +477,21 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
         </CardContent>
       </Card>
 
-      {/* Dialog de Criar/Editar */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>
-              {editingDocumento ? 'Editar Documento Admissional' : 'Novo Documento Admissional'}
-            </DialogTitle>
+            <DialogTitle>{editingDocumento ? "Editar documento" : "Novo documento de demissão"}</DialogTitle>
             <DialogDescription>
-              Preencha os dados do documento. Alerta será enviado 30 dias antes do vencimento (se aplicável).
+              Anexe o PDF ou imagem. A lista de tipos pode ser ajustada quando a documentação oficial for enviada.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div>
               <Label>
-                Tipo de Documento <span className="text-red-500">*</span>
+                Tipo <span className="text-red-500">*</span>
               </Label>
-              <Select
-                value={formData.tipo || undefined}
-                onValueChange={(value) => setFormData({ ...formData, tipo: value })}
-              >
+              <Select value={formData.tipo || undefined} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
                 <SelectTrigger>
                   <SelectValue placeholder="Selecione o tipo" />
                 </SelectTrigger>
@@ -522,12 +507,12 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
 
             <div>
               <Label>
-                Nome do Documento <span className="text-red-500">*</span>
+                Nome / observação <span className="text-red-500">*</span>
               </Label>
               <Input
                 value={formData.nome}
                 onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                placeholder="Ex: ASO - Exame Médico Admissional"
+                placeholder="Ex.: rescisão contrato fulano — obra X"
               />
             </div>
 
@@ -535,25 +520,16 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
               <Label>
                 Data <span className="text-red-500">*</span>
               </Label>
-              <Input
-                type="date"
-                value={formData.data}
-                onChange={(e) => setFormData({ ...formData, data: e.target.value })}
-              />
+              <Input type="date" value={formData.data} onChange={(e) => setFormData({ ...formData, data: e.target.value })} />
             </div>
 
             <div>
-              <Label>
-                Data de Validade (Opcional)
-              </Label>
+              <Label>Data de validade (opcional)</Label>
               <Input
                 type="date"
                 value={formData.data_validade}
                 onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
               />
-              <p className="text-xs text-gray-500 mt-1">
-                Se informado, alerta será enviado 30 dias antes do vencimento
-              </p>
             </div>
 
             <div>
@@ -561,7 +537,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
                 accept="application/pdf,image/*"
                 maxSize={5 * 1024 * 1024}
                 onUpload={(file) => setFormData({ ...formData, arquivo: file })}
-                label="Upload do Documento"
+                label="Upload do documento"
                 required={!editingDocumento}
               />
             </div>
@@ -570,9 +546,7 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancelar
               </Button>
-              <Button onClick={handleSave}>
-                {editingDocumento ? 'Atualizar' : 'Criar'} Documento
-              </Button>
+              <Button onClick={handleSave}>{editingDocumento ? "Atualizar" : "Criar"}</Button>
             </div>
           </div>
         </DialogContent>
@@ -580,4 +554,3 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     </div>
   )
 }
-
