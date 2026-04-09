@@ -27,6 +27,10 @@ import { useToast } from "@/hooks/use-toast"
 interface NotasResumo {
   aReceber: {
     total: number
+    /** Valor já recebido (NF saída com status paga). */
+    valorRecebido: number
+    /** Valor ainda em aberto (pendente/vencida, exceto cancelada). */
+    valorAReceber: number
     pendentes: number
     vencidas: number
     pagas: number
@@ -34,6 +38,10 @@ interface NotasResumo {
   }
   aPagar: {
     total: number
+    /** Valor já quitado (status pago ou paga nas NFs de entrada carregadas). */
+    valorPago: number
+    /** Valor ainda a pagar (em aberto, exceto cancelada). */
+    valorAPagar: number
     pendentes: number
     vencidas: number
     pagas: number
@@ -52,8 +60,8 @@ export default function FinanceiroPage() {
   const { toast } = useToast()
   const [isLoading, setIsLoading] = useState(true)
   const [notasResumo, setNotasResumo] = useState<NotasResumo>({
-    aReceber: { total: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] },
-    aPagar: { total: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] }
+    aReceber: { total: 0, valorRecebido: 0, valorAReceber: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] },
+    aPagar: { total: 0, valorPago: 0, valorAPagar: 0, pendentes: 0, vencidas: 0, pagas: 0, lista: [] }
   })
   const [bancosResumo, setBancosResumo] = useState<BancosResumo>({
     totalContas: 0,
@@ -233,30 +241,63 @@ export default function FinanceiroPage() {
       const hoje = new Date()
       hoje.setHours(0, 0, 0, 0)
 
+      const notaQuitada = (n: NotaFiscal) => n.status === "paga" || n.status === "pago"
+      const notaCancelada = (n: NotaFiscal) => n.status === "cancelada" || n.status === "cancelado"
+
       const calcularResumoNotas = (notas: NotaFiscal[]) => {
-        const pendentes = notas.filter(n => n.status === 'pendente')
-        const vencidas = notas.filter(n => {
-          if (n.status === 'paga' || n.status === 'cancelada') return false
+        const pendentes = notas.filter((n) => n.status === "pendente")
+        const vencidas = notas.filter((n) => {
+          if (notaQuitada(n) || notaCancelada(n)) return false
           if (!n.data_vencimento) return false
           const vencimento = new Date(n.data_vencimento)
           vencimento.setHours(0, 0, 0, 0)
           return vencimento < hoje
         })
-        const pagas = notas.filter(n => n.status === 'paga')
-        const total = notas.reduce((sum, n) => sum + getValorFinanceiroNota(n), 0)
+        const listaPagas = notas.filter((n) => notaQuitada(n))
+
+        let valorQuitado = 0
+        let valorEmAberto = 0
+        for (const n of notas) {
+          if (notaCancelada(n)) continue
+          const v = getValorFinanceiroNota(n)
+          if (notaQuitada(n)) valorQuitado += v
+          else valorEmAberto += v
+        }
+        const total = valorQuitado + valorEmAberto
 
         return {
           total,
+          valorQuitado,
+          valorEmAberto,
           pendentes: pendentes.length,
           vencidas: vencidas.length,
-          pagas: pagas.length,
+          pagas: listaPagas.length,
           lista: notas.slice(0, 10) // Mostrar apenas as 10 primeiras
         }
       }
 
+      const resumoReceber = calcularResumoNotas(notasReceber)
+      const resumoPagar = calcularResumoNotas(notasPagar)
+
       setNotasResumo({
-        aReceber: calcularResumoNotas(notasReceber),
-        aPagar: calcularResumoNotas(notasPagar)
+        aReceber: {
+          total: resumoReceber.total,
+          valorRecebido: resumoReceber.valorQuitado,
+          valorAReceber: resumoReceber.valorEmAberto,
+          pendentes: resumoReceber.pendentes,
+          vencidas: resumoReceber.vencidas,
+          pagas: resumoReceber.pagas,
+          lista: resumoReceber.lista
+        },
+        aPagar: {
+          total: resumoPagar.total,
+          valorPago: resumoPagar.valorQuitado,
+          valorAPagar: resumoPagar.valorEmAberto,
+          pendentes: resumoPagar.pendentes,
+          vencidas: resumoPagar.vencidas,
+          pagas: resumoPagar.pagas,
+          lista: resumoPagar.lista
+        }
       })
 
       // Carregar contas bancárias
@@ -361,10 +402,19 @@ export default function FinanceiroPage() {
               <CardTitle className="text-sm font-medium">Notas a Receber</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground text-green-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatarMoeda(notasResumo.aReceber.total)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {notasResumo.aReceber.pendentes} pendentes
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">A receber</p>
+                  <p className="text-lg font-bold tabular-nums">{formatarMoeda(notasResumo.aReceber.valorAReceber)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Recebido</p>
+                  <p className="text-lg font-semibold text-green-700 tabular-nums">{formatarMoeda(notasResumo.aReceber.valorRecebido)}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground border-t pt-2">
+                Total das notas (exc. canceladas): {formatarMoeda(notasResumo.aReceber.total)} · {notasResumo.aReceber.pendentes} pendentes
               </p>
             </CardContent>
           </Card>
@@ -374,10 +424,19 @@ export default function FinanceiroPage() {
               <CardTitle className="text-sm font-medium">Notas a Pagar</CardTitle>
               <TrendingDown className="h-4 w-4 text-muted-foreground text-red-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatarMoeda(notasResumo.aPagar.total)}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {notasResumo.aPagar.pendentes} pendentes
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <p className="text-xs text-muted-foreground">A pagar</p>
+                  <p className="text-lg font-bold tabular-nums">{formatarMoeda(notasResumo.aPagar.valorAPagar)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Pago</p>
+                  <p className="text-lg font-semibold text-red-700/90 tabular-nums">{formatarMoeda(notasResumo.aPagar.valorPago)}</p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground border-t pt-2">
+                Total das notas (exc. canceladas): {formatarMoeda(notasResumo.aPagar.total)} · {notasResumo.aPagar.pendentes} pendentes
               </p>
             </CardContent>
           </Card>
@@ -428,8 +487,16 @@ export default function FinanceiroPage() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-xl font-bold text-green-700">{formatarMoeda(notasResumo.aReceber.total)}</p>
+                      <p className="text-sm text-muted-foreground">Recebido</p>
+                      <p className="text-xl font-bold text-green-700 tabular-nums">{formatarMoeda(notasResumo.aReceber.valorRecebido)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">A receber</p>
+                      <p className="text-xl font-bold text-green-800 tabular-nums">{formatarMoeda(notasResumo.aReceber.valorAReceber)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total (exc. canceladas)</p>
+                      <p className="text-lg font-semibold text-muted-foreground tabular-nums">{formatarMoeda(notasResumo.aReceber.total)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Pendentes</p>
@@ -440,7 +507,7 @@ export default function FinanceiroPage() {
                       <p className="text-xl font-bold text-red-600">{notasResumo.aReceber.vencidas}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Pagas</p>
+                      <p className="text-sm text-muted-foreground">Pagas (qtd.)</p>
                       <p className="text-xl font-bold text-blue-600">{notasResumo.aReceber.pagas}</p>
                     </div>
                   </div>
@@ -458,8 +525,16 @@ export default function FinanceiroPage() {
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-sm text-muted-foreground">Total</p>
-                      <p className="text-xl font-bold text-red-700">{formatarMoeda(notasResumo.aPagar.total)}</p>
+                      <p className="text-sm text-muted-foreground">Pago</p>
+                      <p className="text-xl font-bold text-red-700 tabular-nums">{formatarMoeda(notasResumo.aPagar.valorPago)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">A pagar</p>
+                      <p className="text-xl font-bold text-red-800 tabular-nums">{formatarMoeda(notasResumo.aPagar.valorAPagar)}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-muted-foreground">Total (exc. canceladas)</p>
+                      <p className="text-lg font-semibold text-muted-foreground tabular-nums">{formatarMoeda(notasResumo.aPagar.total)}</p>
                     </div>
                     <div>
                       <p className="text-sm text-muted-foreground">Pendentes</p>
@@ -470,7 +545,7 @@ export default function FinanceiroPage() {
                       <p className="text-xl font-bold text-orange-600">{notasResumo.aPagar.vencidas}</p>
                     </div>
                     <div>
-                      <p className="text-sm text-muted-foreground">Pagas</p>
+                      <p className="text-sm text-muted-foreground">Pagas (qtd.)</p>
                       <p className="text-xl font-bold text-blue-600">{notasResumo.aPagar.pagas}</p>
                     </div>
                   </div>
