@@ -110,14 +110,31 @@ function primeiroTecnicoManutencaoNaEquipe(funcionariosGrua: any[]) {
   })
 }
 
+/** Operador vinculado no cadastro da obra tem prioridade sobre a equipe inferida na grua */
+function operadorObraOuEquipeGrua(obra: any, operadorGruaEquipe: any) {
+  const op = obra?.operador_obra_funcionario
+  if (op && (op.nome || op.id)) {
+    return {
+      funcionario: {
+        nome: op.nome,
+        cargo: op.cargo || "Operador",
+        telefone: op.telefone
+      }
+    }
+  }
+  return operadorGruaEquipe
+}
+
 interface LivroGruaObraProps {
   obraId: string
+  /** Quando vindo de /livros-gruas/[relacaoId]/livro — força a grua do livro (checklists/PDF) a bater com essa máquina */
+  gruaIdPreferencial?: string
   cachedData?: any
   onDataLoaded?: (data: any) => void
   onRequestEdit?: () => void
 }
 
-export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit }: LivroGruaObraProps) {
+export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLoaded, onRequestEdit }: LivroGruaObraProps) {
   const { toast } = useToast()
   const [loading, setLoading] = useState(!cachedData)
   const [obra, setObra] = useState<any>(cachedData?.obra || null)
@@ -148,59 +165,48 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
     }
   }, [obraId])
 
-  // Selecionar automaticamente a primeira grua quando os dados carregarem
+  // Selecionar grua ao carregar a obra (ou alinhar com gruaIdPreferencial vinda do livro por relação)
   useEffect(() => {
-    if (obra && !gruaSelecionada && !loading) {
-      const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
-      console.log('🔍 DEBUG LivroGruaObra - Selecionando grua:', {
-        obraId: obra.id,
-        gruasDisponiveis: gruasDisponiveis.length,
-        gruas: gruasDisponiveis
-      })
-      
-      if (gruasDisponiveis.length > 0) {
-        const primeiraGrua = gruasDisponiveis[0]
-        console.log('🔍 DEBUG - Primeira grua encontrada:', primeiraGrua)
-        
-        if (primeiraGrua.grua) {
-          const gruaParaSelecionar = {
-            ...primeiraGrua.grua,
-            relacao: primeiraGrua,
-            name: primeiraGrua.grua.modelo || primeiraGrua.grua.name || `Grua ${primeiraGrua.grua.id}`
-          }
-          console.log('✅ Selecionando grua (com grua.grua):', gruaParaSelecionar)
-          setGruaSelecionada(gruaParaSelecionar)
-          
-          // Atualizar cache com grua selecionada
-          if (onDataLoaded) {
-            onDataLoaded({
-              obra,
-              documentos,
-              gruaSelecionada: gruaParaSelecionar
-            })
-          }
-        } else {
-          const gruaParaSelecionar = {
-            ...primeiraGrua,
-            relacao: primeiraGrua
-          }
-          console.log('✅ Selecionando grua (direto):', gruaParaSelecionar)
-          setGruaSelecionada(gruaParaSelecionar)
-          
-          // Atualizar cache com grua selecionada
-          if (onDataLoaded) {
-            onDataLoaded({
-              obra,
-              documentos,
-              gruaSelecionada: gruaParaSelecionar
-            })
-          }
-        }
-      } else {
-        console.log('⚠️ Nenhuma grua disponível para selecionar')
+    if (!obra || loading) return
+
+    const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+    if (gruasDisponiveis.length === 0) return
+
+    const idGruaItem = (g: any) => String(g?.grua?.id ?? g?.grua_id ?? g?.id ?? "")
+    let escolhida = gruasDisponiveis[0]
+    if (gruaIdPreferencial) {
+      const p = String(gruaIdPreferencial)
+      const found = gruasDisponiveis.find((g: any) => idGruaItem(g) === p)
+      if (found) escolhida = found
+    }
+
+    const precisaSelecionar =
+      !gruaSelecionada ||
+      (gruaIdPreferencial && String(gruaSelecionada.id) !== String(gruaIdPreferencial))
+
+    if (!precisaSelecionar) return
+
+    if (escolhida.grua) {
+      const gruaParaSelecionar = {
+        ...escolhida.grua,
+        relacao: escolhida,
+        name: escolhida.grua.modelo || escolhida.grua.name || `Grua ${escolhida.grua.id}`
+      }
+      setGruaSelecionada(gruaParaSelecionar)
+      if (onDataLoaded) {
+        onDataLoaded({ obra, documentos, gruaSelecionada: gruaParaSelecionar })
+      }
+    } else {
+      const gruaParaSelecionar = {
+        ...escolhida,
+        relacao: escolhida.relacao || escolhida
+      }
+      setGruaSelecionada(gruaParaSelecionar)
+      if (onDataLoaded) {
+        onDataLoaded({ obra, documentos, gruaSelecionada: gruaParaSelecionar })
       }
     }
-  }, [obra, gruaSelecionada, loading, documentos, onDataLoaded])
+  }, [obra, gruaSelecionada, loading, documentos, onDataLoaded, gruaIdPreferencial])
 
   const mapCategoriaLivroArquivo = (arquivo: any) => {
     const categoria = String(arquivo?.categoria || '').toLowerCase()
@@ -525,10 +531,6 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
         ...(gruasDisponiveis.length > 0 ? { gruasVinculadas: gruasDisponiveis } : {})
       }
       setObra(obraFinal)
-
-      if (gruasDisponiveis.length > 0 && !gruaSelecionada) {
-        setGruaSelecionada(gruasDisponiveis[0])
-      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
     } finally {
@@ -1780,7 +1782,10 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      const operador = funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))
+      const opObra = obra?.operador_obra_funcionario
+      const operador = opObra?.nome
+        ? { funcionario: { nome: opObra.nome, cargo: opObra.cargo || 'Operador' } }
+        : funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))
       const montador = funcionariosGrua.find((f: any) => 
         f.funcionario?.cargo?.toLowerCase().includes('montagem') || 
         f.funcionario?.cargo?.toLowerCase().includes('montador')
@@ -2394,6 +2399,7 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
   }) || []
 
   const operadorGruaEquipe = primeiroOperadorGruaNaEquipe(funcionariosGrua)
+  const operadorGruaExibicao = operadorObraOuEquipeGrua(obra, operadorGruaEquipe)
   const tecnicoManutencaoFunc = primeiroTecnicoManutencaoNaEquipe(funcionariosGrua)
 
   const iniciarEdicaoLivro = () => {
@@ -3020,14 +3026,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Operador da Grua</p>
                   <div className="p-3 bg-gray-50 rounded-md">
-                    {operadorGruaEquipe ? (
+                    {operadorGruaExibicao ? (
                       <>
                         <p className="font-medium">
-                          {operadorGruaEquipe.funcionario?.nome}
+                          {operadorGruaExibicao.funcionario?.nome}
                         </p>
                         <p className="text-sm text-gray-600">
-                          {operadorGruaEquipe.funcionario?.cargo}
+                          {operadorGruaExibicao.funcionario?.cargo}
                         </p>
+                        {operadorGruaExibicao.funcionario?.telefone && (
+                          <p className="text-sm text-gray-600">
+                            Telefone: {operadorGruaExibicao.funcionario.telefone}
+                          </p>
+                        )}
                       </>
                     ) : (
                       <p className="text-gray-500">Não informado</p>
@@ -3695,19 +3706,19 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
                 {/* Operador */}
                 <div>
                   <p className="text-xs text-gray-500 mb-2 font-semibold">Operador da Grua</p>
-                  {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador')) ? (
+                  {operadorGruaExibicao ? (
                     <div className="p-3 bg-gray-50 rounded-md">
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                           <p className="text-xs text-gray-500">Nome</p>
                           <p className="font-medium">
-                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.nome}
+                            {operadorGruaExibicao.funcionario?.nome}
                           </p>
                         </div>
                         <div>
                           <p className="text-xs text-gray-500">Cargo</p>
                           <p className="font-medium">
-                            {funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))?.funcionario?.cargo}
+                            {operadorGruaExibicao.funcionario?.cargo}
                           </p>
                         </div>
                       </div>

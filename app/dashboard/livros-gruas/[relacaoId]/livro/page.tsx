@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useToast } from "@/hooks/use-toast"
 import { useParams, useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -10,13 +9,13 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   ArrowLeft, 
   Wrench, 
-  BookOpen, 
   AlertCircle,
-  Building2,
-  MapPin,
-  Calendar
+  Building2
 } from "lucide-react"
 import { LivroGruaObra } from "@/components/livro-grua-obra"
+import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
+import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { useCurrentUser } from "@/hooks/use-current-user"
@@ -45,7 +44,6 @@ interface GruaCompleta {
 }
 
 export default function LivroGruaRelacaoPage() {
-  const { toast } = useToast()
   const params = useParams()
   const router = useRouter()
   const relacaoId = params.relacaoId as string
@@ -270,22 +268,53 @@ export default function LivroGruaRelacaoPage() {
         </Card>
       </div>
 
-      {/* Livro da Grua */}
+      {/* Livro da Grua + checklists/manutenções desta máquina (relação) */}
       {(() => {
-        // Tentar obter o ID da obra de diferentes formas
         const obraId = obra?.id || obra?.obra_id || grua?.obraAtual?.id || relacao?.obra_id
-        return obraId ? (
-          <LivroGruaObra obraId={obraId.toString()} />
-        ) : (
-          <Card>
-            <CardContent className="pt-6">
-              <div className="text-center py-8 text-gray-500">
-                <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                <p>Obra não encontrada para exibir o Livro da Grua</p>
-                <p className="text-xs mt-2 text-gray-400">Relacao ID: {relacaoId}</p>
-              </div>
-            </CardContent>
-          </Card>
+        const gruaIdStr = String(grua.id)
+
+        if (!obraId) {
+          return (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center py-8 text-gray-500">
+                  <AlertCircle className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>Obra não encontrada para exibir o Livro da Grua</p>
+                  <p className="text-xs mt-2 text-gray-400">Relacao ID: {relacaoId}</p>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        }
+
+        return (
+          <div className="space-y-6">
+            <LivroGruaObra
+              obraId={obraId.toString()}
+              gruaIdPreferencial={gruaIdStr}
+            />
+
+            <Tabs defaultValue="checklist" className="w-full">
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="checklist">Checklists diários</TabsTrigger>
+                <TabsTrigger value="manutencoes">Manutenções</TabsTrigger>
+              </TabsList>
+              <TabsContent value="checklist" className="mt-4">
+                <LivroGruaChecklistList
+                  gruaId={gruaIdStr}
+                  variant="preview"
+                  description={`${grua.fabricante} ${grua.modelo} · ID ${gruaIdStr}`}
+                />
+              </TabsContent>
+              <TabsContent value="manutencoes" className="mt-4">
+                <LivroGruaManutencaoList
+                  gruaId={gruaIdStr}
+                  variant="preview"
+                  description={`${grua.fabricante} ${grua.modelo} · ID ${gruaIdStr}`}
+                />
+              </TabsContent>
+            </Tabs>
+          </div>
         )
       })()}
 

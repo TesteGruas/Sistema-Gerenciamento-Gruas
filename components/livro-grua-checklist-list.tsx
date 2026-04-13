@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useCallback, memo } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,15 +17,27 @@ import {
   Calendar,
   User,
   CheckCircle2,
-  Filter,
   RefreshCw,
-  Download
+  Check,
+  X
 } from "lucide-react"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { CardLoader } from "@/components/ui/loader"
 import { ExportButton } from "@/components/export-button"
-import { useToast } from "@/hooks/use-toast"
-import { contagemChecklistLivroGrua, normalizeChecklistItensExtras } from "@/lib/checklist-livro-grua-shared"
+import {
+  CHECKLIST_LIVRO_GRUA_ITENS_FIXOS,
+  contagemChecklistLivroGrua,
+  normalizeChecklistItensExtras
+} from "@/lib/checklist-livro-grua-shared"
+import { cn } from "@/lib/utils"
+import { entradaNoMesReferencia } from "@/lib/livro-grua-entradas-filtro"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select"
 
 interface ChecklistDiario {
   id?: number
@@ -46,8 +58,35 @@ interface ChecklistDiario {
   checklist_itens_extras?: unknown
 }
 
+function chaveFuncionarioChecklist(c: ChecklistDiario): string {
+  const id = Number(c.funcionario_id)
+  if (!Number.isNaN(id) && id > 0) return String(id)
+  return `nome:${(c.funcionario_nome || "").trim().toLowerCase() || "_"}`
+}
+
+function itemFixoOk(c: ChecklistDiario, key: string): boolean {
+  const v = (c as unknown as Record<string, unknown>)[key]
+  return v === true || v === 1 || v === "1"
+}
+
+/** Abreviações para cabeçalhos compactos (título completo no tooltip) */
+const CHECKLIST_COL_ABREV: Record<string, string> = {
+  cabos: "Cb",
+  polias: "Pl",
+  estrutura: "Es",
+  movimentos: "Mv",
+  freios: "Fr",
+  limitadores: "Lm",
+  indicadores: "In",
+  aterramento: "At"
+}
+
 interface LivroGruaChecklistListProps {
   gruaId: string
+  /** Subtítulo opcional (ex.: modelo da grua e ID) */
+  description?: string
+  /** Lista somente leitura: sem coluna de ações, tabela mais compacta */
+  variant?: "default" | "preview"
   onNovoChecklist?: () => void
   onEditarChecklist?: (checklist: ChecklistDiario) => void
   onVisualizarChecklist?: (checklist: ChecklistDiario) => void
@@ -56,16 +95,18 @@ interface LivroGruaChecklistListProps {
 
 export function LivroGruaChecklistList({
   gruaId,
+  description,
+  variant = "default",
   onNovoChecklist,
   onEditarChecklist,
   onVisualizarChecklist,
   onExcluirChecklist
 }: LivroGruaChecklistListProps) {
-  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [checklists, setChecklists] = useState<ChecklistDiario[]>([])
-  const [filtroData, setFiltroData] = useState("")
+  const [filtroMes, setFiltroMes] = useState("")
+  const [filtroFuncionario, setFiltroFuncionario] = useState<string>("todos")
 
   // Carregar checklists
   const carregarChecklists = async () => {
@@ -81,19 +122,6 @@ export function LivroGruaChecklistList({
 
       // Converter entradas para formato de checklist
       const checklistsData = response.data.map((entrada: any) => {
-        // Debug: log para verificar se os campos estão chegando
-        console.log('🔍 Checklist entrada recebida:', {
-          id: entrada.id,
-          cabos: entrada.cabos,
-          polias: entrada.polias,
-          estrutura: entrada.estrutura,
-          movimentos: entrada.movimentos,
-          freios: entrada.freios,
-          limitadores: entrada.limitadores,
-          indicadores: entrada.indicadores,
-          aterramento: entrada.aterramento
-        })
-        
         return {
           id: entrada.id,
           grua_id: entrada.grua_id,
@@ -128,12 +156,30 @@ export function LivroGruaChecklistList({
     carregarChecklists()
   }, [gruaId])
 
-  // Filtrar checklists - memoizado para evitar recálculo desnecessário
-  const checklistsFiltrados = useMemo(() => checklists.filter(checklist => {
-    const matchData = !filtroData || checklist.data === filtroData
+  const opcoesFuncionario = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of checklists) {
+      const k = chaveFuncionarioChecklist(c)
+      const label =
+        (c.funcionario_nome || "").trim() ||
+        (c.funcionario_id != null && !Number.isNaN(Number(c.funcionario_id))
+          ? `ID ${c.funcionario_id}`
+          : "Sem nome")
+      if (!m.has(k)) m.set(k, label)
+    }
+    return [...m.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
+  }, [checklists])
 
-    return matchData
-  }), [checklists, filtroData])
+  const checklistsFiltrados = useMemo(
+    () =>
+      checklists.filter((checklist) => {
+        const matchMes = entradaNoMesReferencia(checklist.data, filtroMes)
+        const matchFun =
+          filtroFuncionario === "todos" || chaveFuncionarioChecklist(checklist) === filtroFuncionario
+        return matchMes && matchFun
+      }),
+    [checklists, filtroMes, filtroFuncionario]
+  )
 
   const contarItensMarcados = useCallback((checklist: ChecklistDiario): number => {
     return contagemChecklistLivroGrua(checklist as unknown as Record<string, unknown>).marcados
@@ -174,20 +220,38 @@ export function LivroGruaChecklistList({
     })
   }, [checklistsFiltrados, contarItensMarcados, totalItensChecklist])
 
+  const listaVaziaPorFiltro = checklists.length > 0 && checklistsFiltrados.length === 0
+
+  const isPreview = variant === "preview"
+  const mostrarAcoes =
+    !isPreview &&
+    !!(onVisualizarChecklist || onEditarChecklist || onExcluirChecklist)
+
   return (
-    <Card className="border-0 shadow-none checklist-card-no-gap">
-      <CardHeader className="px-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5" />
-              Checklists Diários
+    <Card
+      className={
+        isPreview
+          ? "overflow-hidden border border-muted-foreground/20 bg-card shadow-sm"
+          : "overflow-hidden shadow-sm"
+      }
+    >
+      <CardHeader className="space-y-1 border-b bg-muted/20 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold leading-tight sm:text-lg">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-primary" />
+              <span className="truncate">
+                {isPreview ? "Pré-visualização — checklists diários" : "Checklists diários"}
+              </span>
             </CardTitle>
-            <CardDescription>
-              Lista de checklists diários realizados nesta grua
+            <CardDescription className="text-xs sm:text-sm">
+              {description ??
+                (isPreview
+                  ? "Somente leitura. Filtre por mês ou funcionário."
+                  : "Lista de checklists diários realizados nesta grua")}
             </CardDescription>
           </div>
-          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
             {checklistsFiltrados.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -200,7 +264,7 @@ export function LivroGruaChecklistList({
               />
             )}
             {onNovoChecklist && (
-              <Button 
+              <Button
                 type="button"
                 className="w-full sm:w-auto"
                 onClick={(e) => {
@@ -209,120 +273,228 @@ export function LivroGruaChecklistList({
                   onNovoChecklist()
                 }}
               >
-                <Plus className="w-4 h-4 mr-2" />
+                <Plus className="mr-2 h-4 w-4" />
                 Novo Checklist
               </Button>
             )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-0">
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-2 mb-4 items-stretch sm:items-end">
-          <div className="flex-1">
-            <Label htmlFor="filtroData">Filtrar por Data</Label>
-            <Input
-              id="filtroData"
-              type="date"
-              value={filtroData}
-              onChange={(e) => setFiltroData(e.target.value)}
-              className="w-full"
-            />
+      <CardContent className="p-0">
+        <div className="border-b bg-muted/15 px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-xs">
+              <Label htmlFor="filtroMesChecklist" className="text-xs font-medium text-muted-foreground">
+                Mês
+              </Label>
+              <Input
+                id="filtroMesChecklist"
+                type="month"
+                value={filtroMes}
+                onChange={(e) => setFiltroMes(e.target.value)}
+                className="h-9 bg-background"
+              />
+            </div>
+            <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-xs">
+              <Label className="text-xs font-medium text-muted-foreground">Funcionário</Label>
+              <Select value={filtroFuncionario} onValueChange={setFiltroFuncionario}>
+                <SelectTrigger className="h-9 w-full bg-background">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {opcoesFuncionario.map(([k, nome]) => (
+                    <SelectItem key={k} value={k}>
+                      {nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 w-full shrink-0 sm:ml-auto sm:w-auto"
+              onClick={() => {
+                setFiltroMes("")
+                setFiltroFuncionario("todos")
+              }}
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Limpar filtros
+            </Button>
           </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setFiltroData("")
-            }}
-            className="h-9 w-full sm:w-auto"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
         </div>
 
-        {/* Erro */}
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="m-4">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {/* Loading */}
         {loading && <CardLoader />}
 
-        {/* Tabela */}
         {!loading && checklistsFiltrados.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <CheckCircle2 className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <p>Nenhum checklist encontrado</p>
-            {onNovoChecklist && (
-              <Button 
+          <div className="mx-4 my-6 rounded-lg border border-dashed bg-muted/20 px-6 py-12 text-center text-muted-foreground">
+            <CheckCircle2 className="mx-auto mb-3 h-10 w-10 opacity-50" />
+            <p className="text-sm">
+              {listaVaziaPorFiltro ? "Nenhum checklist corresponde aos filtros." : "Nenhum checklist encontrado."}
+            </p>
+            {onNovoChecklist && !listaVaziaPorFiltro && (
+              <Button
                 type="button"
+                className="mt-4"
+                variant="outline"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   onNovoChecklist()
-                }} 
-                variant="outline" 
-                className="mt-4"
+                }}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Criar Primeiro Checklist
+                <Plus className="mr-2 h-4 w-4" />
+                Criar primeiro checklist
               </Button>
             )}
           </div>
         )}
 
         {!loading && checklistsFiltrados.length > 0 && (
-          <>
-            {/* Desktop: Tabela */}
-            <div className="hidden md:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Itens Verificados</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {checklistsFiltrados.map((checklist) => {
-                    const itensMarcados = contarItensMarcados(checklist)
-                    const totalItens = totalItensChecklist(checklist)
-                    const todosMarcados = itensMarcados === totalItens
-                    
-                    return (
-                      <TableRow key={checklist.id}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            {new Date(checklist.data).toLocaleDateString('pt-BR')}
+          <div className="overflow-x-auto px-1 pb-1 sm:px-2">
+            <Table
+              className={cn(
+                "[&_tbody_tr:nth-child(even)]:bg-muted/25",
+                isPreview
+                  ? "min-w-[720px] text-sm [&_td]:py-2 [&_th]:h-10 [&_th]:px-1.5 [&_th]:py-2 [&_th]:text-[11px] [&_td]:px-1.5"
+                  : "min-w-[800px] [&_th]:text-xs [&_td]:text-sm"
+              )}
+            >
+              <TableHeader>
+                <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="whitespace-nowrap pl-3 font-semibold">Data</TableHead>
+                  <TableHead className="min-w-[6.5rem] pl-2 font-semibold">Quem</TableHead>
+                  {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map(({ key, label }) => (
+                    <TableHead
+                      key={key}
+                      className="w-9 min-w-[2.25rem] max-w-[2.5rem] px-0.5 text-center font-semibold"
+                      title={label}
+                    >
+                      <span className="tabular-nums tracking-tight">{CHECKLIST_COL_ABREV[key] ?? key.slice(0, 2)}</span>
+                    </TableHead>
+                  ))}
+                  <TableHead
+                    className="min-w-[5.5rem] max-w-[8rem] text-left text-xs font-semibold"
+                    title="Itens adicionais da obra"
+                  >
+                    Outros
+                  </TableHead>
+                  <TableHead className="whitespace-nowrap text-center font-semibold">Total</TableHead>
+                  <TableHead className="pr-3 text-center font-semibold">Status</TableHead>
+                  {mostrarAcoes && <TableHead className="text-right font-semibold">Ações</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {checklistsFiltrados.map((checklist) => {
+                  const itensMarcados = contarItensMarcados(checklist)
+                  const totalItens = totalItensChecklist(checklist)
+                  const todosMarcados = itensMarcados === totalItens
+                  const extras = normalizeChecklistItensExtras(checklist.checklist_itens_extras)
+
+                  return (
+                    <TableRow
+                      key={checklist.id}
+                      className="border-b border-border/60 transition-colors hover:bg-muted/35"
+                    >
+                      <TableCell className="whitespace-nowrap pl-3 text-muted-foreground tabular-nums">
+                        <div className="flex items-center gap-1.5">
+                          {!isPreview && (
+                            <Calendar className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                          )}
+                          {new Date(checklist.data).toLocaleDateString("pt-BR")}
+                        </div>
+                      </TableCell>
+                      <TableCell className="max-w-[8.5rem] pl-2">
+                        <div className="flex items-center gap-1.5">
+                          {!isPreview && (
+                            <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-70" />
+                          )}
+                          <span className="truncate text-foreground" title={checklist.funcionario_nome || ""}>
+                            {checklist.funcionario_nome || "N/A"}
+                          </span>
+                        </div>
+                      </TableCell>
+                      {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map(({ key, label }) => {
+                        const ok = itemFixoOk(checklist, key)
+                        return (
+                          <TableCell key={key} className="p-0">
+                            <div
+                              className="flex h-9 items-center justify-center"
+                              title={`${label}: ${ok ? "Sim" : "Não"}`}
+                            >
+                              {ok ? (
+                                <Check
+                                  className="h-3.5 w-3.5 text-emerald-600"
+                                  strokeWidth={2.5}
+                                  aria-label={`${label}: sim`}
+                                />
+                              ) : (
+                                <X
+                                  className="h-3.5 w-3.5 text-muted-foreground/65"
+                                  strokeWidth={2.5}
+                                  aria-label={`${label}: não`}
+                                />
+                              )}
+                            </div>
+                          </TableCell>
+                        )
+                      })}
+                      <TableCell className="max-w-[9rem] align-middle py-1.5">
+                        {extras.length === 0 ? (
+                          <span className="text-muted-foreground/80">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {extras.map((e) => (
+                              <span
+                                key={e.id}
+                                className="inline-flex max-w-full items-center gap-0.5 rounded-md border border-border/80 bg-background px-1.5 py-0.5 text-[10px] leading-tight"
+                                title={`${e.label}: ${e.ok ? "Sim" : "Não"}`}
+                              >
+                                <span className="truncate text-muted-foreground">{e.label}</span>
+                                {e.ok ? (
+                                  <Check className="h-2.5 w-2.5 shrink-0 text-emerald-600" />
+                                ) : (
+                                  <X className="h-2.5 w-2.5 shrink-0 text-muted-foreground" />
+                                )}
+                              </span>
+                            ))}
                           </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <User className="w-4 h-4 text-gray-400" />
-                            {checklist.funcionario_nome || 'N/A'}
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {itensMarcados}/{totalItens}
-                            </span>
-                            <Badge variant={todosMarcados ? "default" : "secondary"}>
-                              {todosMarcados ? "Completo" : "Incompleto"}
-                            </Badge>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className={todosMarcados ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
-                            {todosMarcados ? "OK" : "Pendente"}
+                        )}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <div className="inline-flex flex-wrap items-center justify-center gap-1.5">
+                          <span className="text-sm font-semibold tabular-nums text-foreground">
+                            {itensMarcados}/{totalItens}
+                          </span>
+                          <Badge
+                            variant={todosMarcados ? "default" : "secondary"}
+                            className="h-5 px-1.5 text-[10px] font-normal"
+                          >
+                            {todosMarcados ? "Completo" : "Incompleto"}
                           </Badge>
-                        </TableCell>
+                        </div>
+                      </TableCell>
+                      <TableCell className="pr-3 text-center">
+                        <Badge
+                          className={cn(
+                            "h-6 px-2 text-xs font-medium",
+                            todosMarcados ? "bg-emerald-100 text-emerald-900" : "bg-amber-100 text-amber-900"
+                          )}
+                        >
+                          {todosMarcados ? "OK" : "Pendente"}
+                        </Badge>
+                      </TableCell>
+                      {mostrarAcoes && (
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             {onVisualizarChecklist && (
@@ -332,7 +504,7 @@ export function LivroGruaChecklistList({
                                 size="sm"
                                 onClick={() => onVisualizarChecklist(checklist)}
                               >
-                                <Eye className="w-4 h-4" />
+                                <Eye className="h-4 w-4" />
                               </Button>
                             )}
                             {onEditarChecklist && (
@@ -342,7 +514,7 @@ export function LivroGruaChecklistList({
                                 size="sm"
                                 onClick={() => onEditarChecklist(checklist)}
                               >
-                                <Edit className="w-4 h-4" />
+                                <Edit className="h-4 w-4" />
                               </Button>
                             )}
                             {onExcluirChecklist && (
@@ -351,118 +523,23 @@ export function LivroGruaChecklistList({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => {
-                                  if (confirm('Tem certeza que deseja excluir este checklist?')) {
+                                  if (confirm("Tem certeza que deseja excluir este checklist?")) {
                                     onExcluirChecklist(checklist)
                                   }
                                 }}
                               >
-                                <Trash2 className="w-4 h-4 text-red-500" />
+                                <Trash2 className="h-4 w-4 text-red-500" />
                               </Button>
                             )}
                           </div>
                         </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Mobile: Cards */}
-            <div className="md:hidden space-y-3">
-              {checklistsFiltrados.map((checklist) => {
-                const itensMarcados = contarItensMarcados(checklist)
-                const totalItens = totalItensChecklist(checklist)
-                const todosMarcados = itensMarcados === totalItens
-                
-                return (
-                  <Card key={checklist.id} className="border-l-4 border-l-blue-500">
-                    <CardContent className="p-4">
-                      <div className="space-y-3">
-                        {/* Header com Data e Status */}
-                        <div className="flex items-start justify-between">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-gray-400" />
-                            <span className="font-medium text-sm">
-                              {new Date(checklist.data).toLocaleDateString('pt-BR')}
-                            </span>
-                          </div>
-                          <Badge className={todosMarcados ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
-                            {todosMarcados ? "OK" : "Pendente"}
-                          </Badge>
-                        </div>
-
-                        {/* Funcionário */}
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm text-gray-700">
-                            {checklist.funcionario_nome || 'N/A'}
-                          </span>
-                        </div>
-
-                        {/* Itens Verificados */}
-                        <div className="flex items-center justify-between bg-gray-50 p-2 rounded-md">
-                          <span className="text-xs text-gray-600">Itens Verificados</span>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium">
-                              {itensMarcados}/{totalItens}
-                            </span>
-                            <Badge variant={todosMarcados ? "default" : "secondary"} className="text-xs">
-                              {todosMarcados ? "Completo" : "Incompleto"}
-                            </Badge>
-                          </div>
-                        </div>
-
-                        {/* Ações */}
-                        <div className="grid grid-cols-3 gap-2 pt-2 border-t">
-                          {onVisualizarChecklist && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => onVisualizarChecklist(checklist)}
-                              className="w-full px-2 text-xs"
-                            >
-                              <Eye className="w-4 h-4" />
-                              Ver
-                            </Button>
-                          )}
-                          {onEditarChecklist && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => onEditarChecklist(checklist)}
-                              className="w-full px-2 text-xs"
-                            >
-                              <Edit className="w-4 h-4" />
-                              Editar
-                            </Button>
-                          )}
-                          {onExcluirChecklist && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => {
-                                if (confirm('Tem certeza que deseja excluir este checklist?')) {
-                                  onExcluirChecklist(checklist)
-                                }
-                              }}
-                              className="w-full px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                              Excluir
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                )
-              })}
-            </div>
-          </>
+                      )}
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>

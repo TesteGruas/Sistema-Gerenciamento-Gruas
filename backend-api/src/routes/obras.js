@@ -415,6 +415,7 @@ const obraSchema = Joi.object({
   observacoes: Joi.string().allow('', null).optional(),
   responsavel_id: Joi.number().integer().positive().allow(null).optional(),
   responsavel_nome: Joi.string().allow('', null).optional(),
+  operador_obra_funcionario_id: Joi.number().integer().positive().allow(null).optional(),
   created_at: Joi.date().optional(),
   updated_at: Joi.date().optional(),
   // Dados da grua (mantido para compatibilidade)
@@ -576,6 +577,7 @@ const obraUpdateSchema = Joi.object({
   observacoes: Joi.string().allow('', null).optional(),
   responsavel_id: Joi.number().integer().positive().allow(null).optional(),
   responsavel_nome: Joi.string().allow('', null).optional(),
+  operador_obra_funcionario_id: Joi.number().integer().positive().allow(null).optional(),
   latitude: Joi.number().min(-90).max(90).allow(null).optional(),
   longitude: Joi.number().min(-180).max(180).allow(null).optional(),
   raio_permitido: Joi.number().integer().positive().optional(),
@@ -1315,6 +1317,14 @@ router.get('/:id', authenticateToken, async (req, res) => {
           crea_empresa,
           created_at,
           updated_at
+        ),
+        operador_obra_funcionario:funcionarios!obras_operador_obra_funcionario_id_fkey (
+          id,
+          nome,
+          cargo,
+          telefone,
+          email,
+          status
         )
       `)
       .eq('id', id)
@@ -1876,6 +1886,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
+      operador_obra_funcionario_id: value.operador_obra_funcionario_id ?? null,
       // Campos de geolocalização
       latitude: coordenadasResolvidas.latitude,
       longitude: coordenadasResolvidas.longitude,
@@ -2857,6 +2868,8 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
+      operador_obra_funcionario_id:
+        value.operador_obra_funcionario_id !== undefined ? value.operador_obra_funcionario_id : undefined,
       // Campos de geolocalização
       latitude: coordenadasResolvidas.latitude ?? undefined,
       longitude: coordenadasResolvidas.longitude ?? undefined,

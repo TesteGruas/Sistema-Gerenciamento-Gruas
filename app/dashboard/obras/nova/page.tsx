@@ -36,7 +36,8 @@ import {
   UserCheck,
   Phone,
   Mail,
-  Edit
+  Edit,
+  HardHat
 } from "lucide-react"
 import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
@@ -513,6 +514,14 @@ export default function NovaObraPage() {
   const [formResponsavelObra, setFormResponsavelObra] = useState<ResponsavelObraCreateData>({
     nome: '', usuario: '', email: '', telefone: ''
   })
+
+  /** Um funcionário cadastrado como operador da obra (empresa) — exibido no Livro da Grua */
+  const [operadorObraFuncionario, setOperadorObraFuncionario] = useState<{
+    id: string
+    userId: string
+    name: string
+    role: string
+  } | null>(null)
   
   // Estados para orçamento aprovado
   const [orcamentoAprovado, setOrcamentoAprovado] = useState<Orcamento | null>(null)
@@ -1106,6 +1115,7 @@ export default function NovaObraPage() {
         dados_montagem_equipamento: dadosMontagemEquipamento,
         // Lista de funcionários
         funcionarios: funcionariosSelecionados,
+        operadorObraFuncionario,
         // Valores - converter para formato do backend
         custos_mensais: custosMensais.map(custo => ({
           item: custo.item,
@@ -1173,7 +1183,8 @@ export default function NovaObraPage() {
         abaFuncionarios: {
           responsaveis_obra: responsaveisObra,
           funcionarios: funcionariosSelecionados,
-          sinaleiros: sinaleirosConsolidadosParaObra
+          sinaleiros: sinaleirosConsolidadosParaObra,
+          operador_obra: operadorObraFuncionario
         },
         payloadCriacaoObra: obraData
       }
@@ -2155,6 +2166,7 @@ export default function NovaObraPage() {
     })
     setSinaleiros([])
     setResponsaveisObra([])
+    setOperadorObraFuncionario(null)
     setGruasSelecionadas([])
     setFuncionariosSelecionados([])
     setClienteSelecionado(null)
@@ -4164,6 +4176,59 @@ startxref
                     }
                   }}
                 />
+              </CardContent>
+            </Card>
+
+            {/* Seção: Operador da Obra */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <HardHat className="w-5 h-5 text-amber-600" />
+                  Operador da Obra
+                </CardTitle>
+                <CardDescription>
+                  Funcionário da empresa cadastrado como operador nesta obra (aparece no Livro da Grua). Opcional.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!operadorObraFuncionario ? (
+                  <div>
+                    <Label htmlFor="operadorObraSearch">Buscar operador</Label>
+                    <FuncionarioSearch
+                      onFuncionarioSelect={(f) => setOperadorObraFuncionario(f)}
+                      placeholder="Buscar por nome (cargo operador)..."
+                      className="mt-1"
+                      onlyActive={true}
+                      onlyRealEmployees={true}
+                      allowedRoles={['Operador', 'Auxiliar Operacional']}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Selecione um funcionário com cargo de operador ou auxiliar operacional
+                    </p>
+                  </div>
+                ) : (
+                  <div className="flex gap-2 p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border-amber-200/80">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <HardHat className="w-4 h-4 text-amber-700" />
+                        <div>
+                          <p className="font-medium text-amber-950 dark:text-amber-100">{operadorObraFuncionario.name}</p>
+                          <p className="text-sm text-amber-800/90 dark:text-amber-200/80">{operadorObraFuncionario.role}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setOperadorObraFuncionario(null)}
+                      className="shrink-0"
+                    >
+                      <X className="w-4 h-4 mr-1" />
+                      Remover
+                    </Button>
+                  </div>
+                )}
               </CardContent>
             </Card>
 

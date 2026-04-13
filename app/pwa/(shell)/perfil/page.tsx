@@ -65,6 +65,38 @@ import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
 import { sessionPersistence } from "@/lib/session-persistence"
 import { SignaturePad } from "@/components/signature-pad"
 
+function formatarCpfExibicao(cpf: string | null | undefined): string {
+  if (!cpf || typeof cpf !== "string") return "Não informado"
+  const d = cpf.replace(/\D/g, "")
+  if (d.length !== 11) return cpf
+  return d.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4")
+}
+
+function formatarMoedaBrl(val: number | null | undefined): string {
+  if (val == null || Number.isNaN(Number(val))) return "Não informado"
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(val))
+}
+
+function formatarTelefoneBr(val: string | null | undefined): string {
+  if (!val || typeof val !== "string") return "Não informado"
+  const d = val.replace(/\D/g, "")
+  if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
+  if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3")
+  return val
+}
+
+/** Mescla objetos priorizando valores não vazios de `extra` */
+function mergePerfilPreferindoExtra(base: Record<string, unknown>, extra: Record<string, unknown>) {
+  const out: Record<string, unknown> = { ...base }
+  for (const [k, v] of Object.entries(extra)) {
+    if (v === undefined || v === null) continue
+    if (typeof v === "string" && v.trim() === "") continue
+    if (Array.isArray(v) && v.length === 0) continue
+    out[k] = v
+  }
+  return out
+}
+
 // Função helper para calcular dias até vencimento
 function calcularDiasParaVencimento(dataValidade: string): number {
   if (!dataValidade) return Infinity
@@ -300,78 +332,108 @@ function PWAPerfilPageContent() {
   const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false)
   const [alterandoSenha, setAlterandoSenha] = useState(false)
 
-  // Carregar dados completos do perfil via endpoint unificado (funcionário ou responsável)
+  // Perfil: GET /api/auth/me (tabela usuarios + vínculo funcionário) + /api/auth/meu-perfil (obras, etc.)
   useEffect(() => {
     const carregarPerfil = async () => {
-      if (!user || typeof window === 'undefined') {
-        setLoadingFuncionario(false)
-        return
-      }
-
-      if (!user.id) {
+      if (!user || typeof window === "undefined") {
         setLoadingFuncionario(false)
         return
       }
 
       try {
         setLoadingFuncionario(true)
-        const token = localStorage.getItem('access_token')
+        const token = localStorage.getItem("access_token")
         if (!token) {
           setLoadingFuncionario(false)
           return
         }
 
-        const response = await fetch('/api/auth/meu-perfil', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        })
-        const result = await response.json()
+        const headers = { Authorization: `Bearer ${token}` }
+        let merged: Record<string, unknown> | null = null
+
+        const meRes = await fetch("/api/auth/me", { headers })
+        const meJson = await meRes.json().catch(() => ({}))
+
+        if (meJson.success && meJson.data) {
+          const { profile: prof, perfil: perfilAcesso, user: apiUser } = meJson.data
+          if (prof && typeof prof === "object") {
+            const p = prof as Record<string, unknown>
+            merged = {
+              tipo: meJson.data.eh_funcionario ? "funcionario" : "usuario",
+              nome: (p.nome as string) || (apiUser as any)?.nome,
+              email: (p.email as string) || (apiUser as any)?.email,
+              telefone: (p.telefone as string) || "",
+              cargo: (p.cargo as string) || (apiUser as any)?.cargo,
+              cpf: p.cpf,
+              data_admissao: p.data_admissao,
+              data_nascimento: p.data_nascimento,
+              endereco: p.endereco,
+              cidade: p.cidade,
+              estado: p.estado,
+              cep: p.cep,
+              status: p.status,
+              turno: p.turno,
+              salario: p.salario,
+              funcionario_id: p.funcionario_id,
+              usuario_id: p.id,
+              foto_url: p.foto_perfil ?? p.foto_url,
+              perfil_acesso_nome: perfilAcesso?.nome,
+              supabase_auth_user_id: (apiUser as any)?.supabase_auth_user_id ?? (apiUser as any)?.identities?.[0]?.id
+            }
+            const fid = p.funcionario_id
+            if (fid != null && Number(fid) > 0) {
+              setFuncionarioId(Number(fid))
+            }
+            if (meJson.data.is_responsavel_obra) {
+              setIsResponsavelObra(true)
+            } else {
+              setIsResponsavelObra(false)
+            }
+          }
+        }
+
+        const mpRes = await fetch("/api/auth/meu-perfil", { headers })
+        const result = await mpRes.json().catch(() => ({}))
 
         if (result.success && result.data) {
-          const perfil = result.data
-
-          if (perfil.tipo === 'responsavel_obra') {
+          const perfil = result.data as Record<string, unknown>
+          if (perfil.tipo === "responsavel_obra") {
             setIsResponsavelObra(true)
-            setFuncionarioCompleto({
+            merged = mergePerfilPreferindoExtra(merged || {}, {
               ...perfil,
-              cargo: perfil.cargo || 'Responsável de Obra'
+              cargo: perfil.cargo || "Responsável de Obra"
             })
-            setUserData({
-              telefone: perfil.telefone || '',
-              email: perfil.email || user?.email || ''
-            })
-          } else if (perfil.tipo === 'funcionario') {
-            setFuncionarioId(perfil.funcionario_id || perfil.id)
-            setFuncionarioCompleto(perfil)
-            setUserData({
-              telefone: perfil.telefone || '',
-              email: perfil.email || user?.email || ''
-            })
+          } else if (perfil.tipo === "funcionario") {
+            setIsResponsavelObra(false)
+            const fid = perfil.funcionario_id ?? perfil.id
+            if (fid != null && Number(fid) > 0) {
+              setFuncionarioId(Number(fid))
+            }
+            merged = mergePerfilPreferindoExtra(merged || {}, perfil)
           } else {
-            setFuncionarioCompleto({
-              nome: perfil.nome,
-              email: perfil.email,
-              telefone: perfil.telefone,
-              cargo: perfil.cargo || 'Usuário'
-            })
-            setUserData({
-              telefone: perfil.telefone || '',
-              email: perfil.email || user?.email || ''
-            })
+            merged = mergePerfilPreferindoExtra(merged || {}, perfil)
           }
-        } else {
-          console.warn('[PERFIL] Endpoint meu-perfil não retornou dados, usando fallback do localStorage')
+        } else if (!merged) {
+          console.warn("[PERFIL] meu-perfil sem dados e /me sem perfil — usando localStorage")
+        }
+
+        if (merged) {
+          setFuncionarioCompleto(merged)
+          setUserData({
+            telefone: String(merged.telefone ?? ""),
+            email: String(merged.email ?? user?.email ?? "")
+          })
         }
       } catch (error) {
-        console.warn('[PERFIL] Erro ao carregar perfil, usando dados do localStorage:', error)
+        console.warn("[PERFIL] Erro ao carregar perfil:", error)
       } finally {
         setLoadingFuncionario(false)
       }
     }
 
     carregarPerfil()
-    
-    // Carregar estado de simulação do localStorage
-    const simulatingManager = localStorage.getItem('simulating_manager') === 'true'
+
+    const simulatingManager = localStorage.getItem("simulating_manager") === "true"
     setIsSimulatingManager(simulatingManager)
   }, [user])
 
@@ -1205,133 +1267,238 @@ function PWAPerfilPageContent() {
         <p className="text-gray-600">Gerencie suas informações pessoais</p>
       </div>
 
-      {/* Foto e Informações Principais */}
-      <Card>
-        <CardContent className="p-6">
-          <div className="flex flex-col sm:flex-row items-center gap-6">
-            {/* Foto de Perfil */}
-            <div className="relative">
-              <div className="w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white text-3xl font-bold">
-                {user?.nome ? user.nome.charAt(0).toUpperCase() : 'U'}
+      {/* Perfil — hero + blocos */}
+      <Card className="overflow-hidden border-border/80 shadow-sm">
+        <CardContent className="p-0">
+          <div className="border-b border-border/60 bg-gradient-to-br from-primary/5 via-muted/20 to-background px-4 py-6 sm:px-6">
+            <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex flex-col items-center gap-4 sm:flex-row sm:items-center sm:gap-5">
+                <div className="relative shrink-0">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/80 text-3xl font-bold text-primary-foreground shadow-md ring-4 ring-background">
+                    {(funcionarioCompleto?.nome || user?.nome)?.charAt(0).toUpperCase() || "U"}
+                  </div>
+                  <button
+                    type="button"
+                    className="absolute -bottom-0.5 -right-0.5 rounded-full bg-primary p-2.5 text-primary-foreground shadow-lg ring-2 ring-background transition hover:bg-primary/90"
+                    title="Alterar foto"
+                  >
+                    <Camera className="h-4 w-4" />
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1 text-center sm:text-left">
+                  <h2 className="text-balance text-2xl font-bold tracking-tight text-foreground">
+                    {funcionarioCompleto?.nome || user?.nome || "Usuário"}
+                  </h2>
+                  <p className="mt-1 text-muted-foreground">
+                    {funcionarioCompleto?.cargo || user?.cargo || "Sem cargo definido"}
+                  </p>
+                  <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
+                    <Badge
+                      variant="outline"
+                      className={
+                        String(funcionarioCompleto?.status || "")
+                          .toLowerCase()
+                          .includes("inativ")
+                          ? "border-red-200 bg-red-50 text-red-800"
+                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                      }
+                    >
+                      <CheckCircle className="mr-1 h-3 w-3" />
+                      {String(funcionarioCompleto?.status || "Ativo")}
+                    </Badge>
+                    {funcionarioId != null && funcionarioId > 0 ? (
+                      <Badge variant="outline" className="font-mono text-xs" title="Cadastro de funcionário">
+                        Matr. {funcionarioId}
+                      </Badge>
+                    ) : null}
+                    {funcionarioCompleto?.usuario_id != null ? (
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        Conta #{String(funcionarioCompleto.usuario_id)}
+                      </Badge>
+                    ) : null}
+                  </div>
+                </div>
               </div>
-              <button 
-                className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white shadow-lg hover:bg-blue-700"
-                title="Alterar foto"
-              >
-                <Camera className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Informações */}
-            <div className="flex-1 text-center sm:text-left">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {funcionarioCompleto?.nome || user?.nome || 'Usuário'}
-              </h2>
-              <p className="text-gray-600 mb-2">
-                {funcionarioCompleto?.cargo || user?.cargo || 'Sem cargo'}
-              </p>
-              <div className="flex flex-wrap gap-2 justify-center sm:justify-start">
-                <Badge variant="outline" className="bg-green-50 border-green-200 text-green-700">
-                  <CheckCircle className="w-3 h-3 mr-1" />
-                  Ativo
-                </Badge>
-                <Badge variant="outline">
-                  ID: {user?.id || 'N/A'}
-                </Badge>
+              <div className="flex w-full flex-wrap justify-center gap-2 sm:w-auto sm:justify-end">
+                {!isEditing ? (
+                  <Button variant="outline" size="sm" className="min-w-[7rem]" onClick={() => setIsEditing(true)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    Editar
+                  </Button>
+                ) : (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setIsEditing(false)}>
+                      <X className="mr-2 h-4 w-4" />
+                      Cancelar
+                    </Button>
+                    <Button size="sm" className="min-w-[7rem]" onClick={handleSave}>
+                      <Save className="mr-2 h-4 w-4" />
+                      Salvar
+                    </Button>
+                  </>
+                )}
               </div>
-            </div>
-
-            {/* Botões de Ação */}
-            <div className="flex gap-2">
-              {!isEditing ? (
-                <Button variant="outline" onClick={() => setIsEditing(true)}>
-                  <Edit className="w-4 h-4 mr-2" />
-                  Editar
-                </Button>
-              ) : (
-                <>
-                  <Button variant="outline" onClick={() => setIsEditing(false)}>
-                    <X className="w-4 h-4 mr-2" />
-                    Cancelar
-                  </Button>
-                  <Button onClick={handleSave}>
-                    <Save className="w-4 h-4 mr-2" />
-                    Salvar
-                  </Button>
-                </>
-              )}
             </div>
           </div>
 
-          {/* Dados do Usuário */}
-          <div className="mt-6 pt-6 border-t">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="email">
-                  <Mail className="w-4 h-4 inline mr-2" />
-                  E-mail
-                </Label>
-                {isEditing ? (
-                  <Input
-                    id="email"
-                    type="email"
-                    value={userData.email}
-                    onChange={(e) => setUserData({...userData, email: e.target.value})}
-                    className="mt-1"
-                  />
-                ) : (
-                  <p className="mt-1 text-gray-900">
-                    {funcionarioCompleto?.email || userData.email || user?.email || 'Não informado'}
+          <div className="space-y-4 p-4 sm:p-6">
+            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
+                <Mail className="h-4 w-4 shrink-0 text-primary" />
+                Contato
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
+                    E-mail
+                  </Label>
+                  {isEditing ? (
+                    <Input
+                      id="email"
+                      type="email"
+                      value={userData.email}
+                      onChange={(e) => setUserData({ ...userData, email: e.target.value })}
+                      className="h-9"
+                    />
+                  ) : (
+                    <p className="text-sm font-medium text-foreground break-all">
+                      {funcionarioCompleto?.email || userData.email || user?.email || "Não informado"}
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="telefone" className="text-xs font-medium text-muted-foreground">
+                    Telefone
+                  </Label>
+                  {isEditing ? (
+                    <Input
+                      id="telefone"
+                      type="tel"
+                      value={userData.telefone}
+                      onChange={(e) => setUserData({ ...userData, telefone: e.target.value })}
+                      className="h-9"
+                    />
+                  ) : (
+                    <p className="text-sm font-medium text-foreground">
+                      {formatarTelefoneBr(
+                        String(funcionarioCompleto?.telefone || userData.telefone || "")
+                      )}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
+                <Briefcase className="h-4 w-4 shrink-0 text-primary" />
+                Vínculo e trabalho
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Cargo</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {funcionarioCompleto?.cargo || user?.cargo || "Não informado"}
                   </p>
-                )}
-              </div>
-
-              <div>
-                <Label htmlFor="telefone">
-                  <Phone className="w-4 h-4 inline mr-2" />
-                  Telefone
-                </Label>
-                {isEditing ? (
-                  <Input
-                    id="telefone"
-                    type="tel"
-                    value={userData.telefone}
-                    onChange={(e) => setUserData({...userData, telefone: e.target.value})}
-                    className="mt-1"
-                  />
-                ) : (
-                  <p className="mt-1 text-gray-900">
-                    {funcionarioCompleto?.telefone || userData.telefone || 'Não informado'}
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">
+                    {isResponsavelObra ? "Usuário / login" : "Data de admissão"}
                   </p>
-                )}
+                  <p className="text-sm font-medium tabular-nums text-foreground">
+                    {isResponsavelObra
+                      ? funcionarioCompleto?.usuario_login || "Não informado"
+                      : funcionarioCompleto?.data_admissao
+                        ? new Date(String(funcionarioCompleto.data_admissao)).toLocaleDateString("pt-BR")
+                        : (user as any)?.data_admissao
+                          ? new Date(String((user as any).data_admissao)).toLocaleDateString("pt-BR")
+                          : (user as any)?.dataAdmissao
+                            ? new Date(String((user as any).dataAdmissao)).toLocaleDateString("pt-BR")
+                            : "Não informado"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Turno</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {(funcionarioCompleto as any)?.turno || "Não informado"}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Salário base</p>
+                  <p className="text-sm font-semibold tabular-nums text-foreground">
+                    {formatarMoedaBrl((funcionarioCompleto as any)?.salario)}
+                  </p>
+                </div>
+                <div className="space-y-1 sm:col-span-2 lg:col-span-2">
+                  <p className="text-xs font-medium text-muted-foreground">Perfil de acesso</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {(funcionarioCompleto as any)?.perfil_acesso_nome ||
+                      (user as any)?.perfil?.nome ||
+                      "Não informado"}
+                  </p>
+                </div>
               </div>
+            </section>
 
-              <div>
-                <Label>
-                  <Briefcase className="w-4 h-4 inline mr-2" />
-                  Cargo
-                </Label>
-                <p className="mt-1 text-gray-900">
-                  {funcionarioCompleto?.cargo || user?.cargo || 'Não informado'}
-                </p>
+            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
+                <User className="h-4 w-4 shrink-0 text-primary" />
+                Documentação
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">CPF</p>
+                  <p className="font-mono text-sm font-medium tracking-wide text-foreground">
+                    {formatarCpfExibicao((funcionarioCompleto as any)?.cpf)}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Data de nascimento</p>
+                  <p className="text-sm font-medium tabular-nums text-foreground">
+                    {(funcionarioCompleto as any)?.data_nascimento
+                      ? new Date(String((funcionarioCompleto as any).data_nascimento)).toLocaleDateString(
+                          "pt-BR"
+                        )
+                      : "Não informado"}
+                  </p>
+                </div>
               </div>
+            </section>
 
-              <div>
-                <Label>
-                  <Calendar className="w-4 h-4 inline mr-2" />
-                  {isResponsavelObra ? 'Usuário / Login' : 'Data de Admissão'}
-                </Label>
-                <p className="mt-1 text-gray-900">
-                  {isResponsavelObra
-                    ? (funcionarioCompleto?.usuario_login || 'Não informado')
-                    : (funcionarioCompleto?.data_admissao 
-                        ? new Date(funcionarioCompleto.data_admissao).toLocaleDateString('pt-BR')
-                        : (user as any).dataAdmissao 
-                          ? new Date((user as any).dataAdmissao).toLocaleDateString('pt-BR')
-                          : 'Não informado')}
-                </p>
+            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
+              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
+                <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                Localização
+              </h3>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-1 sm:col-span-2">
+                  <p className="text-xs font-medium text-muted-foreground">Endereço</p>
+                  <p className="text-sm leading-relaxed text-foreground">
+                    {(funcionarioCompleto as any)?.endereco || (
+                      <span className="text-muted-foreground">Não informado</span>
+                    )}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Cidade / UF</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {[(funcionarioCompleto as any)?.cidade, (funcionarioCompleto as any)?.estado]
+                      .filter(Boolean)
+                      .join(" / ") || (
+                      <span className="font-normal text-muted-foreground">Não informado</span>
+                    )}
+                  </p>
+                </div>
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">CEP</p>
+                  <p className="font-mono text-sm font-medium text-foreground">
+                    {(funcionarioCompleto as any)?.cep || (
+                      <span className="font-sans font-normal text-muted-foreground">Não informado</span>
+                    )}
+                  </p>
+                </div>
               </div>
-            </div>
+            </section>
           </div>
         </CardContent>
       </Card>

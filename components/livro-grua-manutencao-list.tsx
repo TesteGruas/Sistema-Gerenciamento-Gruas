@@ -17,14 +17,20 @@ import {
   Calendar,
   User,
   Wrench,
-  Filter,
-  RefreshCw,
-  Download
+  RefreshCw
 } from "lucide-react"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { CardLoader } from "@/components/ui/loader"
 import { ExportButton } from "@/components/export-button"
-import { useToast } from "@/hooks/use-toast"
+import { entradaNoMesReferencia } from "@/lib/livro-grua-entradas-filtro"
+import { cn } from "@/lib/utils"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from "@/components/ui/select"
 
 interface Manutencao {
   id?: number
@@ -38,8 +44,19 @@ interface Manutencao {
   created_at?: string
 }
 
+function chaveResponsavelManutencao(m: Manutencao): string {
+  const id = m.realizado_por_id
+  if (id != null && id !== "" && !Number.isNaN(Number(id))) {
+    return `id:${id}`
+  }
+  const n = (m.realizado_por_nome || "").trim().toLowerCase()
+  return `nome:${n || "_"}`
+}
+
 interface LivroGruaManutencaoListProps {
   gruaId: string
+  description?: string
+  variant?: "default" | "preview"
   onNovaManutencao?: () => void
   onEditarManutencao?: (manutencao: Manutencao) => void
   onVisualizarManutencao?: (manutencao: Manutencao) => void
@@ -48,17 +65,18 @@ interface LivroGruaManutencaoListProps {
 
 export function LivroGruaManutencaoList({
   gruaId,
+  description,
+  variant = "default",
   onNovaManutencao,
   onEditarManutencao,
   onVisualizarManutencao,
   onExcluirManutencao
 }: LivroGruaManutencaoListProps) {
-  const { toast } = useToast()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([])
-  const [filtroDataInicio, setFiltroDataInicio] = useState("")
-  const [filtroDataFim, setFiltroDataFim] = useState("")
+  const [filtroMes, setFiltroMes] = useState("")
+  const [filtroResponsavel, setFiltroResponsavel] = useState("todos")
 
   // Carregar manutenções
   const carregarManutencoes = async () => {
@@ -99,13 +117,26 @@ export function LivroGruaManutencaoList({
     carregarManutencoes()
   }, [gruaId])
 
-  // Filtrar manutenções - memoizado para evitar recálculo desnecessário
-  const manutencoesFiltradas = useMemo(() => manutencoes.filter(manutencao => {
-    const matchDataInicio = !filtroDataInicio || manutencao.data >= filtroDataInicio
-    const matchDataFim = !filtroDataFim || manutencao.data <= filtroDataFim
+  const opcoesResponsavel = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const m of manutencoes) {
+      const k = chaveResponsavelManutencao(m)
+      const label = (m.realizado_por_nome || "").trim() || "Sem nome"
+      if (!map.has(k)) map.set(k, label)
+    }
+    return [...map.entries()].sort((a, b) => a[1].localeCompare(b[1], "pt-BR"))
+  }, [manutencoes])
 
-    return matchDataInicio && matchDataFim
-  }), [manutencoes, filtroDataInicio, filtroDataFim])
+  const manutencoesFiltradas = useMemo(
+    () =>
+      manutencoes.filter((manutencao) => {
+        const matchMes = entradaNoMesReferencia(manutencao.data, filtroMes)
+        const matchResp =
+          filtroResponsavel === "todos" || chaveResponsavelManutencao(manutencao) === filtroResponsavel
+        return matchMes && matchResp
+      }),
+    [manutencoes, filtroMes, filtroResponsavel]
+  )
 
   // Função para formatar dados para exportação
   const formatarDadosParaExportacao = useCallback(() => {
@@ -118,20 +149,38 @@ export function LivroGruaManutencaoList({
     }))
   }, [manutencoesFiltradas])
 
+  const listaVaziaPorFiltro = manutencoes.length > 0 && manutencoesFiltradas.length === 0
+
+  const isPreview = variant === "preview"
+  const mostrarAcoes =
+    !isPreview &&
+    !!(onVisualizarManutencao || onEditarManutencao || onExcluirManutencao)
+
   return (
-    <Card className="border-0 shadow-none checklist-card-no-gap">
-      <CardHeader className="px-0">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Wrench className="w-5 h-5" />
-              Manutenções
+    <Card
+      className={
+        isPreview
+          ? "overflow-hidden border border-muted-foreground/20 bg-card shadow-sm"
+          : "overflow-hidden shadow-sm"
+      }
+    >
+      <CardHeader className="space-y-1 border-b bg-muted/20 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0 space-y-0.5">
+            <CardTitle className="flex items-center gap-2 text-base font-semibold leading-tight sm:text-lg">
+              <Wrench className="h-5 w-5 shrink-0 text-primary" />
+              <span className="truncate">
+                {isPreview ? "Pré-visualização — manutenções" : "Manutenções"}
+              </span>
             </CardTitle>
-            <CardDescription>
-              Histórico de manutenções realizadas nesta grua
+            <CardDescription className="text-xs sm:text-sm">
+              {description ??
+                (isPreview
+                  ? "Somente leitura. Filtre por mês ou funcionário."
+                  : "Histórico de manutenções realizadas nesta grua")}
             </CardDescription>
           </div>
-          <div className="flex w-full sm:w-auto flex-col sm:flex-row gap-2">
+          <div className="flex shrink-0 flex-col gap-2 sm:flex-row sm:items-center">
             {manutencoesFiltradas.length > 0 && (
               <ExportButton
                 dados={formatarDadosParaExportacao()}
@@ -144,7 +193,7 @@ export function LivroGruaManutencaoList({
               />
             )}
             {onNovaManutencao && (
-              <Button 
+              <Button
                 type="button"
                 className="w-full sm:w-auto"
                 onClick={(e) => {
@@ -153,121 +202,154 @@ export function LivroGruaManutencaoList({
                   onNovaManutencao()
                 }}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Nova Manutenção
+                <Plus className="mr-2 h-4 w-4" />
+                Nova manutenção
               </Button>
             )}
           </div>
         </div>
       </CardHeader>
-      <CardContent className="px-0">
-        {/* Filtros */}
-        <div className="flex flex-col sm:flex-row gap-2 mb-4 items-stretch sm:items-end">
-          <div className="flex-1">
-            <Label htmlFor="filtroDataInicio">Data Início</Label>
-            <Input
-              id="filtroDataInicio"
-              type="date"
-              value={filtroDataInicio}
-              onChange={(e) => setFiltroDataInicio(e.target.value)}
-              className="w-full"
-            />
+      <CardContent className="p-0">
+        <div className="border-b bg-muted/15 px-4 py-3 sm:px-5">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-4">
+            <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-xs">
+              <Label htmlFor="filtroMesManut" className="text-xs font-medium text-muted-foreground">
+                Mês
+              </Label>
+              <Input
+                id="filtroMesManut"
+                type="month"
+                value={filtroMes}
+                onChange={(e) => setFiltroMes(e.target.value)}
+                className="h-9 bg-background"
+              />
+            </div>
+            <div className="grid min-w-0 flex-1 gap-1.5 sm:max-w-xs">
+              <Label className="text-xs font-medium text-muted-foreground">Funcionário</Label>
+              <Select value={filtroResponsavel} onValueChange={setFiltroResponsavel}>
+                <SelectTrigger className="h-9 w-full bg-background">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="todos">Todos</SelectItem>
+                  {opcoesResponsavel.map(([k, nome]) => (
+                    <SelectItem key={k} value={k}>
+                      {nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="h-9 w-full shrink-0 sm:ml-auto sm:w-auto"
+              onClick={() => {
+                setFiltroMes("")
+                setFiltroResponsavel("todos")
+              }}
+            >
+              <RefreshCw className="mr-2 h-3.5 w-3.5" />
+              Limpar filtros
+            </Button>
           </div>
-          <div className="flex-1">
-            <Label htmlFor="filtroDataFim">Data Fim</Label>
-            <Input
-              id="filtroDataFim"
-              type="date"
-              value={filtroDataFim}
-              onChange={(e) => setFiltroDataFim(e.target.value)}
-              className="w-full"
-            />
-          </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setFiltroDataInicio("")
-              setFiltroDataFim("")
-            }}
-            className="h-9 w-full sm:w-auto"
-          >
-            <RefreshCw className="w-4 h-4" />
-          </Button>
         </div>
 
-        {/* Erro */}
         {error && (
-          <Alert variant="destructive" className="mb-4">
+          <Alert variant="destructive" className="m-4">
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
 
-        {/* Loading */}
         {loading && <CardLoader />}
 
-        {/* Tabela */}
         {!loading && manutencoesFiltradas.length === 0 && (
-          <div className="text-center py-8 text-gray-500">
-            <Wrench className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <p>Nenhuma manutenção encontrada</p>
-            {onNovaManutencao && (
-              <Button 
+          <div className="mx-4 my-6 rounded-lg border border-dashed bg-muted/20 px-6 py-12 text-center text-muted-foreground">
+            <Wrench className="mx-auto mb-3 h-10 w-10 opacity-50" />
+            <p className="text-sm">
+              {listaVaziaPorFiltro
+                ? "Nenhuma manutenção corresponde aos filtros."
+                : "Nenhuma manutenção encontrada."}
+            </p>
+            {onNovaManutencao && !listaVaziaPorFiltro && (
+              <Button
                 type="button"
+                className="mt-4"
+                variant="outline"
                 onClick={(e) => {
                   e.preventDefault()
                   e.stopPropagation()
                   onNovaManutencao()
-                }} 
-                variant="outline" 
-                className="mt-4"
+                }}
               >
-                <Plus className="w-4 h-4 mr-2" />
-                Registrar Primeira Manutenção
+                <Plus className="mr-2 h-4 w-4" />
+                Registrar primeira manutenção
               </Button>
             )}
           </div>
         )}
 
         {!loading && manutencoesFiltradas.length > 0 && (
-          <>
-            {/* Desktop: Tabela */}
-            <div className="hidden md:block overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Realizado Por</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead className="text-right">Ações</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {manutencoesFiltradas.map((manutencao) => (
-                    <TableRow key={manutencao.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <Calendar className="w-4 h-4 text-gray-400" />
-                          {new Date(manutencao.data).toLocaleDateString('pt-BR')}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-gray-400" />
-                          {manutencao.realizado_por_nome || 'N/A'}
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge variant="outline">
-                          {manutencao.cargo || 'N/A'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <p className="text-sm text-gray-600 line-clamp-2">
-                          {manutencao.descricao || 'Sem descrição'}
-                        </p>
-                      </TableCell>
+          <div className="overflow-x-auto px-1 pb-1 sm:px-2">
+            <Table
+              className={cn(
+                "[&_tbody_tr:nth-child(even)]:bg-muted/25",
+                isPreview
+                  ? "min-w-[560px] text-sm [&_td]:py-2.5 [&_th]:h-10 [&_th]:px-3 [&_td]:px-3"
+                  : "min-w-[720px]"
+              )}
+            >
+              <TableHeader>
+                <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
+                  <TableHead className="pl-3 font-semibold">Data</TableHead>
+                  <TableHead className="font-semibold">Realizado por</TableHead>
+                  <TableHead className="font-semibold">Cargo</TableHead>
+                  <TableHead className="pr-3 font-semibold">Descrição</TableHead>
+                  {mostrarAcoes && <TableHead className="text-right font-semibold">Ações</TableHead>}
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {manutencoesFiltradas.map((manutencao) => (
+                  <TableRow
+                    key={manutencao.id}
+                    className="border-b border-border/60 transition-colors hover:bg-muted/35"
+                  >
+                    <TableCell className="pl-3 tabular-nums text-muted-foreground">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        {!isPreview && (
+                          <Calendar className="h-3.5 w-3.5 shrink-0 opacity-70" />
+                        )}
+                        {new Date(manutencao.data).toLocaleDateString("pt-BR")}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-1.5">
+                        {!isPreview && (
+                          <User className="h-3.5 w-3.5 shrink-0 text-muted-foreground opacity-70" />
+                        )}
+                        <span className="max-w-[200px] truncate text-foreground">
+                          {manutencao.realizado_por_nome || "N/A"}
+                        </span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={cn("font-normal", isPreview && "text-xs")}>
+                        {manutencao.cargo || "N/A"}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="pr-3">
+                      <p
+                        className={cn(
+                          "line-clamp-2 max-w-md",
+                          isPreview ? "text-muted-foreground" : "text-sm text-muted-foreground"
+                        )}
+                      >
+                        {manutencao.descricao || "Sem descrição"}
+                      </p>
+                    </TableCell>
+                    {mostrarAcoes && (
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           {onVisualizarManutencao && (
@@ -277,7 +359,7 @@ export function LivroGruaManutencaoList({
                               size="sm"
                               onClick={() => onVisualizarManutencao(manutencao)}
                             >
-                              <Eye className="w-4 h-4" />
+                              <Eye className="h-4 w-4" />
                             </Button>
                           )}
                           {onEditarManutencao && (
@@ -287,7 +369,7 @@ export function LivroGruaManutencaoList({
                               size="sm"
                               onClick={() => onEditarManutencao(manutencao)}
                             >
-                              <Edit className="w-4 h-4" />
+                              <Edit className="h-4 w-4" />
                             </Button>
                           )}
                           {onExcluirManutencao && (
@@ -296,112 +378,22 @@ export function LivroGruaManutencaoList({
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                if (confirm('Tem certeza que deseja excluir esta manutenção?')) {
+                                if (confirm("Tem certeza que deseja excluir esta manutenção?")) {
                                   onExcluirManutencao(manutencao)
                                 }
                               }}
                             >
-                              <Trash2 className="w-4 h-4 text-red-500" />
+                              <Trash2 className="h-4 w-4 text-red-500" />
                             </Button>
                           )}
                         </div>
                       </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-
-            {/* Mobile: Cards */}
-            <div className="md:hidden space-y-3">
-              {manutencoesFiltradas.map((manutencao) => (
-                <Card key={manutencao.id} className="border-l-4 border-l-orange-500">
-                  <CardContent className="p-4">
-                    <div className="space-y-3">
-                      {/* Header com Data */}
-                      <div className="flex items-center gap-2">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium text-sm">
-                          {new Date(manutencao.data).toLocaleDateString('pt-BR')}
-                        </span>
-                      </div>
-
-                      {/* Realizado Por e Cargo */}
-                      <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                          <User className="w-4 h-4 text-gray-400" />
-                          <span className="text-sm font-medium text-gray-900">
-                            {manutencao.realizado_por_nome || 'N/A'}
-                          </span>
-                        </div>
-                        {manutencao.cargo && (
-                          <div>
-                            <Badge variant="outline" className="text-xs">
-                              {manutencao.cargo}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Descrição */}
-                      {manutencao.descricao && (
-                        <div className="bg-gray-50 p-2 rounded-md">
-                          <p className="text-xs text-gray-600 mb-1">Descrição</p>
-                          <p className="text-sm text-gray-700 line-clamp-3">
-                            {manutencao.descricao}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Ações */}
-                      <div className="grid grid-cols-3 gap-2 pt-2 border-t">
-                        {onVisualizarManutencao && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onVisualizarManutencao(manutencao)}
-                            className="w-full px-2 text-xs"
-                          >
-                            <Eye className="w-4 h-4" />
-                            Ver
-                          </Button>
-                        )}
-                        {onEditarManutencao && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => onEditarManutencao(manutencao)}
-                            className="w-full px-2 text-xs"
-                          >
-                            <Edit className="w-4 h-4" />
-                            Editar
-                          </Button>
-                        )}
-                        {onExcluirManutencao && (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              if (confirm('Tem certeza que deseja excluir esta manutenção?')) {
-                                onExcluirManutencao(manutencao)
-                              }
-                            }}
-                            className="w-full px-2 text-xs text-red-600 hover:text-red-700 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                            Excluir
-                          </Button>
-                        )}
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          </>
+                    )}
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </CardContent>
     </Card>

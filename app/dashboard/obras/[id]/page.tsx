@@ -51,7 +51,8 @@ import {
   UserCheck,
   Phone,
   Mail,
-  MapPin
+  MapPin,
+  HardHat
 } from "lucide-react"
 import { custosMensaisApi, CustoMensal as CustoMensalApi, CustoMensalObra, CustoMensalObraCreate, CustoMensalObraUpdate, formatarMes, formatarValor, formatarQuantidade } from "@/lib/api-custos-mensais"
 import { livroGruaApi, EntradaLivroGrua, EntradaLivroGruaCompleta, FiltrosLivroGrua } from "@/lib/api-livro-grua"
@@ -537,7 +538,7 @@ function ObraDetailsPageContent() {
         })
         
         // Recarregar obra atualizada
-        await carregarObra(obraId)
+        await carregarObra(obraId, { force: true })
         
         // Salvar responsáveis técnicos adicionais dinâmicos
         if (responsaveisAdicionais && responsaveisAdicionais.length > 0) {
@@ -1250,6 +1251,7 @@ function ObraDetailsPageContent() {
   const [funcionariosDisponiveis, setFuncionariosDisponiveis] = useState<any[]>([])
   const [funcionarioSearchValue, setFuncionarioSearchValue] = useState('')
   const [loadingFuncionariosSearch, setLoadingFuncionariosSearch] = useState(false)
+  const [salvandoOperadorObra, setSalvandoOperadorObra] = useState(false)
   const [novoFuncionarioData, setNovoFuncionarioData] = useState({
     dataInicio: '',
     dataFim: '',
@@ -2372,7 +2374,7 @@ function ObraDetailsPageContent() {
       await carregarGruasVinculadas()
       
       // Recarregar a obra para atualizar os dados
-      await carregarObra(obraId)
+      await carregarObra(obraId, { force: true })
       
     } catch (error) {
       toast({
@@ -2499,8 +2501,9 @@ function ObraDetailsPageContent() {
         observacoes: ''
       })
       
-      // Recarregar funcionários vinculados
+      // Recarregar funcionários vinculados e dados da obra (equipe / livro da grua)
       await carregarFuncionariosVinculados()
+      await carregarObra(obraId, { force: true })
       
     } catch (error) {
       toast({
@@ -2605,8 +2608,9 @@ function ObraDetailsPageContent() {
           description: "Funcionário removido da obra com sucesso!",
         })
         
-        // Recarregar funcionários vinculados
+        // Recarregar funcionários vinculados e obra (equipe no livro / embeds)
         await carregarFuncionariosVinculados()
+        await carregarObra(obraId, { force: true })
       } else {
         toast({
           title: "Erro",
@@ -2622,6 +2626,36 @@ function ObraDetailsPageContent() {
       })
     } finally {
       setLoadingFuncionarios(false)
+    }
+  }
+
+  const persistirOperadorObra = async (funcionario: { userId?: string; id?: string; name: string; role: string } | null) => {
+    if (!obra?.id) return
+    setSalvandoOperadorObra(true)
+    try {
+      const idStr = funcionario ? (funcionario.userId ?? funcionario.id) : null
+      const idNum = idStr != null && String(idStr).trim() !== '' ? parseInt(String(idStr), 10) : NaN
+      const res = await obrasApi.atualizarObra(parseInt(obra.id, 10), {
+        operador_obra_funcionario_id: funcionario && Number.isFinite(idNum) && idNum > 0 ? idNum : null
+      })
+      if (res.success) {
+        toast({ title: "Sucesso", description: "Operador da obra atualizado." })
+        await carregarObra(obraId, { force: true })
+      } else {
+        toast({
+          title: "Erro",
+          description: (res as any).message || "Não foi possível salvar o operador da obra.",
+          variant: "destructive"
+        })
+      }
+    } catch {
+      toast({
+        title: "Erro",
+        description: "Falha ao salvar o operador da obra.",
+        variant: "destructive"
+      })
+    } finally {
+      setSalvandoOperadorObra(false)
     }
   }
 
@@ -3427,7 +3461,7 @@ useEffect(() => {
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-red-500" />
             <h2 className="text-xl font-semibold text-red-700 mb-2">Erro ao carregar obra</h2>
             <p className="text-red-600 mb-4">{error}</p>
-            <Button onClick={() => carregarObra(obraId)} variant="outline">
+            <Button onClick={() => carregarObra(obraId, { force: true })} variant="outline">
               Tentar novamente
             </Button>
           </div>
@@ -3686,7 +3720,7 @@ useEffect(() => {
                               description: resultado.message || "Obra finalizada com sucesso",
                             })
                             // Recarregar a obra para atualizar o status
-                            await carregarObra(obraId)
+                            await carregarObra(obraId, { force: true })
                             setShowFinalizarObraDialog(false)
                           } else {
                             toast({
@@ -5378,8 +5412,8 @@ useEffect(() => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="funcionarios" data-export-tab="funcionarios" className="space-y-4">
-          <Card>
+        <TabsContent value="funcionarios" data-export-tab="funcionarios" className="flex flex-col gap-4">
+          <Card className="order-3">
             <CardHeader>
               <div className="flex justify-between items-center">
                 <CardTitle className="text-sm">
@@ -5520,7 +5554,7 @@ useEffect(() => {
           </Card>
 
           {/* Seção: Responsáveis Técnicos */}
-          <Card>
+          <Card className="order-4">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <UserCheck className="w-5 h-5 text-blue-600" />
@@ -5590,7 +5624,7 @@ useEffect(() => {
           </Card>
 
           {/* Seção: Sinaleiros */}
-          <Card>
+          <Card className="order-1">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
@@ -5856,6 +5890,57 @@ useEffect(() => {
                   })}
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Operador da Obra (funcionário — cadastro da empresa) */}
+          <Card className="order-2">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <HardHat className="w-5 h-5 text-amber-600" />
+                Operador da Obra
+              </CardTitle>
+              <CardDescription>
+                Designe o operador da empresa para esta obra. Os dados aparecem no Livro da Grua (Operador da Grua).
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {obra?.operador_obra_funcionario?.nome ? (
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20">
+                  <div>
+                    <p className="font-medium">{obra.operador_obra_funcionario.nome}</p>
+                    <p className="text-sm text-muted-foreground">
+                      {obra.operador_obra_funcionario.cargo || "Operador"}
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={salvandoOperadorObra}
+                      onClick={() => persistirOperadorObra(null)}
+                    >
+                      {salvandoOperadorObra ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                      Remover
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div>
+                <Label>{obra?.operador_obra_funcionario?.nome ? "Trocar operador" : "Buscar operador"}</Label>
+                <FuncionarioSearch
+                  onFuncionarioSelect={(f) => persistirOperadorObra(f)}
+                  placeholder="Buscar funcionário operador..."
+                  className="mt-1"
+                  onlyActive={true}
+                  allowedRoles={["Operador", "Auxiliar Operacional"]}
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Ao selecionar, o vínculo é salvo automaticamente na obra.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>

@@ -365,6 +365,8 @@ export const converterFuncionarioBackendParaFrontend = (funcionarioBackend: Func
   
   return {
     id: funcionarioBackend.id.toString(),
+    /** Alias do id do funcionário — usado em vínculos (obra, grua) onde o legado esperava `userId` */
+    userId: funcionarioBackend.id.toString(),
     name: funcionarioBackend.nome,
     role: cargo,
     status: funcionarioBackend.status,

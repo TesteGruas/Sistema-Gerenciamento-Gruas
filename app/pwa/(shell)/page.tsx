@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -53,6 +53,63 @@ interface MedicaoResumoHome {
   valor_total: number
 }
 
+const PWA_LOCATION_CHOICE_KEY_PREFIX = "pwa_location_choice_v2_"
+
+function getStablePwaUserId(user: unknown): string | null {
+  if (!user || typeof user !== "object") return null
+  const u = user as Record<string, unknown>
+  const raw = u.id ?? u.user_id ?? u.sub ?? (u.user as Record<string, unknown> | undefined)?.id
+  if (raw != null && String(raw).length > 0) return String(raw)
+  const email = u.email
+  if (typeof email === "string" && email.length > 0) return `email:${email}`
+  return null
+}
+
+function locationChoiceStorageKey(userId: string): string {
+  return `${PWA_LOCATION_CHOICE_KEY_PREFIX}${userId}`
+}
+
+function readLocationChoiceForUser(userId: string): "allow" | "deny" | null {
+  if (typeof window === "undefined") return null
+  try {
+    const v = localStorage.getItem(locationChoiceStorageKey(userId))
+    if (v === "allow" || v === "deny") return v
+    return null
+  } catch {
+    return null
+  }
+}
+
+function writeLocationChoiceForUser(userId: string, choice: "allow" | "deny"): void {
+  try {
+    localStorage.setItem(locationChoiceStorageKey(userId), choice)
+  } catch {
+    /* ignore quota */
+  }
+}
+
+/** Migra sessionStorage antigo (amarrado ao token, que muda no refresh) para localStorage por usuário */
+function migrateLegacyLocationChoice(
+  userId: string,
+  accessToken: string | null
+): "allow" | "deny" | null {
+  try {
+    const tokenKey = "pwa_location_prompt_login_token"
+    const choiceKey = "pwa_location_prompt_login_choice"
+    const tokenJa = sessionStorage.getItem(tokenKey)
+    const escolha = sessionStorage.getItem(choiceKey)
+    if (accessToken && tokenJa === accessToken && (escolha === "allow" || escolha === "deny")) {
+      writeLocationChoiceForUser(userId, escolha)
+      sessionStorage.removeItem(tokenKey)
+      sessionStorage.removeItem(choiceKey)
+      return escolha
+    }
+  } catch {
+    /* ignore */
+  }
+  return null
+}
+
 export default function PWAMainPage() {
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
@@ -67,6 +124,8 @@ export default function PWAMainPage() {
   const [showFeriadoDialog, setShowFeriadoDialog] = useState(false)
   const [showPermissaoLocalizacaoDialog, setShowPermissaoLocalizacaoDialog] = useState(false)
   const [permitiuLocalizacaoNoLogin, setPermitiuLocalizacaoNoLogin] = useState<boolean | null>(null)
+  /** Evita persistir duas vezes ao fechar o diálogo (botão já chama handle) */
+  const locationPromptHandledRef = useRef(false)
   const [isFeriado, setIsFeriado] = useState<boolean | null>(null)
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
@@ -202,35 +261,49 @@ export default function PWAMainPage() {
     setIsClient(true)
   }, [])
 
-  // Perguntar uso de localização a cada login (identificado por access_token)
+  // Perguntar localização uma vez por usuário (persistido em localStorage; token JWT muda a cada refresh)
   useEffect(() => {
     if (!isClient || pwaUserData.loading || !pwaUserData.user) return
 
     try {
-      const accessToken = localStorage.getItem('access_token')
-      if (!accessToken) return
-
-      const tokenKey = 'pwa_location_prompt_login_token'
-      const choiceKey = 'pwa_location_prompt_login_choice'
-      const tokenJaPerguntado = sessionStorage.getItem(tokenKey)
-      const escolhaAnterior = sessionStorage.getItem(choiceKey)
-
-      if (tokenJaPerguntado === accessToken) {
-        if (escolhaAnterior === 'allow') {
-          setPermitiuLocalizacaoNoLogin(true)
-        } else if (escolhaAnterior === 'deny') {
-          setPermitiuLocalizacaoNoLogin(false)
+      let userId = getStablePwaUserId(pwaUserData.user)
+      if (!userId && typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem("user_data")
+          if (raw) userId = getStablePwaUserId(JSON.parse(raw))
+        } catch {
+          /* ignore */
         }
+      }
+      if (!userId) return
+
+      const accessToken = localStorage.getItem("access_token")
+      const migrated = migrateLegacyLocationChoice(userId, accessToken)
+      const saved = migrated ?? readLocationChoiceForUser(userId)
+
+      if (saved === "allow") {
+        setPermitiuLocalizacaoNoLogin(true)
+        setShowPermissaoLocalizacaoDialog(false)
+        return
+      }
+      if (saved === "deny") {
+        setPermitiuLocalizacaoNoLogin(false)
+        setShowPermissaoLocalizacaoDialog(false)
         return
       }
 
-      // Novo login/token: perguntar novamente
       setPermitiuLocalizacaoNoLogin(null)
       setShowPermissaoLocalizacaoDialog(true)
     } catch (error) {
-      console.warn('[PWA] Erro ao validar prompt de localização no login:', error)
+      console.warn("[PWA] Erro ao validar prompt de localização no login:", error)
     }
   }, [isClient, pwaUserData.loading, pwaUserData.user])
+
+  useEffect(() => {
+    if (showPermissaoLocalizacaoDialog) {
+      locationPromptHandledRef.current = false
+    }
+  }, [showPermissaoLocalizacaoDialog])
 
   // Verificar se funcionário tem obra ativa
   useEffect(() => {
@@ -697,14 +770,24 @@ export default function PWAMainPage() {
   }, [isClient, permitiuLocalizacaoNoLogin])
 
   const handlePermissaoLocalizacaoNoLogin = (permitir: boolean) => {
+    locationPromptHandledRef.current = true
     try {
-      const accessToken = localStorage.getItem('access_token')
-      if (accessToken) {
-        sessionStorage.setItem('pwa_location_prompt_login_token', accessToken)
-        sessionStorage.setItem('pwa_location_prompt_login_choice', permitir ? 'allow' : 'deny')
+      let userId = getStablePwaUserId(pwaUserData.user)
+      if (!userId && typeof window !== "undefined") {
+        try {
+          const raw = localStorage.getItem("user_data")
+          if (raw) userId = getStablePwaUserId(JSON.parse(raw))
+        } catch {
+          /* ignore */
+        }
       }
+      if (userId) {
+        writeLocationChoiceForUser(userId, permitir ? "allow" : "deny")
+      }
+      sessionStorage.removeItem("pwa_location_prompt_login_token")
+      sessionStorage.removeItem("pwa_location_prompt_login_choice")
     } catch (error) {
-      console.warn('[PWA] Erro ao salvar escolha de localização no login:', error)
+      console.warn("[PWA] Erro ao salvar escolha de localização no login:", error)
     }
 
     setPermitiuLocalizacaoNoLogin(permitir)
@@ -1854,7 +1937,19 @@ export default function PWAMainPage() {
       )}
 
       {/* Diálogo de Pergunta sobre Feriado */}
-      <Dialog open={showPermissaoLocalizacaoDialog} onOpenChange={setShowPermissaoLocalizacaoDialog}>
+      <Dialog
+        open={showPermissaoLocalizacaoDialog}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowPermissaoLocalizacaoDialog(false)
+            if (!locationPromptHandledRef.current) {
+              handlePermissaoLocalizacaoNoLogin(false)
+            }
+          } else {
+            setShowPermissaoLocalizacaoDialog(true)
+          }
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

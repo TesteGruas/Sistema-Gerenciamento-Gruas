@@ -124,7 +124,8 @@ interface ObraState {
   lastCustosUpdated: string | null
   
   // Ações
-  carregarObra: (obraId: string) => Promise<void>
+  /** `force: true` ignora cache da mesma obra (necessário após salvar operador, gruas, etc.) */
+  carregarObra: (obraId: string, options?: { force?: boolean }) => Promise<void>
   carregarCustosMensais: (obraId: string) => Promise<void>
   limparObra: () => void
   atualizarObra: (dados: Partial<ObraStore>) => void
@@ -144,53 +145,56 @@ export const useObraStore = create<ObraState>()(
       lastCustosUpdated: null,
 
       // Carregar obra principal
-      carregarObra: async (obraId: string) => {
+      carregarObra: async (obraId: string, options?: { force?: boolean }) => {
+        const force = options?.force === true
         const currentObra = get().obra
-        // Evitar recarregamento se já está carregando ou se a obra já está carregada
-        if (get().loading || (currentObra && currentObra.id === obraId && !get().error)) {
-          return
+
+        if (!force) {
+          if (get().loading) return
+          if (currentObra && String(currentObra.id) === String(obraId) && !get().error) {
+            return
+          }
         }
-        
-        set({ 
-          loading: true, 
+
+        set({
+          loading: true,
           error: null,
           lastUpdated: new Date().toISOString()
         })
-        
+
         try {
-          const response = await obrasApi.obterObra(parseInt(obraId))
-          
+          const response = await obrasApi.obterObra(parseInt(obraId, 10))
+
           if (response.success && response.data) {
             const obraConvertida = converterObraBackendParaFrontend(response.data)
-            
-            // Só atualizar se o ID for diferente ou se houver mudanças significativas
-            const shouldUpdate = !currentObra || 
-                                 currentObra.id !== obraConvertida.id ||
-                                 currentObra.updatedAt !== obraConvertida.updatedAt
-            
+
+            const shouldUpdate =
+              force ||
+              !currentObra ||
+              String(currentObra.id) !== String(obraConvertida.id) ||
+              currentObra.updatedAt !== obraConvertida.updatedAt
+
             if (shouldUpdate) {
-              set({ 
+              set({
                 obra: obraConvertida,
                 loading: false,
                 lastUpdated: new Date().toISOString()
               })
-              
-              // Carregar custos mensais automaticamente
+
               await get().carregarCustosMensais(obraId)
             } else {
               set({ loading: false })
             }
-            
           } else {
-            set({ 
+            set({
               error: 'Erro ao carregar obra',
-              loading: false 
+              loading: false
             })
           }
         } catch (error) {
-          set({ 
+          set({
             error: 'Erro na requisição',
-            loading: false 
+            loading: false
           })
         }
       },
