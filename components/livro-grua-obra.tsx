@@ -37,6 +37,7 @@ import { gruasApi } from "@/lib/api-gruas"
 import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { Upload } from "lucide-react"
+import { contagemChecklistLivroGrua } from "@/lib/checklist-livro-grua-shared"
 
 // Nota: Este componente usa gruaObraApi (não obraGruasApi) para buscar relacionamentos grua-obra
 
@@ -2105,24 +2106,14 @@ export function LivroGruaObra({ obraId, cachedData, onDataLoaded, onRequestEdit 
 
       if (checklistsLivroGrua.length > 0) {
         const linhasChecklists = checklistsLivroGrua.map((checklist: any) => {
-          const itens = [
-            checklist?.cabos,
-            checklist?.polias,
-            checklist?.estrutura,
-            checklist?.movimentos,
-            checklist?.freios,
-            checklist?.limitadores,
-            checklist?.indicadores,
-            checklist?.aterramento
-          ]
-          const totalMarcados = itens.filter(Boolean).length
+          const { marcados, total } = contagemChecklistLivroGrua(checklist || {})
           const dataChecklist = checklist?.data_entrada || checklist?.created_at
           const responsavel = checklist?.funcionario_nome || checklist?.funcionarioName || checklist?.realizado_por_nome || 'Não informado'
 
           return [
             dataChecklist ? formatarData(dataChecklist) : 'Não informado',
             responsavel,
-            `${totalMarcados}/8`,
+            `${marcados}/${total}`,
             checklist?.status_resolucao || checklist?.status_entrada || 'N/A'
           ]
         })

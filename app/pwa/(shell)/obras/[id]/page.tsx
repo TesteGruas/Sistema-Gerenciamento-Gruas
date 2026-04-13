@@ -46,6 +46,11 @@ import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diar
 import LivroGruaList from "@/components/livro-grua-list"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { getApiOrigin } from "@/lib/runtime-config"
+import {
+  CHECKLIST_LIVRO_GRUA_ITENS_FIXOS,
+  contagemChecklistLivroGrua,
+  normalizeChecklistItensExtras
+} from "@/lib/checklist-livro-grua-shared"
 
 const CHECKLIST_MANUTENCAO_MARKER = "__CHECKLIST_MANUTENCAO_JSON__:"
 
@@ -61,17 +66,6 @@ function formatarLabelChecklistManutencao(chave: string) {
     .trim()
     .replace(/\b\w/g, (letra) => letra.toUpperCase())
 }
-
-const CHECKLIST_DIARIO_ITEMS = [
-  { key: "cabos", label: "Cabos" },
-  { key: "polias", label: "Polias" },
-  { key: "estrutura", label: "Estrutura" },
-  { key: "movimentos", label: "Movimentos" },
-  { key: "freios", label: "Freios" },
-  { key: "limitadores", label: "Limitadores" },
-  { key: "indicadores", label: "Indicadores" },
-  { key: "aterramento", label: "Aterramento" }
-] as const
 
 function parseObservacoesManutencao(observacoes?: string | null): {
   textoLimpo: string
@@ -1753,6 +1747,7 @@ export default function PWAObraDetalhesPage() {
           {gruaSelecionadaChecklist && (
             <LivroGruaChecklistDiario
               gruaId={gruaSelecionadaChecklist}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               onSave={handleSucessoChecklist}
               onCancel={() => setIsNovoChecklistOpen(false)}
             />
@@ -1769,6 +1764,7 @@ export default function PWAObraDetalhesPage() {
           {gruaSelecionadaChecklist && checklistSelecionado && (
             <LivroGruaChecklistDiario
               gruaId={gruaSelecionadaChecklist}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               checklist={checklistSelecionado}
               onSave={handleSucessoChecklist}
               onCancel={() => setIsEditarChecklistOpen(false)}
@@ -1804,9 +1800,10 @@ export default function PWAObraDetalhesPage() {
                 <label className="text-xs font-semibold text-gray-500 uppercase">Itens Verificados</label>
                 <div className="mt-2 mb-3">
                   {(() => {
-                    const totalItens = CHECKLIST_DIARIO_ITEMS.length
-                    const itensOk = CHECKLIST_DIARIO_ITEMS.filter((item) => Boolean(checklistSelecionado[item.key])).length
-                    const completo = itensOk === totalItens
+                    const { marcados: itensOk, total: totalItens } = contagemChecklistLivroGrua(
+                      checklistSelecionado as Record<string, unknown>
+                    )
+                    const completo = totalItens > 0 && itensOk === totalItens
                     return (
                       <div className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${completo ? "bg-green-100 text-green-700" : "bg-amber-100 text-amber-700"}`}>
                         {itensOk}/{totalItens} itens verificados
@@ -1815,7 +1812,7 @@ export default function PWAObraDetalhesPage() {
                   })()}
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {CHECKLIST_DIARIO_ITEMS.map((item) => {
+                  {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map((item) => {
                     const itemOk = Boolean(checklistSelecionado[item.key])
                     return (
                       <div
@@ -1832,6 +1829,20 @@ export default function PWAObraDetalhesPage() {
                       </div>
                     )
                   })}
+                  {normalizeChecklistItensExtras(checklistSelecionado.checklist_itens_extras).map((ex) => (
+                    <div
+                      key={ex.id}
+                      className={`rounded-md border p-2 text-xs ${ex.ok ? 'border-green-200 bg-green-50' : 'border-gray-200 bg-gray-50'}`}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="font-medium text-gray-800">{ex.label}</span>
+                        <span className={`inline-flex items-center gap-1 font-semibold ${ex.ok ? 'text-green-700' : 'text-gray-600'}`}>
+                          <CheckCircle2 className="w-3.5 h-3.5" />
+                          {ex.ok ? 'OK' : 'Pendente'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
               {checklistSelecionado.observacoes && (

@@ -193,6 +193,7 @@ export default function PWAObraChecklistPage() {
           {gruaSelecionadaChecklist && (
             <LivroGruaChecklistDiario
               gruaId={gruaSelecionadaChecklist}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               onSave={handleSucessoChecklist}
               onCancel={() => setIsNovoChecklistOpen(false)}
             />
@@ -208,6 +209,7 @@ export default function PWAObraChecklistPage() {
           {gruaSelecionadaChecklist && checklistSelecionado && (
             <LivroGruaChecklistDiario
               gruaId={gruaSelecionadaChecklist}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               checklist={checklistSelecionado}
               onSave={handleSucessoChecklist}
               onCancel={() => setIsEditarChecklistOpen(false)}

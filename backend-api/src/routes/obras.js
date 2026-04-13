@@ -5491,4 +5491,110 @@ router.delete('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermi
   }
 })
 
+/** Itens extras de checklist do livro da grua, reutilizáveis por obra */
+const obraChecklistItemBody = Joi.object({
+  label: Joi.string().trim().min(1).max(200).required()
+})
+
+router.get('/:id/checklist-itens-custom', authenticateToken, async (req, res) => {
+  try {
+    const obraId = parseInt(req.params.id, 10)
+    if (Number.isNaN(obraId)) {
+      return res.status(400).json({ success: false, message: 'ID da obra inválido' })
+    }
+
+    const { data: obra, error: obraErr } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('id', obraId)
+      .single()
+
+    if (obraErr || !obra) {
+      return res.status(404).json({ success: false, message: 'Obra não encontrada' })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('obra_checklist_itens_custom')
+      .select('id, label, created_at')
+      .eq('obra_id', obraId)
+      .order('label', { ascending: true })
+
+    if (error) {
+      console.error('[obras] checklist-itens-custom GET:', error)
+      return res.status(500).json({ success: false, message: error.message })
+    }
+
+    res.json({ success: true, data: data || [] })
+  } catch (error) {
+    console.error('[obras] checklist-itens-custom GET:', error)
+    res.status(500).json({ success: false, message: error.message })
+  }
+})
+
+router.post('/:id/checklist-itens-custom', authenticateToken, async (req, res) => {
+  try {
+    const obraId = parseInt(req.params.id, 10)
+    if (Number.isNaN(obraId)) {
+      return res.status(400).json({ success: false, message: 'ID da obra inválido' })
+    }
+
+    const { error: vErr, value } = obraChecklistItemBody.validate(req.body)
+    if (vErr) {
+      return res.status(400).json({ success: false, message: vErr.details[0].message })
+    }
+    const labelTrim = value.label.trim()
+    const labelLower = labelTrim.toLowerCase()
+
+    const { data: obra, error: obraErr } = await supabaseAdmin
+      .from('obras')
+      .select('id')
+      .eq('id', obraId)
+      .single()
+
+    if (obraErr || !obra) {
+      return res.status(404).json({ success: false, message: 'Obra não encontrada' })
+    }
+
+    const { data: existentes } = await supabaseAdmin
+      .from('obra_checklist_itens_custom')
+      .select('id, label, created_at')
+      .eq('obra_id', obraId)
+
+    const duplicado = (existentes || []).find(
+      (row) => String(row.label || '').trim().toLowerCase() === labelLower
+    )
+    if (duplicado) {
+      return res.status(200).json({ success: true, data: duplicado })
+    }
+
+    const { data: created, error: insErr } = await supabaseAdmin
+      .from('obra_checklist_itens_custom')
+      .insert({ obra_id: obraId, label: labelTrim })
+      .select('id, label, created_at')
+      .single()
+
+    if (insErr) {
+      if (insErr.code === '23505') {
+        const { data: again } = await supabaseAdmin
+          .from('obra_checklist_itens_custom')
+          .select('id, label, created_at')
+          .eq('obra_id', obraId)
+        const hit = (again || []).find(
+          (row) => String(row.label || '').trim().toLowerCase() === labelLower
+        )
+        if (hit) {
+          return res.status(200).json({ success: true, data: hit })
+        }
+      }
+      console.error('[obras] checklist-itens-custom POST:', insErr)
+      return res.status(500).json({ success: false, message: insErr.message })
+    }
+
+    res.status(201).json({ success: true, data: created })
+  } catch (error) {
+    console.error('[obras] checklist-itens-custom POST:', error)
+    res.status(500).json({ success: false, message: error.message })
+  }
+})
+
 export default router

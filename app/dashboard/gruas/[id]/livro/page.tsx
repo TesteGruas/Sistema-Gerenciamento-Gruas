@@ -20,11 +20,16 @@ import {
 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
+import { gruaObraApi } from "@/lib/api-grua-obra"
 import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
 import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  CHECKLIST_LIVRO_GRUA_ITENS_FIXOS,
+  normalizeChecklistItensExtras
+} from "@/lib/checklist-livro-grua-shared"
 
 export default function LivroGruaPage() {
   const { toast } = useToast()
@@ -43,6 +48,7 @@ export default function LivroGruaPage() {
   const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
   const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
   const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
+  const [obraIdAtivaChecklist, setObraIdAtivaChecklist] = useState<number | undefined>(undefined)
   
   const [isNovaManutencaoOpen, setIsNovaManutencaoOpen] = useState(false)
   const [isEditarManutencaoOpen, setIsEditarManutencaoOpen] = useState(false)
@@ -110,6 +116,26 @@ export default function LivroGruaPage() {
       carregarEstatisticas()
     }
   }, [grua])
+
+  useEffect(() => {
+    const gid = grua?.id || gruaId
+    if (!gid) {
+      setObraIdAtivaChecklist(undefined)
+      return
+    }
+    gruaObraApi
+      .buscarObrasPorGrua(String(gid))
+      .then((r) => {
+        const list = r.data || []
+        const ativa = list.find((rel: { status?: string }) =>
+          String(rel.status || "")
+            .toLowerCase()
+            .includes("ativa")
+        )
+        setObraIdAtivaChecklist((ativa || list[0])?.obra_id)
+      })
+      .catch(() => setObraIdAtivaChecklist(undefined))
+  }, [grua?.id, gruaId])
 
   // Handlers Checklist
   const handleNovoChecklist = () => {
@@ -385,6 +411,7 @@ export default function LivroGruaPage() {
           </DialogHeader>
           <LivroGruaChecklistDiario
             gruaId={grua?.id || gruaId}
+            obraId={obraIdAtivaChecklist}
             onSave={handleSucessoChecklist}
             onCancel={() => setIsNovoChecklistOpen(false)}
           />
@@ -399,6 +426,7 @@ export default function LivroGruaPage() {
           </DialogHeader>
           <LivroGruaChecklistDiario
             gruaId={grua?.id || gruaId}
+            obraId={obraIdAtivaChecklist}
             checklist={checklistSelecionado}
             modoEdicao={true}
             onSave={handleSucessoChecklist}
@@ -441,16 +469,7 @@ export default function LivroGruaPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {[
-                      { key: 'cabos', label: 'Cabos' },
-                      { key: 'polias', label: 'Polias' },
-                      { key: 'estrutura', label: 'Estrutura' },
-                      { key: 'movimentos', label: 'Movimentos' },
-                      { key: 'freios', label: 'Freios' },
-                      { key: 'limitadores', label: 'Limitadores' },
-                      { key: 'indicadores', label: 'Indicadores' },
-                      { key: 'aterramento', label: 'Aterramento' }
-                    ].map((item) => (
+                    {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map((item) => (
                       <div key={item.key} className="flex items-center gap-2">
                         {checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? (
                           <CheckCircle2 className="w-5 h-5 text-green-500" />
@@ -459,6 +478,19 @@ export default function LivroGruaPage() {
                         )}
                         <span className={checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? 'text-gray-900' : 'text-gray-400'}>
                           {item.label}
+                        </span>
+                      </div>
+                    ))}
+                    {normalizeChecklistItensExtras(checklistSelecionado.checklist_itens_extras).map((ex) => (
+                      <div key={ex.id} className="flex items-center gap-2">
+                        {ex.ok ? (
+                          <CheckCircle2 className="w-5 h-5 text-green-500" />
+                        ) : (
+                          <AlertCircle className="w-5 h-5 text-gray-300" />
+                        )}
+                        <span className={ex.ok ? 'text-gray-900' : 'text-gray-400'}>
+                          {ex.label}
+                          <span className="text-xs text-muted-foreground ml-1">(adicional)</span>
                         </span>
                       </div>
                     ))}

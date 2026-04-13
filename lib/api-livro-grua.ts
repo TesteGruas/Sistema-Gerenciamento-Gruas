@@ -77,6 +77,8 @@ export interface EntradaLivroGrua {
   limitadores?: boolean
   indicadores?: boolean
   aterramento?: boolean
+  /** Itens adicionais criados no formulário: { id, label, ok } */
+  checklist_itens_extras?: Array<{ id: string; label: string; ok: boolean; obra_item_id?: number }>
   // Campos específicos de manutenção
   realizado_por_id?: number
   realizado_por_nome?: string

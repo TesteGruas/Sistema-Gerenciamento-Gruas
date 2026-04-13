@@ -25,6 +25,7 @@ import { livroGruaApi } from "@/lib/api-livro-grua"
 import { CardLoader } from "@/components/ui/loader"
 import { ExportButton } from "@/components/export-button"
 import { useToast } from "@/hooks/use-toast"
+import { contagemChecklistLivroGrua, normalizeChecklistItensExtras } from "@/lib/checklist-livro-grua-shared"
 
 interface ChecklistDiario {
   id?: number
@@ -42,6 +43,7 @@ interface ChecklistDiario {
   aterramento: boolean
   observacoes?: string
   created_at?: string
+  checklist_itens_extras?: unknown
 }
 
 interface LivroGruaChecklistListProps {
@@ -107,7 +109,8 @@ export function LivroGruaChecklistList({
           indicadores: entrada.indicadores === true || entrada.indicadores === 1 || entrada.indicadores === '1',
           aterramento: entrada.aterramento === true || entrada.aterramento === 1 || entrada.aterramento === '1',
           observacoes: entrada.observacoes,
-          created_at: entrada.created_at
+          created_at: entrada.created_at,
+          checklist_itens_extras: entrada.checklist_itens_extras
         }
       })
 
@@ -133,25 +136,25 @@ export function LivroGruaChecklistList({
   }), [checklists, filtroData])
 
   const contarItensMarcados = useCallback((checklist: ChecklistDiario): number => {
-    return [
-      checklist.cabos,
-      checklist.polias,
-      checklist.estrutura,
-      checklist.movimentos,
-      checklist.freios,
-      checklist.limitadores,
-      checklist.indicadores,
-      checklist.aterramento
-    ].filter(Boolean).length
+    return contagemChecklistLivroGrua(checklist as unknown as Record<string, unknown>).marcados
+  }, [])
+
+  const totalItensChecklist = useCallback((checklist: ChecklistDiario): number => {
+    return contagemChecklistLivroGrua(checklist as unknown as Record<string, unknown>).total
   }, [])
 
   // Função para formatar dados para exportação
   const formatarDadosParaExportacao = useCallback(() => {
     return checklistsFiltrados.map((checklist) => {
       const itensMarcados = contarItensMarcados(checklist)
-      const totalItens = 8
+      const totalItens = totalItensChecklist(checklist)
       const status = itensMarcados === totalItens ? 'Completo' : 'Incompleto'
-      
+      const extras = normalizeChecklistItensExtras(checklist.checklist_itens_extras)
+      const extrasStr =
+        extras.length === 0
+          ? ''
+          : extras.map((e) => `${e.label}: ${e.ok ? 'Sim' : 'Não'}`).join('; ')
+
       return {
         'Data': new Date(checklist.data).toLocaleDateString('pt-BR'),
         'Funcionário': checklist.funcionario_nome || 'N/A',
@@ -163,12 +166,13 @@ export function LivroGruaChecklistList({
         'Limitadores': checklist.limitadores ? 'Sim' : 'Não',
         'Indicadores': checklist.indicadores ? 'Sim' : 'Não',
         'Aterramento': checklist.aterramento ? 'Sim' : 'Não',
+        'Itens adicionais': extrasStr,
         'Itens Verificados': `${itensMarcados}/${totalItens}`,
         'Status': status,
         'Observações': checklist.observacoes || ''
       }
     })
-  }, [checklistsFiltrados, contarItensMarcados])
+  }, [checklistsFiltrados, contarItensMarcados, totalItensChecklist])
 
   return (
     <Card className="border-0 shadow-none checklist-card-no-gap">
@@ -287,7 +291,7 @@ export function LivroGruaChecklistList({
                 <TableBody>
                   {checklistsFiltrados.map((checklist) => {
                     const itensMarcados = contarItensMarcados(checklist)
-                    const totalItens = 8
+                    const totalItens = totalItensChecklist(checklist)
                     const todosMarcados = itensMarcados === totalItens
                     
                     return (
@@ -368,7 +372,7 @@ export function LivroGruaChecklistList({
             <div className="md:hidden space-y-3">
               {checklistsFiltrados.map((checklist) => {
                 const itensMarcados = contarItensMarcados(checklist)
-                const totalItens = 8
+                const totalItens = totalItensChecklist(checklist)
                 const todosMarcados = itensMarcados === totalItens
                 
                 return (

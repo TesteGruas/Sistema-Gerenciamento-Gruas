@@ -356,7 +356,18 @@ const entradaLivroSchema = Joi.object({
   freios: Joi.boolean().optional(),
   limitadores: Joi.boolean().optional(),
   indicadores: Joi.boolean().optional(),
-  aterramento: Joi.boolean().optional()
+  aterramento: Joi.boolean().optional(),
+  checklist_itens_extras: Joi.array()
+    .max(40)
+    .items(
+      Joi.object({
+        id: Joi.string().trim().min(1).max(120).required(),
+        label: Joi.string().trim().min(1).max(200).required(),
+        ok: Joi.boolean().required(),
+        obra_item_id: Joi.number().integer().positive().optional()
+      })
+    )
+    .optional()
 })
 
 const filtrosSchema = Joi.object({

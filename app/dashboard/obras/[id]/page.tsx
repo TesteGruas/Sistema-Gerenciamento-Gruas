@@ -151,6 +151,15 @@ function ObraDetailsPageContent() {
     carregarCustosMensais,
     atualizarObra
   } = useObraStore()
+
+  /** ID numérico da obra para APIs (catálogo de checklist); prioriza obra carregada no store */
+  const obraIdNumericoParaApi = useMemo(() => {
+    const fromObra = obra?.id != null ? Number(obra.id) : NaN
+    if (Number.isFinite(fromObra) && fromObra > 0) return Math.trunc(fromObra)
+    const fromParams = parseInt(String(obraId), 10)
+    if (Number.isFinite(fromParams) && fromParams > 0) return fromParams
+    return undefined
+  }, [obra?.id, obraId])
   
   // Estados locais para dados não armazenados no store
   const [documentos, setDocumentos] = useState<any[]>([])
@@ -1264,6 +1273,7 @@ function ObraDetailsPageContent() {
 
   // Estados para livro da grua - Checklist Diários
   const [isNovoChecklistOpen, setIsNovoChecklistOpen] = useState(false)
+  const [nonceNovoChecklistDiario, setNonceNovoChecklistDiario] = useState(0)
   const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
   const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
   const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
@@ -1453,6 +1463,7 @@ function ObraDetailsPageContent() {
   const handleNovoChecklist = (gruaId: string) => {
     setGruaSelecionadaChecklist(gruaId)
     setChecklistSelecionado(null)
+    setNonceNovoChecklistDiario((n) => n + 1)
     setIsNovoChecklistOpen(true)
   }
 
@@ -7047,7 +7058,9 @@ useEffect(() => {
           </DialogHeader>
           {gruaSelecionadaChecklist && (
             <LivroGruaChecklistDiario
+              key={`novo-checklist-${nonceNovoChecklistDiario}`}
               gruaId={gruaSelecionadaChecklist}
+              obraId={obraIdNumericoParaApi}
               onSave={handleSucessoChecklist}
               onCancel={() => setIsNovoChecklistOpen(false)}
             />
@@ -7066,6 +7079,7 @@ useEffect(() => {
           {gruaSelecionadaChecklist && checklistSelecionado && (
             <LivroGruaChecklistDiario
               gruaId={gruaSelecionadaChecklist}
+              obraId={obraIdNumericoParaApi}
               checklist={checklistSelecionado}
               modoEdicao
               onSave={handleSucessoChecklist}
@@ -7083,6 +7097,7 @@ useEffect(() => {
           {checklistSelecionado && (
             <LivroGruaChecklistDiario
               gruaId={checklistSelecionado.grua_id?.toString() || gruaSelecionadaChecklist}
+              obraId={obraIdNumericoParaApi}
               checklist={checklistSelecionado}
               modoVisualizacao
               onCancel={() => setIsVisualizarChecklistOpen(false)}

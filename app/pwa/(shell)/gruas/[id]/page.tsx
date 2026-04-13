@@ -23,12 +23,17 @@ import {
 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
+import { gruaObraApi } from "@/lib/api-grua-obra"
 import { fetchWithAuth } from "@/lib/api"
 import { LivroGruaChecklistDiario } from "@/components/livro-grua-checklist-diario"
 import { LivroGruaManutencao } from "@/components/livro-grua-manutencao"
 import { LivroGruaChecklistList } from "@/components/livro-grua-checklist-list"
 import { LivroGruaManutencaoList } from "@/components/livro-grua-manutencao-list"
 import { LivroGruaFuncionariosList } from "@/components/livro-grua-funcionarios-list"
+import {
+  CHECKLIST_LIVRO_GRUA_ITENS_FIXOS,
+  normalizeChecklistItensExtras
+} from "@/lib/checklist-livro-grua-shared"
 
 export default function PWAGruaDetalhesPage() {
   const { toast } = useToast()
@@ -50,6 +55,7 @@ export default function PWAGruaDetalhesPage() {
   const [isEditarChecklistOpen, setIsEditarChecklistOpen] = useState(false)
   const [isVisualizarChecklistOpen, setIsVisualizarChecklistOpen] = useState(false)
   const [checklistSelecionado, setChecklistSelecionado] = useState<any>(null)
+  const [obraIdAtivaChecklist, setObraIdAtivaChecklist] = useState<number | undefined>(undefined)
   
   const [isNovaManutencaoOpen, setIsNovaManutencaoOpen] = useState(false)
   const [isEditarManutencaoOpen, setIsEditarManutencaoOpen] = useState(false)
@@ -120,6 +126,28 @@ export default function PWAGruaDetalhesPage() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (grua?.obra_ativa?.id != null) {
+      const oid = Number(grua.obra_ativa.id)
+      if (Number.isFinite(oid)) {
+        setObraIdAtivaChecklist(oid)
+        return
+      }
+    }
+    gruaObraApi
+      .buscarObrasPorGrua(gruaId)
+      .then((r) => {
+        const list = r.data || []
+        const ativa = list.find((rel: { status?: string }) =>
+          String(rel.status || "")
+            .toLowerCase()
+            .includes("ativa")
+        )
+        setObraIdAtivaChecklist((ativa || list[0])?.obra_id)
+      })
+      .catch(() => setObraIdAtivaChecklist(undefined))
+  }, [grua, gruaId])
 
   // Carregar coordenadas da obra ou localização da grua
   useEffect(() => {
@@ -556,6 +584,7 @@ export default function PWAGruaDetalhesPage() {
             {grua && (
               <LivroGruaChecklistDiario
                 gruaId={grua.id || gruaId}
+                obraId={obraIdAtivaChecklist}
                 onSave={handleSucessoChecklist}
                 onCancel={() => setIsNovoChecklistOpen(false)}
               />
@@ -572,6 +601,7 @@ export default function PWAGruaDetalhesPage() {
             {grua && checklistSelecionado && (
               <LivroGruaChecklistDiario
                 gruaId={grua.id || gruaId}
+                obraId={obraIdAtivaChecklist}
                 checklist={checklistSelecionado}
                 onSave={handleSucessoChecklist}
                 onCancel={() => setIsEditarChecklistOpen(false)}
@@ -603,16 +633,7 @@ export default function PWAGruaDetalhesPage() {
                   </CardHeader>
                   <CardContent>
                     <div className="grid grid-cols-2 gap-2">
-                      {[
-                        { key: 'cabos', label: 'Cabos' },
-                        { key: 'polias', label: 'Polias' },
-                        { key: 'estrutura', label: 'Estrutura' },
-                        { key: 'movimentos', label: 'Movimentos' },
-                        { key: 'freios', label: 'Freios' },
-                        { key: 'limitadores', label: 'Limitadores' },
-                        { key: 'indicadores', label: 'Indicadores' },
-                        { key: 'aterramento', label: 'Aterramento' }
-                      ].map((item) => (
+                      {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map((item) => (
                         <div key={item.key} className="flex items-center gap-2">
                           {checklistSelecionado[item.key as keyof typeof checklistSelecionado] ? (
                             <CheckCircle2 className="w-4 h-4 text-green-600" />
@@ -620,6 +641,16 @@ export default function PWAGruaDetalhesPage() {
                             <AlertCircle className="w-4 h-4 text-gray-400" />
                           )}
                           <span className="text-sm">{item.label}</span>
+                        </div>
+                      ))}
+                      {normalizeChecklistItensExtras(checklistSelecionado.checklist_itens_extras).map((ex) => (
+                        <div key={ex.id} className="flex items-center gap-2">
+                          {ex.ok ? (
+                            <CheckCircle2 className="w-4 h-4 text-green-600" />
+                          ) : (
+                            <AlertCircle className="w-4 h-4 text-gray-400" />
+                          )}
+                          <span className="text-sm">{ex.label}</span>
                         </div>
                       ))}
                     </div>
