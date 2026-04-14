@@ -14,6 +14,7 @@ import {
   adicionarAssinaturaPorAncorasOuFallback
 } from '../utils/pdf-signature.js'
 import { tipoAdmissionalParaTipoDocumentoAssinatura } from '../utils/tipo-admissional-assinatura.js'
+import { tipoDemissaoParaTipoDocumentoAssinatura } from '../utils/tipo-demissao-assinatura.js'
 import { certificadoTipoParaTipoDocumentoAssinatura } from '../utils/certificado-tipo-assinatura.js'
 
 const router = express.Router()
@@ -1137,12 +1138,18 @@ router.get('/documentos-demissao/:id/download', async (req, res) => {
 
     if ((comAssinatura === 'true' || comAssinatura === '1') && doc.assinatura_digital) {
       try {
-        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, doc.assinatura_digital, {
-          horizontalAlign: 'left',
-          marginLeft: 56,
-          marginBottom: 52,
-          height: 88,
-          pages: 'last',
+        const tipoDoc = tipoDemissaoParaTipoDocumentoAssinatura(doc.tipo)
+        const arquivoNome =
+          String(doc.arquivo || '')
+            .split('/')
+            .pop()
+            .split('?')[0] || 'documento.pdf'
+        pdfBuffer = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, doc.assinatura_digital, {
+          documento: {
+            arquivo_original: arquivoNome,
+            titulo: doc.tipo || '',
+            ...(tipoDoc ? { tipo_documento: tipoDoc } : {})
+          },
           opacity: 1.0
         })
       } catch (signatureError) {

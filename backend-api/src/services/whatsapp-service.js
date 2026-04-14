@@ -1617,3 +1617,69 @@ export async function enviarMensagemAprovacao(aprovacao, supervisor = null) {
   }
 }
 
+/**
+ * WhatsApp: responsável de obra.
+ * Com email_login + senha_provisória: usa template DB `responsavel_obra_credenciais` (fallback embutido).
+ * Sem senha: apenas link / esqueci senha (ex.: cadastro só com telefone).
+ *
+ * @param {object} opts
+ * @param {string} [opts.email_login]
+ * @param {string} [opts.senha_provisoria]
+ * @param {boolean} [opts.credenciais_enviadas_por_email] — legado; se true e faltar senha no opts, mensagem só avisa e-mail
+ */
+export async function enviarWhatsAppResponsavelObraAcesso(telefone, opts = {}) {
+  const {
+    nome,
+    obra_nome,
+    credenciais_enviadas_por_email = false,
+    email_login = null,
+    senha_provisoria = null
+  } = opts;
+  const tel = normalizarTelefoneBrasilParaWhatsApp(telefone);
+  if (!tel) {
+    return { sucesso: false, erro: 'Telefone inválido ou ausente' };
+  }
+  const link_login = `${getPublicFrontendUrl()}/login`;
+  const obra = String(obra_nome || 'obra').trim();
+  const nomeFmt = nome || 'responsável';
+
+  let msg;
+  let tipoLog = 'responsavel_obra_acesso';
+
+  if (email_login && senha_provisoria) {
+    tipoLog = 'responsavel_obra_credenciais';
+    msg = await renderWhatsAppMessage({
+      tipo: 'responsavel_obra_credenciais',
+      fallbackText:
+        `Olá, ${nomeFmt}!\n\n` +
+        `Você está cadastrado(a) como responsável de obra em *${obra}*.\n\n` +
+        `Login: ${email_login}\n` +
+        `Senha provisória: ${senha_provisoria}\n\n` +
+        `Também enviamos esses dados para o seu e-mail (confira caixa de entrada e spam).\n\n` +
+        `Link para entrar: ${link_login}\n\n` +
+        `Após o primeiro acesso, altere a senha no sistema.`,
+      vars: {
+        nome: nomeFmt,
+        obra_nome: obra,
+        email_login,
+        senha_provisoria,
+        link_login
+      }
+    });
+  } else if (credenciais_enviadas_por_email) {
+    msg =
+      `Olá, ${nomeFmt}!\n\n` +
+      `Você está cadastrado(a) como *responsável de obra* em *${obra}*.\n\n` +
+      `Enviamos seu *login* e *senha provisória* para o seu *e-mail cadastrado*. Confira a caixa de entrada e o spam.\n\n` +
+      `Link para entrar: ${link_login}\n\n` +
+      `Após o primeiro acesso, altere a senha no sistema.`;
+  } else {
+    msg =
+      `Olá, ${nomeFmt}!\n\n` +
+      `Você está cadastrado(a) como *responsável de obra* em *${obra}*.\n\n` +
+      `Acesse o sistema: ${link_login}\n\n` +
+      `Use o mesmo e-mail cadastrado. Se não lembrar a senha, use *Esqueci minha senha* na tela de login.`;
+  }
+
+  return enviarMensagemWebhook(tel, msg, link_login, { tipo: tipoLog });
+}

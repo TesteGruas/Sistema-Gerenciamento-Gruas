@@ -386,7 +386,7 @@ export default function TemplateEditPage() {
             <DialogHeader>
               <DialogTitle>Preview do e-mail</DialogTitle>
               <DialogDescription>
-                {tipo === "medicao_enviada"
+                {tipo === "medicao_enviada" || tipo === "medicao_faturamento_enviada"
                   ? "Mesma lógica do envio real de medição (payload fictício completo)."
                   : "Dados fictícios de exemplo para cada variável do template."}
               </DialogDescription>

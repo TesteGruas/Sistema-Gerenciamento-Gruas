@@ -501,7 +501,8 @@ app.use(express.urlencoded({ extended: true }))
 // Rate limiting (permissivo) - Excluindo rotas de configurações e login
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 1000,
+  // Dev: SPA + HMR + vários efeitos podem gerar muitas leituras autenticadas; produção mantém teto alto
+  max: process.env.NODE_ENV === 'production' ? 8000 : 20000,
   message: {
     error: 'Muitas tentativas. Tente novamente em 15 minutos.'
   },

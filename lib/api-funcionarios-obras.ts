@@ -158,11 +158,37 @@ export async function getFuncionariosObra(
   return response.data
 }
 
+/** Evita rajadas de GET idênticos (vários useEffects / remontagens) estourando rate limit da API */
+const alocacoesAtivasCache = new Map<
+  number,
+  { data: FuncionariosObrasResponse; at: number }
+>()
+const ALOC_ATIVAS_TTL_MS = 45_000
+const alocacoesAtivasInflight = new Map<number, Promise<FuncionariosObrasResponse>>()
+
 /**
  * Obter alocações ativas de um funcionário
  */
 export async function getAlocacoesAtivasFuncionario(funcionario_id: number): Promise<FuncionariosObrasResponse> {
-  return getFuncionariosObras({ funcionario_id, status: 'ativo', limit: 100 })
+  const now = Date.now()
+  const cached = alocacoesAtivasCache.get(funcionario_id)
+  if (cached && now - cached.at < ALOC_ATIVAS_TTL_MS) {
+    return cached.data
+  }
+  const pending = alocacoesAtivasInflight.get(funcionario_id)
+  if (pending) return pending
+
+  const p = getFuncionariosObras({ funcionario_id, status: 'ativo', limit: 100 })
+    .then((data) => {
+      alocacoesAtivasCache.set(funcionario_id, { data, at: Date.now() })
+      return data
+    })
+    .finally(() => {
+      alocacoesAtivasInflight.delete(funcionario_id)
+    })
+
+  alocacoesAtivasInflight.set(funcionario_id, p)
+  return p
 }
 
 /**

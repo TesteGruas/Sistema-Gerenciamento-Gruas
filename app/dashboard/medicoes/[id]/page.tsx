@@ -10,6 +10,14 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { 
   ArrowLeft, 
   Download,
@@ -19,6 +27,8 @@ import {
   FileCheck,
   FileText,
   Send,
+  Share2,
+  ChevronDown,
   CheckCircle,
   XCircle,
   Clock,
@@ -32,12 +42,28 @@ import {
   MedicaoMensal,
   MedicaoDocumento,
   MedicaoAditivo,
+  type ModoEnvioMedicaoCliente,
 } from "@/lib/api-medicoes-mensais"
 import { medicoesUtils, calcularDiasPeriodoEmissao } from "@/lib/medicoes-utils"
-
-type TipoDocumentoMedicaoUpload = MedicaoDocumento["tipo_documento"]
+import { scheduleReleaseStaleBodyPointerLock } from "@/lib/release-stale-modal-body-lock"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
+
+type TipoDocumentoMedicaoUpload = MedicaoDocumento["tipo_documento"]
+
+const MODO_COMPARTILHAR_INFO: Record<
+  ModoEnvioMedicaoCliente,
+  { titulo: string; descricao: string }
+> = {
+  medicao_completa: {
+    titulo: "Medição completa",
+    descricao: "PDF consolidado, documentos da medição, notas fiscais e boletos.",
+  },
+  faturamento_notas_boletos: {
+    titulo: "Faturamento (notas e boletos)",
+    descricao: "Somente arquivos de NF e boletos; e-mail com texto de faturamento.",
+  },
+}
 
 export default function MedicaoDetalhesPage() {
   const router = useRouter()
@@ -75,6 +101,9 @@ export default function MedicaoDetalhesPage() {
   const [telefonesEnvio, setTelefonesEnvio] = useState<string[]>([""])
   const [incluirContatosCliente, setIncluirContatosCliente] = useState(true)
   const [enviarContatosExtras, setEnviarContatosExtras] = useState(false)
+  const [modoEnvioMedicao, setModoEnvioMedicao] = useState<ModoEnvioMedicaoCliente>("medicao_completa")
+  /** Controlado para evitar travar o trigger após abrir o Dialog a partir do menu (Radix). */
+  const [compartilharMenuOpen, setCompartilharMenuOpen] = useState(false)
   const [enviando, setEnviando] = useState(false)
   const [exportandoPdfCompleto, setExportandoPdfCompleto] = useState(false)
   const [isAprovarDialogOpen, setIsAprovarDialogOpen] = useState(false)
@@ -293,7 +322,8 @@ export default function MedicaoDetalhesPage() {
         {
           incluir_contatos_cliente: incluirContatosCliente,
           emails_adicionais: emailsValidos,
-          telefones_adicionais: telefonesValidos
+          telefones_adicionais: telefonesValidos,
+          modo_envio: modoEnvioMedicao,
         }
       )
       if (response.success) {
@@ -539,7 +569,8 @@ export default function MedicaoDetalhesPage() {
     ""
   const temContatoClientePadrao = Boolean(emailClientePadrao || telefoneClientePadrao)
 
-  const abrirDialogEnviar = () => {
+  const abrirDialogCompartilhar = (modo: ModoEnvioMedicaoCliente) => {
+    setModoEnvioMedicao(modo)
     setIncluirContatosCliente(temContatoClientePadrao)
     setEnviarContatosExtras(false)
     setEmailsEnvio([""])
@@ -674,7 +705,7 @@ export default function MedicaoDetalhesPage() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-2">
           {getStatusBadge(medicao.status)}
           {getAprovacaoBadge(medicao.status_aprovacao)}
           <Button
@@ -714,13 +745,52 @@ export default function MedicaoDetalhesPage() {
             <Download className="w-4 h-4 mr-2" />
             {exportandoPdfCompleto ? "Exportando..." : "Exportar PDF Completo"}
           </Button>
-          <Button
-            variant="outline"
-            onClick={abrirDialogEnviar}
+          <DropdownMenu
+            modal={false}
+            open={compartilharMenuOpen}
+            onOpenChange={(open) => {
+              setCompartilharMenuOpen(open)
+              if (open) scheduleReleaseStaleBodyPointerLock()
+            }}
           >
-            <Send className="w-4 h-4 mr-2" />
-            Enviar
-          </Button>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" className="gap-1.5">
+                <Share2 className="w-4 h-4 shrink-0" />
+                Compartilhar
+                <ChevronDown className="w-4 h-4 shrink-0 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-[min(100vw-2rem,22rem)]">
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                Enviar por e-mail e WhatsApp
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                className="flex cursor-pointer flex-col items-start gap-0.5 py-2.5"
+                onSelect={() => {
+                  setCompartilharMenuOpen(false)
+                  window.setTimeout(() => abrirDialogCompartilhar("medicao_completa"), 0)
+                }}
+              >
+                <span className="font-medium text-foreground">Medição completa</span>
+                <span className="text-xs font-normal text-muted-foreground leading-snug">
+                  {MODO_COMPARTILHAR_INFO.medicao_completa.descricao}
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                className="flex cursor-pointer flex-col items-start gap-0.5 py-2.5"
+                onSelect={() => {
+                  setCompartilharMenuOpen(false)
+                  window.setTimeout(() => abrirDialogCompartilhar("faturamento_notas_boletos"), 0)
+                }}
+              >
+                <span className="font-medium text-foreground">Faturamento (NF e boletos)</span>
+                <span className="text-xs font-normal text-muted-foreground leading-snug">
+                  {MODO_COMPARTILHAR_INFO.faturamento_notas_boletos.descricao}
+                </span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -1267,12 +1337,27 @@ export default function MedicaoDetalhesPage() {
       <Dialog open={isEnviarDialogOpen} onOpenChange={setIsEnviarDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
-            <DialogTitle>Enviar Medição ao Cliente</DialogTitle>
+            <DialogTitle className="flex items-center gap-2 pr-8">
+              <Send className="h-5 w-5 shrink-0 text-muted-foreground" />
+              Compartilhar medição
+            </DialogTitle>
             <DialogDescription>
-              Envie para os contatos padrão do cliente e, se quiser, adicione contatos extras.
+              Confirme os destinatários. O tipo de envio foi escolhido no menu <strong>Compartilhar</strong> — para alterar, cancele e abra outra opção.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            <div className="rounded-md border border-border bg-muted/40 p-3">
+              <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                Tipo de envio
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {MODO_COMPARTILHAR_INFO[modoEnvioMedicao].titulo}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground leading-relaxed">
+                {MODO_COMPARTILHAR_INFO[modoEnvioMedicao].descricao}
+              </p>
+            </div>
+
             <div className="rounded-md border p-3 space-y-2 bg-gray-50">
               <div className="flex items-center justify-between gap-3">
                 <Label className="text-sm">Contatos padrão do cliente</Label>
@@ -1399,12 +1484,20 @@ export default function MedicaoDetalhesPage() {
                 setTelefonesEnvio([""])
                 setIncluirContatosCliente(true)
                 setEnviarContatosExtras(false)
+                setModoEnvioMedicao("medicao_completa")
               }}
             >
               Cancelar
             </Button>
-            <Button onClick={handleEnviar} disabled={enviando}>
-              {enviando ? "Enviando..." : "Enviar"}
+            <Button onClick={handleEnviar} disabled={enviando} className="gap-2">
+              {enviando ? (
+                "Enviando..."
+              ) : (
+                <>
+                  <Send className="h-4 w-4 shrink-0" />
+                  Enviar
+                </>
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

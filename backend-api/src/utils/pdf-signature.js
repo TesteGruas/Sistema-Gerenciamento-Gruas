@@ -1,10 +1,12 @@
 import { PDFDocument } from 'pdf-lib';
 import {
   encontrarPosicaoAssinaturaPorAncoras,
+  encontrarTodasPosicoesPorAncoras,
   encontrarTodasPosicoesDuasColunasFuncionario,
   encontrarTodasPosicoesRodapeColunaEsquerda,
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
+  encontrarPosicoesCaixaFixaA4Trabalhador151,
   resolverRegraPorDocumento
 } from './pdf-signature-placement.js';
 
@@ -15,6 +17,8 @@ export {
   encontrarTodasPosicoesRodapeColunaEsquerda,
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
+  encontrarPosicoesCaixaFixaA4Trabalhador151,
+  encontrarTodasPosicoesPorAncoras,
   resolverRegraPorDocumento,
   normalizarTipoDocumentoParaRegraAssinatura,
   listarPaginasComConteudo,
@@ -298,6 +302,10 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
       posicoes = await encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, regra);
     } else if (regra.metodoAncora === 'certificado_multipagina_aluno') {
       posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra);
+    } else if (regra.metodoAncora === 'caixa_fixa_a4_trabalhador_151') {
+      posicoes = await encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regra);
+    } else if (regra.todasOcorrenciasAncora === true && regra.anchors?.length) {
+      posicoes = await encontrarTodasPosicoesPorAncoras(pdfBuffer, regra);
     } else {
       const pos = await encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, regra);
       if (pos) posicoes = [pos];
@@ -310,13 +318,27 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
     let buf = pdfBuffer;
     for (let i = 0; i < posicoes.length; i++) {
       const pos = posicoes[i];
-      const h = pos.height;
-      const w = (dims.width / dims.height) * h;
-      let drawX = pos.x;
-      let drawY = pos.y;
-      if (pos.metodo === 'canto_inferior_direito_fixo' && typeof pos.pageWidth === 'number') {
-        drawX = pos.pageWidth - w - (pos.marginRight ?? 44);
-        drawY = pos.marginBottom ?? 40;
+      let drawX;
+      let drawY;
+      let drawW;
+      let drawH;
+      if (pos.metodo === 'caixa_fixa_centrada' && pos.box) {
+        const box = pos.box;
+        const ratio = Math.min(box.width / dims.width, box.height / dims.height);
+        drawW = dims.width * ratio;
+        drawH = dims.height * ratio;
+        drawX = box.x + (box.width - drawW) / 2;
+        drawY = box.y + (box.height - drawH) / 2;
+      } else {
+        const h = pos.height;
+        drawH = h;
+        drawW = (dims.width / dims.height) * h;
+        drawX = pos.x;
+        drawY = pos.y;
+        if (pos.metodo === 'canto_inferior_direito_fixo' && typeof pos.pageWidth === 'number') {
+          drawX = pos.pageWidth - drawW - (pos.marginRight ?? 44);
+          drawY = pos.marginBottom ?? 40;
+        }
       }
       console.log(
         `[PDF Signature] Assinatura (${pos.metodo || 'âncora'}) página ${pos.pageIndex + 1} [${i + 1}/${posicoes.length}], anchor="${pos.anchor}" x=${Number(drawX).toFixed(1)} y=${Number(drawY).toFixed(1)}`
@@ -325,8 +347,8 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
         pageIndex: pos.pageIndex,
         x: drawX,
         y: drawY,
-        width: w,
-        height: h,
+        width: drawW,
+        height: drawH,
         opacity: contexto.opacity ?? 1.0
       });
     }

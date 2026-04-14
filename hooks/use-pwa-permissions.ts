@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useEffect, useState } from 'react'
+import { useMemo, useEffect, useState, useCallback } from 'react'
 import { useAuth } from './use-auth'
 import { usePWAUser } from './use-pwa-user'
 import type { RoleName, Permission } from '@/types/permissions'
@@ -169,12 +169,12 @@ export const usePWAPermissions = () => {
   // VERIFICAÇÕES POR ROLE
   // ========================================
 
-  const isAdmin = () => userRole === 'Admin'
-  const isManager = () => userRole === 'Gestores'
-  // Função removida: isSupervisor - sistema não utiliza mais supervisor
-  const isSupervisor = () => false
-  const isClient = () => userRole === 'Clientes'
-  const isOperator = () => userRole === 'Operários'
+  // useCallback: referências estáveis para não disparar useEffects em loop quando usadas em deps
+  const isAdmin = useCallback(() => userRole === 'Admin', [userRole])
+  const isManager = useCallback(() => userRole === 'Gestores', [userRole])
+  const isSupervisor = useCallback(() => false, [])
+  const isClient = useCallback(() => userRole === 'Clientes', [userRole])
+  const isOperator = useCallback(() => userRole === 'Operários', [userRole])
 
   // ========================================
   // VERIFICAÇÕES DE FUNCIONALIDADES

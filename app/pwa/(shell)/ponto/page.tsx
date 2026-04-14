@@ -43,15 +43,16 @@ import { PontoMapa } from "@/components/pwa-ponto-mapa"
 import { responsaveisObraApi } from "@/lib/api-responsaveis-obra"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
+import { formatDateYYYYMMDDLocal } from "@/lib/date-local"
+
+/** YYYY-MM-DD vindo da API (date ou ISO string). */
+function dataRegistroYYYYMMD(v: unknown): string {
+  if (typeof v !== "string") return ""
+  return v.slice(0, 10)
+}
 
 export default function PWAPontoPage() {
-  const obterDataLocalISO = () => {
-    const now = new Date()
-    const ano = now.getFullYear()
-    const mes = String(now.getMonth() + 1).padStart(2, '0')
-    const dia = String(now.getDate()).padStart(2, '0')
-    return `${ano}-${mes}-${dia}`
-  }
+  const obterDataLocalISO = () => formatDateYYYYMMDDLocal()
 
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isOnline, setIsOnline] = useState(true)
@@ -385,13 +386,14 @@ export default function PWAPontoPage() {
       )
       console.log('🔍 [PWA Ponto] Fazendo chamada API com funcionario_id:', funcionarioId)
       
-      const data = await pontoApi.getRegistros({
+      const listaBruta = await pontoApi.getRegistros({
         funcionario_id: funcionarioId,
         data_inicio: hoje,
         data_fim: hoje
       })
+      const data = (listaBruta || []).filter((r) => dataRegistroYYYYMMD(r.data) === hoje)
 
-      if (data && data.length > 0) {
+      if (data.length > 0) {
         const registro = data[0]
         setRegistroIdHoje(registro.id ?? null)
         const registros = {
@@ -643,13 +645,16 @@ export default function PWAPontoPage() {
       )
 
       const hoje = obterDataLocalISO()
-      const registrosExistentes = await pontoApi.getRegistros({
+      const listaBrutaTc = await pontoApi.getRegistros({
         funcionario_id: funcionarioId,
         data_inicio: hoje,
         data_fim: hoje
       })
+      const registrosExistentes = (listaBrutaTc || []).filter(
+        (r) => dataRegistroYYYYMMD(r.data) === hoje
+      )
 
-      if (!registrosExistentes || registrosExistentes.length === 0) {
+      if (registrosExistentes.length === 0) {
         throw new Error('Registre a entrada antes de selecionar Dia corrido.')
       }
 
@@ -661,12 +666,14 @@ export default function PWAPontoPage() {
       })
 
       if (!registroAtualizado?.trabalho_corrido) {
-        const registrosPosAtualizacao = await pontoApi.getRegistros({
+        const listaPos = await pontoApi.getRegistros({
           funcionario_id: funcionarioId,
           data_inicio: hoje,
           data_fim: hoje
         })
-        const registroHojeAtualizado = registrosPosAtualizacao?.[0]
+        const registroHojeAtualizado = (listaPos || []).find(
+          (r) => dataRegistroYYYYMMD(r.data) === hoje
+        )
         if (!registroHojeAtualizado?.trabalho_corrido) {
           throw new Error('O servidor não confirmou o Dia corrido para hoje. Tente novamente.')
         }
@@ -801,13 +808,16 @@ export default function PWAPontoPage() {
       
       // VALIDAÇÃO: Verificar se já existe um registro completo (entrada + saída) para hoje
       if (isOnline) {
-        const registrosExistentes = await pontoApi.getRegistros({
+        const listaBruta = await pontoApi.getRegistros({
           funcionario_id: funcionarioId,
           data_inicio: hoje,
           data_fim: hoje
         })
-        
-        if (registrosExistentes && registrosExistentes.length > 0) {
+        const registrosExistentes = (listaBruta || []).filter(
+          (r) => dataRegistroYYYYMMD(r.data) === hoje
+        )
+
+        if (registrosExistentes.length > 0) {
           const registroExistente = registrosExistentes[0]
           
           // Se já existe entrada E saída, não permitir novos registros
@@ -940,25 +950,9 @@ export default function PWAPontoPage() {
         return
       }
 
-      // Verificar se já existe registro para hoje
-      const registrosExistentes = await pontoApi.getRegistros({
-        funcionario_id: funcionarioId,
-        data_inicio: hoje,
-        data_fim: hoje
-      })
-
+      // POST /registros faz upsert por (funcionario_id, data) — evita PUT no id errado se a listagem vier incompleta
       try {
-        if (registrosExistentes && registrosExistentes.length > 0) {
-          // Atualizar registro existente
-          const registroId = registrosExistentes[0].id!
-          await pontoApi.atualizarRegistro(registroId, {
-            ...dadosRegistro,
-            justificativa_alteracao: `Registro ${tipo} via PWA`
-          })
-        } else {
-          // Criar novo registro
-          await pontoApi.criarRegistro(dadosRegistro)
-        }
+        await pontoApi.criarRegistro(dadosRegistro)
       } catch (apiError: any) {
         // Tratar erro específico de registro completo (409 - Conflito)
         if (apiError.response?.status === 409) {
@@ -1104,8 +1098,11 @@ export default function PWAPontoPage() {
       let response
       if (responseExistente.ok) {
         const dataExistente = await responseExistente.json()
-        if (dataExistente.data && dataExistente.data.length > 0) {
-          const registroExistente = dataExistente.data[0]
+        const listaHoje = (dataExistente.data || []).filter(
+          (r: { data?: string }) => dataRegistroYYYYMMD(r.data) === hoje
+        )
+        if (listaHoje.length > 0) {
+          const registroExistente = listaHoje[0]
           
           // VALIDAÇÃO: Se já existe um registro completo (entrada + saída), não permitir novos registros
           if (registroExistente.entrada && registroExistente.saida) {

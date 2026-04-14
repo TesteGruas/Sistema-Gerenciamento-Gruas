@@ -212,6 +212,24 @@ async function getTemplateRowAny(tipo) {
  */
 function buildFakeVarsForTemplatePreview(tipo, variaveisJson, publicUrl, destinatario = '', dadosTeste = {}) {
   const dt = dadosTeste && typeof dadosTeste === 'object' ? dadosTeste : {};
+  if (tipo === 'medicao_faturamento_enviada') {
+    const p = getFakeMedicaoPreviewPayload();
+    const vars = buildMedicaoEmailVars({
+      medicao: p.medicao,
+      linkPdfPublico: p.linkPdfPublico,
+      cliente: p.cliente,
+      empresaNome: p.empresaNome,
+      documentos: p.documentos
+    });
+    const out = { ...vars };
+    const keys = Array.isArray(variaveisJson) ? variaveisJson : [];
+    for (const k of keys) {
+      if (out[k] === undefined) {
+        out[k] = dt[k] !== undefined && dt[k] != null ? String(dt[k]) : `(${k})`;
+      }
+    }
+    return { ...out, ...dt };
+  }
   const year = new Date().getFullYear();
   const empresa = dt.empresa || 'Sistema de Gerenciamento de Gruas';
   const baseUrl = String(publicUrl || '').replace(/\/+$/, '');
@@ -311,8 +329,8 @@ function buildFakeVarsForTemplatePreview(tipo, variaveisJson, publicUrl, destina
  * Preview: medição usa payload fictício completo; demais usam template + dados fictícios.
  */
 async function previewEmailTemplateByType({ tipo, assuntoDraft, htmlDraft }) {
-  if (tipo === 'medicao_enviada') {
-    return previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlDraft });
+  if (tipo === 'medicao_enviada' || tipo === 'medicao_faturamento_enviada') {
+    return previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlDraft, templateTipo: tipo });
   }
   if (tipo === 'nota_fiscal_enviada') {
     return previewNotaFiscalEmail({ assunto: assuntoDraft, html_template: htmlDraft });
@@ -335,7 +353,7 @@ async function previewEmailTemplateByType({ tipo, assuntoDraft, htmlDraft }) {
  */
 async function buildTestEmailContent({ tipo, destinatario, dados_teste: dadosTeste }) {
   const dt = dadosTeste && typeof dadosTeste === 'object' ? dadosTeste : {};
-  if (tipo === 'medicao_enviada') {
+  if (tipo === 'medicao_enviada' || tipo === 'medicao_faturamento_enviada') {
     const agora = new Date().toISOString();
     const medicaoFake = {
       numero: dt.numero ?? '12',
@@ -375,7 +393,8 @@ async function buildTestEmailContent({ tipo, destinatario, dados_teste: dadosTes
       linkPdfPublico: linkPdf,
       cliente: clienteFake,
       empresaNome: dt.empresa || 'Sistema de Gerenciamento de Gruas',
-      documentos: documentosTeste
+      documentos: documentosTeste,
+      templateTipo: tipo
     });
   }
 
@@ -863,6 +882,63 @@ function getDefaultMedicaoEnviadaTemplateHtml() {
 </html>`;
 }
 
+/** HTML padrão quando não há template ativo no banco — faturamento (NF + boletos), sem texto de “envio de medição”. */
+function getDefaultMedicaoFaturamentoEnviadaTemplateHtml() {
+  return `<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Faturamento</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f3f4f6;padding:16px 8px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border-radius:12px;border:1px solid #e5e7eb;overflow:hidden;">
+          <tr>
+            <td style="padding:20px 24px;border-bottom:2px solid #0d9488;text-align:center;">
+              <p style="margin:0;font-size:20px;font-weight:bold;color:#134e4a;">{{empresa}}</p>
+              <p style="margin:10px 0 0;font-size:14px;color:#4b5563;">Faturamento — notas fiscais e boletos</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 24px;">
+              <p style="margin:0 0 12px;font-size:15px;color:#111827;">Olá, <strong>{{cliente_nome}}</strong>,</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">Encaminhamos em anexo as <strong>notas fiscais</strong> e os <strong>boletos</strong> referentes à medição nº <strong>{{numero}}</strong>, período <strong>{{periodo_formatado}}</strong>, obra <strong>{{obra_nome}}</strong>.</p>
+              <p style="margin:0 0 16px;font-size:14px;color:#374151;line-height:1.6;">Em caso de dúvida sobre valores ou vencimentos, entre em contato conosco.</p>
+              <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+                <tr>
+                  <td width="50%" style="padding:6px 8px 6px 0;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Medição</p>
+                    <p style="margin:4px 0 0;font-size:14px;font-weight:600;">{{numero}}</p>
+                  </td>
+                  <td width="50%" style="padding:6px 0 6px 8px;vertical-align:top;">
+                    <p style="margin:0;font-size:11px;color:#6b7280;">Valor total (referência)</p>
+                    <p style="margin:4px 0 0;font-size:16px;font-weight:700;color:#0d9488;">R$ {{valor_total}}</p>
+                  </td>
+                </tr>
+              </table>
+              <div style="background:#f8f9fa;padding:14px;border-left:4px solid #0d9488;margin:16px 0;">
+                <p style="margin:0 0 8px;font-size:14px;font-weight:600;color:#333;">PDF da medição (consulta)</p>
+                <p style="margin:0 0 8px;font-size:12px;color:#555;">Se precisar consultar o demonstrativo completo, copie o link abaixo e abra no navegador.</p>
+                <p style="margin:0;font-size:11px;word-break:break-all;font-family:Consolas,monospace;color:#111;">{{link_pdf}}</p>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 24px;border-top:1px solid #e5e7eb;text-align:center;font-size:11px;color:#9ca3af;">
+              E-mail automático — {{empresa}} · © {{ano}}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 /**
  * Variáveis {{...}} para template de medição (reutilizável em preview).
  */
@@ -966,7 +1042,11 @@ function getFakeMedicaoPreviewPayload() {
  * Preview com dados fictícios. Se assunto e html_template forem enviados (rascunho do editor), aplica variáveis neles;
  * caso contrário usa o template ativo do banco (ou HTML padrão).
  */
-async function previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlDraft } = {}) {
+async function previewMedicaoEmail({
+  assunto: assuntoDraft,
+  html_template: htmlDraft,
+  templateTipo = 'medicao_enviada'
+} = {}) {
   const { medicao, cliente, documentos, linkPdfPublico, empresaNome } = getFakeMedicaoPreviewPayload();
   const vars = buildMedicaoEmailVars({
     medicao,
@@ -989,7 +1069,7 @@ async function previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlD
     };
   }
 
-  const tpl = await getActiveTemplateRow('medicao_enviada');
+  const tpl = await getActiveTemplateRow(templateTipo);
   if (tpl) {
     return {
       assunto: replaceVariables(tpl.assunto, vars),
@@ -997,9 +1077,20 @@ async function previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlD
     };
   }
 
+  const defaultHtmlByTipo = {
+    medicao_enviada: getDefaultMedicaoEnviadaTemplateHtml,
+    medicao_faturamento_enviada: getDefaultMedicaoFaturamentoEnviadaTemplateHtml
+  };
+  const htmlFn = defaultHtmlByTipo[templateTipo] || getDefaultMedicaoEnviadaTemplateHtml;
+
+  const assuntoSemTpl =
+    templateTipo === 'medicao_faturamento_enviada'
+      ? `FATURAMENTO — Medição ${vars.numero} — ${vars.periodo_assunto} — ${vars.obra_nome_assunto}`
+      : `MEDIÇÃO ${vars.numero} - ${vars.periodo_assunto} - ${vars.obra_nome_assunto} - ${vars.grua_nome_assunto}`;
+
   return {
-    assunto: `MEDIÇÃO ${vars.numero} - ${vars.periodo_assunto} - ${vars.obra_nome_assunto} - ${vars.grua_nome_assunto}`,
-    html: replaceVariables(getDefaultMedicaoEnviadaTemplateHtml(), vars)
+    assunto: assuntoSemTpl,
+    html: replaceVariables(htmlFn(), vars)
   };
 }
 
@@ -1011,11 +1102,19 @@ async function previewMedicaoEmail({ assunto: assuntoDraft, html_template: htmlD
  * @param {Object} params.cliente
  * @param {string} [params.empresaNome]
  * @param {Array} [params.documentos]
+ * @param {'medicao_enviada'|'medicao_faturamento_enviada'} [params.templateTipo]
  */
-async function buildMedicaoClienteEmail({ medicao, linkPdfPublico, cliente, empresaNome, documentos = [] }) {
+async function buildMedicaoClienteEmail({
+  medicao,
+  linkPdfPublico,
+  cliente,
+  empresaNome,
+  documentos = [],
+  templateTipo = 'medicao_enviada'
+}) {
   const vars = buildMedicaoEmailVars({ medicao, linkPdfPublico, cliente, empresaNome, documentos });
 
-  const tpl = await getActiveTemplateRow('medicao_enviada');
+  const tpl = await getActiveTemplateRow(templateTipo);
   if (tpl) {
     return {
       assunto: replaceVariables(tpl.assunto, vars),
@@ -1023,9 +1122,20 @@ async function buildMedicaoClienteEmail({ medicao, linkPdfPublico, cliente, empr
     };
   }
 
+  const defaultHtmlByTipo = {
+    medicao_enviada: getDefaultMedicaoEnviadaTemplateHtml,
+    medicao_faturamento_enviada: getDefaultMedicaoFaturamentoEnviadaTemplateHtml
+  };
+  const htmlFn = defaultHtmlByTipo[templateTipo] || getDefaultMedicaoEnviadaTemplateHtml;
+
+  const assuntoSemTpl =
+    templateTipo === 'medicao_faturamento_enviada'
+      ? `FATURAMENTO — Medição ${vars.numero} — ${vars.periodo_assunto} — ${vars.obra_nome_assunto}`
+      : `MEDIÇÃO ${vars.numero} - ${vars.periodo_assunto} - ${vars.obra_nome_assunto} - ${vars.grua_nome_assunto}`;
+
   return {
-    assunto: `MEDIÇÃO ${vars.numero} - ${vars.periodo_assunto} - ${vars.obra_nome_assunto} - ${vars.grua_nome_assunto}`,
-    html: replaceVariables(getDefaultMedicaoEnviadaTemplateHtml(), vars)
+    assunto: assuntoSemTpl,
+    html: replaceVariables(htmlFn(), vars)
   };
 }
 
@@ -1359,6 +1469,42 @@ async function sendEmail(options) {
   }
 }
 
+function escapeHtmlEmail(s) {
+  if (s == null || s === '') return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * E-mail quando o responsável de obra já tinha usuário no sistema (ou reenvio após edição).
+ * Não duplica o template "welcome" (senha só no e-mail de nova conta).
+ */
+async function sendResponsavelObraNotificacaoEmail({ nome, email, obra_nome }) {
+  const link_login = `${getPublicFrontendUrl()}/login`;
+  const ano = new Date().getFullYear();
+  const subject = `Responsável de obra — ${obra_nome}`;
+  const html = `<!DOCTYPE html>
+<html lang="pt-BR"><head><meta charset="UTF-8"></head>
+<body style="font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;background:#f4f4f4;">
+  <div style="background:#fff;padding:28px;border-radius:10px;">
+    <p>Olá, <strong>${escapeHtmlEmail(nome)}</strong>,</p>
+    <p>Você foi indicado(a) como <strong>responsável de obra</strong> em <strong>${escapeHtmlEmail(obra_nome)}</strong>.</p>
+    <p>Use o mesmo e-mail cadastrado no sistema para entrar. Se não lembrar a senha, use <strong>Esqueci minha senha</strong> na tela de login.</p>
+    <p style="margin:24px 0;"><a href="${link_login}" style="background:#0d9488;color:#fff;padding:12px 20px;text-decoration:none;border-radius:8px;display:inline-block;">Abrir login</a></p>
+    <p style="font-size:12px;color:#666;">Sistema de Gerenciamento de Gruas · ${ano}</p>
+  </div>
+</body></html>`;
+  return sendEmail({
+    to: email,
+    subject,
+    html,
+    tipo: 'responsavel_obra_notificacao'
+  });
+}
+
 /**
  * Envia email de boas-vindas com senha temporária
  * @param {Object} userData - Dados do usuário
@@ -1660,6 +1806,7 @@ export {
   encrypt,
   decrypt,
   sendEmail,
+  sendResponsavelObraNotificacaoEmail,
   sendWelcomeEmail,
   sendResetPasswordEmail,
   sendPasswordResetEmail,

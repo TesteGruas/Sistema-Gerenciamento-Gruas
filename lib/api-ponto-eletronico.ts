@@ -1,4 +1,5 @@
 import api from './api';
+import { parseYYYYMMDDLocal } from './date-local';
 
 function getApiBaseUrlFromClient(): string {
   const base = api.defaults.baseURL || '/api';
@@ -894,9 +895,14 @@ export const utilsPonto = {
    */
   formatarData(data: string): string {
     if (!data) return '-';
-    
+
     try {
+      const local = parseYYYYMMDDLocal(data);
+      if (local) {
+        return local.toLocaleDateString('pt-BR');
+      }
       const date = new Date(data);
+      if (Number.isNaN(date.getTime())) return data;
       return date.toLocaleDateString('pt-BR');
     } catch {
       return data;

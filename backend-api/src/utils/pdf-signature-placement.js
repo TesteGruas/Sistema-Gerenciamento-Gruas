@@ -2,6 +2,7 @@ import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mj
 import { createRequire } from 'module';
 import { REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO } from '../config/assinatura-posicao-por-tipo-documento.js';
 import { tipoAdmissionalParaTipoDocumentoAssinatura } from './tipo-admissional-assinatura.js';
+import { tipoDemissaoParaTipoDocumentoAssinatura } from './tipo-demissao-assinatura.js';
 
 export { REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO };
 
@@ -22,9 +23,19 @@ try {
  * @property {number} [gapAbaixoTextoPoints] — espaço entre a base do texto e o topo da imagem da assinatura
  * @property {number} [signatureHeight] — altura desejada da assinatura (pontos PDF)
  * @property {number} [pageIndex] — forçar página (0-based). Com `rodape_coluna_esquerda`, usa só essa página (ex.: ficha de registro na 2.ª folha).
- * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'} [metodoAncora] — certificado_nr12_multi: p.1 ANDERSON (fallback ALUNO); demais canto. certificado_multipagina_aluno: p.1 ALUNO; demais canto (demais certificados NR).
+ * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'} [metodoAncora] — caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi: p.1 ANDERSON (fallback ALUNO); demais canto. certificado_multipagina_aluno: p.1 ALUNO; demais canto (demais certificados NR).
+ * @property {number} [caixaPrimeirasPaginas] — com `caixa_fixa_a4_trabalhador_151`: quantas páginas a partir da 1.ª (default 3).
+ * @property {number} [caixaX] — canto inferior esquerdo da caixa (pt).
+ * @property {number} [caixaY] — base da caixa (pt, origem inferior esquerda).
+ * @property {number} [caixaWidth] — largura da caixa (pt).
+ * @property {number} [caixaHeight] — altura da caixa (pt).
+ * @property {number} [caixaPageWidth] [caixaPageHeight] — referência A4 (default 595×841).
+ * @property {number} [caixaToleranciaPts] — tolerância ao validar tamanho da página (default 3).
+ * @property {boolean} [caixaExigeDimensaoA4] — se false, não filtra por tamanho (default true).
+ * @property {boolean} [caixaFallbackPrimeirasPaginas] — se true (default), aplica nas primeiras N páginas quando nenhuma passou no filtro de tamanho.
  * @property {boolean} [todasOcorrenciasColunaFuncionario] — se true, assina em cada linha com coluna empresa + funcionário (ex.: dois blocos ANDERSON no mesmo PDF)
  * @property {boolean} [todasPaginasRodapeColunaEsquerda] — se true, aplica rodape_coluna_esquerda em **cada página** que tiver rodapé na coluna esquerda (ex.: ficha EPIs: termo + tabela em páginas distintas)
+ * @property {boolean} [todasOcorrenciasAncora] — se true, usa **todas** as ocorrências de `anchors` no PDF (ex.: duas vias de aviso prévio na mesma folha), ordenadas topo→fundo
  */
 
 export const REGRA_ASSINATURA_PADRAO = {
@@ -214,6 +225,10 @@ export function resolverRegraPorDocumento(documento, override = {}) {
   if (tipo && !REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
     const mapeado = tipoAdmissionalParaTipoDocumentoAssinatura(tipoBruto)
     if (mapeado) tipo = mapeado
+  }
+  if (tipo && !REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
+    const mapeadoDem = tipoDemissaoParaTipoDocumentoAssinatura(tipoBruto)
+    if (mapeadoDem) tipo = mapeadoDem
   }
   if (tipo && REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
     const { descricao: _, ...regraTipo } = REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo];
@@ -647,6 +662,57 @@ export async function encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, reg
  * @param {Partial<RegraPosicaoAssinatura>} regra
  * @returns {Promise<Array<Record<string, unknown>>>}
  */
+/**
+ * Comunicação de Desligamento (e formulários equivalentes): sem campo AcroForm — área fixa do
+ * campo 151 «Assinatura do Trabalhador» em A4 (595×841 pt). Páginas 1–3 com o mesmo layout.
+ * Coordenadas em origem inferior esquerda (pdf-lib): x=47, y=333, largura 240, altura 38.
+ * @param {Buffer|Uint8Array} pdfBuffer
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ * @returns {Promise<Array<{ pageIndex: number, metodo: string, box: { x: number, y: number, width: number, height: number }, anchor?: string }>>}
+ */
+export async function encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regra = {}) {
+  const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
+  const { paginas } = await extrairItensTextoPdf(pdfBuffer);
+  const refW = r.caixaPageWidth ?? 595;
+  const refH = r.caixaPageHeight ?? 841;
+  const tol = r.caixaToleranciaPts ?? 3;
+  const maxIdxExclusive = r.caixaPrimeirasPaginas ?? 3;
+  const box = {
+    x: r.caixaX ?? 47,
+    y: r.caixaY ?? 333,
+    width: r.caixaWidth ?? 240,
+    height: r.caixaHeight ?? 38
+  };
+
+  const out = [];
+  for (const pag of paginas) {
+    if (pag.pageIndex >= maxIdxExclusive) break;
+    const okSize =
+      Math.abs(pag.pageWidth - refW) <= tol && Math.abs(pag.pageHeight - refH) <= tol;
+    if (!okSize && r.caixaExigeDimensaoA4 !== false) continue;
+    out.push({
+      pageIndex: pag.pageIndex,
+      metodo: 'caixa_fixa_centrada',
+      box: { ...box },
+      anchor: 'Campo 151 — Assinatura do Trabalhador (caixa fixa A4)'
+    });
+  }
+
+  if (out.length === 0 && paginas.length > 0 && r.caixaFallbackPrimeirasPaginas !== false) {
+    for (const pag of paginas) {
+      if (pag.pageIndex >= maxIdxExclusive) break;
+      out.push({
+        pageIndex: pag.pageIndex,
+        metodo: 'caixa_fixa_centrada',
+        box: { ...box },
+        anchor: 'Campo 151 (fallback sem checagem de tamanho de página)'
+      });
+    }
+  }
+
+  return out;
+}
+
 export async function encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
   const { paginas } = await extrairItensTextoPdf(pdfBuffer);
@@ -767,6 +833,42 @@ export async function encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, regra = {}
   const escolhido = escolherCandidatoAncoraPorGeometria(candidatos, r.match || 'last');
   if (!escolhido) return null;
   return calcularRetanguloAssinatura(escolhido.item, escolhido.pag, r);
+}
+
+/**
+ * Todas as ocorrências das âncoras (mesma lógica de `encontrarPosicaoAssinaturaPorAncoras`, mas sem escolher só uma).
+ * Ordem: página crescente; em cada página, Y decrescente (trecho mais alto primeiro — leitura de cima para baixo).
+ * @param {Buffer|Uint8Array} pdfBuffer
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ * @returns {Promise<Array<{ pageIndex: number, x: number, y: number, height: number, anchor?: string, metodo: string }>>}
+ */
+export async function encontrarTodasPosicoesPorAncoras(pdfBuffer, regra = {}) {
+  const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
+  const anchors = r.anchors?.length ? r.anchors : REGRA_ASSINATURA_PADRAO.anchors;
+  const { paginas } = await extrairItensTextoPdf(pdfBuffer);
+  const candidatos = [];
+
+  for (const pag of paginas) {
+    if (typeof r.pageIndex === 'number' && r.pageIndex >= 0 && pag.pageIndex !== r.pageIndex) {
+      continue;
+    }
+    for (const item of pag.items) {
+      for (const anc of anchors) {
+        if (itemCombina(item.str, anc)) {
+          candidatos.push({ item, pag });
+        }
+      }
+    }
+  }
+
+  if (candidatos.length === 0) return [];
+
+  const list = dedupeCandidatosAncora(candidatos);
+  list.sort((a, b) => {
+    if (a.pag.pageIndex !== b.pag.pageIndex) return a.pag.pageIndex - b.pag.pageIndex;
+    return b.item.y - a.item.y;
+  });
+  return list.map(({ item, pag }) => calcularRetanguloAssinatura(item, pag, r));
 }
 
 /**

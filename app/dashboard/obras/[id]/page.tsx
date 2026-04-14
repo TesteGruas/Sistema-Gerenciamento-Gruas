@@ -230,6 +230,8 @@ function ObraDetailsPageContent() {
     email: '',
     telefone: ''
   })
+  /** Ao editar: reenviar e-mail + WhatsApp com link de login */
+  const [notificarAcessoResponsavelObra, setNotificarAcessoResponsavelObra] = useState(true)
   const responsaveisObraCarregadosRef = useRef(false)
   
   // Estados para devolução de componentes
@@ -704,6 +706,7 @@ function ObraDetailsPageContent() {
   const abrirModalResponsavelObra = (responsavel?: ResponsavelObra) => {
     if (responsavel) {
       setEditandoResponsavelObra(responsavel)
+      setNotificarAcessoResponsavelObra(true)
       setFormResponsavelObra({
         nome: responsavel.nome,
         usuario: responsavel.usuario || '',
@@ -712,7 +715,8 @@ function ObraDetailsPageContent() {
       })
     } else {
       setEditandoResponsavelObra(null)
-      setFormResponsavelObra({ nome: '', pedido: '', usuario: '', email: '', telefone: '' })
+      setNotificarAcessoResponsavelObra(false)
+      setFormResponsavelObra({ nome: '', usuario: '', email: '', telefone: '' })
     }
     setIsModalResponsavelObraOpen(true)
   }
@@ -734,8 +738,16 @@ function ObraDetailsPageContent() {
     setSalvandoResponsavelObra(true)
     try {
       if (editandoResponsavelObra) {
-        await responsaveisObraApi.atualizar(parseInt(obraId), editandoResponsavelObra.id, formResponsavelObra)
-        toast({ title: "Sucesso", description: "Responsável atualizado com sucesso" })
+        await responsaveisObraApi.atualizar(parseInt(obraId), editandoResponsavelObra.id, {
+          ...formResponsavelObra,
+          notificar_acesso: notificarAcessoResponsavelObra
+        })
+        toast({
+          title: "Sucesso",
+          description: notificarAcessoResponsavelObra
+            ? "Responsável atualizado. E-mail e/ou WhatsApp serão enviados em breve, se houver e-mail ou telefone cadastrados."
+            : "Responsável atualizado com sucesso"
+        })
       } else {
         const resultado = await responsaveisObraApi.criar(parseInt(obraId), formResponsavelObra)
         const msg = resultado.message || "Responsável cadastrado com sucesso"
@@ -4922,6 +4934,20 @@ useEffect(() => {
                       <span className="font-mono">81987440990</span>. Deixe em branco se não usar WhatsApp.
                     </p>
                   </div>
+                  {editandoResponsavelObra ? (
+                    <div className="flex items-start gap-2 rounded-md border border-amber-200/80 bg-amber-50/80 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                      <Checkbox
+                        id="resp-notificar-acesso"
+                        checked={notificarAcessoResponsavelObra}
+                        onCheckedChange={(v) => setNotificarAcessoResponsavelObra(v === true)}
+                        className="mt-0.5"
+                      />
+                      <label htmlFor="resp-notificar-acesso" className="text-sm leading-snug cursor-pointer">
+                        Reenviar <strong>e-mail</strong> e <strong>WhatsApp</strong> com link de acesso (mesmo para
+                        quem já tem conta). Desmarque se for só uma correção de nome ou telefone.
+                      </label>
+                    </div>
+                  ) : null}
                 </div>
                 <DialogFooter>
                   <Button variant="outline" onClick={() => setIsModalResponsavelObraOpen(false)}>

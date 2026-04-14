@@ -34,6 +34,16 @@ import {
 import { adicionarLogosNoCabecalho, adicionarRodapeEmpresa, adicionarLogosEmTodasAsPaginas, adicionarLogosNaPagina } from '../utils/pdf-logos.js';
 import { validarProximidadeObra, extrairCoordenadas } from '../utils/geo.js';
 import { enviarNotificacaoAlmoco } from '../services/almoco-automatico-service.js';
+import {
+  dataYYYYMMDDAmericaSaoPaulo,
+  deslocarMes,
+  diaSemanaDeYYYYMMDD,
+  intervaloSemanaDomingoSabadoAPartirDe,
+  intervaloTrimestreAno,
+  partesCalendarioAmericaSaoPaulo,
+  primeiroDiaMesParaYYYYMMDD,
+  ultimoDiaMesParaYYYYMMDD,
+} from '../utils/data-brasil.js';
 
 const router = express.Router();
 
@@ -1820,13 +1830,10 @@ router.post('/registros', async (req, res) => {
       });
     }
 
-    // Validar que a data não seja futura
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0); // Zerar horas para comparar apenas a data
-    const dataRegistro = new Date(data);
-    dataRegistro.setHours(0, 0, 0, 0);
-    
-    if (dataRegistro > hoje) {
+    // Validar que a data não seja futura (comparar calendário America/Sao_Paulo, sem UTC)
+    const dataNorm = String(data).trim().slice(0, 10);
+    const hojeStr = dataYYYYMMDDAmericaSaoPaulo();
+    if (dataNorm > hojeStr) {
       return res.status(400).json({
         success: false,
         message: 'Não é possível registrar ponto para uma data futura. A data deve ser hoje ou uma data passada.'
@@ -2115,9 +2122,8 @@ router.post('/registros', async (req, res) => {
 
       // Se ainda não determinou, verificar dia da semana
       if (!tipoDiaFinal) {
-        const dataObj = new Date(data);
-        const diaSemana = dataObj.getDay(); // 0 = domingo, 6 = sábado
-        
+        const diaSemana = diaSemanaDeYYYYMMDD(data); // calendário YYYY-MM-DD (evita parse UTC)
+
         if (diaSemana === 0) {
           tipoDiaFinal = 'domingo';
         } else if (diaSemana === 6) {
@@ -3300,13 +3306,9 @@ router.post('/justificativas', authenticateToken, upload.single('anexo'), async 
       });
     }
 
-    // Validar que a data não seja futura
-    const hoje = new Date();
-    hoje.setHours(0, 0, 0, 0);
-    const dataRegistro = new Date(data);
-    dataRegistro.setHours(0, 0, 0, 0);
-    
-    if (dataRegistro > hoje) {
+    const dataNormJust = String(data).trim().slice(0, 10);
+    const hojeStrJust = dataYYYYMMDDAmericaSaoPaulo();
+    if (dataNormJust > hojeStrJust) {
       return res.status(400).json({
         success: false,
         message: 'Não é possível criar justificativa para uma data futura. A data deve ser hoje ou uma data passada.'
@@ -4091,27 +4093,26 @@ router.get('/relatorios/justificativas/estatisticas', authenticateToken, async (
   try {
     const { periodo = 'ultimo_mes', funcionario_id, obra_id } = req.query;
 
-    // Calcular range de datas baseado no período
-    const hoje = new Date();
-    let data_inicio, data_fim;
-
+    // Calendário de negócio: America/Sao_Paulo (não usar getMonth/getDate do host)
+    const { year: y, month: mo } = partesCalendarioAmericaSaoPaulo();
+    let dataInicioStr;
     switch (periodo) {
-      case 'ultimos_3_meses':
-        data_inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 3, 1);
+      case 'ultimos_3_meses': {
+        const start = deslocarMes(y, mo, -3);
+        dataInicioStr = primeiroDiaMesParaYYYYMMDD(start.year, start.month);
         break;
+      }
       case 'ultimo_ano':
-        data_inicio = new Date(hoje.getFullYear() - 1, hoje.getMonth(), 1);
+        dataInicioStr = primeiroDiaMesParaYYYYMMDD(y - 1, mo);
         break;
       case 'ultimo_mes':
-      default:
-        data_inicio = new Date(hoje.getFullYear(), hoje.getMonth() - 1, 1);
+      default: {
+        const start = deslocarMes(y, mo, -1);
+        dataInicioStr = primeiroDiaMesParaYYYYMMDD(start.year, start.month);
         break;
+      }
     }
-
-    data_fim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0); // Último dia do mês atual
-
-    const dataInicioStr = data_inicio.toISOString().split('T')[0];
-    const dataFimStr = data_fim.toISOString().split('T')[0];
+    const dataFimStr = ultimoDiaMesParaYYYYMMDD(y, mo);
 
     // Construir query
     let query = supabaseAdmin
@@ -6443,30 +6444,31 @@ router.get('/horas-extras/estatisticas', async (req, res) => {
       ano
     } = req.query;
 
-    // Determinar período
-    const hoje = new Date();
-    let dataInicio, dataFim;
+    const { year: ySp, month: moSp } = partesCalendarioAmericaSaoPaulo();
+    let dataInicio;
+    let dataFim;
 
     if (mes && ano) {
-      // Período específico
-      dataInicio = `${ano}-${mes.toString().padStart(2, '0')}-01`;
-      const ultimoDia = new Date(ano, mes, 0).getDate();
-      dataFim = `${ano}-${mes.toString().padStart(2, '0')}-${ultimoDia}`;
+      const anoNum = parseInt(String(ano), 10);
+      const mesNum = parseInt(String(mes), 10);
+      dataInicio = primeiroDiaMesParaYYYYMMDD(anoNum, mesNum);
+      dataFim = ultimoDiaMesParaYYYYMMDD(anoNum, mesNum);
     } else {
-      // Período baseado no tipo
       switch (periodo) {
-        case 'trimestre':
-          dataInicio = new Date(hoje.getFullYear(), Math.floor(hoje.getMonth() / 3) * 3, 1).toISOString().split('T')[0];
-          dataFim = new Date(hoje.getFullYear(), Math.floor(hoje.getMonth() / 3) * 3 + 3, 0).toISOString().split('T')[0];
+        case 'trimestre': {
+          const iv = intervaloTrimestreAno(ySp, moSp);
+          dataInicio = iv.dataInicio;
+          dataFim = iv.dataFim;
           break;
+        }
         case 'ano':
-          dataInicio = `${hoje.getFullYear()}-01-01`;
-          dataFim = `${hoje.getFullYear()}-12-31`;
+          dataInicio = `${ySp}-01-01`;
+          dataFim = `${ySp}-12-31`;
           break;
         case 'mes':
         default:
-          dataInicio = new Date(hoje.getFullYear(), hoje.getMonth(), 1).toISOString().split('T')[0];
-          dataFim = new Date(hoje.getFullYear(), hoje.getMonth() + 1, 0).toISOString().split('T')[0];
+          dataInicio = primeiroDiaMesParaYYYYMMDD(ySp, moSp);
+          dataFim = ultimoDiaMesParaYYYYMMDD(ySp, moSp);
           break;
       }
     }
@@ -7276,28 +7278,23 @@ router.get('/relatorios/exportar', async (req, res) => {
       });
     }
 
-    // Calcular período baseado no formato
-    const hoje = new Date();
-    let dataInicio, dataFim;
+    const agora = new Date();
+    const { year: yEx, month: moEx } = partesCalendarioAmericaSaoPaulo(agora);
+    let dataInicio;
+    let dataFim;
 
     if (formato === 'mensal') {
-      const mesUso = mes || (hoje.getMonth() + 1);
-      const anoUso = ano || hoje.getFullYear();
-      dataInicio = `${anoUso}-${mesUso.toString().padStart(2, '0')}-01`;
-      const ultimoDia = new Date(anoUso, mesUso, 0).getDate();
-      dataFim = `${anoUso}-${mesUso.toString().padStart(2, '0')}-${ultimoDia}`;
+      const mesUso = mes != null && mes !== '' ? parseInt(String(mes), 10) : moEx;
+      const anoUso = ano != null && ano !== '' ? parseInt(String(ano), 10) : yEx;
+      dataInicio = primeiroDiaMesParaYYYYMMDD(anoUso, mesUso);
+      dataFim = ultimoDiaMesParaYYYYMMDD(anoUso, mesUso);
     } else if (formato === 'semanal') {
-      const diaSemana = hoje.getDay();
-      const primeiroDia = new Date(hoje);
-      primeiroDia.setDate(hoje.getDate() - diaSemana);
-      dataInicio = primeiroDia.toISOString().split('T')[0];
-      
-      const ultimoDia = new Date(primeiroDia);
-      ultimoDia.setDate(primeiroDia.getDate() + 6);
-      dataFim = ultimoDia.toISOString().split('T')[0];
+      const hojeYmd = dataYYYYMMDDAmericaSaoPaulo(agora);
+      const sem = intervaloSemanaDomingoSabadoAPartirDe(hojeYmd);
+      dataInicio = sem.dataInicio;
+      dataFim = sem.dataFim;
     } else {
-      // diario
-      dataInicio = hoje.toISOString().split('T')[0];
+      dataInicio = dataYYYYMMDDAmericaSaoPaulo(agora);
       dataFim = dataInicio;
     }
 
@@ -7809,7 +7806,7 @@ router.post('/debug/disparar-notificacao-almoco', async (req, res) => {
       });
     }
 
-    const dataAlvo = req.body?.data || new Date().toISOString().split('T')[0];
+    const dataAlvo = req.body?.data || dataYYYYMMDDAmericaSaoPaulo();
 
     // Permitir debug para qualquer funcionário informado no corpo (endpoint de debug)
     const funcionarioIdCorpo = Number(req.body?.funcionario_id);
@@ -7981,7 +7978,7 @@ router.post('/debug/disparar-notificacao-responsavel-assinatura', async (req, re
       });
     }
 
-    const dataAlvo = req.body?.data || new Date().toISOString().split('T')[0];
+    const dataAlvo = req.body?.data || dataYYYYMMDDAmericaSaoPaulo();
     const funcionarioIdCorpo = Number(req.body?.funcionario_id);
     const funcionarioIdValidoNoCorpo = !Number.isNaN(funcionarioIdCorpo) && funcionarioIdCorpo > 0;
 
@@ -8217,7 +8214,7 @@ router.post('/debug/disparar-notificacao-responsavel-assinatura', async (req, re
 router.get('/trabalho-corrido/pendentes', authenticateToken, async (req, res) => {
   try {
     const { data, obra_id } = req.query;
-    const hoje = data || new Date().toISOString().split('T')[0];
+    const hoje = data || dataYYYYMMDDAmericaSaoPaulo();
 
     // Buscar registros com trabalho corrido não confirmado
     let query = supabaseAdmin

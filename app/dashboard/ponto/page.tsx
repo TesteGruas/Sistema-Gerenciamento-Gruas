@@ -25,9 +25,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, Play, Square, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
+import { Clock, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
-import { SignaturePad } from "@/components/signature-pad"
 import { AuthService } from "@/app/lib/auth"
 import { 
   apiFuncionarios, 
@@ -116,7 +115,6 @@ export default function PontoPage() {
   const { hasPermission } = usePermissions()
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
-  const [selectedFuncionario, setSelectedFuncionario] = useState("")
   const [data, setData] = useState(estadoInicial)
   const [searchTerm, setSearchTerm] = useState("")
   // Debounce do termo de busca para melhorar performance ao digitar
@@ -139,12 +137,6 @@ export default function PontoPage() {
   const [observacoesModal, setObservacoesModal] = useState('')
   const [justificativaModal, setJustificativaModal] = useState('')
 
-  // Estados para assinatura de registros (supervisor)
-  const [isAssinaturaOpen, setIsAssinaturaOpen] = useState(false)
-  const [registroParaAssinatura, setRegistroParaAssinatura] = useState<RegistroPonto | null>(null)
-  const [assinaturaDigital, setAssinaturaDigital] = useState('')
-  const [isAssinando, setIsAssinando] = useState(false)
-  const [usuarioAtual, setUsuarioAtual] = useState<{ id: number; nome: string; role?: string } | null>(null)
   const [registroParaExcluir, setRegistroParaExcluir] = useState<RegistroPonto | null>(null)
   const [excluindoRegistro, setExcluindoRegistro] = useState(false)
   const podeExcluirRegistroPonto = hasPermission("ponto_eletronico:gerenciar")
@@ -492,13 +484,6 @@ export default function PontoPage() {
       const currentUser = await AuthService.getCurrentUser()
       const usuarioId = currentUser.id
       
-      // Salvar informações do usuário atual para uso em assinaturas
-      setUsuarioAtual({
-        id: currentUser.id,
-        nome: currentUser.nome || currentUser.email || 'Usuário',
-        role: currentUser.role
-      })
-      
       // Carregar funcionários com verificação de admin e outros dados em paralelo
       // Recalcular apenas na primeira carga para melhor performance
       const [funcionariosResponse, registrosResponse, justificativasResponse] = await Promise.all([
@@ -532,11 +517,6 @@ export default function PontoPage() {
       }))
       
       setPagination(paginationData)
-
-      // Definir funcionário selecionado padrão (usuário atual ou primeiro da lista)
-      if (!selectedFuncionario && usuarioAtual) {
-        setSelectedFuncionario(usuarioAtual.id.toString())
-      }
     } catch (error) {
       console.error('Erro ao carregar dados:', error)
       setData(prev => ({
@@ -590,104 +570,6 @@ export default function PontoPage() {
   const handleItemsPerPageChange = (newPageSize: number) => {
     setPageSize(newPageSize)
     setCurrentPage(1) // Reset para primeira página
-  }
-
-  // Função para mapear tipos de registro para campos da API
-  const mapearTipoParaCampo = (tipo: string) => {
-    const mapeamento: { [key: string]: string } = {
-      'Entrada': 'entrada',
-      'Saída': 'saida',
-    }
-    return mapeamento[tipo] || tipo.toLowerCase().replace(' ', '_')
-  }
-
-  // Função para verificar o status do registro atual
-  const getStatusRegistroAtual = () => {
-    if (!selectedFuncionario) return null
-
-    const agora = new Date()
-    const dataAtual = agora.toISOString().split("T")[0]
-
-    const registrosHoje = data.registrosPonto.filter(
-      r => r.funcionario_id === parseInt(selectedFuncionario) && r.data === dataAtual
-    )
-
-    if (registrosHoje.length === 0) return null
-
-    const registro = registrosHoje[0]
-    return {
-      temEntrada: !!registro.entrada,
-      temSaida: !!registro.saida,
-      registro
-    }
-  }
-
-  const registrarPonto = async (tipo: string) => {
-    if (!selectedFuncionario) {
-      toast({
-        title: "Informação",
-        description: "Selecione um funcionário",
-        variant: "default"
-      })
-      return
-    }
-
-    const agora = new Date()
-    const horaAtual = agora.toTimeString().slice(0, 5)
-    const dataAtual = agora.toISOString().split("T")[0]
-
-    try {
-      // Buscar registro existente para hoje
-      const registrosHoje = data.registrosPonto.filter(
-        r => r.funcionario_id === parseInt(selectedFuncionario) && r.data === dataAtual
-      )
-
-      let registroAtual = registrosHoje[0]
-
-      if (!registroAtual) {
-        // Criar novo registro
-        const novoRegistro = await apiRegistrosPonto.criar({
-          funcionario_id: parseInt(selectedFuncionario),
-          data: dataAtual,
-          [mapearTipoParaCampo(tipo)]: horaAtual,
-          localizacao: "Sistema Web"
-        })
-        
-        registroAtual = novoRegistro
-        setData(prev => ({
-          ...prev,
-          registrosPonto: [novoRegistro, ...prev.registrosPonto]
-        }))
-      } else {
-        // Atualizar registro existente
-        const dadosAtualizacao: any = {
-          [mapearTipoParaCampo(tipo)]: horaAtual,
-          justificativa_alteracao: `Registro automático de ${tipo}`
-        }
-
-        const registroAtualizado = await apiRegistrosPonto.atualizar(registroAtual.id || '', dadosAtualizacao)
-        
-        setData(prev => ({
-          ...prev,
-          registrosPonto: prev.registrosPonto.map(r => 
-            r.id === registroAtualizado.id ? registroAtualizado : r
-          )
-        }))
-      }
-
-      toast({
-        title: "Sucesso",
-        description: `Ponto registrado: ${tipo} às ${horaAtual}`,
-        variant: "default"
-      })
-    } catch (error) {
-      console.error('Erro ao registrar ponto:', error)
-      toast({
-        title: "Erro",
-        description: "Erro ao registrar ponto. Tente novamente.",
-        variant: "destructive"
-      })
-    }
   }
 
   // ========================================
@@ -1793,54 +1675,6 @@ export default function PontoPage() {
     setIsAprovacaoOpen(true)
   }
 
-  // Função para abrir diálogo de assinatura (supervisor)
-  const abrirAssinatura = (registro: RegistroPonto) => {
-    setRegistroParaAssinatura(registro)
-    setAssinaturaDigital('')
-    setIsAssinaturaOpen(true)
-  }
-
-  // Função para assinar registro
-  const assinarRegistro = async () => {
-    if (!registroParaAssinatura || !assinaturaDigital) {
-      toast({
-        title: "Erro",
-        description: "Dados incompletos para assinatura",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setIsAssinando(true)
-    try {
-      const response = await apiRegistrosPonto.assinar(registroParaAssinatura.id!, {
-        assinatura_digital: assinaturaDigital,
-        observacoes: usuarioAtual ? `Registro assinado por ${usuarioAtual.nome}` : undefined
-      })
-
-      if (response.success) {
-        toast({
-          title: "Sucesso",
-          description: response.message || "Registro assinado com sucesso"
-        })
-        setIsAssinaturaOpen(false)
-        setAssinaturaDigital('')
-        setRegistroParaAssinatura(null)
-        // Recarregar dados
-        await carregarDados()
-      }
-    } catch (error: any) {
-      console.error('Erro ao assinar registro:', error)
-      toast({
-        title: "Erro",
-        description: error.response?.data?.message || "Erro ao assinar registro",
-        variant: "destructive"
-      })
-    } finally {
-      setIsAssinando(false)
-    }
-  }
-
   const fecharAprovacao = () => {
     setIsAprovacaoOpen(false)
     setRegistroParaAprovacao(null)
@@ -2149,7 +1983,7 @@ export default function PontoPage() {
                 <h3 className="font-semibold text-gray-800 mb-1 text-sm">Funcionário</h3>
                 <p className="text-base font-medium">{registroEditando?.funcionario?.nome || 'Funcionário não encontrado'}</p>
                 <p className="text-xs text-gray-600">
-                  Data: {registroEditando?.data && new Date(registroEditando.data).toLocaleDateString("pt-BR")}
+                  Data: {registroEditando?.data ? utilsPonto.formatarData(String(registroEditando.data)) : ""}
                 </p>
               </div>
 
@@ -2430,7 +2264,7 @@ export default function PontoPage() {
 
                             doc.setFontSize(10);
                             doc.setFont('helvetica', 'normal');
-                            doc.text(`Data: ${new Date(registroEditando.data).toLocaleDateString('pt-BR')}`, 14, yPos);
+                            doc.text(`Data: ${utilsPonto.formatarData(String(registroEditando.data))}`, 14, yPos);
                             yPos += 6;
                             doc.text(`Entrada: ${registroEditando.entrada || '-'}`, 14, yPos);
                             yPos += 6;
@@ -2590,7 +2424,7 @@ export default function PontoPage() {
                             doc.text(`Documento gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, pageHeight - 10);
 
                             // Salvar PDF
-                            const nomeArquivo = `registro_ponto_${registroEditando.funcionario?.nome?.replace(/\s+/g, '_')}_${new Date(registroEditando.data).toISOString().split('T')[0]}.pdf`;
+                            const nomeArquivo = `registro_ponto_${registroEditando.funcionario?.nome?.replace(/\s+/g, '_')}_${typeof registroEditando.data === "string" && /^\d{4}-\d{2}-\d{2}/.test(registroEditando.data) ? registroEditando.data.slice(0, 10) : new Date(registroEditando.data).toISOString().split("T")[0]}.pdf`;
                             doc.save(nomeArquivo);
 
                             toast({
@@ -2671,105 +2505,23 @@ export default function PontoPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Stats Cards e Registro de Ponto */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Stats Cards */}
-        <div className="grid grid-cols-2 gap-4">
-          {stats.map((stat, index) => (
-            <Card key={index}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                    <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
-                  </div>
-                  <div className={`p-3 rounded-full ${stat.color}`}>
-                    <stat.icon className="w-6 h-6 text-white" />
-                  </div>
+      {/* Stats Cards */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {stats.map((stat, index) => (
+          <Card key={index}>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
+                  <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-
-        {/* Registro de Ponto */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Clock className="w-5 h-5" />
-              Registrar Ponto
-            </CardTitle>
-            <CardDescription>Registre entrada e saída</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {/* Seleção de Funcionário */}
-            <div className="space-y-2">
-              <Label htmlFor="funcionario">Funcionário</Label>
-              <Select value={selectedFuncionario} onValueChange={setSelectedFuncionario}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione um funcionário" />
-                </SelectTrigger>
-                <SelectContent>
-                  {data.funcionarios.length > 0 ? (
-                    data.funcionarios.map((func) => (
-                      <SelectItem key={func.id} value={func.id.toString()}>
-                        {func.nome} - {func.cargo || 'Sem cargo'}
-                        {data.usuarioAtual?.id === func.id && ' (Você)'}
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <div className="px-2 py-1.5 text-sm text-gray-500">
-                      Nenhum funcionário disponível
-                    </div>
-                  )}
-                </SelectContent>
-              </Select>
-              {selectedFuncionario && data.usuarioAtual?.id === parseInt(selectedFuncionario) && (
-                <p className="text-xs text-gray-500">Seu registro de ponto</p>
-              )}
-            </div>
-
-            {/* Botões de Registro */}
-            <div className="grid grid-cols-2 gap-3">
-              {(() => {
-                const status = getStatusRegistroAtual()
-                const podeEntrada = !status || (!status.temEntrada || status.temSaida)
-                const podeSaida = status && status.temEntrada && !status.temSaida
-
-                return (
-                  <>
-                    <Button
-                      onClick={() => registrarPonto("Entrada")}
-                      disabled={!podeEntrada}
-                      className={`flex items-center gap-2 ${
-                        podeEntrada 
-                          ? "bg-green-600 hover:bg-green-700" 
-                          : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                      title={!podeEntrada ? "Já existe uma entrada sem saída registrada" : ""}
-                    >
-                      <Play className="w-4 h-4" />
-                      Entrada
-                    </Button>
-                    <Button
-                      onClick={() => registrarPonto("Saída")}
-                      disabled={!podeSaida}
-                      className={`flex items-center gap-2 ${
-                        podeSaida 
-                          ? "bg-red-600 hover:bg-red-700" 
-                          : "bg-gray-400 cursor-not-allowed"
-                      }`}
-                      title={!podeSaida ? "Registre a entrada primeiro" : ""}
-                    >
-                      <Square className="w-4 h-4" />
-                      Saída
-                    </Button>
-                  </>
-                )
-              })()}
-            </div>
-          </CardContent>
-        </Card>
+                <div className={`p-3 rounded-full ${stat.color}`}>
+                  <stat.icon className="w-6 h-6 text-white" />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
       </div>
 
       <Tabs defaultValue="registros">
@@ -3075,29 +2827,6 @@ export default function PontoPage() {
                             {(() => {
                               const statusInfo = getRegistroStatusInfo(registro)
                               const acoes = [...statusInfo.acoes]
-                              
-                              // Adicionar botão de assinatura para supervisores (se não estiver já assinado)
-                              const isSupervisor = usuarioAtual?.role === 'supervisor' || usuarioAtual?.role === 'admin'
-                              // Verificar se já foi assinado (com supervisor antigo OU com assinatura digital)
-                              const jaAssinadoComSupervisor = registro.aprovado_por && registro.data_aprovacao
-                              const jaAssinadoSemSupervisor = registro.assinatura_digital_path && registro.status?.toLowerCase() === 'aprovado'
-                              const jaAssinado = jaAssinadoComSupervisor || jaAssinadoSemSupervisor
-                              
-                              if (isSupervisor && !jaAssinado) {
-                                acoes.push(
-                                  <Button
-                                    key="assinar"
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => abrirAssinatura(registro)}
-                                    className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 border-blue-200"
-                                    title="Assinar registro de ponto"
-                                  >
-                                    <FileText className="w-4 h-4 mr-1" />
-                                    Assinar
-                                  </Button>
-                                )
-                              }
 
                               if (podeExcluirRegistroPonto) {
                                 acoes.push(
@@ -4574,7 +4303,7 @@ export default function PontoPage() {
                 <strong>Funcionário:</strong> {registroParaModal?.funcionario?.nome}
               </p>
               <p className="text-sm text-gray-600">
-                <strong>Data:</strong> {registroParaModal?.data && new Date(registroParaModal.data).toLocaleDateString("pt-BR")}
+                <strong>Data:</strong> {registroParaModal?.data ? utilsPonto.formatarData(String(registroParaModal.data)) : ""}
               </p>
               <p className="text-sm text-gray-600">
                 <strong>Horas Extras:</strong> +{registroParaModal?.horas_extras || 0}h
@@ -4637,101 +4366,6 @@ export default function PontoPage() {
               </Button>
             </div>
           </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Dialog de Assinatura Digital para Supervisor */}
-      <Dialog open={isAssinaturaOpen} onOpenChange={setIsAssinaturaOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5" />
-              Assinar Registro de Ponto
-            </DialogTitle>
-            <DialogDescription>
-              Assine digitalmente o registro de ponto do funcionário
-            </DialogDescription>
-          </DialogHeader>
-
-          {registroParaAssinatura && (
-            <div className="space-y-4">
-              {/* Informações do Registro */}
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  <div>
-                    <span className="text-gray-600">Funcionário:</span>
-                    <p className="font-medium">{registroParaAssinatura.funcionario?.nome || 'N/A'}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Data:</span>
-                    <p className="font-medium">{utilsPonto.formatarData(registroParaAssinatura.data)}</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Horas Trabalhadas:</span>
-                    <p className="font-medium">{registroParaAssinatura.horas_trabalhadas || 0}h</p>
-                  </div>
-                  <div>
-                    <span className="text-gray-600">Horas Extras:</span>
-                    <p className="font-medium text-orange-600">
-                      {registroParaAssinatura.horas_extras ? `+${registroParaAssinatura.horas_extras}h` : '0h'}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Componente de Assinatura */}
-              <div className="space-y-2">
-                <Label>Assinatura Digital *</Label>
-                <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                  <SignaturePad
-                    title=""
-                    description=""
-                    onSave={setAssinaturaDigital}
-                    onCancel={() => setAssinaturaDigital('')}
-                  />
-                </div>
-                {assinaturaDigital && (
-                  <p className="text-sm text-green-600 flex items-center gap-1">
-                    <CheckCircle className="w-4 h-4" />
-                    Assinatura realizada
-                  </p>
-                )}
-              </div>
-
-              {/* Botões */}
-              <div className="flex justify-end gap-3 pt-4">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => {
-                    setIsAssinaturaOpen(false)
-                    setAssinaturaDigital('')
-                    setRegistroParaAssinatura(null)
-                  }}
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  onClick={assinarRegistro}
-                  disabled={!assinaturaDigital || isAssinando}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {isAssinando ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Assinando...
-                    </>
-                  ) : (
-                    <>
-                      <FileText className="w-4 h-4 mr-2" />
-                      Assinar Registro
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          )}
         </DialogContent>
       </Dialog>
       </div>

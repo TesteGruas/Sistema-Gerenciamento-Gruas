@@ -10,11 +10,25 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DocumentoUpload } from "./documento-upload"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature } from "lucide-react"
+import { SignaturePad } from "@/components/signature-pad"
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Download,
+  AlertTriangle,
+  CheckCircle2,
+  Clock,
+  FileSignature,
+  Loader2,
+  PenLine,
+  Eye,
+} from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { getApiBasePath } from "@/lib/runtime-config"
 import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
 import { TIPOS_DOCUMENTOS_DEMISSAO } from "@/lib/rh-documentos-tipos"
+import { tipoDemissaoParaTipoDocumentoAssinatura } from "@/lib/demissao-tipo-documento-assinatura"
 
 export interface DocumentoDemissao {
   id?: string | number
@@ -54,6 +68,25 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
     data_validade: "",
     arquivo: null,
   })
+
+  const [assinarOpen, setAssinarOpen] = useState(false)
+  const [assinarDoc, setAssinarDoc] = useState<DocumentoDemissao | null>(null)
+  const [assinarPdf, setAssinarPdf] = useState<File | null>(null)
+  const [assinarArquivoNome, setAssinarArquivoNome] = useState("documento.pdf")
+  const [assinarTitulo, setAssinarTitulo] = useState("")
+  const [assinarTipoDocumentoApi, setAssinarTipoDocumentoApi] = useState("")
+  const [assinarAssinaturaDataUrl, setAssinarAssinaturaDataUrl] = useState<string | null>(null)
+  const [assinarAssinaturaImg, setAssinarAssinaturaImg] = useState<File | null>(null)
+  const [assinarPadOpen, setAssinarPadOpen] = useState(false)
+  const [assinarPreviewUrl, setAssinarPreviewUrl] = useState<string | null>(null)
+  const [assinarLoadingPdf, setAssinarLoadingPdf] = useState(false)
+  const [assinarLoadingPrev, setAssinarLoadingPrev] = useState(false)
+  const [assinarSalvando, setAssinarSalvando] = useState(false)
+
+  const [visualizarOpen, setVisualizarOpen] = useState(false)
+  const [visualizarUrl, setVisualizarUrl] = useState<string | null>(null)
+  const [visualizarLoading, setVisualizarLoading] = useState(false)
+  const [visualizarTitulo, setVisualizarTitulo] = useState("")
 
   const loadDocumentos = async () => {
     setLoading(true)
@@ -109,6 +142,190 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
   }
 
   const documentoAssinado = (d: DocumentoDemissao) => Boolean(d.assinatura_digital && d.assinado_em)
+
+  const fecharDialogAssinar = () => {
+    setAssinarPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAssinarOpen(false)
+    setAssinarDoc(null)
+    setAssinarPdf(null)
+    setAssinarAssinaturaDataUrl(null)
+    setAssinarAssinaturaImg(null)
+    setAssinarPadOpen(false)
+    setAssinarTipoDocumentoApi("")
+    setAssinarArquivoNome("documento.pdf")
+    setAssinarTitulo("")
+  }
+
+  const fecharVisualizar = () => {
+    setVisualizarUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setVisualizarOpen(false)
+    setVisualizarTitulo("")
+  }
+
+  const abrirVisualizarPdf = async (documento: DocumentoDemissao) => {
+    if (!documento.id || !documento.arquivo_url) return
+    setVisualizarTitulo(`${documento.tipo}`)
+    setVisualizarOpen(true)
+    setVisualizarLoading(true)
+    setVisualizarUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    try {
+      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+      const blob = await colaboradoresDocumentosApi.documentosDemissao.baixar(String(documento.id), false)
+      setVisualizarUrl(URL.createObjectURL(blob))
+    } catch (e) {
+      toast({
+        title: "Erro ao abrir PDF",
+        description: e instanceof Error ? e.message : "Falha ao baixar o arquivo",
+        variant: "destructive",
+      })
+      fecharVisualizar()
+    } finally {
+      setVisualizarLoading(false)
+    }
+  }
+
+  const abrirAssinarDemissao = async (documento: DocumentoDemissao) => {
+    if (!documento.id || documentoAssinado(documento) || !documento.arquivo_url) return
+    setAssinarDoc(documento)
+    setAssinarOpen(true)
+    setAssinarLoadingPdf(true)
+    setAssinarAssinaturaDataUrl(null)
+    setAssinarAssinaturaImg(null)
+    setAssinarPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAssinarTipoDocumentoApi(tipoDemissaoParaTipoDocumentoAssinatura(documento.tipo))
+    try {
+      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+      const blob = await colaboradoresDocumentosApi.documentosDemissao.baixar(String(documento.id), false)
+      const baseNome = (documento.nome || documento.tipo || "documento").replace(/[<>:"/\\|?*]+/g, "_").slice(0, 120)
+      const nomeArquivo = baseNome.toLowerCase().endsWith(".pdf") ? baseNome : `${baseNome}.pdf`
+      setAssinarPdf(new File([blob], nomeArquivo, { type: "application/pdf" }))
+      setAssinarArquivoNome(nomeArquivo)
+      setAssinarTitulo(`${documento.tipo} — ${documento.nome}`)
+      toast({
+        title: "PDF carregado",
+        description: "Desenhe a assinatura e gere a prévia antes de registrar (mesmo fluxo dos admissionais).",
+      })
+    } catch (e) {
+      toast({
+        title: "Erro ao carregar PDF",
+        description: e instanceof Error ? e.message : "Falha ao baixar o arquivo",
+        variant: "destructive",
+      })
+      fecharDialogAssinar()
+    } finally {
+      setAssinarLoadingPdf(false)
+    }
+  }
+
+  const gerarPreviaAssinaturaDemissao = async () => {
+    if (!assinarPdf) {
+      toast({ title: "PDF não disponível", description: "Aguarde o carregamento do arquivo.", variant: "destructive" })
+      return
+    }
+    setAssinarLoadingPrev(true)
+    try {
+      setAssinarPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+      const fd = new FormData()
+      fd.append("pdf", assinarPdf)
+      fd.append("arquivo_original", assinarArquivoNome || "documento.pdf")
+      fd.append("titulo", assinarTitulo || "")
+      if (assinarTipoDocumentoApi) {
+        fd.append("tipo_documento", assinarTipoDocumentoApi)
+      }
+      if (assinarAssinaturaDataUrl) {
+        const imgRes = await fetch(assinarAssinaturaDataUrl)
+        const imgBlob = await imgRes.blob()
+        fd.append("assinatura", new File([imgBlob], "assinatura.png", { type: "image/png" }))
+      } else if (assinarAssinaturaImg) {
+        fd.append("assinatura", assinarAssinaturaImg)
+      }
+
+      const res = await fetch(`${getApiBasePath()}/rh/preview-assinatura-pdf`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      })
+
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { message?: string }
+        throw new Error(err.message || `Erro ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      setAssinarPreviewUrl(URL.createObjectURL(blob))
+      toast({ title: "Prévia gerada", description: "Confira o posicionamento no PDF abaixo." })
+    } catch (e) {
+      toast({
+        title: "Erro ao gerar prévia",
+        description: e instanceof Error ? e.message : "Falha na simulação",
+        variant: "destructive",
+      })
+    } finally {
+      setAssinarLoadingPrev(false)
+    }
+  }
+
+  const registrarAssinaturaDemissao = async () => {
+    if (!assinarDoc?.id) return
+    let assinatura_digital: string | null = assinarAssinaturaDataUrl
+    if (!assinatura_digital && assinarAssinaturaImg) {
+      assinatura_digital = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.onerror = () => reject(new Error("Leitura da imagem falhou"))
+        r.readAsDataURL(assinarAssinaturaImg!)
+      })
+    }
+    if (!assinatura_digital) {
+      toast({
+        title: "Assinatura obrigatória",
+        description: "Desenhe no painel ou envie uma imagem PNG/JPG.",
+        variant: "destructive",
+      })
+      return
+    }
+    setAssinarSalvando(true)
+    try {
+      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+      const response = await colaboradoresDocumentosApi.documentosDemissao.assinar(String(assinarDoc.id), {
+        assinatura_digital,
+      })
+      if (response.success) {
+        toast({
+          title: "Assinatura registrada",
+          description: "O PDF com assinatura embutida fica disponível no download.",
+        })
+        fecharDialogAssinar()
+        loadDocumentos()
+      } else {
+        throw new Error("Falha ao registrar")
+      }
+    } catch (e) {
+      toast({
+        title: "Erro",
+        description: e instanceof Error ? e.message : "Não foi possível registrar a assinatura",
+        variant: "destructive",
+      })
+    } finally {
+      setAssinarSalvando(false)
+    }
+  }
 
   const handleDownloadDocumento = async (documento: DocumentoDemissao, comAssinatura: boolean) => {
     if (!documento.id) return
@@ -337,7 +554,8 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
                       <p className="text-sm text-gray-600">
                         {doc.data_validade && (
                           <>
-                            Vence em {dias} dia{dias !== 1 ? "s" : ""} - {new Date(doc.data_validade).toLocaleDateString("pt-BR")}
+                            Vence em {dias} dia{dias !== 1 ? "s" : ""} -{" "}
+                            {new Date(doc.data_validade).toLocaleDateString("pt-BR")}
                           </>
                         )}
                       </p>
@@ -360,7 +578,9 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
             <div>
               <CardTitle>Documentos de demissão</CardTitle>
               <CardDescription>
-                {documentos.length} documento(s). O colaborador pode assinar pelo aplicativo (Perfil), como nos holerites.
+                {documentos.length} documento(s). Visualize o PDF aqui; use a caneta para simular assinatura e registrar
+                (mesmo utilitário de prévia dos admissionais e `/api/rh/preview-assinatura-pdf`). O colaborador também
+                assina pelo app (Perfil).
               </CardDescription>
             </div>
             {!readOnly && (
@@ -431,6 +651,15 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
                                 variant="ghost"
                                 size="sm"
                                 type="button"
+                                title="Visualizar PDF"
+                                onClick={() => void abrirVisualizarPdf(documento)}
+                              >
+                                <Eye className="w-4 h-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                type="button"
                                 title="Baixar PDF original"
                                 onClick={() => handleDownloadDocumento(documento, false)}
                               >
@@ -446,6 +675,23 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
                                   onClick={() => handleDownloadDocumento(documento, true)}
                                 >
                                   <FileSignature className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {!readOnly && !documentoAssinado(documento) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  title="Prévia e registrar assinatura (RH)"
+                                  className="text-primary"
+                                  disabled={assinarLoadingPdf && assinarDoc?.id === documento.id}
+                                  onClick={() => void abrirAssinarDemissao(documento)}
+                                >
+                                  {assinarLoadingPdf && assinarDoc?.id === documento.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <PenLine className="w-4 h-4" />
+                                  )}
                                 </Button>
                               )}
                             </>
@@ -549,6 +795,189 @@ export function ColaboradorDocumentosDemissao({ colaboradorId, readOnly = false 
               <Button onClick={handleSave}>{editingDocumento ? "Atualizar" : "Criar"}</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={visualizarOpen}
+        onOpenChange={(open) => {
+          if (!open) fecharVisualizar()
+        }}
+      >
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Visualizar documento</DialogTitle>
+            <DialogDescription>{visualizarTitulo}</DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 min-h-[min(70vh,560px)] border rounded-md bg-muted/30 overflow-hidden">
+            {visualizarLoading ? (
+              <div className="flex items-center justify-center h-full gap-2 text-muted-foreground">
+                <Loader2 className="w-5 h-5 animate-spin" />
+                Carregando PDF…
+              </div>
+            ) : visualizarUrl ? (
+              <iframe title="PDF documento de demissão" src={visualizarUrl} className="w-full h-[min(70vh,560px)]" />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={assinarOpen}
+        onOpenChange={(open) => {
+          if (!open) fecharDialogAssinar()
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Prévia e registro de assinatura</DialogTitle>
+            <DialogDescription>
+              Mesma lógica dos documentos admissionais: `/api/rh/preview-assinatura-pdf` com regras por tipo de demissão.
+              Gere a prévia, confira e registre.
+              {assinarDoc ? ` Documento: ${assinarDoc.tipo}.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {assinarLoadingPdf ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Carregando PDF do servidor…
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Arquivo: <span className="font-medium text-foreground">{assinarArquivoNome}</span>
+              </p>
+            )}
+            <div>
+              <Label htmlFor="dem-sim-tipo-doc">Tipo do documento (regra de posição)</Label>
+              <p className="text-xs text-muted-foreground mb-1.5">
+                Ajuste se o modelo do PDF for diferente do tipo cadastrado (ex.: termo em layout de duas colunas).
+              </p>
+              <Select
+                value={assinarTipoDocumentoApi || "__auto__"}
+                onValueChange={(v) => setAssinarTipoDocumentoApi(v === "__auto__" ? "" : v)}
+              >
+                <SelectTrigger id="dem-sim-tipo-doc" className="w-full">
+                  <SelectValue placeholder="Automático" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__auto__">Automático (tipo cadastrado + nome do arquivo)</SelectItem>
+                  <SelectItem value="demissao_termo_rescisao">Termo de rescisão (demissão)</SelectItem>
+                  <SelectItem value="demissao_termo_quitacao">Termo de quitação (demissão)</SelectItem>
+                  <SelectItem value="demissao_aviso_previo">
+                    Aviso prévio trabalhado — 2 assinaturas (duas vias na folha)
+                  </SelectItem>
+                  <SelectItem value="demissao_comunicacao_desligamento">
+                    CD — comunicação de desligamento (âncora «Assinatura do Trabalhador», uma por página)
+                  </SelectItem>
+                  <SelectItem value="demissao_padrao">Demissão — rodapé padrão</SelectItem>
+                  <SelectItem value="contrato_experiencia_prorrogacao">Reutilizar: contrato experiência (2 colunas)</SelectItem>
+                  <SelectItem value="termo_responsabilidade">Reutilizar: termo responsabilidade (rodapé)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label>Assinatura</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Desenhe como no aplicativo ou envie PNG/JPG.</p>
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setAssinarPadOpen(true)}>
+                  <FileSignature className="w-4 h-4 mr-2" />
+                  Desenhar assinatura
+                </Button>
+              </div>
+              {assinarAssinaturaDataUrl && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={assinarAssinaturaDataUrl}
+                    alt="Prévia da assinatura"
+                    className="h-14 max-w-[200px] object-contain border rounded bg-white p-1"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAssinarAssinaturaDataUrl(null)}>
+                    Remover
+                  </Button>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="dem-sim-ass-img" className="text-muted-foreground">
+                  Ou enviar imagem (PNG/JPG)
+                </Label>
+                <Input
+                  id="dem-sim-ass-img"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="mt-1"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null
+                    setAssinarAssinaturaImg(f)
+                    if (f) setAssinarAssinaturaDataUrl(null)
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() => void gerarPreviaAssinaturaDemissao()}
+                disabled={assinarLoadingPrev || assinarLoadingPdf || !assinarPdf}
+              >
+                {assinarLoadingPrev ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Gerando…
+                  </>
+                ) : (
+                  "Gerar prévia"
+                )}
+              </Button>
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => void registrarAssinaturaDemissao()}
+                disabled={assinarSalvando || assinarLoadingPdf}
+              >
+                {assinarSalvando ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Registrando…
+                  </>
+                ) : (
+                  "Registrar assinatura"
+                )}
+              </Button>
+            </div>
+            {assinarPreviewUrl && (
+              <div className="border rounded-md overflow-hidden bg-muted/30 min-h-[320px]">
+                <iframe title="Prévia PDF com assinatura" src={assinarPreviewUrl} className="w-full h-[min(60vh,480px)]" />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={assinarPadOpen} onOpenChange={setAssinarPadOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Desenhar assinatura</DialogTitle>
+            <DialogDescription>Depois volte e clique em «Gerar prévia».</DialogDescription>
+          </DialogHeader>
+          <SignaturePad
+            compact
+            compactDense
+            applyLabel="Usar esta assinatura"
+            onSave={(dataUrl) => {
+              setAssinarAssinaturaDataUrl(dataUrl)
+              setAssinarAssinaturaImg(null)
+              setAssinarPadOpen(false)
+              toast({
+                title: "Assinatura capturada",
+                description: "Gere a prévia do PDF para conferir o posicionamento.",
+              })
+            }}
+            onCancel={() => setAssinarPadOpen(false)}
+          />
         </DialogContent>
       </Dialog>
     </div>

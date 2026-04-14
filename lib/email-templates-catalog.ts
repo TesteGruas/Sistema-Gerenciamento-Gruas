@@ -67,6 +67,18 @@ export const EMAIL_TEMPLATES_CATALOG: EmailTemplateCatalogItem[] = [
     editavelNoPainel: true,
   },
   {
+    tipo: "medicao_faturamento_enviada",
+    nome: "Medição — faturamento (notas e boletos)",
+    categoria: "medicao",
+    gatilho:
+      "Reenvio ou envio apenas de NF e boletos a partir da medição; assunto e corpo específicos de faturamento.",
+    onde: [
+      "backend-api/src/routes/medicoes-mensais.js (modo faturamento_notas_boletos)",
+      "backend-api/src/services/email.service.js (buildMedicaoClienteEmail)",
+    ],
+    editavelNoPainel: true,
+  },
+  {
     tipo: "nota_fiscal_enviada",
     nome: "Nota fiscal e boleto enviados ao cliente",
     categoria: "financeiro",

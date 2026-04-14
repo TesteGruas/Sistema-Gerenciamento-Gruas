@@ -36,7 +36,12 @@ import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
-import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
+import { formatDateYYYYMMDDLocal } from "@/lib/date-local"
+import {
+  isPendenteAssinaturaFuncionarioStatus,
+  isPendenteCorrecaoStatus,
+} from "@/lib/ponto-registro-status"
+import { getFuncionarioIdWithFallback, type UserData } from "@/lib/get-funcionario-id"
 import { getAlocacoesAtivasFuncionario } from "@/lib/api-funcionarios-obras"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { medicoesMensaisApi, type MedicaoMensal } from "@/lib/api-medicoes-mensais"
@@ -130,6 +135,7 @@ export default function PWAMainPage() {
   const [tipoFeriado, setTipoFeriado] = useState<'nacional' | 'estadual' | 'local' | null>(null)
   const [isFacultativo, setIsFacultativo] = useState<boolean>(false)
   const [registrosPendentesAssinatura, setRegistrosPendentesAssinatura] = useState<number>(0)
+  const [primeiroPendenteAssinaturaId, setPrimeiroPendenteAssinaturaId] = useState<string | null>(null)
   const [medicoesResumo, setMedicoesResumo] = useState<MedicaoResumoHome[]>([])
   const [loadingMedicoesResumo, setLoadingMedicoesResumo] = useState(false)
   const [obraAtalhoId, setObraAtalhoId] = useState<number | null>(null)
@@ -454,8 +460,15 @@ export default function PWAMainPage() {
     const verificarPendentesAssinatura = async () => {
       if (typeof window === 'undefined' || isResponsavelObra || isClientRole()) return
       try {
-        const funcionarioId = await getFuncionarioIdWithFallback()
-        if (!funcionarioId) return
+        const token = localStorage.getItem('access_token')
+        const raw = localStorage.getItem('user_data')
+        if (!token || !raw) return
+        const user = JSON.parse(raw) as UserData
+        const funcionarioId = await getFuncionarioIdWithFallback(
+          user,
+          token,
+          'ID do funcionário não encontrado'
+        )
 
         const hoje = new Date()
         const trintaDiasAtras = new Date(hoje)
@@ -463,18 +476,34 @@ export default function PWAMainPage() {
 
         const { data } = await pontoApi.apiRegistrosPonto.listar({
           funcionario_id: funcionarioId,
-          data_inicio: trintaDiasAtras.toISOString().split('T')[0],
-          data_fim: hoje.toISOString().split('T')[0],
-          limit: 100
+          data_inicio: formatDateYYYYMMDDLocal(trintaDiasAtras),
+          data_fim: formatDateYYYYMMDDLocal(hoje),
+          limit: 500
         })
 
-        const pendentes = data.filter(r => r.status === 'Pendente Assinatura Funcionário' || r.status === 'Pendente Correção')
+        const pendentes = data.filter(
+          (r) =>
+            isPendenteAssinaturaFuncionarioStatus(r.status) || isPendenteCorrecaoStatus(r.status)
+        )
+        pendentes.sort((a, b) => String(b.data || "").localeCompare(String(a.data || "")))
         setRegistrosPendentesAssinatura(pendentes.length)
+        const primeiro = pendentes[0]
+        setPrimeiroPendenteAssinaturaId(primeiro?.id != null ? String(primeiro.id) : null)
       } catch (e) {
         console.warn('[PWA] Erro ao verificar pendentes de assinatura:', e)
+        setPrimeiroPendenteAssinaturaId(null)
       }
     }
     verificarPendentesAssinatura()
+    const id = window.setInterval(verificarPendentesAssinatura, 4 * 60 * 1000)
+    const onVis = () => {
+      if (document.visibilityState === "visible") void verificarPendentesAssinatura()
+    }
+    document.addEventListener("visibilitychange", onVis)
+    return () => {
+      window.clearInterval(id)
+      document.removeEventListener("visibilitychange", onVis)
+    }
   }, [isResponsavelObra, isClientRole])
 
   // Resolver obra para atalhos de checklist/manutenção
@@ -533,7 +562,15 @@ export default function PWAMainPage() {
         }
 
         // Fallback API de alocações
-        const funcionarioId = await getFuncionarioIdWithFallback()
+        const token = localStorage.getItem('access_token')
+        const funcionarioId =
+          token && userData
+            ? await getFuncionarioIdWithFallback(
+                userData as UserData,
+                token,
+                'ID do funcionário não encontrado'
+              ).catch(() => null)
+            : null
         if (funcionarioId) {
           const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
           if (alocacoes.success && Array.isArray(alocacoes.data) && alocacoes.data.length > 0) {
@@ -578,7 +615,15 @@ export default function PWAMainPage() {
             if (!Number.isNaN(obraId) && obraId > 0) obraIds.add(obraId)
           }
         } else {
-          const funcionarioId = await getFuncionarioIdWithFallback()
+          const token = localStorage.getItem('access_token')
+          const funcionarioId =
+            token && userData
+              ? await getFuncionarioIdWithFallback(
+                  userData as UserData,
+                  token,
+                  'ID do funcionário não encontrado'
+                ).catch(() => null)
+              : null
           if (funcionarioId) {
             const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
             if (alocacoes.success && Array.isArray(alocacoes.data)) {
@@ -1502,7 +1547,15 @@ export default function PWAMainPage() {
       {registrosPendentesAssinatura > 0 && !isResponsavelObra && (
         <Card 
           className="border-orange-300 bg-orange-50 cursor-pointer hover:shadow-md transition-shadow"
-          onClick={() => router.push('/pwa/aprovacoes')}
+          onClick={() => {
+            if (primeiroPendenteAssinaturaId) {
+              router.push(
+                `/pwa/aprovacao-assinatura?id=${encodeURIComponent(primeiroPendenteAssinaturaId)}`
+              )
+            } else {
+              router.push("/pwa/aprovacoes")
+            }
+          }}
         >
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

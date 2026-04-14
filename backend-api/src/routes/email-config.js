@@ -315,6 +315,7 @@ router.post('/templates', async (req, res) => {
       'reset_password',
       'password_changed',
       'medicao_enviada',
+      'medicao_faturamento_enviada',
       'nota_fiscal_enviada',
       'notificacao_ponto_responsavel',
       'notificacao_ponto_pendente_generica',

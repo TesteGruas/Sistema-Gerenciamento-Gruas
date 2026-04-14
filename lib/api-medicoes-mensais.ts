@@ -106,12 +106,17 @@ export interface MedicaoDocumento {
   updated_at: string;
 }
 
+/** O que anexar e qual template de e-mail usar ao enviar a partir da tela da medição. */
+export type ModoEnvioMedicaoCliente = 'medicao_completa' | 'faturamento_notas_boletos';
+
 export interface EnviarMedicaoOptions {
   email?: string;
   telefone?: string;
   emails_adicionais?: string[];
   telefones_adicionais?: string[];
   incluir_contatos_cliente?: boolean;
+  /** Padrão: medição completa (comportamento anterior). */
+  modo_envio?: ModoEnvioMedicaoCliente;
 }
 
 export interface LinkPublicoMedicaoPdf {

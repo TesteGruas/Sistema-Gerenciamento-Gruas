@@ -21,6 +21,8 @@ export interface ResponsavelObraCreateData {
 
 export interface ResponsavelObraUpdateData extends ResponsavelObraCreateData {
   ativo?: boolean
+  /** Reenviar e-mail informativo e WhatsApp (apenas no PUT) */
+  notificar_acesso?: boolean
 }
 
 const apiRequest = async (url: string, options: RequestInit = {}) => {

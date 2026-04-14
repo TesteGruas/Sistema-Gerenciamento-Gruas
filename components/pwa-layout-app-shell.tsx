@@ -48,6 +48,7 @@ import {
   PWA_NOTIFICACOES_API_EVENT,
 } from "@/hooks/use-pwa-socket-notifications"
 import { ChatIa } from "@/components/chat-ia"
+import { PwaPontoAssinaturaPendenteAviso } from "@/components/pwa-ponto-assinatura-pendente-aviso"
 import { pwaNotifications } from "@/lib/pwa-notifications"
 import { ensurePushSubscription } from "@/lib/pwa-push-subscription"
 import { forcePwaRecoveryLogout } from "@/lib/pwa-emergency-recovery"
@@ -1158,6 +1159,14 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
 
             {/* Chat de IA - Botão Flutuante */}
             <ChatIa floating={true} floatingBottom="5.5rem" />
+
+            <PwaPontoAssinaturaPendenteAviso
+              sessionUser={persistentUser}
+              sessionLoading={sessionLoading}
+              isAuthenticated={isAuthenticated}
+              permissionsLoading={permissionsLoading}
+              isClientUser={isClientRole}
+            />
           </div>
       </PWAAuthGuard>
     </PWAErrorBoundary>

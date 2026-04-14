@@ -110,5 +110,66 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     signatureHeight: 52,
     marginRightCanto: 44,
     marginBottomCanto: 40
+  },
+  /** Documentos de demissão / rescisão: formulário eSocial A4 sem AcroForm — campo 151 (trabalhador). */
+  demissao_termo_rescisao: {
+    descricao:
+      'Termo de rescisão: PDF oficial A4 (595×841), 3 páginas com o mesmo rodapé — carimbar no campo 151 (47,333 — 240×38 pt).',
+    metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+    caixaPrimeirasPaginas: 3,
+    caixaX: 47,
+    caixaY: 333,
+    caixaWidth: 240,
+    caixaHeight: 38,
+    caixaPageWidth: 595,
+    caixaPageHeight: 841
+  },
+  demissao_termo_quitacao: {
+    descricao: 'Termo de quitação: mesmo layout eSocial do termo de rescisão (campo 151 nas 3 primeiras páginas).',
+    metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+    caixaPrimeirasPaginas: 3,
+    caixaX: 47,
+    caixaY: 333,
+    caixaWidth: 240,
+    caixaHeight: 38,
+    caixaPageWidth: 595,
+    caixaPageHeight: 841
+  },
+  demissao_aviso_previo: {
+    descricao:
+      'Aviso prévio do empregador (IRBANA, duas vias na mesma folha): assinatura do empregado abaixo do rótulo «Empregado e seu Representante Legal» / «Quando Menor» — uma cópia por ocorrência (tipicamente 2).',
+    todasOcorrenciasAncora: true,
+    anchors: [
+      /Empregado\s+e\s+seu\s+Representante\s+Legal/i,
+      /Representante\s+Legal\s*\(\s*Quando\s+Menor\s*\)/i
+    ],
+    match: 'last',
+    offsetXPoints: 0,
+    offsetYPoints: 30,
+    gapAbaixoTextoPoints: 6,
+    signatureHeight: 56
+  },
+  /** CD IRBANA: PDF sem AcroForm — carimbar na caixa do campo 151 (trabalhador), A4; páginas 1–3. */
+  demissao_comunicacao_desligamento: {
+    descricao:
+      'CD: sem campo de assinatura nativo; imagem centralizada na caixa fixa do campo 151 (47,333 — 240×38 pt, A4 595×841), primeiras 3 páginas.',
+    metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+    caixaPrimeirasPaginas: 3,
+    caixaX: 47,
+    caixaY: 333,
+    caixaWidth: 240,
+    caixaHeight: 38,
+    caixaPageWidth: 595,
+    caixaPageHeight: 841
+  },
+  demissao_padrao: {
+    descricao: 'Demissão genérica: rodapé coluna esquerda (âncora «Assinatura»).',
+    metodoAncora: 'rodape_coluna_esquerda',
+    anchors: [/assinatura/i],
+    match: 'last',
+    offsetXPoints: 0,
+    offsetYPoints: 50,
+    gapAbaixoTextoPoints: 6,
+    signatureHeight: 58
   }
 }

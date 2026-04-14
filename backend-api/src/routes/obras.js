@@ -3,7 +3,8 @@ import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
-import { sendWelcomeEmail } from '../services/email.service.js'
+import { sendWelcomeEmail, sendResponsavelObraNotificacaoEmail } from '../services/email.service.js'
+import { enviarWhatsAppResponsavelObraAcesso } from '../services/whatsapp-service.js'
 import { validarTelefoneWhatsappBrasil } from '../utils/telefone-brasil.js'
 
 // Função auxiliar para gerar senha segura aleatória
@@ -5223,7 +5224,9 @@ const responsavelObraSchema = Joi.object({
   usuario: Joi.string().allow('', null).optional(),
   email: Joi.string().email().allow('', null).optional(),
   telefone: Joi.string().allow('', null).optional(),
-  ativo: Joi.boolean().optional()
+  ativo: Joi.boolean().optional(),
+  /** Só no PUT: reenviar e-mail informativo + WhatsApp com link de login */
+  notificar_acesso: Joi.boolean().optional()
 })
 
 /** Telefone opcional; se informado, deve ser celular BR válido (11 dígitos nacionais ou 13 com 55). Salva só os 11 dígitos (DDD+número). */
@@ -5237,6 +5240,115 @@ function telefoneResponsavelObraParaSalvar(telefone) {
   }
   const nacional11 = v.e164.slice(2);
   return { ok: true, valor: nacional11 };
+}
+
+/**
+ * E-mail já cadastrado em `usuarios`: redefine senha no Auth (ou cria conta Auth se faltar),
+ * garante perfil Cliente (6), envia e-mail de boas-vindas com senha provisória e WhatsApp coerente.
+ */
+async function garantirCredenciaisResponsavelObraUsuarioExistente({
+  usuarioId,
+  nome,
+  email,
+  telefoneSalvar,
+  obraNome
+}) {
+  const emailNorm = String(email).toLowerCase().trim()
+  const senhaTemporaria = generateSecurePassword()
+
+  const { data: listData, error: listError } = await supabaseAdmin.auth.admin.listUsers()
+  if (listError) {
+    console.error('[responsavel-obra] listUsers:', listError)
+    return
+  }
+  const authUser = listData.users.find(u => u.email?.toLowerCase() === emailNorm)
+
+  if (authUser) {
+    const { error: upErr } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+      password: senhaTemporaria
+    })
+    if (upErr) {
+      console.error('[responsavel-obra] updateUserById:', upErr)
+      return
+    }
+  } else {
+    const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: senhaTemporaria,
+      email_confirm: true,
+      user_metadata: {
+        nome,
+        tipo: 'responsavel_obra'
+      }
+    })
+    if (createError) {
+      console.error('[responsavel-obra] createUser (usuário em usuarios, sem Auth):', createError)
+      return
+    }
+    console.log(`✅ Conta Auth criada para e-mail já existente em usuarios: ${email}`)
+  }
+
+  const { data: perfilExiste } = await supabaseAdmin
+    .from('usuario_perfis')
+    .select('id')
+    .eq('usuario_id', usuarioId)
+    .eq('perfil_id', 6)
+    .eq('status', 'Ativa')
+    .maybeSingle()
+
+  if (!perfilExiste) {
+    const { error: perfilErr } = await supabaseAdmin
+      .from('usuario_perfis')
+      .insert({
+        usuario_id: usuarioId,
+        perfil_id: 6,
+        status: 'Ativa',
+        data_atribuicao: new Date().toISOString(),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+    if (perfilErr) {
+      console.error('[responsavel-obra] insert usuario_perfis (6):', perfilErr)
+    } else {
+      console.log(`✅ Perfil Cliente (6) atribuído ao responsável de obra: ${nome}`)
+    }
+  }
+
+  if (telefoneSalvar) {
+    await supabaseAdmin
+      .from('usuarios')
+      .update({ telefone: telefoneSalvar, updated_at: new Date().toISOString() })
+      .eq('id', usuarioId)
+      .then(({ error: uErr }) => {
+        if (uErr) console.warn('[responsavel-obra] atualizar telefone em usuarios:', uErr.message)
+      })
+  }
+
+  try {
+    await sendWelcomeEmail({
+      nome,
+      email,
+      senha_temporaria: senhaTemporaria
+    })
+    console.log(`✅ E-mail com credenciais enviado (usuário já existia na base): ${email}`)
+  } catch (emailErr) {
+    console.error(`❌ Erro ao enviar e-mail de credenciais para ${email}:`, emailErr)
+  }
+
+  if (telefoneSalvar) {
+    enviarWhatsAppResponsavelObraAcesso(telefoneSalvar, {
+      nome,
+      obra_nome: obraNome,
+      credenciais_enviadas_por_email: true,
+      email_login: email,
+      senha_provisoria: senhaTemporaria
+    })
+      .then((r) => {
+        if (r.sucesso) console.log(`✅ WhatsApp enviado (login e senha) ao responsável de obra`)
+        else console.warn(`⚠️ WhatsApp responsável obra:`, r.erro)
+      })
+      .catch((wErr) => console.error('[responsavel-obra] WhatsApp:', wErr))
+  }
 }
 
 /**
@@ -5328,8 +5440,15 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
           .maybeSingle()
 
         if (usuarioExistente) {
-          console.log(`ℹ️ Usuário com email ${value.email} já existe no sistema. Pulando criação de conta.`)
+          console.log(`ℹ️ Usuário com email ${value.email} já existe no sistema. Enviando credenciais (nova senha provisória) e notificações.`)
           usuarioCriado = usuarioExistente
+          garantirCredenciaisResponsavelObraUsuarioExistente({
+            usuarioId: usuarioExistente.id,
+            nome: value.nome,
+            email: value.email,
+            telefoneSalvar,
+            obraNome: obra.nome
+          }).catch((err) => console.error('[responsavel-obra] garantirCredenciaisUsuarioExistente:', err))
         } else {
           // Verificar se existe no Supabase Auth
           const { data: authUsers } = await supabaseAdmin.auth.admin.listUsers()
@@ -5392,7 +5511,7 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
                 .then(() => console.log(`✅ Perfil atribuído ao responsável de obra: ${value.nome}`))
                 .catch(err => console.error('Erro ao atribuir perfil:', err))
 
-              // Enviar email com credenciais (assíncrono)
+              // E-mail com senha provisória + WhatsApp com link (assíncrono)
               sendWelcomeEmail({
                 nome: value.nome,
                 email: value.email,
@@ -5402,6 +5521,19 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
                 emailEnviado = true
               }).catch((emailError) => {
                 console.error(`❌ Erro ao enviar email para ${value.email}:`, emailError)
+              }).finally(() => {
+                if (telefoneSalvar) {
+                  enviarWhatsAppResponsavelObraAcesso(telefoneSalvar, {
+                    nome: value.nome,
+                    obra_nome: obra.nome,
+                    credenciais_enviadas_por_email: true,
+                    email_login: value.email,
+                    senha_provisoria: senhaTemporaria
+                  }).then((r) => {
+                    if (r.sucesso) console.log(`✅ WhatsApp enviado ao novo responsável de obra`)
+                    else console.warn(`⚠️ WhatsApp responsável obra:`, r.erro)
+                  }).catch((wErr) => console.error('[responsavel-obra] WhatsApp:', wErr))
+                }
               })
             }
           }
@@ -5409,6 +5541,17 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
       } catch (userError) {
         console.error('Erro ao criar conta para responsável de obra (não impede o cadastro):', userError)
       }
+    }
+
+    // Sem e-mail no cadastro: ainda pode avisar pelo WhatsApp
+    if (!value.email && telefoneSalvar) {
+      enviarWhatsAppResponsavelObraAcesso(telefoneSalvar, {
+        nome: value.nome,
+        obra_nome: obra.nome
+      }).then((r) => {
+        if (r.sucesso) console.log(`✅ WhatsApp enviado ao responsável de obra (sem e-mail no formulário)`)
+        else console.warn(`⚠️ WhatsApp responsável obra:`, r.erro)
+      }).catch((wErr) => console.error('[responsavel-obra] WhatsApp:', wErr))
     }
 
     res.status(201).json({
@@ -5469,6 +5612,53 @@ router.put('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermissi
 
     if (!data) {
       return res.status(404).json({ success: false, error: 'Responsável não encontrado' })
+    }
+
+    if (value.notificar_acesso) {
+      const { data: obraRow } = await supabaseAdmin
+        .from('obras')
+        .select('nome')
+        .eq('id', obra_id)
+        .maybeSingle()
+      const obraNome = obraRow?.nome || 'Obra'
+
+      if (data.email) {
+        const { data: usuarioRow } = await supabaseAdmin
+          .from('usuarios')
+          .select('id')
+          .eq('email', String(data.email).toLowerCase().trim())
+          .maybeSingle()
+
+        if (usuarioRow?.id) {
+          garantirCredenciaisResponsavelObraUsuarioExistente({
+            usuarioId: usuarioRow.id,
+            nome: data.nome,
+            email: data.email,
+            telefoneSalvar: data.telefone || null,
+            obraNome
+          }).catch((err) => console.error('[responsavel-obra] PUT garantirCredenciais:', err))
+        } else {
+          sendResponsavelObraNotificacaoEmail({
+            nome: data.nome,
+            email: data.email,
+            obra_nome: obraNome
+          }).then(() => console.log(`✅ E-mail informativo reenviado (responsável obra ${id}, sem linha em usuarios)`))
+            .catch((err) => console.error('❌ Erro ao reenviar e-mail ao responsável:', err))
+          if (data.telefone) {
+            enviarWhatsAppResponsavelObraAcesso(data.telefone, {
+              nome: data.nome,
+              obra_nome: obraNome,
+              credenciais_enviadas_por_email: false
+            }).catch((wErr) => console.error('[responsavel-obra] WhatsApp:', wErr))
+          }
+        }
+      } else if (data.telefone) {
+        enviarWhatsAppResponsavelObraAcesso(data.telefone, {
+          nome: data.nome,
+          obra_nome: obraNome,
+          credenciais_enviadas_por_email: false
+        }).catch((wErr) => console.error('[responsavel-obra] WhatsApp:', wErr))
+      }
     }
 
     res.json({ success: true, data })

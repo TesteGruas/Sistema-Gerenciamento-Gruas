@@ -113,6 +113,61 @@ const gerarTokenLinkPublicoMedicao = (medicaoId, expiresIn = '7d') => {
   );
 };
 
+const MODOS_ENVIO_MEDICAO = ['medicao_completa', 'faturamento_notas_boletos'];
+
+function normalizeModoEnvioMedicao(v) {
+  const s = String(v || 'medicao_completa').trim();
+  return MODOS_ENVIO_MEDICAO.includes(s) ? s : 'medicao_completa';
+}
+
+function templateTipoEmailPorModoEnvio(modoEnvio) {
+  if (modoEnvio === 'faturamento_notas_boletos') return 'medicao_faturamento_enviada';
+  return 'medicao_enviada';
+}
+
+/** Garante que o modo escolhido tenha arquivos correspondentes antes de aceitar o envio. */
+async function assertMedicaoModoEnvioTemAnexos(medicaoId, modoEnvio) {
+  if (modoEnvio === 'medicao_completa') {
+    return { ok: true };
+  }
+  const { data: notas } = await supabaseAdmin
+    .from('notas_fiscais')
+    .select('id, arquivo_nf')
+    .eq('medicao_id', medicaoId);
+  const notasComArquivo = (notas || []).filter((n) => n.arquivo_nf && String(n.arquivo_nf).trim());
+  const notaIds = (notas || []).map((n) => n.id).filter(Boolean);
+
+  const boletosMap = new Map();
+  const { data: bolMed } = await supabaseAdmin
+    .from('boletos')
+    .select('id, arquivo_boleto')
+    .eq('medicao_id', medicaoId);
+  for (const b of bolMed || []) {
+    if (b?.id && b.arquivo_boleto && String(b.arquivo_boleto).trim()) boletosMap.set(b.id, b);
+  }
+  if (notaIds.length > 0) {
+    const { data: bolNf } = await supabaseAdmin
+      .from('boletos')
+      .select('id, arquivo_boleto')
+      .in('nota_fiscal_id', notaIds);
+    for (const b of bolNf || []) {
+      if (b?.id && b.arquivo_boleto && String(b.arquivo_boleto).trim()) boletosMap.set(b.id, b);
+    }
+  }
+
+  const temNf = notasComArquivo.length > 0;
+  const temBol = boletosMap.size > 0;
+
+  if (!temNf && !temBol) {
+    return {
+      ok: false,
+      message:
+        'Para enviar faturamento é necessário ao menos uma nota fiscal ou um boleto com arquivo vinculado à medição.'
+    };
+  }
+  return { ok: true };
+}
+
 /**
  * Notas fiscais vinculadas à medição (medicao_id).
  * Faturado = existe pelo menos uma NF com medicao_id preenchido, independente do status (pendente, paga, cancelada, etc.).
@@ -1200,6 +1255,15 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
       });
     }
 
+    const modoEnvio = normalizeModoEnvioMedicao(req.body?.modo_envio);
+    const anexoCheck = await assertMedicaoModoEnvioTemAnexos(medicao.id, modoEnvio);
+    if (!anexoCheck.ok) {
+      return res.status(400).json({
+        error: 'Envio não permitido',
+        message: anexoCheck.message
+      });
+    }
+
     const jaEnviada = medicao.status === 'enviada';
     let medicaoAtualizada = medicao;
 
@@ -1286,25 +1350,29 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             gruas: medicao.gruas
           };
 
-          /** PDF único (link público) + cada arquivo em documentos/NF/boletos vinculados à medição. */
+          const templateTipoLog = templateTipoEmailPorModoEnvio(modoEnvio);
+
           const attachments = [];
           const seenAttachmentUrls = new Set();
 
-          try {
-            const { buscarMedicaoCompleta, gerarPdfCompletoMedicao } = await import('./relatorios-medicoes.js');
-            const medicaoCompleta = await buscarMedicaoCompleta(medicao.id);
-            const { pdfBytes, nomeArquivo } = await gerarPdfCompletoMedicao(medicaoCompleta, medicao.id);
-            attachments.push({ filename: nomeArquivo, content: Buffer.from(pdfBytes) });
-          } catch (pdfErr) {
-            console.error('[medicoes-mensais/enviar] Erro ao gerar PDF da medição para anexo:', pdfErr);
-          }
+          if (modoEnvio === 'medicao_completa') {
+            try {
+              const { buscarMedicaoCompleta, gerarPdfCompletoMedicao } = await import('./relatorios-medicoes.js');
+              const medicaoCompleta = await buscarMedicaoCompleta(medicao.id);
+              const { pdfBytes, nomeArquivo } = await gerarPdfCompletoMedicao(medicaoCompleta, medicao.id);
+              attachments.push({ filename: nomeArquivo, content: Buffer.from(pdfBytes) });
+            } catch (pdfErr) {
+              console.error('[medicoes-mensais/enviar] Erro ao gerar PDF da medição para anexo:', pdfErr);
+            }
 
-          for (const doc of documentosEmail || []) {
-            if (!doc.caminho_arquivo) continue;
-            const prefix = LABEL_ARQUIVO_TIPO_DOCUMENTO_MEDICAO[doc.tipo_documento] || doc.tipo_documento || 'documento';
-            const fallback = `${prefix}_${doc.numero_documento || doc.id}.pdf`;
-            const att = await tryEmailAttachmentFromUrl(doc.caminho_arquivo, fallback, seenAttachmentUrls);
-            if (att) attachments.push(att);
+            for (const doc of documentosEmail || []) {
+              if (!doc.caminho_arquivo) continue;
+              const prefix =
+                LABEL_ARQUIVO_TIPO_DOCUMENTO_MEDICAO[doc.tipo_documento] || doc.tipo_documento || 'documento';
+              const fallback = `${prefix}_${doc.numero_documento || doc.id}.pdf`;
+              const att = await tryEmailAttachmentFromUrl(doc.caminho_arquivo, fallback, seenAttachmentUrls);
+              if (att) attachments.push(att);
+            }
           }
 
           const { data: notasMedicao } = await supabaseAdmin
@@ -1314,20 +1382,22 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
 
           const notaIds = (notasMedicao || []).map((n) => n.id).filter(Boolean);
 
-          for (const nota of notasMedicao || []) {
-            if (!nota.arquivo_nf) continue;
-            const extMed =
-              nota.tipo_arquivo === 'xml'
-                ? 'xml'
-                : nota.tipo_arquivo === 'imagem'
-                  ? 'jpg'
-                  : 'pdf';
-            const fallback =
-              nota.nome_arquivo && String(nota.nome_arquivo).trim()
-                ? String(nota.nome_arquivo).trim()
-                : `NotaFiscal_medicao_${medicao.id}_${nota.numero_nf || nota.id}.${extMed}`;
-            const att = await tryEmailAttachmentFromUrl(nota.arquivo_nf, fallback, seenAttachmentUrls);
-            if (att) attachments.push(att);
+          if (modoEnvio === 'medicao_completa' || modoEnvio === 'faturamento_notas_boletos') {
+            for (const nota of notasMedicao || []) {
+              if (!nota.arquivo_nf) continue;
+              const extMed =
+                nota.tipo_arquivo === 'xml'
+                  ? 'xml'
+                  : nota.tipo_arquivo === 'imagem'
+                    ? 'jpg'
+                    : 'pdf';
+              const fallback =
+                nota.nome_arquivo && String(nota.nome_arquivo).trim()
+                  ? String(nota.nome_arquivo).trim()
+                  : `NotaFiscal_medicao_${medicao.id}_${nota.numero_nf || nota.id}.${extMed}`;
+              const att = await tryEmailAttachmentFromUrl(nota.arquivo_nf, fallback, seenAttachmentUrls);
+              if (att) attachments.push(att);
+            }
           }
 
           const { data: boletosPorMedicao } = await supabaseAdmin
@@ -1349,20 +1419,23 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             if (bol?.id) boletosUnicos.set(bol.id, bol);
           }
 
-          for (const bol of boletosUnicos.values()) {
-            if (!bol.arquivo_boleto) continue;
-            const fallback = `Boleto_medicao_${medicao.id}_${String(bol.numero_boleto || bol.id).replace(/[^\w.-]+/g, '_')}.pdf`;
-            const att = await tryEmailAttachmentFromUrl(bol.arquivo_boleto, fallback, seenAttachmentUrls);
-            if (att) attachments.push(att);
+          if (modoEnvio === 'medicao_completa' || modoEnvio === 'faturamento_notas_boletos') {
+            for (const bol of boletosUnicos.values()) {
+              if (!bol.arquivo_boleto) continue;
+              const fallback = `Boleto_medicao_${medicao.id}_${String(bol.numero_boleto || bol.id).replace(/[^\w.-]+/g, '_')}.pdf`;
+              const att = await tryEmailAttachmentFromUrl(bol.arquivo_boleto, fallback, seenAttachmentUrls);
+              if (att) attachments.push(att);
+            }
           }
 
           console.log(
-            '[medicoes-mensais/enviar] Anexos preparados:',
+            '[medicoes-mensais/enviar] modo:',
+            modoEnvio,
+            'anexos:',
             attachments.length,
             attachments.map((a) => a.filename)
           );
 
-          // Enviar e-mail (HTML/assunto via template em email_templates.tipo = medicao_enviada)
           for (const emailDestino of emailsUnicos) {
             try {
               const { sendEmail, buildMedicaoClienteEmail } = await import('../services/email.service.js');
@@ -1370,13 +1443,14 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
                 medicao: medicaoParaEmail,
                 linkPdfPublico,
                 cliente,
-                documentos: documentosEmail || []
+                documentos: documentosEmail || [],
+                templateTipo: templateTipoLog
               });
               await sendEmail({
                 to: emailDestino,
                 subject: assunto,
                 html,
-                tipo: 'medicao_enviada',
+                tipo: templateTipoLog,
                 ...(attachments.length > 0 ? { attachments } : {}),
               });
             } catch (emailErr) {
@@ -1384,15 +1458,19 @@ router.patch('/:id/enviar', authenticateToken, requirePermission('obras:editar')
             }
           }
 
-          // Enviar WhatsApp
           for (const telefoneDestino of telefonesUnicos) {
             try {
               const { enviarMensagemWebhook } = await import('../services/whatsapp-service.js');
               const dataMedicaoFormatada = medicao.data_medicao
                 ? new Date(medicao.data_medicao).toLocaleDateString('pt-BR')
                 : '-';
-              const mensagem = `📄 *Medição Mensal*\nNúmero: ${medicao.numero}\nPeríodo: ${medicao.periodo}\nData: ${dataMedicaoFormatada}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\n${linkPdfPublico}`;
-              await enviarMensagemWebhook(telefoneDestino, mensagem, linkPdfPublico, { tipo: 'medicao_enviada' });
+              let mensagem;
+              if (modoEnvio === 'faturamento_notas_boletos') {
+                mensagem = `📑 *Faturamento (notas e boletos)*\nMedição: ${medicao.numero}\nPeríodo: ${medicao.periodo}\nData: ${dataMedicaoFormatada}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\nConsulta do PDF da medição:\n${linkPdfPublico}`;
+              } else {
+                mensagem = `📄 *Medição Mensal*\nNúmero: ${medicao.numero}\nPeríodo: ${medicao.periodo}\nData: ${dataMedicaoFormatada}\nValor: R$ ${parseFloat(medicao.valor_total || 0).toFixed(2)}\n\n${linkPdfPublico}`;
+              }
+              await enviarMensagemWebhook(telefoneDestino, mensagem, linkPdfPublico, { tipo: templateTipoLog });
             } catch (whatsappErr) {
               console.error('Erro ao enviar WhatsApp:', whatsappErr);
             }

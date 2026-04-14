@@ -43,6 +43,7 @@ export type TipoCertificado = (typeof TIPOS_CERTIFICADOS)[number]
 export const TIPOS_DOCUMENTOS_DEMISSAO = [
   'Termo de Rescisão do Contrato',
   'Termo de Quitação',
+  'Aviso Prévio Trabalhado',
   'Homologação da Rescisão',
   'Recibo de Verbas Rescisórias',
   'Comunicação de Desligamento (CD)',
