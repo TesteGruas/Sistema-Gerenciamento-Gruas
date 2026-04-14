@@ -28,8 +28,28 @@ import { useToast } from "@/hooks/use-toast"
 import { getFuncionarioIdWithFallback } from "@/lib/get-funcionario-id"
 import * as documentosApi from "@/lib/api-documentos"
 import { downloadDocumento } from "@/lib/api-assinaturas"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 type Documento = documentosApi.DocumentoFuncionario
+
+async function fetchPdfBlobRh(arquivoUrl: string): Promise<Blob> {
+  const token = localStorage.getItem("access_token")
+  if (!token) throw new Error("Token não encontrado")
+  const base = getApiBasePath()
+  const q = new URLSearchParams({ caminho: arquivoUrl })
+  const res = await fetch(`${base}/arquivos/url-assinada?${q}`, {
+    headers: { Authorization: `Bearer ${token}` }
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    throw new Error(json.message || "Falha ao obter URL do documento")
+  }
+  const signed = json?.data?.url as string | undefined
+  const url = signed || arquivoUrl
+  const pdfRes = await fetch(url)
+  if (!pdfRes.ok) throw new Error("Falha ao baixar o PDF")
+  return pdfRes.blob()
+}
 
 export default function PWADocumentosPage() {
   const [documentos, setDocumentos] = useState<Documento[]>([])
@@ -162,16 +182,20 @@ export default function PWADocumentosPage() {
 
           console.log('🔍 [PWA Documentos] Usando identificador:', funcionarioId, 'tipo:', typeof funcionarioId, 'cliente:', isClienteLogin)
           
-          // Buscar documentos do funcionário
-          const response = await documentosApi.getDocumentosFuncionario(funcionarioId)
-          
-          // A API retorna documentos de obras com estrutura diferente
-          // Mapear para o formato esperado pelo componente
-          const documentosMapeados = (Array.isArray(response) ? response : response.data || []).map((doc: any) => {
-            // Verificar se tem assinatura pendente ou aguardando
+          // Obras (assinaturas em obras_documentos) + RH (funcionario_documentos — mesmo painel /dashboard/rh)
+          const [responseObra, docsRhRaw] = await Promise.all([
+            documentosApi.getDocumentosFuncionario(funcionarioId).catch(() => []),
+            !isClienteLogin
+              ? documentosApi.listarDocumentosRhFuncionario(funcionarioId).catch(() => [])
+              : Promise.resolve([])
+          ])
+
+          const listaObra = Array.isArray(responseObra) ? responseObra : (responseObra as any)?.data || []
+
+          // A API de obra retorna documentos com assinatura embutida
+          const documentosObra = listaObra.map((doc: any) => {
             const assinatura = doc.assinatura || {}
             const statusAssinatura = assinatura.status || 'pendente'
-            const isPendente = ['pendente', 'aguardando'].includes(statusAssinatura)
             
             return {
               id: doc.id?.toString() || assinatura.documento_id?.toString(),
@@ -190,7 +214,8 @@ export default function PWADocumentosPage() {
               obra_id: doc.obra_id,
               obra_nome: doc.obra_nome,
               arquivo_original: doc.arquivo_original,
-              caminho_arquivo: doc.caminho_arquivo
+              caminho_arquivo: doc.caminho_arquivo,
+              fonte: 'obra' as const
             }
           }).filter((doc: any) => {
             if (isClienteLogin) {
@@ -214,6 +239,36 @@ export default function PWADocumentosPage() {
             console.log(`🔍 [PWA Documentos] Filtro - doc.user_id: ${docUserId}, funcionarioId: ${userFuncionarioId}, match: ${userIdMatch}, status: ${doc.status}, statusMatch: ${statusMatch}`)
             
             return userIdMatch && statusMatch
+          })
+
+          const fidStr = funcionarioId.toString()
+          const documentosRh = (Array.isArray(docsRhRaw) ? docsRhRaw : []).map((doc: any) => {
+            const url = String(doc.arquivo_url || '')
+            const semArquivoValido = !url || url.trim().startsWith('blob:')
+            const jaAssinado = url.includes('assinados-rh-funcionario')
+            const status = semArquivoValido ? 'aguardando' : jaAssinado ? 'assinado' : 'pendente'
+            return {
+              id: `rh-${doc.id}`,
+              documento_id: Number(doc.id),
+              titulo: doc.nome || 'Documento sem título',
+              descricao: doc.observacoes,
+              tipo: doc.tipo || 'rh',
+              ordem: 1,
+              status,
+              user_id: fidStr,
+              created_at: doc.created_at,
+              updated_at: doc.updated_at,
+              arquivo_original: `${doc.nome || 'documento'}.pdf`,
+              email_enviado: false,
+              fonte: 'rh' as const,
+              arquivo_url_rh: doc.arquivo_url
+            }
+          }).filter((doc: any) => ['pendente', 'aguardando', 'assinado'].includes(doc.status))
+
+          const documentosMapeados = [...documentosObra, ...documentosRh].sort((a: any, b: any) => {
+            const ta = new Date(a.created_at || 0).getTime()
+            const tb = new Date(b.created_at || 0).getTime()
+            return tb - ta
           })
           
           console.log('📄 [PWA Documentos] Documentos mapeados:', documentosMapeados.length)
@@ -374,6 +429,16 @@ export default function PWADocumentosPage() {
         }
       }
 
+      if (tipoAssinatura === 'arquivo' && documentoSelecionado.fonte === 'rh') {
+        toast({
+          title: "Indisponível",
+          description: "Para documentos do RH, use a assinatura digital no app.",
+          variant: "destructive"
+        })
+        setIsAssinando(false)
+        return
+      }
+
       if (tipoAssinatura === 'digital') {
         // Assinatura digital - adicionar ao PDF pelo backend
         if (!isOnline) {
@@ -382,14 +447,22 @@ export default function PWADocumentosPage() {
           return
         }
 
-        // Usar a nova API que adiciona assinatura ao PDF
-        const { assinarDocumentoComPDF } = await import('@/lib/api-assinaturas')
-        await assinarDocumentoComPDF(Number(documentoSelecionado.documento_id), {
-          assinatura: signature!,
-          geoloc,
-          timestamp: new Date().toISOString(),
-          observacoes: 'Assinatura digital via PWA'
-        })
+        if (documentoSelecionado.fonte === 'rh') {
+          await documentosApi.assinarDocumentoRhColaborador(Number(documentoSelecionado.documento_id), {
+            assinatura: signature!,
+            geoloc,
+            timestamp: new Date().toISOString(),
+            observacoes: 'Assinatura digital via PWA (documento RH)'
+          })
+        } else {
+          const { assinarDocumentoComPDF } = await import('@/lib/api-assinaturas')
+          await assinarDocumentoComPDF(Number(documentoSelecionado.documento_id), {
+            assinatura: signature!,
+            geoloc,
+            timestamp: new Date().toISOString(),
+            observacoes: 'Assinatura digital via PWA'
+          })
+        }
 
       } else {
         // Upload de arquivo assinado
@@ -472,8 +545,21 @@ export default function PWADocumentosPage() {
 
   const handleDownload = async (documento: Documento, comAssinaturas: boolean = false) => {
     try {
+      if (documento.fonte === 'rh' && documento.arquivo_url_rh) {
+        const blob = await fetchPdfBlobRh(documento.arquivo_url_rh)
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${documento.titulo || `documento_${documento.documento_id}`}.pdf`
+        document.body.appendChild(a)
+        a.click()
+        document.body.removeChild(a)
+        window.URL.revokeObjectURL(url)
+        return
+      }
+
       // Verificar se documento tem assinaturas para sugerir download com assinaturas
-      const temAssinaturas = documento.status === 'assinado' || documento.assinatura_url
+      const temAssinaturas = documento.status === 'assinado' || (documento as any).assinatura_url
       
       // Usar documento_id (ID do documento de obra) para o download
       const documentoId = documento.documento_id || documento.id
@@ -502,9 +588,17 @@ export default function PWADocumentosPage() {
       setIsPreviewOpen(true)
       setUrlPreview(null)
       setCarregandoPreview(true)
+
+      if (documento.fonte === 'rh' && documento.arquivo_url_rh) {
+        const blob = await fetchPdfBlobRh(documento.arquivo_url_rh)
+        const url = window.URL.createObjectURL(blob)
+        setUrlPreview(url)
+        setCarregandoPreview(false)
+        return
+      }
       
       // Verificar se documento tem assinaturas para visualizar versão assinada
-      const temAssinaturas = documento.status === 'assinado' || documento.assinatura_url
+      const temAssinaturas = documento.status === 'assinado' || (documento as any).assinatura_url
       
       // Usar documento_id (ID do documento de obra) para o download
       const documentoId = documento.documento_id || documento.id
@@ -580,6 +674,12 @@ export default function PWADocumentosPage() {
             const statusConfig = getStatusBadge(documento.status)
             const StatusIcon = statusConfig.icon
             const vencido = isVencido(documento)
+            const rhSemPdf =
+              documento.fonte === 'rh' &&
+              (!documento.arquivo_url_rh || String(documento.arquivo_url_rh).trim().startsWith('blob:'))
+            const podeAssinar =
+              (documento.status === 'pendente' || documento.status === 'aguardando') &&
+              !rhSemPdf
 
             return (
               <Card key={documento.id} className={`hover:shadow-md transition-shadow ${vencido ? 'border-red-200 bg-red-50' : ''}`}>
@@ -615,7 +715,7 @@ export default function PWADocumentosPage() {
                     )}
 
                     <div className="flex gap-2">
-                      {(documento.status === 'aguardando' || documento.status === 'pendente') && (
+                      {podeAssinar && (
                         <Button
                           onClick={() => iniciarAssinatura(documento)}
                           size="sm"
@@ -630,7 +730,7 @@ export default function PWADocumentosPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleVisualizar(documento, false)}
-                        disabled={!isOnline}
+                        disabled={!isOnline || rhSemPdf}
                       >
                         <Eye className="w-4 h-4 mr-2" />
                         Visualizar
@@ -640,7 +740,7 @@ export default function PWADocumentosPage() {
                         variant="outline"
                         size="sm"
                         onClick={() => handleDownload(documento, false)}
-                        disabled={!isOnline}
+                        disabled={!isOnline || rhSemPdf}
                       >
                         <Download className="w-4 h-4 mr-2" />
                         Baixar

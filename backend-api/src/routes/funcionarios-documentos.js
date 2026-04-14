@@ -8,11 +8,63 @@ import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { checkPermission } from '../middleware/permissions.js'
+import {
+  adicionarAssinaturaPorAncorasOuFallback,
+  normalizarTipoDocumentoParaRegraAssinatura
+} from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
 // Aplicar middleware de autenticação
 router.use(authenticateToken)
+
+const sanitizeFileName = (fileName) => {
+  return String(fileName || 'documento')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9._-]/g, '_')
+}
+
+function extrairCaminhoArquivosObras(arquivoUrl) {
+  if (!arquivoUrl || typeof arquivoUrl !== 'string') return null
+  const s = arquivoUrl.trim()
+  if (/^blob:/i.test(s)) return null
+  if (/^https?:\/\//i.test(s)) {
+    try {
+      const u = new URL(s)
+      const pathname = decodeURIComponent(u.pathname)
+      const needle = '/arquivos-obras/'
+      const idx = pathname.indexOf(needle)
+      if (idx === -1) return null
+      const rest = pathname.slice(idx + needle.length).replace(/^\/+/, '')
+      return rest || null
+    } catch {
+      return null
+    }
+  }
+  return s.replace(/^\/+/, '') || null
+}
+
+async function baixarPdfBufferDeArquivoUrl(arquivoUrl) {
+  const storagePath = extrairCaminhoArquivosObras(arquivoUrl)
+  if (storagePath) {
+    const { data, error } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .download(storagePath)
+    if (!error && data) {
+      return Buffer.from(await data.arrayBuffer())
+    }
+  }
+  if (!/^https?:\/\//i.test(String(arquivoUrl))) {
+    throw new Error('Caminho ou URL do PDF inválida')
+  }
+  const res = await fetch(arquivoUrl)
+  if (!res.ok) {
+    throw new Error(`Falha ao baixar PDF (${res.status})`)
+  }
+  return Buffer.from(await res.arrayBuffer())
+}
 
 // Schema de validação para documentos
 const documentoSchema = Joi.object({
@@ -316,18 +368,36 @@ router.delete('/:id', async (req, res) => {
 // ============== LISTAR DOCUMENTOS POR FUNCIONÁRIO ==============
 
 /**
- * GET /funcionarios/:funcionario_id/documentos
- * Listar todos os documentos de um funcionário específico
+ * GET /funcionarios/documentos/funcionario/:funcionario_id
+ * Listar documentos admissionais / RH (`funcionario_documentos`).
+ * Colaborador: apenas o próprio `funcionario_id`. Gestão: quem tem `funcionarios:visualizar`.
  */
 router.get('/funcionario/:funcionario_id', async (req, res) => {
   try {
     const { funcionario_id } = req.params
+    const fid = parseInt(funcionario_id, 10)
+    if (Number.isNaN(fid) || fid <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do funcionário inválido'
+      })
+    }
+
+    const meuFid = Number(req.user?.funcionario_id || 0)
+    const role = req.user?.role
+    const podeVerOutros = checkPermission(role, 'funcionarios:visualizar')
+    if (meuFid !== fid && !podeVerOutros) {
+      return res.status(403).json({
+        success: false,
+        message: 'Sem permissão para listar estes documentos'
+      })
+    }
 
     // Verificar se funcionário existe
     const { data: funcionario } = await supabaseAdmin
       .from('funcionarios')
       .select('id, nome')
-      .eq('id', funcionario_id)
+      .eq('id', fid)
       .single()
 
     if (!funcionario) {
@@ -341,7 +411,7 @@ router.get('/funcionario/:funcionario_id', async (req, res) => {
     const { data, error } = await supabaseAdmin
       .from('funcionario_documentos')
       .select('*')
-      .eq('funcionario_id', funcionario_id)
+      .eq('funcionario_id', fid)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -356,6 +426,152 @@ router.get('/funcionario/:funcionario_id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro ao listar documentos do funcionário',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * POST /funcionarios/documentos/:id/assinar-colaborador
+ * Assinatura digital no PDF de documento RH (mesma lógica de âncoras do módulo de obras).
+ */
+router.post('/:id/assinar-colaborador', async (req, res) => {
+  try {
+    const docId = parseInt(req.params.id, 10)
+    if (Number.isNaN(docId) || docId <= 0) {
+      return res.status(400).json({ success: false, message: 'ID do documento inválido' })
+    }
+
+    const { assinatura, geoloc, observacoes } = req.body || {}
+    if (!assinatura || typeof assinatura !== 'string') {
+      return res.status(400).json({ success: false, message: 'Assinatura é obrigatória' })
+    }
+
+    const { data: documento, error: docError } = await supabaseAdmin
+      .from('funcionario_documentos')
+      .select('*')
+      .eq('id', docId)
+      .single()
+
+    if (docError || !documento) {
+      return res.status(404).json({ success: false, message: 'Documento não encontrado' })
+    }
+
+    const meuFid = Number(req.user?.funcionario_id || 0)
+    if (meuFid !== Number(documento.funcionario_id)) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você não pode assinar este documento'
+      })
+    }
+
+    const arquivoUrl = documento.arquivo_url
+    if (!arquivoUrl || /^blob:/i.test(String(arquivoUrl).trim())) {
+      return res.status(400).json({
+        success: false,
+        message: 'Documento sem PDF válido no servidor. Peça ao RH para reenviar o arquivo.'
+      })
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await baixarPdfBufferDeArquivoUrl(arquivoUrl)
+    } catch (e) {
+      console.error('[RH assinar-colaborador] download PDF:', e)
+      return res.status(500).json({
+        success: false,
+        message: e?.message || 'Erro ao baixar o PDF do documento'
+      })
+    }
+
+    const arquivoOriginal = `${sanitizeFileName(documento.nome)}.pdf`
+    const tipoRegra = normalizarTipoDocumentoParaRegraAssinatura(documento.tipo) || undefined
+    let pdfComAssinatura
+    try {
+      pdfComAssinatura = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, assinatura, {
+        documento: {
+          arquivo_original: arquivoOriginal,
+          titulo: documento.nome,
+          tipo_documento: tipoRegra,
+          tipo_funcionario_documento: tipoRegra
+        }
+      })
+    } catch (e) {
+      console.error('[RH assinar-colaborador] PDF assinatura:', e)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao aplicar assinatura no PDF',
+        error: e.message
+      })
+    }
+
+    const ts = Date.now()
+    const filePath = `assinados-rh-funcionario/${documento.funcionario_id}/${docId}/assinado_${ts}.pdf`
+
+    const { error: uploadError } = await supabaseAdmin.storage
+      .from('arquivos-obras')
+      .upload(filePath, pdfComAssinatura, {
+        contentType: 'application/pdf',
+        cacheControl: '3600',
+        upsert: true
+      })
+
+    if (uploadError) {
+      console.error('[RH assinar-colaborador] upload:', uploadError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao gravar PDF assinado',
+        error: uploadError.message
+      })
+    }
+
+    const { data: urlData } = supabaseAdmin.storage
+      .from('arquivos-obras')
+      .getPublicUrl(filePath)
+
+    const publicUrl = urlData?.publicUrl
+    if (!publicUrl) {
+      return res.status(500).json({ success: false, message: 'Erro ao gerar URL pública do PDF' })
+    }
+
+    const obsExtra = [
+      observacoes,
+      geoloc ? `Localização: ${geoloc}` : null,
+      `Assinado pelo colaborador em ${new Date().toISOString()}`
+    ].filter(Boolean).join(' | ')
+
+    const observacoesNovas = [documento.observacoes, obsExtra].filter(Boolean).join('\n')
+
+    const { data: atualizado, error: upDocError } = await supabaseAdmin
+      .from('funcionario_documentos')
+      .update({
+        arquivo_url: publicUrl,
+        observacoes: observacoesNovas,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', docId)
+      .select()
+      .single()
+
+    if (upDocError) {
+      console.error('[RH assinar-colaborador] update doc:', upDocError)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao atualizar documento após assinatura',
+        error: upDocError.message
+      })
+    }
+
+    res.json({
+      success: true,
+      message: 'Documento assinado com sucesso',
+      data: atualizado
+    })
+  } catch (error) {
+    console.error('Erro em assinar-colaborador:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro interno do servidor',
       error: error.message
     })
   }

@@ -16,6 +16,7 @@ export {
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
   resolverRegraPorDocumento,
+  normalizarTipoDocumentoParaRegraAssinatura,
   listarPaginasComConteudo,
   PERFIS_ASSINATURA_DOCUMENTO,
   REGRA_ASSINATURA_PADRAO,

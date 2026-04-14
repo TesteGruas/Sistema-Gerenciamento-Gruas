@@ -6,14 +6,14 @@ export interface DocumentoFuncionario {
   user_id: string;
   ordem: number;
   status: 'pendente' | 'aguardando' | 'assinado' | 'rejeitado';
-  tipo: 'interno' | 'cliente';
+  tipo: 'interno' | 'cliente' | string;
   docu_sign_link?: string;
   docu_sign_envelope_id?: string;
   data_envio?: string;
   data_assinatura?: string;
   arquivo_assinado?: string;
   observacoes?: string;
-  email_enviado: boolean;
+  email_enviado?: boolean;
   data_email_enviado?: string;
   created_at: string;
   updated_at: string;
@@ -21,7 +21,11 @@ export interface DocumentoFuncionario {
   titulo?: string;
   descricao?: string;
   arquivo_original?: string;
+  caminho_arquivo?: string;
   data_criacao?: string;
+  /** Documentos de obra vs admissionais (RH) */
+  fonte?: 'obra' | 'rh';
+  arquivo_url_rh?: string;
 }
 
 export interface AssinarDocumentoPayload {
@@ -51,6 +55,38 @@ export const getDocumentosFuncionario = async (funcionarioId: number | string): 
   }
   // Fallback para formato antigo
   return response.data.data || response.data || [];
+};
+
+/**
+ * Documentos admissionais / RH (`funcionario_documentos`) — mesma origem do painel RH.
+ */
+export const listarDocumentosRhFuncionario = async (funcionarioId: number | string): Promise<any[]> => {
+  const response = await api.get(`/funcionarios/documentos/funcionario/${funcionarioId}`);
+  if (response.data?.success && Array.isArray(response.data.data)) {
+    return response.data.data;
+  }
+  return response.data?.data || [];
+};
+
+export interface AssinarRhColaboradorPayload {
+  assinatura: string;
+  geoloc?: string;
+  timestamp?: string;
+  observacoes?: string;
+}
+
+/**
+ * Assinatura digital no PDF de documento RH (colaborador).
+ */
+export const assinarDocumentoRhColaborador = async (
+  documentoId: number,
+  payload: AssinarRhColaboradorPayload
+): Promise<any> => {
+  const response = await api.post(
+    `/funcionarios/documentos/${documentoId}/assinar-colaborador`,
+    payload
+  );
+  return response.data?.data ?? response.data;
 };
 
 /**

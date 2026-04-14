@@ -512,7 +512,8 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
           documento: {
             arquivo_original: arquivoNome,
             titulo: tituloCert,
-            tipo_documento: tipoDocCert
+            tipo_documento: tipoDocCert,
+            tipo_funcionario_documento: tipoDocCert
           },
           opacity: 1.0
         })

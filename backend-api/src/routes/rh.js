@@ -8,7 +8,10 @@ import Joi from 'joi'
 import multer from 'multer'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
-import { adicionarAssinaturaPorAncorasOuFallback } from '../utils/pdf-signature.js'
+import {
+  adicionarAssinaturaPorAncorasOuFallback,
+  normalizarTipoDocumentoParaRegraAssinatura
+} from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
@@ -680,7 +683,8 @@ router.post(
 
       const arquivo_original = String(req.body.arquivo_original || 'documento.pdf')
       const titulo = String(req.body.titulo || '')
-      const tipo_documento = String(req.body.tipo_documento || '').trim() || undefined
+      const tipoNorm = normalizarTipoDocumentoParaRegraAssinatura(req.body.tipo_documento)
+      const tipo_documento = tipoNorm || undefined
 
       let sig = ASSINATURA_PREVIEW_PADRAO
       const assFile = req.files?.assinatura?.[0]

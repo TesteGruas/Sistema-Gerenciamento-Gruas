@@ -1,6 +1,7 @@
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { createRequire } from 'module';
 import { REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO } from '../config/assinatura-posicao-por-tipo-documento.js';
+import { tipoAdmissionalParaTipoDocumentoAssinatura } from './tipo-admissional-assinatura.js';
 
 export { REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO };
 
@@ -187,6 +188,15 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
 ];
 
 /**
+ * Normaliza o tipo para casar com chaves de `REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO`
+ * (`funcionario_documentos.tipo` em snake_case; no front às vezes vem com hífen).
+ */
+export function normalizarTipoDocumentoParaRegraAssinatura(tipo) {
+  if (tipo == null) return ''
+  return String(tipo).trim().replace(/-/g, '_')
+}
+
+/**
  * @param {{
  *   arquivo_original?: string,
  *   titulo?: string,
@@ -196,10 +206,15 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
  * @returns {RegraPosicaoAssinatura}
  */
 export function resolverRegraPorDocumento(documento, override = {}) {
-  const tipo =
+  const tipoBruto =
     documento?.tipo_documento ||
     documento?.tipo_funcionario_documento ||
-    documento?.tipoDocumento;
+    documento?.tipoDocumento
+  let tipo = normalizarTipoDocumentoParaRegraAssinatura(tipoBruto)
+  if (tipo && !REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
+    const mapeado = tipoAdmissionalParaTipoDocumentoAssinatura(tipoBruto)
+    if (mapeado) tipo = mapeado
+  }
   if (tipo && REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
     const { descricao: _, ...regraTipo } = REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo];
     return { ...REGRA_ASSINATURA_PADRAO, ...regraTipo, ...override };
