@@ -19,7 +19,7 @@ export type ChecklistItemExtra = {
   id: string
   label: string
   ok: boolean
-  /** ID em obra_checklist_itens_custom, quando o item veio do catálogo da obra */
+  /** ID em obra_checklist_itens_custom (tipo checklist_diario), quando o item veio do catálogo da obra */
   obra_item_id?: number
 }
 

@@ -685,6 +685,7 @@ export default function PWAGruaDetalhesPage() {
             {grua && (
               <LivroGruaManutencao
                 gruaId={grua.id || gruaId}
+                obraId={obraIdAtivaChecklist}
                 onSave={handleSucessoManutencao}
                 onCancel={() => setIsNovaManutencaoOpen(false)}
               />
@@ -701,6 +702,7 @@ export default function PWAGruaDetalhesPage() {
             {grua && manutencaoSelecionada && (
               <LivroGruaManutencao
                 gruaId={grua.id || gruaId}
+                obraId={obraIdAtivaChecklist}
                 manutencao={manutencaoSelecionada}
                 onSave={handleSucessoManutencao}
                 onCancel={() => setIsEditarManutencaoOpen(false)}

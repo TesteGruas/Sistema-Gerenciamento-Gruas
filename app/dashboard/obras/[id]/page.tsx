@@ -7203,6 +7203,7 @@ useEffect(() => {
           {gruaSelecionadaManutencao && (
             <LivroGruaManutencao
               gruaId={gruaSelecionadaManutencao}
+              obraId={obraIdNumericoParaApi}
               onSave={handleSucessoManutencao}
               onCancel={() => setIsNovaManutencaoOpen(false)}
             />
@@ -7221,6 +7222,7 @@ useEffect(() => {
           {gruaSelecionadaManutencao && manutencaoSelecionada && (
             <LivroGruaManutencao
               gruaId={gruaSelecionadaManutencao}
+              obraId={obraIdNumericoParaApi}
               manutencao={manutencaoSelecionada}
               modoEdicao
               onSave={handleSucessoManutencao}
@@ -7238,6 +7240,7 @@ useEffect(() => {
           {manutencaoSelecionada && (
             <LivroGruaManutencao
               gruaId={manutencaoSelecionada.grua_id?.toString() || gruaSelecionadaManutencao}
+              obraId={obraIdNumericoParaApi}
               manutencao={manutencaoSelecionada}
               modoVisualizacao
               onCancel={() => setIsVisualizarManutencaoOpen(false)}

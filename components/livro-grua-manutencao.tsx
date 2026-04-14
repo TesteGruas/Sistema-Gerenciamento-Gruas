@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -9,6 +9,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle
+} from "@/components/ui/alert-dialog"
 import { 
   Save, 
   X,
@@ -17,13 +25,19 @@ import {
   Wrench,
   AlertCircle,
   CheckCircle2,
-  Shuffle
+  Shuffle,
+  Plus,
+  Trash2
 } from "lucide-react"
 import { ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { livroGruaApi } from "@/lib/api-livro-grua"
 import { getFuncionarioId } from "@/lib/get-funcionario-id"
 import FuncionarioSearch from "@/components/funcionario-search"
+import {
+  criarChecklistItemCustomObra,
+  listarChecklistItensCustomObra
+} from "@/lib/api-obra-checklist-itens-custom"
 
 interface Manutencao {
   id?: number
@@ -44,8 +58,20 @@ interface ChecklistItem {
   section: string
 }
 
+type ManutencaoExtraRow = {
+  key: string
+  label: string
+  obra_item_id?: number
+}
+
+function keyObraCat(obraItemId: number) {
+  return `obra_cat_${obraItemId}`
+}
+
 interface LivroGruaManutencaoProps {
   gruaId: string
+  /** Itens extras do catálogo da obra (tipo manutenção; separado do checklist diário) */
+  obraId?: number
   manutencao?: Manutencao
   onSave?: (manutencao: Manutencao) => void
   onCancel?: () => void
@@ -55,6 +81,7 @@ interface LivroGruaManutencaoProps {
 
 export function LivroGruaManutencao({
   gruaId,
+  obraId,
   manutencao,
   onSave,
   onCancel,
@@ -158,7 +185,20 @@ export function LivroGruaManutencao({
     return acc
   }, {} as Record<string, ChecklistItem[]>)
 
+  const checklistKeysFixos = useMemo(
+    () => new Set(checklistItems.map((i) => i.key)),
+    // checklistItems é estável em conteúdo; evita recalcular a cada render
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    []
+  )
+
   const [checklist, setChecklist] = useState<Record<string, 'ok' | 'manutencao' | null>>({})
+  const [extrasItens, setExtrasItens] = useState<ManutencaoExtraRow[]>([])
+  const [novoItemLabel, setNovoItemLabel] = useState("")
+  const [carregandoCatalogoObra, setCarregandoCatalogoObra] = useState(false)
+  const [dialogNovoItemAberto, setDialogNovoItemAberto] = useState(false)
+  const [labelPendenteAdicionar, setLabelPendenteAdicionar] = useState<string | null>(null)
+  const [salvandoItemObra, setSalvandoItemObra] = useState(false)
   
   const [formData, setFormData] = useState<Manutencao>({
     grua_id: gruaId,
@@ -170,7 +210,7 @@ export function LivroGruaManutencao({
     checklist: {}
   })
 
-  // Carregar dados da manutenção se estiver editando
+  // Carregar dados da manutenção se estiver editando (+ lista sync de itens extras)
   useEffect(() => {
     if (manutencao) {
       const checklistObservacoes = extrairChecklistDasObservacoes(manutencao.observacoes)
@@ -195,12 +235,20 @@ export function LivroGruaManutencao({
         checklist: checklistInicial
       })
 
-      // Carregar checklist se existir
-      if (Object.keys(checklistInicial).length > 0) {
-        setChecklist(checklistInicial)
-      }
+      setChecklist(checklistInicial)
 
-      // Se houver funcionário na manutenção, selecionar
+      const extraKeys = Object.keys(checklistInicial).filter((k) => !checklistKeysFixos.has(k))
+      setExtrasItens(
+        extraKeys.map((k) => {
+          const m = /^obra_cat_(\d+)$/.exec(k)
+          return {
+            key: k,
+            label: m ? `Item #${m[1]}` : k,
+            obra_item_id: m ? Number(m[1]) : undefined
+          }
+        })
+      )
+
       if (manutencao.realizado_por_id) {
         setFuncionarioSelecionado({
           id: manutencao.realizado_por_id,
@@ -208,8 +256,98 @@ export function LivroGruaManutencao({
           role: manutencao.cargo || ''
         })
       }
+    } else {
+      setExtrasItens([])
+      setChecklist({})
     }
-  }, [manutencao])
+  }, [manutencao, checklistKeysFixos])
+
+  // Catálogo da obra: novos checklists recebem todos os itens salvos; em edição, inclui itens novos do catálogo
+  useEffect(() => {
+    let cancelled = false
+    if (!obraId) return
+
+    ;(async () => {
+      try {
+        setCarregandoCatalogoObra(true)
+        const res = await listarChecklistItensCustomObra(obraId, "manutencao")
+        if (cancelled) return
+        const catalog = res.data || []
+        const labelById = new Map(catalog.map((r) => [r.id, r.label]))
+
+        if (modoVisualizacao) {
+          setExtrasItens((prev) =>
+            prev.map((e) => {
+              if (e.obra_item_id != null && labelById.has(e.obra_item_id)) {
+                return { ...e, label: labelById.get(e.obra_item_id)! }
+              }
+              return e
+            })
+          )
+          return
+        }
+
+        if (manutencao) {
+          setExtrasItens((prev) => {
+            const mergedLabels = prev.map((e) => {
+              if (e.obra_item_id != null && labelById.has(e.obra_item_id)) {
+                return { ...e, label: labelById.get(e.obra_item_id)! }
+              }
+              return e
+            })
+            const keysHave = new Set(mergedLabels.map((e) => e.key))
+            const novos = catalog
+              .filter((r) => !keysHave.has(keyObraCat(r.id)))
+              .map((r) => ({
+                key: keyObraCat(r.id),
+                label: r.label,
+                obra_item_id: r.id
+              }))
+            return [...mergedLabels, ...novos]
+          })
+          setChecklist((prev) => {
+            const n = { ...prev }
+            for (const r of catalog) {
+              const k = keyObraCat(r.id)
+              if (n[k] === undefined) n[k] = null
+            }
+            return n
+          })
+        } else {
+          setExtrasItens(
+            catalog.map((r) => ({
+              key: keyObraCat(r.id),
+              label: r.label,
+              obra_item_id: r.id
+            }))
+          )
+          setChecklist((prev) => {
+            const n = { ...prev }
+            for (const r of catalog) {
+              const k = keyObraCat(r.id)
+              if (n[k] === undefined) n[k] = null
+            }
+            return n
+          })
+        }
+      } catch (e) {
+        console.error("Catálogo de checklist da obra (manutenção):", e)
+        if (!cancelled) {
+          toast({
+            title: "Itens da obra",
+            description: "Não foi possível carregar os itens adicionais salvos desta obra.",
+            variant: "destructive"
+          })
+        }
+      } finally {
+        if (!cancelled) setCarregandoCatalogoObra(false)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [obraId, modoVisualizacao, manutencao?.id])
 
   // Nova manutenção: preencher automaticamente com funcionário logado no app
   useEffect(() => {
@@ -299,6 +437,100 @@ export function LivroGruaManutencao({
     })
   }
 
+  const fecharDialogNovoItem = () => {
+    setDialogNovoItemAberto(false)
+    setLabelPendenteAdicionar(null)
+  }
+
+  const solicitarAdicionarItemExtra = () => {
+    const label = novoItemLabel.trim()
+    if (!label) {
+      toast({
+        title: "Nome do item",
+        description: "Digite o nome do item antes de adicionar.",
+        variant: "destructive"
+      })
+      return
+    }
+    if (extrasItens.length >= 40) {
+      toast({
+        title: "Limite",
+        description: "Máximo de 40 itens adicionais por checklist.",
+        variant: "destructive"
+      })
+      return
+    }
+    const duplicado = extrasItens.some((e) => e.label.trim().toLowerCase() === label.toLowerCase())
+    if (duplicado) {
+      toast({
+        title: "Item repetido",
+        description: "Já existe um item com esse nome neste checklist.",
+        variant: "destructive"
+      })
+      return
+    }
+    if (!obraId) {
+      toast({
+        title: "Obra não vinculada",
+        description: "Abra a manutenção pelo detalhe da obra para salvar itens no catálogo reutilizável.",
+        variant: "destructive"
+      })
+      return
+    }
+    setLabelPendenteAdicionar(label)
+    setDialogNovoItemAberto(true)
+  }
+
+  const confirmarAdicionarItemExtra = async (status: 'ok' | 'manutencao' | null) => {
+    const label = labelPendenteAdicionar
+    if (!label || !obraId) {
+      fecharDialogNovoItem()
+      return
+    }
+
+    fecharDialogNovoItem()
+    setNovoItemLabel("")
+
+    try {
+      setSalvandoItemObra(true)
+      const res = await criarChecklistItemCustomObra(obraId, label, "manutencao")
+      if (!res.success || !res.data) {
+        throw new Error("Resposta inválida ao salvar item na obra")
+      }
+      const row = res.data
+      const k = keyObraCat(row.id)
+      setExtrasItens((prev) => [...prev, { key: k, label: row.label, obra_item_id: row.id }])
+      setChecklist((prev) => ({ ...prev, [k]: status }))
+      toast({
+        title:
+          status === "ok"
+            ? "Item adicionado (OK)"
+            : status === "manutencao"
+              ? "Item adicionado (manutenção)"
+              : "Item adicionado",
+        description: "O item foi salvo no catálogo de manutenção desta obra."
+      })
+    } catch (err) {
+      console.error(err)
+      toast({
+        title: "Erro ao salvar item",
+        description: err instanceof Error ? err.message : "Tente novamente.",
+        variant: "destructive"
+      })
+    } finally {
+      setSalvandoItemObra(false)
+    }
+  }
+
+  const removerItemExtra = (key: string) => {
+    setExtrasItens((prev) => prev.filter((e) => e.key !== key))
+    setChecklist((prev) => {
+      const n = { ...prev }
+      delete n[key]
+      return n
+    })
+  }
+
   const preencherDadosAleatorios = () => {
     if (modoVisualizacao) return
 
@@ -306,6 +538,10 @@ export function LivroGruaManutencao({
       acc[item.key] = Math.random() < 0.5 ? 'ok' : 'manutencao'
       return acc
     }, {} as Record<string, 'ok' | 'manutencao' | null>)
+
+    for (const ex of extrasItens) {
+      checklistAleatorio[ex.key] = Math.random() < 0.5 ? 'ok' : 'manutencao'
+    }
 
     const timestamp = new Date().toLocaleString('pt-BR')
     const descricaoAuto = `Manutenção preenchida automaticamente em ${timestamp}.`
@@ -407,6 +643,7 @@ export function LivroGruaManutencao({
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-4">
       {/* Data e Funcionário - Card Unificado - Oculto em nova manutenção */}
       {manutencao && (
@@ -567,6 +804,108 @@ export function LivroGruaManutencao({
                 </div>
               </div>
             ))}
+
+            {(obraId != null || carregandoCatalogoObra || extrasItens.length > 0) && (
+              <div className="space-y-3 pt-2 border-t">
+                <h4 className="text-sm font-semibold text-gray-700 border-b pb-2">
+                  Itens adicionais da obra
+                </h4>
+                {carregandoCatalogoObra && (
+                  <p className="text-xs text-muted-foreground">Carregando itens da obra…</p>
+                )}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {extrasItens.map((ex) => {
+                    const statusAtual = checklist[ex.key] || null
+                    return (
+                      <div
+                        key={ex.key}
+                        className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 p-2 sm:p-3 rounded-md border hover:bg-gray-50 transition-colors"
+                      >
+                        <Label
+                          htmlFor={ex.key}
+                          className="text-sm font-medium leading-snug cursor-pointer flex-1"
+                        >
+                          {ex.label}
+                        </Label>
+                        <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 sm:justify-end">
+                          <Button
+                            type="button"
+                            variant={statusAtual === "ok" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => toggleChecklistItem(ex.key, "ok")}
+                            disabled={modoVisualizacao}
+                            className={`h-7 w-[92px] px-2 text-[11px] sm:h-8 sm:w-[116px] sm:px-3 sm:text-xs ${statusAtual === "ok" ? "bg-green-600 hover:bg-green-700" : ""}`}
+                          >
+                            OK
+                          </Button>
+                          <Button
+                            type="button"
+                            variant={statusAtual === "manutencao" ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => toggleChecklistItem(ex.key, "manutencao")}
+                            disabled={modoVisualizacao}
+                            className={`h-7 w-[92px] px-2 text-[11px] sm:h-8 sm:w-[116px] sm:px-3 sm:text-xs ${statusAtual === "manutencao" ? "bg-yellow-600 hover:bg-yellow-700" : ""}`}
+                          >
+                            MANUTENÇÃO
+                          </Button>
+                          {!modoVisualizacao && (
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="shrink-0 h-8 w-8 text-destructive hover:text-destructive"
+                              onClick={() => removerItemExtra(ex.key)}
+                              aria-label={`Remover ${ex.label}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+
+                {!modoVisualizacao && (
+                  <div className="pt-4 border-t space-y-3">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">Adicionar item</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {obraId
+                          ? "Novos itens ficam no catálogo só de manutenção desta obra (independente do checklist diário)."
+                          : "Abra pelo detalhe da obra para vincular itens ao catálogo reutilizável."}
+                      </p>
+                    </div>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        value={novoItemLabel}
+                        onChange={(e) => setNovoItemLabel(e.target.value)}
+                        placeholder="Ex.: Cabine, iluminação, anemômetro..."
+                        maxLength={200}
+                        disabled={salvandoItemObra || !obraId}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.preventDefault()
+                            solicitarAdicionarItemExtra()
+                          }
+                        }}
+                        className="flex-1"
+                      />
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={solicitarAdicionarItemExtra}
+                        className="shrink-0"
+                        disabled={salvandoItemObra || !obraId}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Adicionar item
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -645,7 +984,7 @@ export function LivroGruaManutencao({
         {!modoVisualizacao && (
           <Button
             type="submit"
-            disabled={loading}
+            disabled={loading || salvandoItemObra}
             className="w-full sm:w-auto"
           >
             {loading ? (
@@ -660,6 +999,61 @@ export function LivroGruaManutencao({
         )}
       </div>
     </form>
+
+    <AlertDialog
+      open={dialogNovoItemAberto}
+      onOpenChange={(open) => {
+        if (!open) fecharDialogNovoItem()
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Registrar item no checklist</AlertDialogTitle>
+          <AlertDialogDescription asChild>
+            <div className="text-sm text-muted-foreground space-y-2">
+              <p>
+                O item{" "}
+                <span className="font-medium text-foreground">&quot;{labelPendenteAdicionar}&quot;</span> será
+                salvo no catálogo desta obra.
+              </p>
+              <p>Como deseja marcá-lo nesta manutenção?</p>
+            </div>
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter className="flex-col sm:flex-row gap-2 sm:justify-end sm:flex-wrap">
+          <Button type="button" variant="ghost" onClick={fecharDialogNovoItem} disabled={salvandoItemObra}>
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void confirmarAdicionarItemExtra(null)}
+            disabled={salvandoItemObra}
+          >
+            Deixar pendente
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-green-600 text-green-700 hover:bg-green-50"
+            onClick={() => void confirmarAdicionarItemExtra("ok")}
+            disabled={salvandoItemObra}
+          >
+            {salvandoItemObra ? "Salvando…" : "Marcar OK"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-amber-600 text-amber-800 hover:bg-amber-50"
+            onClick={() => void confirmarAdicionarItemExtra("manutencao")}
+            disabled={salvandoItemObra}
+          >
+            Marcar manutenção
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   )
 }
 

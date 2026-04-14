@@ -1867,6 +1867,7 @@ export default function PWAObraDetalhesPage() {
           {gruaSelecionadaManutencao && (
             <LivroGruaManutencao
               gruaId={gruaSelecionadaManutencao}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               onSave={handleSucessoManutencao}
               onCancel={() => setIsNovaManutencaoOpen(false)}
             />
@@ -1883,6 +1884,7 @@ export default function PWAObraDetalhesPage() {
           {gruaSelecionadaManutencao && manutencaoSelecionada && (
             <LivroGruaManutencao
               gruaId={gruaSelecionadaManutencao}
+              obraId={Number.isFinite(obraId) ? obraId : undefined}
               manutencao={manutencaoSelecionada}
               onSave={handleSucessoManutencao}
               onCancel={() => setIsEditarManutencaoOpen(false)}

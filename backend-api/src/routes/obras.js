@@ -5504,10 +5504,15 @@ router.delete('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermi
   }
 })
 
-/** Itens extras de checklist do livro da grua, reutilizáveis por obra */
+/** Itens extras por obra: checklist_diario (livro) ou manutencao — catálogos independentes */
 const obraChecklistItemBody = Joi.object({
-  label: Joi.string().trim().min(1).max(200).required()
+  label: Joi.string().trim().min(1).max(200).required(),
+  tipo: Joi.string().valid('checklist_diario', 'manutencao').default('checklist_diario')
 })
+
+function normalizarTipoChecklistCustom(queryOrBodyTipo) {
+  return queryOrBodyTipo === 'manutencao' ? 'manutencao' : 'checklist_diario'
+}
 
 router.get('/:id/checklist-itens-custom', authenticateToken, async (req, res) => {
   try {
@@ -5515,6 +5520,8 @@ router.get('/:id/checklist-itens-custom', authenticateToken, async (req, res) =>
     if (Number.isNaN(obraId)) {
       return res.status(400).json({ success: false, message: 'ID da obra inválido' })
     }
+
+    const tipo = normalizarTipoChecklistCustom(req.query?.tipo)
 
     const { data: obra, error: obraErr } = await supabaseAdmin
       .from('obras')
@@ -5528,8 +5535,9 @@ router.get('/:id/checklist-itens-custom', authenticateToken, async (req, res) =>
 
     const { data, error } = await supabaseAdmin
       .from('obra_checklist_itens_custom')
-      .select('id, label, created_at')
+      .select('id, label, tipo, created_at')
       .eq('obra_id', obraId)
+      .eq('tipo', tipo)
       .order('label', { ascending: true })
 
     if (error) {
@@ -5557,6 +5565,7 @@ router.post('/:id/checklist-itens-custom', authenticateToken, async (req, res) =
     }
     const labelTrim = value.label.trim()
     const labelLower = labelTrim.toLowerCase()
+    const tipo = value.tipo
 
     const { data: obra, error: obraErr } = await supabaseAdmin
       .from('obras')
@@ -5570,8 +5579,9 @@ router.post('/:id/checklist-itens-custom', authenticateToken, async (req, res) =
 
     const { data: existentes } = await supabaseAdmin
       .from('obra_checklist_itens_custom')
-      .select('id, label, created_at')
+      .select('id, label, tipo, created_at')
       .eq('obra_id', obraId)
+      .eq('tipo', tipo)
 
     const duplicado = (existentes || []).find(
       (row) => String(row.label || '').trim().toLowerCase() === labelLower
@@ -5582,16 +5592,17 @@ router.post('/:id/checklist-itens-custom', authenticateToken, async (req, res) =
 
     const { data: created, error: insErr } = await supabaseAdmin
       .from('obra_checklist_itens_custom')
-      .insert({ obra_id: obraId, label: labelTrim })
-      .select('id, label, created_at')
+      .insert({ obra_id: obraId, label: labelTrim, tipo })
+      .select('id, label, tipo, created_at')
       .single()
 
     if (insErr) {
       if (insErr.code === '23505') {
         const { data: again } = await supabaseAdmin
           .from('obra_checklist_itens_custom')
-          .select('id, label, created_at')
+          .select('id, label, tipo, created_at')
           .eq('obra_id', obraId)
+          .eq('tipo', tipo)
         const hit = (again || []).find(
           (row) => String(row.label || '').trim().toLowerCase() === labelLower
         )

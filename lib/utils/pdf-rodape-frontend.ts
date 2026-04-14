@@ -1,13 +1,20 @@
+export type RodapeEmpresaOpcoes = {
+  /** Páginas (1-based) que já têm rodapé próprio (ex.: capas NR12) */
+  excluirPaginas?: number[]
+}
+
 /**
  * Função auxiliar para adicionar rodapé com informações da empresa em PDFs gerados no frontend (jsPDF)
  * @param doc - Documento jsPDF
+ * @param opcoes - ex.: excluir páginas de capa de seção
  */
-export function adicionarRodapeEmpresaFrontend(doc: any) {
+export function adicionarRodapeEmpresaFrontend(doc: any, opcoes?: RodapeEmpresaOpcoes) {
   const pageCount = doc.getNumberOfPages()
   const pageWidth = 210 // largura da página A4 em mm
   const pageHeight = 297 // altura da página A4 em mm
   const margin = 14 // margem lateral
   const rodapeY = pageHeight - 12 // posição Y do rodapé (12mm do final da página)
+  const excluir = new Set(opcoes?.excluirPaginas ?? [])
 
   // Informações da empresa
   const empresaInfo = {
@@ -19,6 +26,7 @@ export function adicionarRodapeEmpresaFrontend(doc: any) {
   }
 
   for (let i = 1; i <= pageCount; i++) {
+    if (excluir.has(i)) continue
     doc.setPage(i)
 
     // Linha separadora acima do rodapé

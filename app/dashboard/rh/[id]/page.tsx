@@ -45,7 +45,7 @@ import {
   PieChart,
   KeyRound,
   Bell,
-  FileSignature
+  Clock
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -58,10 +58,9 @@ import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-docu
 import { ColaboradorDocumentosDemissao } from "@/components/colaborador-documentos-demissao"
 import { ColaboradorHolerites } from "@/components/colaborador-holerites"
 import { DocumentoUpload } from "@/components/documento-upload"
-import { SignaturePad } from "@/components/signature-pad"
 import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
-import { getApiOrigin, getApiBasePath } from "@/lib/runtime-config"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 interface FuncionarioRH {
   id: number
@@ -152,6 +151,14 @@ interface DocumentoFuncionario {
   arquivo?: string
   arquivoUrl?: string
   observacoes?: string
+}
+
+/** Assinatura pelo colaborador no PWA (PDF gravado em `assinados-rh-funcionario/`). */
+function getAssinaturaColaboradorDocStatus(documento: DocumentoFuncionario): 'assinado' | 'pendente' | 'sem_pdf' {
+  const url = (documento.arquivoUrl || '').trim()
+  if (!url || url.startsWith('blob:')) return 'sem_pdf'
+  if (url.includes('assinados-rh-funcionario')) return 'assinado'
+  return 'pendente'
 }
 
 export default function FuncionarioDetalhesPage() {
@@ -253,22 +260,6 @@ export default function FuncionarioDetalhesPage() {
 
   // Documentos
   const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
-
-  /** Modal local: simular posição da assinatura no PDF (sem PWA / fluxo admin). */
-  const [simularAssinaturaOpen, setSimularAssinaturaOpen] = useState(false)
-  const [simularPdf, setSimularPdf] = useState<File | null>(null)
-  const [simularArquivoNome, setSimularArquivoNome] = useState("AcordoCompensacao-demo.pdf")
-  const [simularTitulo, setSimularTitulo] = useState("Acordo de compensação de horas")
-  const [simularAssinaturaImg, setSimularAssinaturaImg] = useState<File | null>(null)
-  /** Mesmo formato do PWA: data URL PNG do canvas (`SignaturePad`). */
-  const [simularAssinaturaDataUrl, setSimularAssinaturaDataUrl] = useState<string | null>(null)
-  const [simularPadOpen, setSimularPadOpen] = useState(false)
-  const [simularPreviewUrl, setSimularPreviewUrl] = useState<string | null>(null)
-  const [simularLoading, setSimularLoading] = useState(false)
-  /** id do documento da linha que está baixando PDF para o modal de simulação */
-  const [simularDocLoadingId, setSimularDocLoadingId] = useState<string | null>(null)
-  /** Regra persistida no backend (`assinatura-posicao-por-tipo-documento`). Vazio = só nome/título. */
-  const [simularTipoDocumentoApi, setSimularTipoDocumentoApi] = useState('')
 
   // Função para carregar dados das tabs
   const carregarDadosTabs = async (funcionarioId: number) => {
@@ -512,12 +503,6 @@ export default function FuncionarioDetalhesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
 
-  useEffect(() => {
-    return () => {
-      if (simularPreviewUrl) URL.revokeObjectURL(simularPreviewUrl)
-    }
-  }, [simularPreviewUrl])
-
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Ativo': return 'bg-green-100 text-green-800'
@@ -594,21 +579,6 @@ export default function FuncionarioDetalhesPage() {
       'ficha_entrega_epis': 'ficha-entrega-epis'
     }
     return mapeamento[tipo] || tipo
-  }
-
-  /** Valor enviado como `tipo_documento` na API (tabela `funcionario_documentos.tipo`). */
-  const converterTipoDocumentoParaApi = (tipoFrontend: string): string => {
-    const m: Record<string, string> = {
-      'titulo-eleitor': 'titulo_eleitor',
-      'certificado-reservista': 'certificado_reservista',
-      'comprovante-residencia': 'comprovante_residencia',
-      'acordo-compensacao': 'acordo_compensacao',
-      'contrato-experiencia-prorrogacao': 'contrato_experiencia_prorrogacao',
-      'solicitacao-vale-transporte': 'solicitacao_vale_transporte',
-      'termo-responsabilidade': 'termo_responsabilidade',
-      'ficha-entrega-epis': 'ficha_entrega_epis'
-    }
-    return m[tipoFrontend] || tipoFrontend.replace(/-/g, '_')
   }
 
   /** Rótulo amigável para badge/tabela (aceita tipo com hífen ou underscore). */
@@ -964,78 +934,6 @@ export default function FuncionarioDetalhesPage() {
         description: "Erro ao baixar documento",
         variant: "destructive"
       })
-    }
-  }
-
-  /** Abre o modal de simulação com o PDF já anexado ao cadastro (tabela Documentos). */
-  const handleSimularAssinaturaDocumentoExistente = async (documento: DocumentoFuncionario) => {
-    if (!documento.arquivoUrl?.trim()) {
-      toast({
-        title: "Sem arquivo",
-        description: "Este documento não tem PDF anexado.",
-        variant: "destructive"
-      })
-      return
-    }
-
-    setSimularDocLoadingId(documento.id)
-    try {
-      let blob: Blob
-
-      if (documento.arquivoUrl.trim().startsWith("blob:")) {
-        const r = await fetch(documento.arquivoUrl)
-        if (!r.ok) throw new Error("Não foi possível ler o arquivo local (link expirado?)")
-        blob = await r.blob()
-      } else {
-        const apiUrl = getApiOrigin()
-        const token = localStorage.getItem("access_token") || localStorage.getItem("token")
-        let fileUrl = documento.arquivoUrl
-        try {
-          const urlResponse = await fetch(
-            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.arquivoUrl)}`,
-            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
-          )
-          if (urlResponse.ok) {
-            const urlData = await urlResponse.json()
-            fileUrl = urlData.url || urlData.data?.url || documento.arquivoUrl
-          }
-        } catch {
-          /* manter URL original */
-        }
-        const pdfRes = await fetch(fileUrl)
-        if (!pdfRes.ok) throw new Error(`Falha ao baixar o PDF (${pdfRes.status})`)
-        blob = await pdfRes.blob()
-      }
-
-      const baseNome = (documento.nome || "documento").replace(/[<>:"/\\|?*]+/g, "_").slice(0, 120)
-      const nomeArquivo = baseNome.toLowerCase().endsWith(".pdf") ? baseNome : `${baseNome}.pdf`
-      const file = new File([blob], nomeArquivo, { type: "application/pdf" })
-
-      if (simularPreviewUrl) {
-        URL.revokeObjectURL(simularPreviewUrl)
-        setSimularPreviewUrl(null)
-      }
-
-      setSimularPdf(file)
-      setSimularArquivoNome(nomeArquivo)
-      setSimularTitulo(`${rotuloTipoDocumento(documento.tipo)} — ${documento.nome}`)
-      setSimularTipoDocumentoApi(converterTipoDocumentoParaApi(documento.tipo))
-      setSimularAssinaturaImg(null)
-      setSimularAssinaturaDataUrl(null)
-      setSimularAssinaturaOpen(true)
-      toast({
-        title: "PDF carregado",
-        description: "Clique em «Gerar prévia» para posicionar a assinatura."
-      })
-    } catch (e) {
-      toast({
-        title: "Erro ao carregar PDF",
-        description:
-          e instanceof Error ? e.message : "Baixe o arquivo e use «Simular assinatura no PDF» com upload manual.",
-        variant: "destructive"
-      })
-    } finally {
-      setSimularDocLoadingId(null)
     }
   }
 
@@ -1471,65 +1369,6 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
-  const gerarPreviaAssinaturaPdf = async () => {
-    if (!simularPdf) {
-      toast({
-        title: "PDF obrigatório",
-        description: "Selecione um arquivo PDF para simular a assinatura.",
-        variant: "destructive"
-      })
-      return
-    }
-    setSimularLoading(true)
-    try {
-      if (simularPreviewUrl) {
-        URL.revokeObjectURL(simularPreviewUrl)
-        setSimularPreviewUrl(null)
-      }
-      const token = localStorage.getItem("access_token") || localStorage.getItem("token")
-      const fd = new FormData()
-      fd.append("pdf", simularPdf)
-      fd.append("arquivo_original", simularArquivoNome || "documento.pdf")
-      fd.append("titulo", simularTitulo || "")
-      if (simularTipoDocumentoApi) {
-        fd.append("tipo_documento", simularTipoDocumentoApi)
-      }
-      if (simularAssinaturaDataUrl) {
-        const imgRes = await fetch(simularAssinaturaDataUrl)
-        const imgBlob = await imgRes.blob()
-        fd.append(
-          "assinatura",
-          new File([imgBlob], "assinatura.png", { type: "image/png" })
-        )
-      } else if (simularAssinaturaImg) {
-        fd.append("assinatura", simularAssinaturaImg)
-      }
-
-      const res = await fetch(`${getApiBasePath()}/rh/preview-assinatura-pdf`, {
-        method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        body: fd
-      })
-
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({} as { message?: string }))
-        throw new Error(err.message || `Erro ${res.status}`)
-      }
-
-      const blob = await res.blob()
-      setSimularPreviewUrl(URL.createObjectURL(blob))
-      toast({ title: "Prévia gerada", description: "Confira o posicionamento no painel abaixo." })
-    } catch (e) {
-      toast({
-        title: "Erro ao gerar prévia",
-        description: e instanceof Error ? e.message : "Falha na simulação",
-        variant: "destructive"
-      })
-    } finally {
-      setSimularLoading(false)
-    }
-  }
-  
   const handleCriarDocumento = async () => {
     if (isDocumentoUploadInFlightRef.current) return
     // Validação de campos obrigatórios
@@ -3159,207 +2998,11 @@ export default function FuncionarioDetalhesPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                 <div>
                   <CardTitle>Documentos do Funcionário</CardTitle>
-                  <CardDescription>Documentos pessoais e profissionais</CardDescription>
+                  <CardDescription>
+                    Documentos pessoais e profissionais. A coluna «Assinatura colaborador» reflete a assinatura feita pelo colaborador no aplicativo (PWA).
+                  </CardDescription>
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <Dialog
-                    open={simularAssinaturaOpen}
-                    onOpenChange={(open) => {
-                      setSimularAssinaturaOpen(open)
-                      if (!open) {
-                        if (simularPreviewUrl) {
-                          URL.revokeObjectURL(simularPreviewUrl)
-                          setSimularPreviewUrl(null)
-                        }
-                        setSimularAssinaturaDataUrl(null)
-                        setSimularAssinaturaImg(null)
-                        setSimularPadOpen(false)
-                        setSimularTipoDocumentoApi('')
-                      }
-                    }}
-                  >
-                    <DialogTrigger asChild>
-                      <Button type="button" variant="outline" size="sm">
-                        <FileSignature className="w-4 h-4 mr-2" />
-                        Simular assinatura no PDF
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Simular posição da assinatura</DialogTitle>
-                        <DialogDescription>
-                          Mesma lógica do PWA e do servidor (âncoras no texto do PDF). Desenhe a assinatura como no app do colaborador ou envie uma imagem; sem assinatura, usa um bloco de teste só para posição.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="space-y-3">
-                        <div>
-                          <Label htmlFor="sim-pdf">PDF *</Label>
-                          <Input
-                            id="sim-pdf"
-                            type="file"
-                            accept="application/pdf"
-                            onChange={(e) => {
-                              const f = e.target.files?.[0]
-                              setSimularPdf(f || null)
-                              if (f?.name) setSimularArquivoNome(f.name)
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="sim-arquivo-nome">Nome do arquivo (para regras de perfil)</Label>
-                          <Input
-                            id="sim-arquivo-nome"
-                            value={simularArquivoNome}
-                            onChange={(e) => setSimularArquivoNome(e.target.value)}
-                            placeholder="ex.: AcordoCompensacao-fulano.pdf"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="sim-titulo">Título do documento</Label>
-                          <Input
-                            id="sim-titulo"
-                            value={simularTitulo}
-                            onChange={(e) => setSimularTitulo(e.target.value)}
-                            placeholder="ex.: Acordo de compensação"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="sim-tipo-doc-api">Tipo do documento (regra de posição)</Label>
-                          <p className="text-xs text-muted-foreground mb-1.5">
-                            Usa a configuração salva no servidor para este tipo (ex.: acordo → coluna do funcionário).
-                          </p>
-                          <Select
-                            value={simularTipoDocumentoApi || "__auto__"}
-                            onValueChange={(v) =>
-                              setSimularTipoDocumentoApi(v === "__auto__" ? "" : v)
-                            }
-                          >
-                            <SelectTrigger id="sim-tipo-doc-api" className="w-full">
-                              <SelectValue placeholder="Automático" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="__auto__">Automático (só nome do arquivo e título)</SelectItem>
-                              <SelectItem value="acordo_compensacao">
-                                Acordo de compensação de horas
-                              </SelectItem>
-                              <SelectItem value="contrato_experiencia_prorrogacao">
-                                Contrato experiência / prorrogação
-                              </SelectItem>
-                              <SelectItem value="solicitacao_vale_transporte">
-                                Solicitação vale transporte
-                              </SelectItem>
-                              <SelectItem value="termo_responsabilidade">
-                                Termo de responsabilidade
-                              </SelectItem>
-                              <SelectItem value="ficha_entrega_epis">
-                                Ficha de entrega de EPIs (IRBANA)
-                              </SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                            <div>
-                              <Label>Assinatura (igual ao PWA)</Label>
-                              <p className="text-xs text-muted-foreground mt-0.5">
-                                Desenhe no painel — mesmo componente do aplicativo.
-                              </p>
-                            </div>
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => setSimularPadOpen(true)}
-                            >
-                              <FileSignature className="w-4 h-4 mr-2" />
-                              Assinar agora
-                            </Button>
-                          </div>
-                          {simularAssinaturaDataUrl && (
-                            <div className="flex items-center gap-3 flex-wrap">
-                              {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img
-                                src={simularAssinaturaDataUrl}
-                                alt="Prévia da assinatura"
-                                className="h-14 max-w-[200px] object-contain border rounded bg-white p-1"
-                              />
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  setSimularAssinaturaDataUrl(null)
-                                }}
-                              >
-                                Remover assinatura
-                              </Button>
-                            </div>
-                          )}
-                          <div>
-                            <Label htmlFor="sim-ass-img" className="text-muted-foreground">
-                              Ou enviar imagem (PNG/JPG)
-                            </Label>
-                            <Input
-                              id="sim-ass-img"
-                              type="file"
-                              accept="image/png,image/jpeg"
-                              className="mt-1"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0] || null
-                                setSimularAssinaturaImg(f)
-                                if (f) setSimularAssinaturaDataUrl(null)
-                              }}
-                            />
-                          </div>
-                        </div>
-                        <Button type="button" onClick={gerarPreviaAssinaturaPdf} disabled={simularLoading || !simularPdf}>
-                          {simularLoading ? (
-                            <>
-                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                              Gerando…
-                            </>
-                          ) : (
-                            "Gerar prévia"
-                          )}
-                        </Button>
-                        {simularPreviewUrl && (
-                          <div className="border rounded-md overflow-hidden bg-muted/30 min-h-[420px]">
-                            <iframe
-                              title="Prévia PDF com assinatura"
-                              src={simularPreviewUrl}
-                              className="w-full h-[min(70vh,560px)]"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-
-                  <Dialog open={simularPadOpen} onOpenChange={setSimularPadOpen}>
-                    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-                      <DialogHeader>
-                        <DialogTitle>Assinar agora</DialogTitle>
-                        <DialogDescription>
-                          Mesmo desenho do PWA (canvas → PNG). Depois, volte e clique em «Gerar prévia».
-                        </DialogDescription>
-                      </DialogHeader>
-                      <SignaturePad
-                        compact
-                        compactDense
-                        applyLabel="Usar esta assinatura"
-                        onSave={(dataUrl) => {
-                          setSimularAssinaturaDataUrl(dataUrl)
-                          setSimularAssinaturaImg(null)
-                          setSimularPadOpen(false)
-                          toast({
-                            title: "Assinatura capturada",
-                            description: "Gere a prévia do PDF para ver o posicionamento."
-                          })
-                        }}
-                        onCancel={() => setSimularPadOpen(false)}
-                      />
-                    </DialogContent>
-                  </Dialog>
                 <Dialog
                   open={isDocumentoDialogOpen}
                   onOpenChange={(open) => {
@@ -3633,11 +3276,14 @@ export default function FuncionarioDetalhesPage() {
                       <TableHead>Número</TableHead>
                       <TableHead>Data Emissão</TableHead>
                       <TableHead>Data Vencimento</TableHead>
+                      <TableHead>Assinatura colaborador</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {documentos.map((documento) => (
+                    {documentos.map((documento) => {
+                      const assColab = getAssinaturaColaboradorDocStatus(documento)
+                      return (
                       <TableRow key={documento.id}>
                         <TableCell>
                           <Badge className={`${getTipoDocumentoColor(documento.tipo)} border`}>
@@ -3660,6 +3306,26 @@ export default function FuncionarioDetalhesPage() {
                             {documento.dataVencimento ? format(new Date(documento.dataVencimento), 'dd/MM/yyyy', { locale: ptBR }) : '-'}
                           </span>
                         </TableCell>
+                        <TableCell>
+                          {assColab === 'assinado' && (
+                            <Badge className="bg-emerald-600 text-primary-foreground hover:bg-emerald-600/90 border-transparent">
+                              <CheckCircle className="w-3 h-3 mr-1" />
+                              Assinado
+                            </Badge>
+                          )}
+                          {assColab === 'pendente' && (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-900 border-amber-200">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Pendente
+                            </Badge>
+                          )}
+                          {assColab === 'sem_pdf' && (
+                            <Badge variant="outline" className="text-muted-foreground">
+                              <AlertCircle className="w-3 h-3 mr-1" />
+                              Sem PDF
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button 
@@ -3679,19 +3345,6 @@ export default function FuncionarioDetalhesPage() {
                               disabled={!documento.arquivoUrl}
                             >
                               <Download className="w-4 h-4" />
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void handleSimularAssinaturaDocumentoExistente(documento)}
-                              title="Simular assinatura neste PDF"
-                              disabled={!documento.arquivoUrl || simularDocLoadingId === documento.id}
-                            >
-                              {simularDocLoadingId === documento.id ? (
-                                <Loader2 className="w-4 h-4 animate-spin" />
-                              ) : (
-                                <FileSignature className="w-4 h-4" />
-                              )}
                             </Button>
                             <Button 
                               variant="outline" 
@@ -3718,7 +3371,7 @@ export default function FuncionarioDetalhesPage() {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                    )})}
                   </TableBody>
                 </Table>
               ) : (

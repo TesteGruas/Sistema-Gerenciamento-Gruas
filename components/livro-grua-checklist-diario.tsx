@@ -155,7 +155,7 @@ export function LivroGruaChecklistDiario({
     ;(async () => {
       try {
         setCarregandoCatalogoObra(true)
-        const res = await listarChecklistItensCustomObra(obraId)
+        const res = await listarChecklistItensCustomObra(obraId, "checklist_diario")
         if (cancelled) return
         const rows = res.data || []
         setExtras(
@@ -231,7 +231,7 @@ export function LivroGruaChecklistDiario({
     try {
       if (obraId) {
         setSalvandoItemObra(true)
-        const res = await criarChecklistItemCustomObra(obraId, label)
+        const res = await criarChecklistItemCustomObra(obraId, label, "checklist_diario")
         if (!res.success || !res.data) {
           throw new Error("Resposta inválida ao salvar item na obra")
         }

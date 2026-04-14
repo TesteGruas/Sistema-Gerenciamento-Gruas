@@ -38,6 +38,11 @@ import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { Upload } from "lucide-react"
 import { contagemChecklistLivroGrua } from "@/lib/checklist-livro-grua-shared"
+import {
+  adicionarPaginaCapaSecaoNr12,
+  desenharCapaInicialLivroGrua,
+  tituloCapaNr12DeLinhaIndice
+} from "@/lib/utils/pdf-capa-secao-nr12"
 
 // Nota: Este componente usa gruaObraApi (não obraGruasApi) para buscar relacionamentos grua-obra
 
@@ -1176,6 +1181,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         format: 'a4'
       })
       const COR_BASE: [number, number, number] = [135, 27, 11] // #871b0b
+      const paginasCapaNr12 = new Set<number>()
 
       // ============================================
       // CAPA PADRÃO NR12 NR18
@@ -1187,49 +1193,22 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         doc.addPage()
         return await adicionarLogosNoCabecalhoFrontend(doc, 10)
       }
-      
-      let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
 
-      // Box de cabeçalho com fundo - Capa padrão NR12 NR18
-      const headerBoxY = yPos - 3
-      const headerBoxHeight = 30
-      doc.setFillColor(...COR_BASE) // Cor base #871b0b
-      doc.roundedRect(14, headerBoxY, 182, headerBoxHeight, 2, 2, 'F')
-      
-      // Título principal (branco sobre fundo azul)
-      doc.setTextColor(255, 255, 255)
-      doc.setFontSize(22)
-      doc.setFont('helvetica', 'bold')
-      doc.text('LIVRO DA GRUA', 105, yPos + 6, { align: 'center' })
-      
-      // Subtítulo NR12 NR18 (branco)
-      doc.setFontSize(14)
-      doc.setFont('helvetica', 'bold')
-      doc.text('Conforme NR12 e NR18', 105, yPos + 14, { align: 'center' })
-      
-      // Subtítulo (branco)
-      doc.setFontSize(11)
-      doc.setFont('helvetica', 'normal')
-      doc.text(`Manual de Operação da Obra`, 105, yPos + 20, { align: 'center' })
-      
-      // Nome da obra (branco)
-      doc.setFontSize(10)
-      doc.text(obra.name || 'N/A', 105, yPos + 26, { align: 'center' })
-      
-      // Resetar cor do texto
-      doc.setTextColor(0, 0, 0)
-      yPos = headerBoxY + headerBoxHeight + 15
+      const fabricanteCapa = (gruaSelecionada.fabricante || '').replace(/^Fabricante/i, '').trim()
+      const modeloCapa = (gruaSelecionada.modelo || '').replace(/^Modelo/i, '').replace(/Samuel/i, '').trim()
+      const nomeGruaCapa =
+        fabricanteCapa && modeloCapa
+          ? `${fabricanteCapa} ${modeloCapa}`
+          : gruaSelecionada.name || `Grua ${gruaSelecionada.id}`
 
-      // Informações da capa
-      doc.setFontSize(10)
-      doc.setFont('helvetica', 'normal')
-      doc.text('Este documento atende aos requisitos das Normas Regulamentadoras:', 105, yPos, { align: 'center' })
-      yPos += 6
-      doc.setFont('helvetica', 'bold')
-      doc.text('NR12 - Segurança no Trabalho em Máquinas e Equipamentos', 105, yPos, { align: 'center' })
-      yPos += 6
-      doc.text('NR18 - Condições e Meio Ambiente de Trabalho na Indústria da Construção', 105, yPos, { align: 'center' })
-      yPos += 15
+      await desenharCapaInicialLivroGrua(doc, {
+        obraNome: obra.name || 'N/A',
+        nomeGrua: nomeGruaCapa,
+        idGrua: String(gruaSelecionada.id || 'N/A')
+      })
+      paginasCapaNr12.add(1)
+
+      let yPos = await adicionarNovaPaginaComLogos()
 
       // Limite máximo considerando rodapé
       // Rodapé está em 285mm (297mm - 12mm), então o conteúdo deve parar em 270mm para dar espaço
@@ -1315,7 +1294,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         '3. FORNECEDOR PROPRIETÁRIO EQUIPAMENTO',
         '4. INFORMAÇÃO MONTAGEM E OPERAÇÃO',
         '5. RESPONSAVEL MONTAGEM E OPERAÇÃO DADOS TECNICOS EQUIPAMENTO',
-        '6. ENTREGA TECNICA',
+        '6. DOCUMENTOS E CERTIFICAÇÕES',
         '7. ART INSTALAÇÃO, OPERAÇÃO, MANUTENÇÃO E DESMONTAGEM',
         '8. LOCAL INSTALAÇÃO DA GRUA E PLANO DE CARGAS',
         '9. CHECKLISTS DIÁRIOS',
@@ -1331,6 +1310,19 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       }
 
       yPos += 10
+
+      const capaProximaSecao = async (linhaIndice: string) => {
+        const idx = await adicionarPaginaCapaSecaoNr12(doc, tituloCapaNr12DeLinhaIndice(linhaIndice))
+        paginasCapaNr12.add(idx)
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+      const capaTituloLivre = async (titulo: string) => {
+        const idx = await adicionarPaginaCapaSecaoNr12(doc, titulo.toUpperCase())
+        paginasCapaNr12.add(idx)
+        yPos = await adicionarNovaPaginaComLogos()
+      }
+
+      await capaProximaSecao(indiceItens[0])
 
       // ============================================
       // INÍCIO DO CONTEÚDO
@@ -1418,6 +1410,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       ]
       renderTabelaPares(dadosObra, true)
 
+      await capaProximaSecao(indiceItens[1])
+
       // 2. EQUIPAMENTO - GRUA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -1451,6 +1445,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         [`Tipo de Base/Fundação:`, relacaoGrua.tipo_base || relacaoGrua.fundacao || obra?.dados_montagem_equipamento?.tipo_base || 'N/A']
       ]
       renderTabelaPares(dadosGrua, true)
+
+      await capaProximaSecao(indiceItens[2])
 
       // 3. RESPONSÁVEIS E EQUIPE
       if (yPos > MAX_Y - 20) {
@@ -1566,6 +1562,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
 
       yPos += 4
 
+      await capaProximaSecao(indiceItens[3])
+
       // 4. LOCALIZAÇÃO E AMBIENTE
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -1599,6 +1597,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       ]
       renderTabelaPares(dadosLocalizacaoAmbiente, true)
 
+      await capaProximaSecao(indiceItens[4])
+
       // 5. PERÍODO DE LOCAÇÃO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -1626,6 +1626,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         [`Período Total:`, calcularPeriodoLocacao(inicioLocacao, fimLocacao)]
       ]
       renderTabelaPares(dadosPeriodoLocacao, true)
+
+      await capaProximaSecao(indiceItens[5])
 
       // 6. DOCUMENTOS E CERTIFICAÇÕES
       if (yPos > MAX_Y - 20) {
@@ -1835,6 +1837,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       renderTabelaPares(dadosTecnicosEquipamento, true)
       yPos += 8
 
+      await capaTituloLivre('ENTREGA TÉCNICA')
+
       // 6.6. TERMO DE ENTREGA TÉCNICA
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -1873,6 +1877,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       renderTabelaPares(dadosEntregaTecnica, true)
       yPos += 8
 
+      await capaProximaSecao(indiceItens[6])
+
       // 6.7. ART DE INSTALAÇÃO E LAUDO DE ATERRAMENTO
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -1903,6 +1909,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       ]
       renderTabelaPares(dadosArtEAterramento, true)
       yPos += 8
+
+      await capaProximaSecao(indiceItens[7])
 
       // 6.8. LOCAL DE INSTALAÇÃO DA GRUA
       if (yPos > MAX_Y - 20) {
@@ -1997,6 +2005,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       renderTabelaPares(dadosManutencaoFormulario, true)
       yPos += 8
 
+      await capaTituloLivre('7 - Configuração e especificações técnicas')
+
       // 7. CONFIGURAÇÃO E ESPECIFICAÇÕES TÉCNICAS
       if (yPos > MAX_Y - 20) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -2037,6 +2047,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       }
 
       if (obra.observacoes || relacaoGrua?.observacoes) {
+        await capaTituloLivre('8 - Observações gerais')
         const secao8Y = yPos
         doc.setFillColor(...COR_BASE)
         doc.roundedRect(14, secao8Y, 182, 8, 2, 2, 'F')
@@ -2090,6 +2101,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
           }
         }
       }
+
+      await capaProximaSecao(indiceItens[8])
 
       // 9. CHECKLISTS DIÁRIOS REALIZADOS
       if (yPos > MAX_Y - 24) {
@@ -2156,6 +2169,8 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         yPos += 8
       }
 
+      await capaProximaSecao(indiceItens[9])
+
       // 10. MANUTENÇÕES REALIZADAS
       if (yPos > MAX_Y - 24) {
         yPos = await adicionarNovaPaginaComLogos()
@@ -2219,9 +2234,9 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         yPos += 8
       }
 
-      // Adicionar rodapé
+      // Adicionar rodapé (páginas de capa de seção já trazem rodapé próprio)
       const { adicionarRodapeEmpresaFrontend } = await import('@/lib/utils/pdf-rodape-frontend')
-      adicionarRodapeEmpresaFrontend(doc)
+      adicionarRodapeEmpresaFrontend(doc, { excluirPaginas: Array.from(paginasCapaNr12) })
       const pdfPrincipalBytes = doc.output('arraybuffer')
 
       // Mesclar o PDF principal com todos os documentos anexados da obra
@@ -2261,41 +2276,25 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         ...Array.from(gruposAnexos.keys()).filter((topico) => !ordemTopicos.includes(topico))
       ]
 
+      /** Evita anexar duas vezes o mesmo arquivo físico (ex.: registro duplicado com o mesmo nome exibido). */
+      const chaveArquivoDocumento = (d: any) => {
+        const p = String(d?.caminho_arquivo || d?.arquivo_original || d?.arquivo_assinado || '').trim()
+        if (p) return p
+        return `id:${d?.id ?? 'sem-id'}`
+      }
+      const caminhosJaAnexados = new Set<string>()
+
       for (const topico of topicosOrdenados) {
         const docsDoTopico = gruposAnexos.get(topico) || []
-        const separador = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
-        let separadorY = 22
-
-        separador.setFont('helvetica', 'bold')
-        separador.setFontSize(16)
-        separador.text('ANEXOS DO LIVRO DA GRUA', 105, separadorY, { align: 'center' })
-        separadorY += 10
-
-        separador.setFontSize(12)
-        separador.text(topico, 14, separadorY)
-        separadorY += 8
-
-        separador.setFont('helvetica', 'normal')
-        separador.setFontSize(10)
-        separador.text(`Quantidade de documentos: ${docsDoTopico.length}`, 14, separadorY)
-        separadorY += 8
-
-        docsDoTopico.forEach((docTopico: any, idx: number) => {
-          if (separadorY > 275) {
-            separador.addPage()
-            separadorY = 22
-          }
-          const tituloDoc = docTopico?.titulo || `Documento ${idx + 1}`
-          separador.text(`${idx + 1}. ${tituloDoc}`, 14, separadorY)
-          separadorY += 6
-        })
-
-        await anexarBytesNoPdfFinal(separador.output('arraybuffer'))
-
         for (const docTopico of docsDoTopico) {
+          const chave = chaveArquivoDocumento(docTopico)
+          if (caminhosJaAnexados.has(chave)) {
+            continue
+          }
           try {
             const bytes = await obterDocumentoArrayBuffer(docTopico)
             await anexarBytesNoPdfFinal(bytes)
+            caminhosJaAnexados.add(chave)
           } catch (error) {
             const nomeErro = docTopico?.titulo || `Documento ${docTopico?.id || 'sem-id'}`
             errosAnexos.push(nomeErro)
