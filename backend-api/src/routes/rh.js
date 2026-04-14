@@ -5,10 +5,21 @@
 
 import express from 'express'
 import Joi from 'joi'
+import multer from 'multer'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { adicionarAssinaturaPorAncorasOuFallback } from '../utils/pdf-signature.js'
 
 const router = express.Router()
+
+const uploadAssinaturaPreview = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024 }
+})
+
+/** PNG 1×1 px — escalonado no PDF vira bloco sólido visível (só para teste de posição). */
+const ASSINATURA_PREVIEW_PADRAO =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=='
 
 // Schema de validação para funcionários RH
 const funcionarioRHSchema = Joi.object({
@@ -643,5 +654,56 @@ router.get('/funcionarios/:id/calcular-salario', authenticateToken, requirePermi
     })
   }
 })
+
+/**
+ * POST /api/rh/preview-assinatura-pdf
+ * Simula assinatura no PDF (mesma lógica do PWA) para ajustar posicionamento sem fluxo completo.
+ * multipart: pdf (obrigatório), assinatura (opcional, png/jpg), arquivo_original, titulo, tipo_documento (opcional, ex.: acordo_compensacao)
+ */
+router.post(
+  '/preview-assinatura-pdf',
+  authenticateToken,
+  requirePermission('rh:visualizar'),
+  uploadAssinaturaPreview.fields([
+    { name: 'pdf', maxCount: 1 },
+    { name: 'assinatura', maxCount: 1 }
+  ]),
+  async (req, res) => {
+    try {
+      const pdfBuf = req.files?.pdf?.[0]?.buffer
+      if (!pdfBuf?.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'Envie um arquivo PDF no campo pdf'
+        })
+      }
+
+      const arquivo_original = String(req.body.arquivo_original || 'documento.pdf')
+      const titulo = String(req.body.titulo || '')
+      const tipo_documento = String(req.body.tipo_documento || '').trim() || undefined
+
+      let sig = ASSINATURA_PREVIEW_PADRAO
+      const assFile = req.files?.assinatura?.[0]
+      if (assFile?.buffer?.length) {
+        const mime = assFile.mimetype || 'image/png'
+        sig = `data:${mime};base64,${assFile.buffer.toString('base64')}`
+      }
+
+      const out = await adicionarAssinaturaPorAncorasOuFallback(pdfBuf, sig, {
+        documento: { arquivo_original, titulo, ...(tipo_documento ? { tipo_documento } : {}) }
+      })
+
+      res.setHeader('Content-Type', 'application/pdf')
+      res.setHeader('Content-Disposition', 'inline; filename="preview-assinatura.pdf"')
+      return res.send(Buffer.from(out))
+    } catch (error) {
+      console.error('[RH] preview-assinatura-pdf:', error)
+      return res.status(500).json({
+        success: false,
+        message: error?.message || 'Erro ao gerar prévia'
+      })
+    }
+  }
+)
 
 export default router

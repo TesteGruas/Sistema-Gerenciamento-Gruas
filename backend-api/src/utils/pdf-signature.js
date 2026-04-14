@@ -1,4 +1,26 @@
 import { PDFDocument } from 'pdf-lib';
+import {
+  encontrarPosicaoAssinaturaPorAncoras,
+  encontrarTodasPosicoesDuasColunasFuncionario,
+  encontrarTodasPosicoesRodapeColunaEsquerda,
+  encontrarPosicoesCertificadoNr12MultiPagina,
+  encontrarPosicoesCertificadoMultipaginaAluno,
+  resolverRegraPorDocumento
+} from './pdf-signature-placement.js';
+
+export {
+  extrairItensTextoPdf,
+  encontrarPosicaoAssinaturaPorAncoras,
+  encontrarTodasPosicoesDuasColunasFuncionario,
+  encontrarTodasPosicoesRodapeColunaEsquerda,
+  encontrarPosicoesCertificadoNr12MultiPagina,
+  encontrarPosicoesCertificadoMultipaginaAluno,
+  resolverRegraPorDocumento,
+  listarPaginasComConteudo,
+  PERFIS_ASSINATURA_DOCUMENTO,
+  REGRA_ASSINATURA_PADRAO,
+  REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO
+} from './pdf-signature-placement.js';
 
 /**
  * Adiciona uma assinatura digital (imagem) em um PDF existente
@@ -223,6 +245,101 @@ export async function adicionarMultiplasAssinaturasNoPDF(pdfBuffer, assinaturas)
  * @param {Object} options - Opções de posicionamento
  * @returns {Promise<Buffer>} - Buffer do PDF com assinatura
  */
+/**
+ * Dimensões naturais da imagem da assinatura (proporção para largura/altura no PDF).
+ */
+async function dimensoesAssinaturaBase64(signatureBase64) {
+  const tmp = await PDFDocument.create();
+  const base64Data = signatureBase64.includes(',')
+    ? signatureBase64.split(',')[1]
+    : signatureBase64;
+  const imageBytes = Buffer.from(base64Data, 'base64');
+  const header = imageBytes.slice(0, 4);
+  let image;
+  if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) {
+    image = await tmp.embedPng(imageBytes);
+  } else if (header[0] === 0xff && header[1] === 0xd8) {
+    image = await tmp.embedJpg(imageBytes);
+  } else {
+    throw new Error('Formato de imagem não suportado. Use PNG ou JPEG.');
+  }
+  const d = image.scale(1);
+  return { width: d.width, height: d.height };
+}
+
+/**
+ * Lê o PDF, procura âncoras de texto (ex.: "Assinatura") e posiciona a imagem abaixo do rótulo.
+ * Se não encontrar âncora, usa última página e y fixo (comportamento legado).
+ *
+ * @param {Buffer} pdfBuffer
+ * @param {string} signatureBase64
+ * @param {{ documento?: { arquivo_original?: string, titulo?: string, tipo_documento?: string }, regra?: Record<string, unknown>, opacity?: number }} contexto
+ */
+export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatureBase64, contexto = {}) {
+  const regra = resolverRegraPorDocumento(contexto.documento || {}, contexto.regra || {});
+  const dims = await dimensoesAssinaturaBase64(signatureBase64);
+
+  /** @type {Array<{ pageIndex: number, x?: number, y?: number, height: number, metodo?: string, anchor?: string, pageWidth?: number, marginRight?: number, marginBottom?: number }>} */
+  let posicoes = [];
+
+  try {
+    if (
+      regra.todasOcorrenciasColunaFuncionario === true &&
+      regra.metodoAncora === 'duas_colunas_funcionario_esquerda'
+    ) {
+      posicoes = await encontrarTodasPosicoesDuasColunasFuncionario(pdfBuffer, regra);
+    } else if (
+      regra.todasPaginasRodapeColunaEsquerda === true &&
+      regra.metodoAncora === 'rodape_coluna_esquerda'
+    ) {
+      posicoes = await encontrarTodasPosicoesRodapeColunaEsquerda(pdfBuffer, regra);
+    } else if (regra.metodoAncora === 'certificado_nr12_multi') {
+      posicoes = await encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, regra);
+    } else if (regra.metodoAncora === 'certificado_multipagina_aluno') {
+      posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra);
+    } else {
+      const pos = await encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, regra);
+      if (pos) posicoes = [pos];
+    }
+  } catch (e) {
+    console.warn('[PDF Signature] Análise de âncoras falhou:', e?.message || e);
+  }
+
+  if (posicoes.length > 0) {
+    let buf = pdfBuffer;
+    for (let i = 0; i < posicoes.length; i++) {
+      const pos = posicoes[i];
+      const h = pos.height;
+      const w = (dims.width / dims.height) * h;
+      let drawX = pos.x;
+      let drawY = pos.y;
+      if (pos.metodo === 'canto_inferior_direito_fixo' && typeof pos.pageWidth === 'number') {
+        drawX = pos.pageWidth - w - (pos.marginRight ?? 44);
+        drawY = pos.marginBottom ?? 40;
+      }
+      console.log(
+        `[PDF Signature] Assinatura (${pos.metodo || 'âncora'}) página ${pos.pageIndex + 1} [${i + 1}/${posicoes.length}], anchor="${pos.anchor}" x=${Number(drawX).toFixed(1)} y=${Number(drawY).toFixed(1)}`
+      );
+      buf = await adicionarAssinaturaNoPDF(buf, signatureBase64, {
+        pageIndex: pos.pageIndex,
+        x: drawX,
+        y: drawY,
+        width: w,
+        height: h,
+        opacity: contexto.opacity ?? 1.0
+      });
+    }
+    return buf;
+  }
+
+  console.warn('[PDF Signature] Nenhuma âncora encontrada; usando última página e y=50');
+  return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
+    pageIndex: -1,
+    y: 50,
+    opacity: contexto.opacity ?? 1.0
+  });
+}
+
 export async function baixarEAdicionarAssinatura(pdfUrl, signatureBase64, options = {}) {
   try {
     // Baixar o PDF

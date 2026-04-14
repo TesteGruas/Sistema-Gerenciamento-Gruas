@@ -9,8 +9,14 @@ export const TIPOS_DOCUMENTOS_ADMISSIONAIS = [
   'Ficha de Registro',
   'Contrato de Trabalho',
   'Contrato de Experiência',
+  'Contrato de experiência / prorrogação',
   'Vale Transporte',
+  'Solicitação de vale transporte',
+  'Acordo de compensação de horas',
+  'Termo de responsabilidade',
+  'Ficha de entrega de EPIs (IRBANA)',
   'Recibo Ajuda de Custo',
+  'Outros',
 ] as const
 
 export type TipoDocumentoAdmissional = (typeof TIPOS_DOCUMENTOS_ADMISSIONAIS)[number]

@@ -19,13 +19,9 @@ import {
   arquivoReferenciaEhBlobInvalida,
   caminhoStorageAPartirDoUpload,
 } from "@/lib/caminho-storage-arquivos"
+import { TIPOS_DOCUMENTOS_ADMISSIONAIS } from "@/lib/rh-documentos-tipos"
 
-// Tipos de documentos admissionais
-export const tiposDocumentos = [
-  'ASO',
-  'eSocial',
-  'Ficha de Registro'
-]
+const tiposDocumentos: readonly string[] = TIPOS_DOCUMENTOS_ADMISSIONAIS
 
 // Interface compatível com o componente
 export interface DocumentoAdmissional {

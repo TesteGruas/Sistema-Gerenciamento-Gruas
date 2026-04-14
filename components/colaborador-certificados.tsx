@@ -10,11 +10,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DocumentoUpload } from "./documento-upload"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature } from "lucide-react"
+import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature, Loader2, PenLine } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
-import { getApiOrigin } from "@/lib/runtime-config"
+import { getApiOrigin, getApiBasePath } from "@/lib/runtime-config"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
 import { TIPOS_CERTIFICADOS } from "@/lib/rh-documentos-tipos"
+import {
+  TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO,
+  TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12,
+  certificadoTipoParaTipoDocumentoAssinatura,
+} from "@/lib/certificado-tipo-documento-assinatura"
+import { SignaturePad } from "@/components/signature-pad"
 
 export interface CertificadoColaborador {
   id?: string
@@ -49,11 +55,177 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     arquivo: null as File | null,
   })
 
+  const [assinarOpen, setAssinarOpen] = useState(false)
+  const [assinarCert, setAssinarCert] = useState<CertificadoColaborador | null>(null)
+  const [assinarPdf, setAssinarPdf] = useState<File | null>(null)
+  const [assinarArquivoNome, setAssinarArquivoNome] = useState("certificado.pdf")
+  const [assinarTitulo, setAssinarTitulo] = useState("")
+  const [assinarTipoDocumentoApi, setAssinarTipoDocumentoApi] = useState(TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO)
+  const [assinarAssinaturaDataUrl, setAssinarAssinaturaDataUrl] = useState<string | null>(null)
+  const [assinarAssinaturaImg, setAssinarAssinaturaImg] = useState<File | null>(null)
+  const [assinarPadOpen, setAssinarPadOpen] = useState(false)
+  const [assinarPreviewUrl, setAssinarPreviewUrl] = useState<string | null>(null)
+  const [assinarLoadingPdf, setAssinarLoadingPdf] = useState(false)
+  const [assinarLoadingPrev, setAssinarLoadingPrev] = useState(false)
+  const [assinarSalvando, setAssinarSalvando] = useState(false)
+
   useEffect(() => {
     loadCertificados()
   }, [colaboradorId])
 
   const certificadoAssinado = (c: CertificadoColaborador) => Boolean(c.assinatura_digital && c.assinado_em)
+
+  const fecharDialogAssinar = () => {
+    setAssinarPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAssinarOpen(false)
+    setAssinarCert(null)
+    setAssinarPdf(null)
+    setAssinarAssinaturaDataUrl(null)
+    setAssinarAssinaturaImg(null)
+    setAssinarPadOpen(false)
+    setAssinarTipoDocumentoApi(TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO)
+    setAssinarArquivoNome("certificado.pdf")
+    setAssinarTitulo("")
+  }
+
+  const abrirAssinarCertificado = async (certificado: CertificadoColaborador) => {
+    if (!certificado.id || certificadoAssinado(certificado) || !certificado.arquivo_url) return
+    setAssinarCert(certificado)
+    setAssinarOpen(true)
+    setAssinarLoadingPdf(true)
+    setAssinarAssinaturaDataUrl(null)
+    setAssinarAssinaturaImg(null)
+    setAssinarPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
+    setAssinarTipoDocumentoApi(certificadoTipoParaTipoDocumentoAssinatura(certificado.tipo))
+    try {
+      const blob = await colaboradoresDocumentosApi.certificados.baixar(certificado.id, false)
+      const baseNome = `${certificado.tipo}_${certificado.nome}`.replace(/[<>:"/\\|?*]+/g, "_").slice(0, 120)
+      const nomeArquivo = baseNome.toLowerCase().endsWith(".pdf") ? baseNome : `${baseNome}.pdf`
+      setAssinarPdf(new File([blob], nomeArquivo, { type: "application/pdf" }))
+      setAssinarArquivoNome(nomeArquivo)
+      setAssinarTitulo(`${certificado.tipo} — ${certificado.nome}`)
+      toast({
+        title: "PDF carregado",
+        description: "Desenhe a assinatura e gere a prévia antes de registrar.",
+      })
+    } catch (e) {
+      toast({
+        title: "Erro ao carregar PDF",
+        description: e instanceof Error ? e.message : "Falha ao baixar o arquivo",
+        variant: "destructive",
+      })
+      fecharDialogAssinar()
+    } finally {
+      setAssinarLoadingPdf(false)
+    }
+  }
+
+  const gerarPreviaAssinaturaCertificado = async () => {
+    if (!assinarPdf) {
+      toast({
+        title: "PDF não disponível",
+        description: "Aguarde o carregamento do arquivo.",
+        variant: "destructive",
+      })
+      return
+    }
+    setAssinarLoadingPrev(true)
+    try {
+      setAssinarPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return null
+      })
+      const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+      const fd = new FormData()
+      fd.append("pdf", assinarPdf)
+      fd.append("arquivo_original", assinarArquivoNome || "certificado.pdf")
+      fd.append("titulo", assinarTitulo || "")
+      if (assinarTipoDocumentoApi) {
+        fd.append("tipo_documento", assinarTipoDocumentoApi)
+      }
+      if (assinarAssinaturaDataUrl) {
+        const imgRes = await fetch(assinarAssinaturaDataUrl)
+        const imgBlob = await imgRes.blob()
+        fd.append("assinatura", new File([imgBlob], "assinatura.png", { type: "image/png" }))
+      } else if (assinarAssinaturaImg) {
+        fd.append("assinatura", assinarAssinaturaImg)
+      }
+
+      const res = await fetch(`${getApiBasePath()}/rh/preview-assinatura-pdf`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd,
+      })
+
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { message?: string }
+        throw new Error(err.message || `Erro ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      setAssinarPreviewUrl(URL.createObjectURL(blob))
+      toast({ title: "Prévia gerada", description: "Confira o posicionamento junto ao campo ALUNO." })
+    } catch (e) {
+      toast({
+        title: "Erro ao gerar prévia",
+        description: e instanceof Error ? e.message : "Falha na simulação",
+        variant: "destructive",
+      })
+    } finally {
+      setAssinarLoadingPrev(false)
+    }
+  }
+
+  const registrarAssinaturaCertificado = async () => {
+    if (!assinarCert?.id) return
+    let assinatura_digital: string | null = assinarAssinaturaDataUrl
+    if (!assinatura_digital && assinarAssinaturaImg) {
+      assinatura_digital = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader()
+        r.onload = () => resolve(String(r.result))
+        r.onerror = () => reject(new Error("Leitura da imagem falhou"))
+        r.readAsDataURL(assinarAssinaturaImg)
+      })
+    }
+    if (!assinatura_digital) {
+      toast({
+        title: "Assinatura obrigatória",
+        description: "Desenhe no painel ou envie uma imagem PNG/JPG.",
+        variant: "destructive",
+      })
+      return
+    }
+    setAssinarSalvando(true)
+    try {
+      const response = await colaboradoresDocumentosApi.certificados.assinar(assinarCert.id, {
+        assinatura_digital,
+      })
+      if (response.success) {
+        toast({
+          title: "Assinatura registrada",
+          description: "O download com assinatura usará o campo do aluno no PDF.",
+        })
+        fecharDialogAssinar()
+        await loadCertificados()
+      } else {
+        throw new Error("Falha ao registrar")
+      }
+    } catch (e) {
+      toast({
+        title: "Erro",
+        description: e instanceof Error ? e.message : "Não foi possível registrar a assinatura",
+        variant: "destructive",
+      })
+    } finally {
+      setAssinarSalvando(false)
+    }
+  }
 
   const loadCertificados = async () => {
     setLoading(true)
@@ -311,7 +483,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
             <div>
               <CardTitle>Certificados</CardTitle>
               <CardDescription>
-                {certificados.length} certificado(s) cadastrado(s). O colaborador assina pelo aplicativo (Perfil), como nos holerites — inclusive Ficha de EPI e demais tipos abaixo.
+                {certificados.length} certificado(s) cadastrado(s). O colaborador pode assinar no Perfil; o RH pode pré-visualizar e registrar a assinatura aqui (ícone de caneta), posicionada no rótulo «ALUNO» do PDF.
               </CardDescription>
             </div>
             {!readOnly && (
@@ -389,6 +561,23 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
                                   onClick={() => handleDownload(certificado, true)}
                                 >
                                   <FileSignature className="w-4 h-4" />
+                                </Button>
+                              )}
+                              {!readOnly && !certificadoAssinado(certificado) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  title="Prévia e registrar assinatura (RH)"
+                                  className="text-primary"
+                                  disabled={assinarLoadingPdf && assinarCert?.id === certificado.id}
+                                  onClick={() => void abrirAssinarCertificado(certificado)}
+                                >
+                                  {assinarLoadingPdf && assinarCert?.id === certificado.id ? (
+                                    <Loader2 className="w-4 h-4 animate-spin" />
+                                  ) : (
+                                    <PenLine className="w-4 h-4" />
+                                  )}
                                 </Button>
                               )}
                             </>
@@ -495,6 +684,161 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
               <Button onClick={handleSave}>{editingCertificado ? "Atualizar" : "Criar"} Certificado</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={assinarOpen}
+        onOpenChange={(open) => {
+          if (!open) fecharDialogAssinar()
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Prévia e registro de assinatura</DialogTitle>
+            <DialogDescription>
+              Padrão: rótulo «ALUNO». NR12: 1.ª página junto ao nome do instrutor (ANDERSON); páginas seguintes no canto inferior direito. Gere a prévia e registre quando estiver correto.
+              {assinarCert ? ` ${assinarCert.tipo} — ${assinarCert.nome}.` : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {assinarLoadingPdf ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Carregando PDF…
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Arquivo: <span className="font-medium text-foreground">{assinarArquivoNome}</span>
+              </p>
+            )}
+            <div>
+              <Label htmlFor="cert-sim-tipo">Regra de posição</Label>
+              <Select
+                value={assinarTipoDocumentoApi || "__auto__"}
+                onValueChange={(v) =>
+                  setAssinarTipoDocumentoApi(v === "__auto__" ? "" : v)
+                }
+              >
+                <SelectTrigger id="cert-sim-tipo" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO}>
+                    Certificado padrão (rótulo ALUNO)
+                  </SelectItem>
+                  <SelectItem value={TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12}>
+                    NR12 — instrutor (1.ª pág.) + canto direito nas demais
+                  </SelectItem>
+                  <SelectItem value="__auto__">Automático (nome do arquivo)</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <Label>Assinatura</Label>
+                  <p className="text-xs text-muted-foreground mt-0.5">Desenhe como no aplicativo ou envie PNG/JPG.</p>
+                </div>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setAssinarPadOpen(true)}>
+                  <FileSignature className="w-4 h-4 mr-2" />
+                  Desenhar assinatura
+                </Button>
+              </div>
+              {assinarAssinaturaDataUrl && (
+                <div className="flex items-center gap-3 flex-wrap">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={assinarAssinaturaDataUrl}
+                    alt="Prévia da assinatura"
+                    className="h-14 max-w-[200px] object-contain border rounded bg-white p-1"
+                  />
+                  <Button type="button" variant="outline" size="sm" onClick={() => setAssinarAssinaturaDataUrl(null)}>
+                    Remover
+                  </Button>
+                </div>
+              )}
+              <div>
+                <Label htmlFor="cert-sim-img" className="text-muted-foreground">
+                  Ou enviar imagem (PNG/JPG)
+                </Label>
+                <Input
+                  id="cert-sim-img"
+                  type="file"
+                  accept="image/png,image/jpeg"
+                  className="mt-1"
+                  onChange={(e) => {
+                    const f = e.target.files?.[0] || null
+                    setAssinarAssinaturaImg(f)
+                    if (f) setAssinarAssinaturaDataUrl(null)
+                  }}
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                onClick={() => void gerarPreviaAssinaturaCertificado()}
+                disabled={assinarLoadingPrev || assinarLoadingPdf || !assinarPdf}
+              >
+                {assinarLoadingPrev ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Gerando…
+                  </>
+                ) : (
+                  "Gerar prévia"
+                )}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void registrarAssinaturaCertificado()}
+                disabled={assinarSalvando || assinarLoadingPdf}
+              >
+                {assinarSalvando ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Registrando…
+                  </>
+                ) : (
+                  "Registrar assinatura"
+                )}
+              </Button>
+            </div>
+            {assinarPreviewUrl && (
+              <div className="border rounded-md overflow-hidden bg-muted/30 min-h-[320px]">
+                <iframe
+                  title="Prévia PDF com assinatura"
+                  src={assinarPreviewUrl}
+                  className="w-full h-[min(60vh,480px)]"
+                />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={assinarPadOpen} onOpenChange={setAssinarPadOpen}>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Desenhar assinatura</DialogTitle>
+            <DialogDescription>Depois clique em «Gerar prévia».</DialogDescription>
+          </DialogHeader>
+          <SignaturePad
+            compact
+            compactDense
+            applyLabel="Usar esta assinatura"
+            onSave={(dataUrl) => {
+              setAssinarAssinaturaDataUrl(dataUrl)
+              setAssinarAssinaturaImg(null)
+              setAssinarPadOpen(false)
+              toast({
+                title: "Assinatura capturada",
+                description: "Gere a prévia do PDF para conferir o posicionamento no campo ALUNO.",
+              })
+            }}
+            onCancel={() => setAssinarPadOpen(false)}
+          />
         </DialogContent>
       </Dialog>
     </div>

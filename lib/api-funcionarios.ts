@@ -95,9 +95,12 @@ export interface FuncionarioResponse {
 export interface FuncionarioDocumento {
   id: number
   funcionario_id: number
-  tipo: 'rg' | 'cpf' | 'ctps' | 'pis' | 'pasep' | 'titulo_eleitor' | 'certificado_reservista' | 
-        'cnh' | 'certificado_aso' | 'certificado_nr' | 'comprovante_residencia' | 
-        'certidao_nascimento' | 'certidao_casamento' | 'outros'
+  tipo: 'rg' | 'cpf' | 'ctps' | 'pis' | 'pasep' | 'titulo_eleitor' | 'certificado_reservista' |
+        'cnh' | 'certificado_aso' | 'certificado_nr' | 'comprovante_residencia' |
+        'certidao_nascimento' | 'certidao_casamento' |         'acordo_compensacao' |
+        'contrato_experiencia_prorrogacao' | 'solicitacao_vale_transporte' |
+        'termo_responsabilidade' | 'ficha_entrega_epis' | 'ficha_registro_empregado' |
+        'certificado_padrao' | 'certificado_nr12' | 'outros'
   nome: string
   numero: string
   orgao_emissor?: string

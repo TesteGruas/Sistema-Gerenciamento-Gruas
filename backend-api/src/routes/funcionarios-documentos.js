@@ -19,10 +19,12 @@ const documentoSchema = Joi.object({
   funcionario_id: Joi.number().integer().positive().required(),
   tipo: Joi.string().valid(
     'rg', 'cpf', 'ctps', 'pis', 'pasep',
-    'titulo_eleitor', 'certificado_reservista', 
+    'titulo_eleitor', 'certificado_reservista',
     'cnh', 'certificado_aso', 'certificado_nr',
     'comprovante_residencia', 'certidao_nascimento',
-    'certidao_casamento', 'outros'
+    'certidao_casamento', 'acordo_compensacao', 'contrato_experiencia_prorrogacao',
+    'solicitacao_vale_transporte', 'termo_responsabilidade', 'ficha_entrega_epis', 'ficha_registro_empregado',
+    'certificado_padrao', 'certificado_nr12', 'outros'
   ).required(),
   nome: Joi.string().min(2).max(255).required(),
   numero: Joi.string().min(1).max(100).required(),

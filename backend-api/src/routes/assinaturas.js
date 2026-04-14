@@ -4,7 +4,7 @@ import path from 'path'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
-import { adicionarMultiplasAssinaturasNoPDF, baixarEAdicionarAssinatura, adicionarAssinaturaNoPDF, adicionarAssinaturaEmTodasPaginas } from '../utils/pdf-signature.js'
+import { adicionarMultiplasAssinaturasNoPDF, baixarEAdicionarAssinatura, adicionarAssinaturaNoPDF, adicionarAssinaturaEmTodasPaginas, adicionarAssinaturaPorAncorasOuFallback } from '../utils/pdf-signature.js'
 
 const router = express.Router()
 
@@ -512,12 +512,14 @@ router.post('/assinar-com-pdf/:id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Adicionar assinatura ao PDF
+    // Adicionar assinatura ao PDF (lê texto do PDF, localiza âncoras como "Assinatura", senão última página)
     let pdfComAssinatura
     try {
-      pdfComAssinatura = await adicionarAssinaturaNoPDF(pdfBuffer, assinatura, {
-        pageIndex: -1, // Última página
-        y: 50
+      pdfComAssinatura = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, assinatura, {
+        documento: {
+          arquivo_original: documento.arquivo_original,
+          titulo: documento.titulo
+        }
       })
     } catch (error) {
       console.error('Erro ao adicionar assinatura ao PDF:', error)

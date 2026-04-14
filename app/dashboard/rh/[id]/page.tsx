@@ -44,7 +44,8 @@ import {
   BarChart3,
   PieChart,
   KeyRound,
-  Bell
+  Bell,
+  FileSignature
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -57,9 +58,10 @@ import { ColaboradorDocumentosAdmissionais } from "@/components/colaborador-docu
 import { ColaboradorDocumentosDemissao } from "@/components/colaborador-documentos-demissao"
 import { ColaboradorHolerites } from "@/components/colaborador-holerites"
 import { DocumentoUpload } from "@/components/documento-upload"
+import { SignaturePad } from "@/components/signature-pad"
 import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
-import { getApiOrigin } from "@/lib/runtime-config"
+import { getApiOrigin, getApiBasePath } from "@/lib/runtime-config"
 
 interface FuncionarioRH {
   id: number
@@ -142,7 +144,7 @@ interface BeneficioFuncionario {
 
 interface DocumentoFuncionario {
   id: string
-  tipo: 'rg' | 'cpf' | 'ctps' | 'pis' | 'titulo-eleitor' | 'certificado-reservista' | 'comprovante-residencia' | 'outros'
+  tipo: 'rg' | 'cpf' | 'ctps' | 'pis' | 'titulo-eleitor' | 'certificado-reservista' | 'comprovante-residencia' | 'acordo-compensacao' | 'contrato-experiencia-prorrogacao' | 'solicitacao-vale-transporte' | 'termo-responsabilidade' | 'ficha-entrega-epis' | 'outros'
   nome: string
   numero: string
   dataEmissao: string
@@ -163,6 +165,8 @@ export default function FuncionarioDetalhesPage() {
   const [isEditBeneficioDialogOpen, setIsEditBeneficioDialogOpen] = useState(false)
   const [beneficioSelecionado, setBeneficioSelecionado] = useState<BeneficioFuncionario | null>(null)
   const [isDocumentoDialogOpen, setIsDocumentoDialogOpen] = useState(false)
+  const [criandoDocumento, setCriandoDocumento] = useState(false)
+  const [excluindoDocumentoId, setExcluindoDocumentoId] = useState<string | null>(null)
   const [isEditDocumentoDialogOpen, setIsEditDocumentoDialogOpen] = useState(false)
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFuncionario | null>(null)
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false)
@@ -249,6 +253,22 @@ export default function FuncionarioDetalhesPage() {
 
   // Documentos
   const [documentos, setDocumentos] = useState<DocumentoFuncionario[]>([])
+
+  /** Modal local: simular posição da assinatura no PDF (sem PWA / fluxo admin). */
+  const [simularAssinaturaOpen, setSimularAssinaturaOpen] = useState(false)
+  const [simularPdf, setSimularPdf] = useState<File | null>(null)
+  const [simularArquivoNome, setSimularArquivoNome] = useState("AcordoCompensacao-demo.pdf")
+  const [simularTitulo, setSimularTitulo] = useState("Acordo de compensação de horas")
+  const [simularAssinaturaImg, setSimularAssinaturaImg] = useState<File | null>(null)
+  /** Mesmo formato do PWA: data URL PNG do canvas (`SignaturePad`). */
+  const [simularAssinaturaDataUrl, setSimularAssinaturaDataUrl] = useState<string | null>(null)
+  const [simularPadOpen, setSimularPadOpen] = useState(false)
+  const [simularPreviewUrl, setSimularPreviewUrl] = useState<string | null>(null)
+  const [simularLoading, setSimularLoading] = useState(false)
+  /** id do documento da linha que está baixando PDF para o modal de simulação */
+  const [simularDocLoadingId, setSimularDocLoadingId] = useState<string | null>(null)
+  /** Regra persistida no backend (`assinatura-posicao-por-tipo-documento`). Vazio = só nome/título. */
+  const [simularTipoDocumentoApi, setSimularTipoDocumentoApi] = useState('')
 
   // Função para carregar dados das tabs
   const carregarDadosTabs = async (funcionarioId: number) => {
@@ -340,7 +360,12 @@ export default function FuncionarioDetalhesPage() {
           const mapeamento: Record<string, string> = {
             'titulo_eleitor': 'titulo-eleitor',
             'certificado_reservista': 'certificado-reservista',
-            'comprovante_residencia': 'comprovante-residencia'
+            'comprovante_residencia': 'comprovante-residencia',
+            'acordo_compensacao': 'acordo-compensacao',
+            'contrato_experiencia_prorrogacao': 'contrato-experiencia-prorrogacao',
+            'solicitacao_vale_transporte': 'solicitacao-vale-transporte',
+            'termo_responsabilidade': 'termo-responsabilidade',
+            'ficha_entrega_epis': 'ficha-entrega-epis'
           }
           return mapeamento[tipo] || tipo
         }
@@ -487,6 +512,12 @@ export default function FuncionarioDetalhesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
 
+  useEffect(() => {
+    return () => {
+      if (simularPreviewUrl) URL.revokeObjectURL(simularPreviewUrl)
+    }
+  }, [simularPreviewUrl])
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Ativo': return 'bg-green-100 text-green-800'
@@ -555,14 +586,55 @@ export default function FuncionarioDetalhesPage() {
     const mapeamento: Record<string, string> = {
       'titulo_eleitor': 'titulo-eleitor',
       'certificado_reservista': 'certificado-reservista',
-      'comprovante_residencia': 'comprovante-residencia'
+      'comprovante_residencia': 'comprovante-residencia',
+      'acordo_compensacao': 'acordo-compensacao',
+      'contrato_experiencia_prorrogacao': 'contrato-experiencia-prorrogacao',
+      'solicitacao_vale_transporte': 'solicitacao-vale-transporte',
+      'termo_responsabilidade': 'termo-responsabilidade',
+      'ficha_entrega_epis': 'ficha-entrega-epis'
     }
     return mapeamento[tipo] || tipo
   }
 
+  /** Valor enviado como `tipo_documento` na API (tabela `funcionario_documentos.tipo`). */
+  const converterTipoDocumentoParaApi = (tipoFrontend: string): string => {
+    const m: Record<string, string> = {
+      'titulo-eleitor': 'titulo_eleitor',
+      'certificado-reservista': 'certificado_reservista',
+      'comprovante-residencia': 'comprovante_residencia',
+      'acordo-compensacao': 'acordo_compensacao',
+      'contrato-experiencia-prorrogacao': 'contrato_experiencia_prorrogacao',
+      'solicitacao-vale-transporte': 'solicitacao_vale_transporte',
+      'termo-responsabilidade': 'termo_responsabilidade',
+      'ficha-entrega-epis': 'ficha_entrega_epis'
+    }
+    return m[tipoFrontend] || tipoFrontend.replace(/-/g, '_')
+  }
+
+  /** Rótulo amigável para badge/tabela (aceita tipo com hífen ou underscore). */
+  const rotuloTipoDocumento = (tipo: string): string => {
+    const t = tipo.replace(/_/g, '-').toLowerCase()
+    const map: Record<string, string> = {
+      'rg': 'RG',
+      'cpf': 'CPF',
+      'ctps': 'Carteira de trabalho',
+      'pis': 'PIS/PASEP',
+      'titulo-eleitor': 'Título de eleitor',
+      'certificado-reservista': 'Certificado de reservista',
+      'comprovante-residencia': 'Comprovante de residência',
+      'acordo-compensacao': 'Acordo de compensação',
+      'contrato-experiencia-prorrogacao': 'Contrato experiência / prorrogação',
+      'solicitacao-vale-transporte': 'Solicitação vale transporte',
+      'termo-responsabilidade': 'Termo de responsabilidade',
+      'ficha-entrega-epis': 'Ficha de entrega de EPIs',
+      'outros': 'Outros'
+    }
+    return map[t] || tipo.replace(/_/g, ' ')
+  }
+
   const getTipoDocumentoColor = (tipo: string) => {
     // Normalizar tipo para comparação (aceitar tanto hífen quanto underscore)
-    const tipoNormalizado = tipo.replace('_', '-')
+    const tipoNormalizado = tipo.replace(/_/g, '-')
     switch (tipoNormalizado) {
       case 'rg': return 'bg-blue-100 text-blue-800'
       case 'cpf': return 'bg-green-100 text-green-800'
@@ -570,6 +642,12 @@ export default function FuncionarioDetalhesPage() {
       case 'pis': return 'bg-orange-100 text-orange-800'
       case 'titulo-eleitor': return 'bg-red-100 text-red-800'
       case 'certificado-reservista': return 'bg-yellow-100 text-yellow-800'
+      case 'comprovante-residencia': return 'bg-teal-100 text-teal-800'
+      case 'acordo-compensacao': return 'bg-indigo-100 text-indigo-800'
+      case 'contrato-experiencia-prorrogacao': return 'bg-violet-100 text-violet-800'
+      case 'solicitacao-vale-transporte': return 'bg-amber-100 text-amber-900'
+      case 'termo-responsabilidade': return 'bg-emerald-100 text-emerald-900'
+      case 'ficha-entrega-epis': return 'bg-sky-100 text-sky-900'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -889,6 +967,78 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
+  /** Abre o modal de simulação com o PDF já anexado ao cadastro (tabela Documentos). */
+  const handleSimularAssinaturaDocumentoExistente = async (documento: DocumentoFuncionario) => {
+    if (!documento.arquivoUrl?.trim()) {
+      toast({
+        title: "Sem arquivo",
+        description: "Este documento não tem PDF anexado.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setSimularDocLoadingId(documento.id)
+    try {
+      let blob: Blob
+
+      if (documento.arquivoUrl.trim().startsWith("blob:")) {
+        const r = await fetch(documento.arquivoUrl)
+        if (!r.ok) throw new Error("Não foi possível ler o arquivo local (link expirado?)")
+        blob = await r.blob()
+      } else {
+        const apiUrl = getApiOrigin()
+        const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+        let fileUrl = documento.arquivoUrl
+        try {
+          const urlResponse = await fetch(
+            `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.arquivoUrl)}`,
+            { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+          )
+          if (urlResponse.ok) {
+            const urlData = await urlResponse.json()
+            fileUrl = urlData.url || urlData.data?.url || documento.arquivoUrl
+          }
+        } catch {
+          /* manter URL original */
+        }
+        const pdfRes = await fetch(fileUrl)
+        if (!pdfRes.ok) throw new Error(`Falha ao baixar o PDF (${pdfRes.status})`)
+        blob = await pdfRes.blob()
+      }
+
+      const baseNome = (documento.nome || "documento").replace(/[<>:"/\\|?*]+/g, "_").slice(0, 120)
+      const nomeArquivo = baseNome.toLowerCase().endsWith(".pdf") ? baseNome : `${baseNome}.pdf`
+      const file = new File([blob], nomeArquivo, { type: "application/pdf" })
+
+      if (simularPreviewUrl) {
+        URL.revokeObjectURL(simularPreviewUrl)
+        setSimularPreviewUrl(null)
+      }
+
+      setSimularPdf(file)
+      setSimularArquivoNome(nomeArquivo)
+      setSimularTitulo(`${rotuloTipoDocumento(documento.tipo)} — ${documento.nome}`)
+      setSimularTipoDocumentoApi(converterTipoDocumentoParaApi(documento.tipo))
+      setSimularAssinaturaImg(null)
+      setSimularAssinaturaDataUrl(null)
+      setSimularAssinaturaOpen(true)
+      toast({
+        title: "PDF carregado",
+        description: "Clique em «Gerar prévia» para posicionar a assinatura."
+      })
+    } catch (e) {
+      toast({
+        title: "Erro ao carregar PDF",
+        description:
+          e instanceof Error ? e.message : "Baixe o arquivo e use «Simular assinatura no PDF» com upload manual.",
+        variant: "destructive"
+      })
+    } finally {
+      setSimularDocLoadingId(null)
+    }
+  }
+
   const handleEditarDocumento = (documento: DocumentoFuncionario) => {
     setDocumentoSelecionado(documento)
     setDocumentoForm({
@@ -902,6 +1052,42 @@ export default function FuncionarioDetalhesPage() {
       arquivo: null
     })
     setIsEditDocumentoDialogOpen(true)
+  }
+
+  const handleExcluirDocumento = async (documento: DocumentoFuncionario) => {
+    if (
+      !window.confirm(
+        `Excluir o documento «${documento.nome}»? Esta ação não pode ser desfeita.`
+      )
+    ) {
+      return
+    }
+    const funcionarioId = parseInt(params.id as string, 10)
+    setExcluindoDocumentoId(documento.id)
+    try {
+      const response = await funcionariosApi.excluirDocumento(parseInt(documento.id, 10))
+      if (response.success) {
+        toast({
+          title: "Documento excluído",
+          description: response.message || "O documento foi removido."
+        })
+        await carregarDadosTabs(funcionarioId)
+      } else {
+        throw new Error(
+          typeof response.message === "string" ? response.message : "Não foi possível excluir."
+        )
+      }
+    } catch (error) {
+      console.error("Erro ao excluir documento:", error)
+      toast({
+        title: "Erro",
+        description:
+          error instanceof Error ? error.message : "Erro ao excluir documento",
+        variant: "destructive"
+      })
+    } finally {
+      setExcluindoDocumentoId(null)
+    }
   }
 
   const handleSalvarEdicaoDocumento = async () => {
@@ -996,7 +1182,12 @@ export default function FuncionarioDetalhesPage() {
         const mapeamento: Record<string, string> = {
           'titulo-eleitor': 'titulo_eleitor',
           'certificado-reservista': 'certificado_reservista',
-          'comprovante-residencia': 'comprovante_residencia'
+          'comprovante-residencia': 'comprovante_residencia',
+          'acordo-compensacao': 'acordo_compensacao',
+          'contrato-experiencia-prorrogacao': 'contrato_experiencia_prorrogacao',
+          'solicitacao-vale-transporte': 'solicitacao_vale_transporte',
+          'termo-responsabilidade': 'termo_responsabilidade',
+          'ficha-entrega-epis': 'ficha_entrega_epis'
         }
         return mapeamento[tipo] || tipo
       }
@@ -1279,6 +1470,65 @@ export default function FuncionarioDetalhesPage() {
       })
     }
   }
+
+  const gerarPreviaAssinaturaPdf = async () => {
+    if (!simularPdf) {
+      toast({
+        title: "PDF obrigatório",
+        description: "Selecione um arquivo PDF para simular a assinatura.",
+        variant: "destructive"
+      })
+      return
+    }
+    setSimularLoading(true)
+    try {
+      if (simularPreviewUrl) {
+        URL.revokeObjectURL(simularPreviewUrl)
+        setSimularPreviewUrl(null)
+      }
+      const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+      const fd = new FormData()
+      fd.append("pdf", simularPdf)
+      fd.append("arquivo_original", simularArquivoNome || "documento.pdf")
+      fd.append("titulo", simularTitulo || "")
+      if (simularTipoDocumentoApi) {
+        fd.append("tipo_documento", simularTipoDocumentoApi)
+      }
+      if (simularAssinaturaDataUrl) {
+        const imgRes = await fetch(simularAssinaturaDataUrl)
+        const imgBlob = await imgRes.blob()
+        fd.append(
+          "assinatura",
+          new File([imgBlob], "assinatura.png", { type: "image/png" })
+        )
+      } else if (simularAssinaturaImg) {
+        fd.append("assinatura", simularAssinaturaImg)
+      }
+
+      const res = await fetch(`${getApiBasePath()}/rh/preview-assinatura-pdf`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({} as { message?: string }))
+        throw new Error(err.message || `Erro ${res.status}`)
+      }
+
+      const blob = await res.blob()
+      setSimularPreviewUrl(URL.createObjectURL(blob))
+      toast({ title: "Prévia gerada", description: "Confira o posicionamento no painel abaixo." })
+    } catch (e) {
+      toast({
+        title: "Erro ao gerar prévia",
+        description: e instanceof Error ? e.message : "Falha na simulação",
+        variant: "destructive"
+      })
+    } finally {
+      setSimularLoading(false)
+    }
+  }
   
   const handleCriarDocumento = async () => {
     if (isDocumentoUploadInFlightRef.current) return
@@ -1310,8 +1560,8 @@ export default function FuncionarioDetalhesPage() {
       return
     }
 
+    setCriandoDocumento(true)
     try {
-      
       const funcionarioId = parseInt(params.id as string)
       let arquivoUrl: string | undefined = undefined
       
@@ -1380,7 +1630,12 @@ export default function FuncionarioDetalhesPage() {
         const mapeamento: Record<string, string> = {
           'titulo-eleitor': 'titulo_eleitor',
           'certificado-reservista': 'certificado_reservista',
-          'comprovante-residencia': 'comprovante_residencia'
+          'comprovante-residencia': 'comprovante_residencia',
+          'acordo-compensacao': 'acordo_compensacao',
+          'contrato-experiencia-prorrogacao': 'contrato_experiencia_prorrogacao',
+          'solicitacao-vale-transporte': 'solicitacao_vale_transporte',
+          'termo-responsabilidade': 'termo_responsabilidade',
+          'ficha-entrega-epis': 'ficha_entrega_epis'
         }
         return mapeamento[tipo] || tipo
       }
@@ -1419,6 +1674,8 @@ export default function FuncionarioDetalhesPage() {
         description: error instanceof Error ? error.message : "Erro ao adicionar documento",
         variant: "destructive"
       })
+    } finally {
+      setCriandoDocumento(false)
     }
   }
 
@@ -2899,23 +3156,232 @@ export default function FuncionarioDetalhesPage() {
         <TabsContent value="documentos" className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex flex-col gap-3 sm:flex-row sm:justify-between sm:items-center">
                 <div>
                   <CardTitle>Documentos do Funcionário</CardTitle>
                   <CardDescription>Documentos pessoais e profissionais</CardDescription>
                 </div>
-                <Dialog open={isDocumentoDialogOpen} onOpenChange={setIsDocumentoDialogOpen}>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Dialog
+                    open={simularAssinaturaOpen}
+                    onOpenChange={(open) => {
+                      setSimularAssinaturaOpen(open)
+                      if (!open) {
+                        if (simularPreviewUrl) {
+                          URL.revokeObjectURL(simularPreviewUrl)
+                          setSimularPreviewUrl(null)
+                        }
+                        setSimularAssinaturaDataUrl(null)
+                        setSimularAssinaturaImg(null)
+                        setSimularPadOpen(false)
+                        setSimularTipoDocumentoApi('')
+                      }
+                    }}
+                  >
+                    <DialogTrigger asChild>
+                      <Button type="button" variant="outline" size="sm">
+                        <FileSignature className="w-4 h-4 mr-2" />
+                        Simular assinatura no PDF
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Simular posição da assinatura</DialogTitle>
+                        <DialogDescription>
+                          Mesma lógica do PWA e do servidor (âncoras no texto do PDF). Desenhe a assinatura como no app do colaborador ou envie uma imagem; sem assinatura, usa um bloco de teste só para posição.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="space-y-3">
+                        <div>
+                          <Label htmlFor="sim-pdf">PDF *</Label>
+                          <Input
+                            id="sim-pdf"
+                            type="file"
+                            accept="application/pdf"
+                            onChange={(e) => {
+                              const f = e.target.files?.[0]
+                              setSimularPdf(f || null)
+                              if (f?.name) setSimularArquivoNome(f.name)
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="sim-arquivo-nome">Nome do arquivo (para regras de perfil)</Label>
+                          <Input
+                            id="sim-arquivo-nome"
+                            value={simularArquivoNome}
+                            onChange={(e) => setSimularArquivoNome(e.target.value)}
+                            placeholder="ex.: AcordoCompensacao-fulano.pdf"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="sim-titulo">Título do documento</Label>
+                          <Input
+                            id="sim-titulo"
+                            value={simularTitulo}
+                            onChange={(e) => setSimularTitulo(e.target.value)}
+                            placeholder="ex.: Acordo de compensação"
+                          />
+                        </div>
+                        <div>
+                          <Label htmlFor="sim-tipo-doc-api">Tipo do documento (regra de posição)</Label>
+                          <p className="text-xs text-muted-foreground mb-1.5">
+                            Usa a configuração salva no servidor para este tipo (ex.: acordo → coluna do funcionário).
+                          </p>
+                          <Select
+                            value={simularTipoDocumentoApi || "__auto__"}
+                            onValueChange={(v) =>
+                              setSimularTipoDocumentoApi(v === "__auto__" ? "" : v)
+                            }
+                          >
+                            <SelectTrigger id="sim-tipo-doc-api" className="w-full">
+                              <SelectValue placeholder="Automático" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__auto__">Automático (só nome do arquivo e título)</SelectItem>
+                              <SelectItem value="acordo_compensacao">
+                                Acordo de compensação de horas
+                              </SelectItem>
+                              <SelectItem value="contrato_experiencia_prorrogacao">
+                                Contrato experiência / prorrogação
+                              </SelectItem>
+                              <SelectItem value="solicitacao_vale_transporte">
+                                Solicitação vale transporte
+                              </SelectItem>
+                              <SelectItem value="termo_responsabilidade">
+                                Termo de responsabilidade
+                              </SelectItem>
+                              <SelectItem value="ficha_entrega_epis">
+                                Ficha de entrega de EPIs (IRBANA)
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="rounded-lg border bg-muted/30 p-3 space-y-3">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                            <div>
+                              <Label>Assinatura (igual ao PWA)</Label>
+                              <p className="text-xs text-muted-foreground mt-0.5">
+                                Desenhe no painel — mesmo componente do aplicativo.
+                              </p>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => setSimularPadOpen(true)}
+                            >
+                              <FileSignature className="w-4 h-4 mr-2" />
+                              Assinar agora
+                            </Button>
+                          </div>
+                          {simularAssinaturaDataUrl && (
+                            <div className="flex items-center gap-3 flex-wrap">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={simularAssinaturaDataUrl}
+                                alt="Prévia da assinatura"
+                                className="h-14 max-w-[200px] object-contain border rounded bg-white p-1"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  setSimularAssinaturaDataUrl(null)
+                                }}
+                              >
+                                Remover assinatura
+                              </Button>
+                            </div>
+                          )}
+                          <div>
+                            <Label htmlFor="sim-ass-img" className="text-muted-foreground">
+                              Ou enviar imagem (PNG/JPG)
+                            </Label>
+                            <Input
+                              id="sim-ass-img"
+                              type="file"
+                              accept="image/png,image/jpeg"
+                              className="mt-1"
+                              onChange={(e) => {
+                                const f = e.target.files?.[0] || null
+                                setSimularAssinaturaImg(f)
+                                if (f) setSimularAssinaturaDataUrl(null)
+                              }}
+                            />
+                          </div>
+                        </div>
+                        <Button type="button" onClick={gerarPreviaAssinaturaPdf} disabled={simularLoading || !simularPdf}>
+                          {simularLoading ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Gerando…
+                            </>
+                          ) : (
+                            "Gerar prévia"
+                          )}
+                        </Button>
+                        {simularPreviewUrl && (
+                          <div className="border rounded-md overflow-hidden bg-muted/30 min-h-[420px]">
+                            <iframe
+                              title="Prévia PDF com assinatura"
+                              src={simularPreviewUrl}
+                              className="w-full h-[min(70vh,560px)]"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={simularPadOpen} onOpenChange={setSimularPadOpen}>
+                    <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+                      <DialogHeader>
+                        <DialogTitle>Assinar agora</DialogTitle>
+                        <DialogDescription>
+                          Mesmo desenho do PWA (canvas → PNG). Depois, volte e clique em «Gerar prévia».
+                        </DialogDescription>
+                      </DialogHeader>
+                      <SignaturePad
+                        compact
+                        compactDense
+                        applyLabel="Usar esta assinatura"
+                        onSave={(dataUrl) => {
+                          setSimularAssinaturaDataUrl(dataUrl)
+                          setSimularAssinaturaImg(null)
+                          setSimularPadOpen(false)
+                          toast({
+                            title: "Assinatura capturada",
+                            description: "Gere a prévia do PDF para ver o posicionamento."
+                          })
+                        }}
+                        onCancel={() => setSimularPadOpen(false)}
+                      />
+                    </DialogContent>
+                  </Dialog>
+                <Dialog
+                  open={isDocumentoDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!open && criandoDocumento) return
+                    setIsDocumentoDialogOpen(open)
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button>
                       <Upload className="w-4 h-4 mr-2" />
                       Novo Documento
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
+                  <DialogContent className="max-w-2xl" aria-busy={criandoDocumento}>
                     <DialogHeader>
                       <DialogTitle>Adicionar Documento</DialogTitle>
                     </DialogHeader>
                     <div className="space-y-4">
+                      <fieldset
+                        disabled={criandoDocumento}
+                        className="space-y-4 min-w-0 border-0 p-0 m-0 disabled:pointer-events-none disabled:opacity-60"
+                      >
                       <div>
                         <Label htmlFor="tipo-documento">Tipo de Documento *</Label>
                         <Select
@@ -2933,6 +3399,11 @@ export default function FuncionarioDetalhesPage() {
                             <SelectItem value="titulo-eleitor">Título de Eleitor</SelectItem>
                             <SelectItem value="certificado-reservista">Certificado de Reservista</SelectItem>
                             <SelectItem value="comprovante-residencia">Comprovante de Residência</SelectItem>
+                            <SelectItem value="acordo-compensacao">Acordo de compensação de horas</SelectItem>
+                            <SelectItem value="contrato-experiencia-prorrogacao">Contrato experiência / prorrogação</SelectItem>
+                            <SelectItem value="solicitacao-vale-transporte">Solicitação vale transporte</SelectItem>
+                            <SelectItem value="termo-responsabilidade">Termo de responsabilidade</SelectItem>
+                            <SelectItem value="ficha-entrega-epis">Ficha de entrega de EPIs (IRBANA)</SelectItem>
                             <SelectItem value="outros">Outros</SelectItem>
                           </SelectContent>
                         </Select>
@@ -3004,9 +3475,11 @@ export default function FuncionarioDetalhesPage() {
                           onChange={(e) => setDocumentoForm({ ...documentoForm, observacoes: e.target.value })}
                         />
                       </div>
+                      </fieldset>
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
+                          disabled={criandoDocumento}
                           onClick={() => {
                             setIsDocumentoDialogOpen(false)
                             resetDocumentoForm()
@@ -3014,13 +3487,21 @@ export default function FuncionarioDetalhesPage() {
                         >
                           Cancelar
                         </Button>
-                        <Button type="button" onClick={handleCriarDocumento}>
-                          Adicionar Documento
+                        <Button type="button" onClick={handleCriarDocumento} disabled={criandoDocumento}>
+                          {criandoDocumento ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Salvando…
+                            </>
+                          ) : (
+                            "Adicionar Documento"
+                          )}
                         </Button>
                       </div>
                     </div>
                   </DialogContent>
                 </Dialog>
+                </div>
 
                 {/* Dialog de Editar Documento */}
                 <Dialog open={isEditDocumentoDialogOpen} onOpenChange={setIsEditDocumentoDialogOpen}>
@@ -3046,6 +3527,11 @@ export default function FuncionarioDetalhesPage() {
                             <SelectItem value="titulo-eleitor">Título de Eleitor</SelectItem>
                             <SelectItem value="certificado-reservista">Certificado de Reservista</SelectItem>
                             <SelectItem value="comprovante-residencia">Comprovante de Residência</SelectItem>
+                            <SelectItem value="acordo-compensacao">Acordo de compensação de horas</SelectItem>
+                            <SelectItem value="contrato-experiencia-prorrogacao">Contrato experiência / prorrogação</SelectItem>
+                            <SelectItem value="solicitacao-vale-transporte">Solicitação vale transporte</SelectItem>
+                            <SelectItem value="termo-responsabilidade">Termo de responsabilidade</SelectItem>
+                            <SelectItem value="ficha-entrega-epis">Ficha de entrega de EPIs (IRBANA)</SelectItem>
                             <SelectItem value="outros">Outros</SelectItem>
                           </SelectContent>
                         </Select>
@@ -3155,7 +3641,7 @@ export default function FuncionarioDetalhesPage() {
                       <TableRow key={documento.id}>
                         <TableCell>
                           <Badge className={`${getTipoDocumentoColor(documento.tipo)} border`}>
-                            {documento.tipo}
+                            {rotuloTipoDocumento(documento.tipo)}
                           </Badge>
                         </TableCell>
                         <TableCell>
@@ -3194,6 +3680,19 @@ export default function FuncionarioDetalhesPage() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void handleSimularAssinaturaDocumentoExistente(documento)}
+                              title="Simular assinatura neste PDF"
+                              disabled={!documento.arquivoUrl || simularDocLoadingId === documento.id}
+                            >
+                              {simularDocLoadingId === documento.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <FileSignature className="w-4 h-4" />
+                              )}
+                            </Button>
                             <Button 
                               variant="outline" 
                               size="sm"
@@ -3201,6 +3700,20 @@ export default function FuncionarioDetalhesPage() {
                               title="Editar documento"
                             >
                               <Edit className="w-4 h-4" />
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              onClick={() => void handleExcluirDocumento(documento)}
+                              title="Excluir documento"
+                              disabled={excluindoDocumentoId === documento.id}
+                            >
+                              {excluindoDocumentoId === documento.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <Trash2 className="w-4 h-4" />
+                              )}
                             </Button>
                           </div>
                         </TableCell>

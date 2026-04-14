@@ -8,7 +8,13 @@ import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { checkPermission } from '../middleware/permissions.js'
-import { baixarEAdicionarAssinatura, adicionarAssinaturaEmTodasPaginas } from '../utils/pdf-signature.js'
+import {
+  baixarEAdicionarAssinatura,
+  adicionarAssinaturaEmTodasPaginas,
+  adicionarAssinaturaPorAncorasOuFallback
+} from '../utils/pdf-signature.js'
+import { tipoAdmissionalParaTipoDocumentoAssinatura } from '../utils/tipo-admissional-assinatura.js'
+import { certificadoTipoParaTipoDocumentoAssinatura } from '../utils/certificado-tipo-assinatura.js'
 
 const router = express.Router()
 
@@ -493,20 +499,25 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
 
     let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
 
-    // Se comAssinatura=true e certificado tem assinatura, adicionar no PDF em todas as páginas
     if ((comAssinatura === 'true' || comAssinatura === '1') && certificado.assinatura_digital) {
       try {
-        console.log('📥 [CERTIFICADO] Adicionando assinatura em todas as páginas do PDF...')
-        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, certificado.assinatura_digital, {
-          height: 100, // Altura fixa de 100px
-          marginRight: 20, // Margem direita de 20px
-          marginBottom: 20, // Margem inferior de 20px
+        const arquivoNome =
+          String(certificado.arquivo || '')
+            .split('/')
+            .pop()
+            .split('?')[0] || 'certificado.pdf'
+        const tituloCert = [certificado.tipo, certificado.nome].filter(Boolean).join(' — ')
+        const tipoDocCert = certificadoTipoParaTipoDocumentoAssinatura(certificado.tipo)
+        pdfBuffer = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, certificado.assinatura_digital, {
+          documento: {
+            arquivo_original: arquivoNome,
+            titulo: tituloCert,
+            tipo_documento: tipoDocCert
+          },
           opacity: 1.0
         })
-        console.log('✅ [CERTIFICADO] Assinatura adicionada em todas as páginas do PDF')
       } catch (signatureError) {
-        console.error('❌ [CERTIFICADO] Erro ao adicionar assinatura no PDF:', signatureError)
-        // Continuar mesmo se houver erro - retornar PDF original
+        console.error('[CERTIFICADO] Erro ao compor assinatura no PDF:', signatureError)
       }
     }
 
@@ -778,12 +789,18 @@ router.get('/documentos-admissionais/:id/download', async (req, res) => {
 
     if ((comAssinatura === 'true' || comAssinatura === '1') && doc.assinatura_digital) {
       try {
-        pdfBuffer = await adicionarAssinaturaEmTodasPaginas(pdfBuffer, doc.assinatura_digital, {
-          horizontalAlign: 'left',
-          marginLeft: 56,
-          marginBottom: 52,
-          height: 88,
-          pages: 'last',
+        const tipoDoc = tipoAdmissionalParaTipoDocumentoAssinatura(doc.tipo)
+        const arquivoNome =
+          String(doc.arquivo || '')
+            .split('/')
+            .pop()
+            .split('?')[0] || 'documento.pdf'
+        pdfBuffer = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, doc.assinatura_digital, {
+          documento: {
+            arquivo_original: arquivoNome,
+            titulo: doc.tipo || '',
+            ...(tipoDoc ? { tipo_documento: tipoDoc } : {})
+          },
           opacity: 1.0
         })
       } catch (signatureError) {
