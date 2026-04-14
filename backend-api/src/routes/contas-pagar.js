@@ -12,6 +12,13 @@ function parseCobrancaAluguelIdFromObservacoes(observacoes) {
   return m ? m[1] : null;
 }
 
+/** PostgREST pode retornar FK embed como objeto ou array com um elemento */
+function normalizeBoletoEmbed(boletos) {
+  if (!boletos) return null;
+  if (Array.isArray(boletos)) return boletos[0] || null;
+  return boletos;
+}
+
 function mapBoletoDetalhes(boleto) {
   if (!boleto) return null;
   return {
@@ -36,7 +43,7 @@ function mapBoletoDetalhes(boleto) {
 }
 
 function buildAluguelNestedFromCobranca(cobranca) {
-  const boleto = cobranca.boletos;
+  const boleto = normalizeBoletoEmbed(cobranca.boletos);
   const ar = cobranca.alugueis_residencias;
   const res = ar?.residencias;
   const func = ar?.funcionarios;
@@ -163,7 +170,11 @@ const contaPagarSchema = Joi.object({
  */
 router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), async (req, res) => {
   try {
-    const { status, fornecedor_id, categoria, data_inicio, data_fim, limite = 100, pagina = 1 } = req.query;
+    const { status, fornecedor_id, categoria, data_inicio, data_fim, pagina = 1 } = req.query;
+    const limitePedido = parseInt(req.query.limite, 10);
+    const limite = Number.isFinite(limitePedido)
+      ? Math.min(Math.max(limitePedido, 1), 5000)
+      : 2000;
 
     // Buscar contas a pagar
     let queryContas = supabaseAdmin
@@ -192,8 +203,9 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
     }
 
     // Paginação
-    const offset = (parseInt(pagina) - 1) * parseInt(limite);
-    queryContas = queryContas.range(offset, offset + parseInt(limite) - 1);
+    const paginaNum = Math.max(1, parseInt(pagina, 10) || 1);
+    const offset = (paginaNum - 1) * limite;
+    queryContas = queryContas.range(offset, offset + limite - 1);
 
     const { data: contasData, error: contasError, count: contasCount } = await queryContas;
 
@@ -332,7 +344,7 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       const ar = cobranca.alugueis_residencias;
       const res = ar?.residencias;
       const func = ar?.funcionarios;
-      const boleto = cobranca.boletos;
+      const boleto = normalizeBoletoEmbed(cobranca.boletos);
 
       const residenciaNome = res?.nome || 'Residência';
       const funcionarioNome = func?.nome || '';
@@ -391,7 +403,7 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       const cid = parseCobrancaAluguelIdFromObservacoes(conta.observacoes);
       if (!cid || !cobrancaPorId[cid]) return base;
       const cob = cobrancaPorId[cid];
-      const boleto = cob.boletos;
+      const boleto = normalizeBoletoEmbed(cob.boletos);
       const aluguel = buildAluguelNestedFromCobranca(cob);
       return {
         ...base,
@@ -403,11 +415,24 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       };
     });
 
+    // Evita duas linhas para a mesma cobrança (contas_pagar já criada em cobrancas-aluguel + espelho em cobrancas_aluguel)
+    const idsCobrancaJaEmContasPagar = new Set(
+      (contasComTipo || [])
+        .map((c) => {
+          if (c.categoria !== 'Aluguel') return null;
+          return c.cobranca_aluguel_id || parseCobrancaAluguelIdFromObservacoes(c.observacoes);
+        })
+        .filter(Boolean)
+    );
+    const cobrancasFormatadasDedup = cobrancasFormatadas.filter(
+      (row) => !idsCobrancaJaEmContasPagar.has(row.cobranca_aluguel_id)
+    );
+
     // Combinar contas, notas fiscais e cobranças de aluguel
     const todasContas = [
       ...contasComTipo,
       ...notasFormatadas,
-      ...cobrancasFormatadas
+      ...cobrancasFormatadasDedup
     ];
 
     // Ordenar por data de vencimento
@@ -417,12 +442,15 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       return dataA - dataB;
     });
 
+    const totalLista =
+      (contasCount || 0) + notasFormatadas.length + cobrancasFormatadasDedup.length;
+
     res.json({
       success: true,
       data: todasContas,
-      total: (contasCount || 0) + notasFormatadas.length + cobrancasFormatadas.length,
-      pagina: parseInt(pagina),
-      total_paginas: Math.ceil(((contasCount || 0) + notasFormatadas.length + cobrancasFormatadas.length) / parseInt(limite))
+      total: totalLista,
+      pagina: paginaNum,
+      total_paginas: Math.ceil(totalLista / limite)
     });
   } catch (error) {
     console.error('Erro ao listar contas a pagar:', error);

@@ -261,7 +261,7 @@ export default function ContasPagarPage() {
     try {
       const token = getAuthToken()
       
-      let url = `${API_URL}/api/contas-pagar?limite=100`
+      let url = `${API_URL}/api/contas-pagar?limite=2000`
       if (filtroStatusContas && filtroStatusContas !== 'todos') {
         url += `&status=${filtroStatusContas}`
       }
@@ -689,6 +689,16 @@ export default function ContasPagarPage() {
         const boletoId = id.replace('boleto_', '')
         response = await fetch(`${API_URL}/api/boletos/${boletoId}/pagar`, {
           method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ data_pagamento: dataPagamento })
+        })
+      } else if (typeof id === 'string' && id.startsWith('cobranca_aluguel_')) {
+        const cobrancaId = id.replace('cobranca_aluguel_', '')
+        response = await fetch(`${API_URL}/api/cobrancas-aluguel/${cobrancaId}`, {
+          method: 'PUT',
           headers: {
             'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json'
@@ -1236,7 +1246,15 @@ export default function ContasPagarPage() {
                 />
               </div>
               <div className="flex items-end">
-                <Button variant="outline" onClick={carregarDados} className="w-full">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    carregarDados()
+                    carregarContas()
+                    carregarAlertas()
+                  }}
+                  className="w-full"
+                >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Atualizar
                 </Button>
@@ -1563,7 +1581,7 @@ export default function ContasPagarPage() {
                     if (registro.tipo === 'conta') {
                       const conta = registro.data as ContaPagar
                       const alug = conta.aluguel
-                      const isAluguel = conta.categoria === 'Aluguel' && alug
+                      const isAluguel = conta.categoria === 'Aluguel'
                       const podeExcluirContaPagar = conta.tipo === 'conta_pagar'
                       return (
                         <TableRow key={`conta-${conta.id}`}>
@@ -1586,13 +1604,13 @@ export default function ContasPagarPage() {
                             <div className="flex items-center gap-2">
                               <Building2 className="w-4 h-4 text-gray-400" />
                               {isAluguel
-                                ? alug.residencia?.nome || 'N/A'
+                                ? alug?.residencia?.nome || 'N/A'
                                 : conta.obra?.nome || 'N/A'}
                             </div>
                           </TableCell>
                           <TableCell>
                             {isAluguel
-                              ? alug.funcionario?.nome || 'N/A'
+                              ? alug?.funcionario?.nome || 'N/A'
                               : conta.fornecedor?.nome || conta.cliente?.nome || 'N/A'}
                           </TableCell>
                           <TableCell>
@@ -1622,7 +1640,7 @@ export default function ContasPagarPage() {
                               >
                                 <Eye className="w-4 h-4" />
                               </Button>
-                              {conta.status === 'pendente' && (
+                              {(conta.status === 'pendente' || conta.status === 'vencido') && (
                                 <Button
                                   size="sm"
                                   onClick={() => marcarComoPago(conta.id)}

@@ -77,11 +77,8 @@ const aluguelSchema = Joi.object({
   valor_mensal: Joi.number().positive().required(),
   dia_vencimento: Joi.number().integer().min(1).max(31).required(),
   desconto_folha: Joi.boolean().default(false),
-  porcentagem_desconto: Joi.number().min(0).max(100).when('desconto_folha', {
-    is: true,
-    then: Joi.optional(),
-    otherwise: Joi.allow(null).optional()
-  }),
+  // Opcional: sem subsídio envia null (ex.: desconto na folha sem percentual definido)
+  porcentagem_desconto: Joi.number().min(0).max(100).allow(null).optional(),
   tipo_sinal: Joi.string().valid('caucao', 'fiador', 'outros').allow(null, '').optional(),
   valor_deposito: Joi.number().min(0).allow(null).optional(),
   periodo_multa: Joi.number().integer().min(0).allow(null).optional(),
