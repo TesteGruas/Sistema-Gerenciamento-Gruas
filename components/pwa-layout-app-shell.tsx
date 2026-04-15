@@ -114,13 +114,9 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     if (typeof window === 'undefined') return
 
     if ('Notification' in window && Notification.permission === 'granted') {
-      ensurePushSubscription().catch((error) => {
-        console.warn('[PWA][Push] Falha ao registrar subscription:', error)
-      })
+      ensurePushSubscription().catch(() => {})
 
-      pwaNotifications.startBackgroundReminders().catch((error) => {
-        console.error('[PWA][Notifications] Erro ao iniciar lembretes:', error)
-      })
+      pwaNotifications.startBackgroundReminders().catch(() => {})
     }
   }, [])
 
@@ -130,9 +126,7 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     if (!isAuthenticated) return
     if (!('Notification' in window) || Notification.permission !== 'granted') return
 
-    ensurePushSubscription().catch((error) => {
-      console.warn('[PWA][Push] Falha ao registrar subscription após login:', error)
-    })
+    ensurePushSubscription().catch(() => {})
   }, [isAuthenticated])
 
   // Recuperação global em erros não tratados que podem travar o PWA
@@ -205,8 +199,8 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
               obrasResponsavelCount = Array.isArray(obrasResponsavel) ? obrasResponsavel.length : 0
               isResponsavelObra = Boolean(meData?.user?.is_responsavel_obra) || obrasResponsavelCount > 0
             }
-          } catch (apiError) {
-            console.warn('[PWA][ObraCheck] Falha ao consultar /auth/me, usando fallback localStorage', apiError)
+          } catch {
+            /* fallback localStorage */
           }
         }
 
@@ -234,11 +228,6 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
         // 3) Se for responsável de obra, validar por vínculo de obras
         if (isResponsavelObra) {
           const temObraResponsavel = obrasResponsavelCount > 0
-          console.log('[PWA][ObraCheck][Responsavel]', {
-            isResponsavelObra,
-            obrasResponsavelCount,
-            temObraResponsavel
-          })
           setTemObraAtiva(temObraResponsavel)
           return
         }
@@ -249,22 +238,13 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
           const totalAlocacoes = alocacoes?.data?.length || 0
           const possuiObraAtiva = Boolean(alocacoes.success && totalAlocacoes > 0)
 
-          console.log('[PWA][ObraCheck][Funcionario]', {
-            funcionarioId,
-            success: alocacoes.success,
-            totalAlocacoes,
-            possuiObraAtiva
-          })
-
           setTemObraAtiva(possuiObraAtiva)
           return
         }
 
         // 5) Sem vínculo de funcionário ou responsável
-        console.log('[PWA][ObraCheck] Usuário sem vínculo com obra (funcionário/responsável)')
         setTemObraAtiva(false)
-      } catch (error) {
-        console.error('Erro ao verificar obra ativa:', error)
+      } catch {
         setTemObraAtiva(false) // Em caso de erro, considerar sem obra
       } finally {
         setLoadingObra(false)
@@ -343,8 +323,8 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
         })
         
         carregarNotificacoesNaoLidas(parsedUser.id)
-      } catch (error) {
-        console.error('Erro ao carregar dados do usuário:', error)
+      } catch {
+        /* ignore */
       }
     }
   }, [])
@@ -541,16 +521,6 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     })
     .filter(item => item.icon) // Filtro adicional para garantir que o ícone existe
 
-  // Debug: Log para verificar quantos itens estão disponíveis
-  if (typeof window !== 'undefined' && allNavigationItems.length <= 2) {
-    console.log('PWA Navigation Debug:', {
-      pwaMenuItemsCount: pwaMenuItems.length,
-      allNavigationItemsCount: allNavigationItems.length,
-      userRole,
-      pwaMenuItems: pwaMenuItems.map(i => i.label)
-    })
-  }
-
   // Adicionar notificações com badge se houver notificações não lidas
   if (canViewNotifications() && notificacoesNaoLidas > 0) {
     const notificacaoItem = pwaMenuItems.find(item => item.path === '/pwa/notificacoes')
@@ -645,8 +615,7 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
       const isCliente = hookRole.includes('cliente') || storedRole.includes('cliente')
       
       return isCliente
-    } catch (error) {
-      console.error('Erro ao verificar se é supervisor/cliente:', error)
+    } catch {
       return false
     }
   }
@@ -763,17 +732,6 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     // Perfil - SEMPRE presente
     perfilItem
   ].filter(Boolean) // Remove itens undefined
-
-  if (typeof window !== 'undefined') {
-    console.log('[PWA][Menu][Ponto]', {
-      userRole,
-      isClientUser,
-      isSupervisorOrResponsavel,
-      isResponsavelObraUser,
-      temObraAtiva,
-      mostrarPontoFuncionario
-    })
-  }
 
   // Usar apenas os itens essenciais na navegação inferior
   const filteredNavigationItems = essentialNavItems.slice(0, 5)

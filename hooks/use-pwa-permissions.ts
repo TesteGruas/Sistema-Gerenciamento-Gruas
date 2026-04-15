@@ -262,15 +262,6 @@ export const usePWAPermissions = () => {
    */
   const debugPermissions = () => {
     if (process.env.NODE_ENV !== 'development') return
-
-    console.group('🔐 PWA Permissions Debug')
-    console.log('User Role:', userRole)
-    console.log('Access Level:', level)
-    console.log('Permissions:', permissions)
-    console.log('Menu Items:', menuItems.length)
-    console.log('Home Page:', homePage)
-    console.log('Features:', features)
-    console.groupEnd()
   }
 
   // ========================================

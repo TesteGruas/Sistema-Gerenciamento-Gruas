@@ -115,6 +115,8 @@ export default function ClientesPage() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false)
   const [dadosIniciaisCarregados, setDadosIniciaisCarregados] = useState(false)
   const initialLoadDoneRef = useRef(false)
+  /** Evita múltiplos `setClienteCreateResetNonce` enquanto `?create=true` ainda está na URL (re-renders / Strict Mode), o que zerava o rascunho do modal. */
+  const abrirCriacaoViaQueryConsumidoRef = useRef(false)
   const prevPageRef = useRef(pagination.page)
   const prevLimitRef = useRef(pagination.limit)
   const prevSearchRef = useRef(searchTerm)
@@ -176,12 +178,17 @@ export default function ClientesPage() {
   // Verificar query param para abrir dialog de criação
   useEffect(() => {
     const createParam = searchParams.get('create')
-    if (createParam === 'true' && dadosIniciaisCarregados) {
-      setClienteCreateResetNonce((n) => n + 1)
-      setIsCreateDialogOpen(true)
-      // Remover query param da URL sem recarregar a página
-      router.replace('/dashboard/clientes', { scroll: false })
+    if (createParam !== 'true') {
+      abrirCriacaoViaQueryConsumidoRef.current = false
+      return
     }
+    if (!dadosIniciaisCarregados) return
+    if (abrirCriacaoViaQueryConsumidoRef.current) return
+    abrirCriacaoViaQueryConsumidoRef.current = true
+    setClienteCreateResetNonce((n) => n + 1)
+    setIsCreateDialogOpen(true)
+    // Remover query param da URL sem recarregar a página
+    router.replace('/dashboard/clientes', { scroll: false })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, dadosIniciaisCarregados])
 
@@ -1407,6 +1414,7 @@ export default function ClientesPage() {
 
       {/* Dialog de Criação de Cliente */}
       <Dialog
+        modal={false}
         open={isCreateDialogOpen}
         onOpenChange={setIsCreateDialogOpen}
       >
@@ -1434,7 +1442,7 @@ export default function ClientesPage() {
       </Dialog>
 
       {/* Dialog de Edição de Cliente */}
-      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+      <Dialog modal={false} open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
         <DialogContent
           className="max-w-4xl max-h-[90vh] overflow-y-auto"
           onPointerDownOutside={(e) => e.preventDefault()}

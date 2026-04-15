@@ -165,9 +165,6 @@ export default function PWAMainPage() {
       // Manter somente os logs mais recentes para evitar crescer indefinidamente
       return next.slice(-25)
     })
-    if (process.env.NODE_ENV !== 'production') {
-      console.log('[PWA Map Debug]', message)
-    }
   }
   
   useEffect(() => {
@@ -190,8 +187,8 @@ export default function PWAMainPage() {
         const role = userData?.role || null
         setRoleFromUserData(cargo || role || null)
       }
-    } catch (error) {
-      console.warn('Erro ao ler perfil/user_data:', error)
+    } catch {
+      /* ignore */
     }
   }, [])
   
@@ -251,8 +248,7 @@ export default function PWAMainPage() {
       })
       
       return isCliente
-    } catch (error) {
-      console.error('Erro ao verificar se é cliente/supervisor:', error)
+    } catch {
       return false
     }
   }, [userRole, roleFromPerfil, roleFromUserData, currentUserRole, pwaUserData.user?.role, isResponsavelObra])
@@ -300,8 +296,8 @@ export default function PWAMainPage() {
 
       setPermitiuLocalizacaoNoLogin(null)
       setShowPermissaoLocalizacaoDialog(true)
-    } catch (error) {
-      console.warn("[PWA] Erro ao validar prompt de localização no login:", error)
+    } catch {
+      /* ignore */
     }
   }, [isClient, pwaUserData.loading, pwaUserData.user])
 
@@ -353,7 +349,6 @@ export default function PWAMainPage() {
           
           // Verificar se tem obra_atual
           if (funcionarioCompleto.obra_atual && funcionarioCompleto.obra_atual.id) {
-            console.log('[PWA] Obra ativa encontrada em obra_atual:', funcionarioCompleto.obra_atual.id)
             setTemObraAtiva(true)
             setLoadingObra(false)
             return
@@ -365,7 +360,6 @@ export default function PWAMainPage() {
               (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
             )
             if (temObraAtiva) {
-              console.log('[PWA] Obra ativa encontrada em funcionarios_obras')
               setTemObraAtiva(true)
               setLoadingObra(false)
               return
@@ -378,7 +372,6 @@ export default function PWAMainPage() {
               (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
             )
             if (temObraAtiva) {
-              console.log('[PWA] Obra ativa encontrada em historico_obras')
               setTemObraAtiva(true)
               setLoadingObra(false)
               return
@@ -402,7 +395,6 @@ export default function PWAMainPage() {
 
         // Tentar buscar dados completos do funcionário via API primeiro
         try {
-          console.log('[PWA] Tentando buscar dados completos do funcionário via API:', funcionarioId)
           const response = await funcionariosApi.obterFuncionario(Number(funcionarioId))
           
           if (response.success && response.data) {
@@ -410,7 +402,6 @@ export default function PWAMainPage() {
             
             // Verificar obra_atual
             if (funcCompleto.obra_atual && funcCompleto.obra_atual.id) {
-              console.log('[PWA] Obra ativa encontrada via API em obra_atual:', funcCompleto.obra_atual.id)
               setTemObraAtiva(true)
               setLoadingObra(false)
               return
@@ -422,30 +413,25 @@ export default function PWAMainPage() {
                 (alocacao: any) => alocacao.status === 'ativo' && alocacao.obra_id
               )
               if (temObraAtiva) {
-                console.log('[PWA] Obra ativa encontrada via API em funcionarios_obras')
                 setTemObraAtiva(true)
                 setLoadingObra(false)
                 return
               }
             }
           }
-        } catch (apiError) {
-          console.warn('[PWA] Erro ao buscar dados completos do funcionário via API, tentando alocações diretamente:', apiError)
+        } catch {
+          /* tentar alocações diretamente */
         }
 
         // Se não encontrou, buscar alocações ativas do funcionário via API
-        console.log('[PWA] Buscando alocações ativas via API para funcionário:', funcionarioId)
         const alocacoes = await getAlocacoesAtivasFuncionario(Number(funcionarioId))
-        
+
         if (alocacoes.success && alocacoes.data && alocacoes.data.length > 0) {
-          console.log('[PWA] Alocações ativas encontradas via API:', alocacoes.data.length)
           setTemObraAtiva(true)
         } else {
-          console.log('[PWA] Nenhuma alocação ativa encontrada via API')
           setTemObraAtiva(false)
         }
-      } catch (error) {
-        console.error('Erro ao verificar obra ativa:', error)
+      } catch {
         setTemObraAtiva(false) // Em caso de erro, considerar sem obra
       } finally {
         setLoadingObra(false)
@@ -489,8 +475,7 @@ export default function PWAMainPage() {
         setRegistrosPendentesAssinatura(pendentes.length)
         const primeiro = pendentes[0]
         setPrimeiroPendenteAssinaturaId(primeiro?.id != null ? String(primeiro.id) : null)
-      } catch (e) {
-        console.warn('[PWA] Erro ao verificar pendentes de assinatura:', e)
+      } catch {
         setPrimeiroPendenteAssinaturaId(null)
       }
     }
@@ -670,8 +655,7 @@ export default function PWAMainPage() {
         }))
 
         setMedicoesResumo(resumo)
-      } catch (error) {
-        console.warn('[PWA] Erro ao carregar cards de medições:', error)
+      } catch {
         setMedicoesResumo([])
       } finally {
         setLoadingMedicoesResumo(false)
@@ -776,13 +760,11 @@ export default function PWAMainPage() {
         } catch (geocodeError: any) {
           // Ignorar erro de geocoding, não é crítico
           if (geocodeError.name !== 'AbortError' && isMounted) {
-            console.warn('Erro ao obter endereço:', geocodeError)
             addMapDebugLog('Erro reverse geocoding', geocodeError?.message || 'erro desconhecido')
           }
         }
       } catch (error: any) {
         if (isMounted) {
-          console.error('Erro ao obter localização:', error)
           setLocationError(error.message || 'Não foi possível obter sua localização')
           addMapDebugLog('Erro geolocalizacao', error?.message || 'erro desconhecido')
         }
@@ -831,8 +813,8 @@ export default function PWAMainPage() {
       }
       sessionStorage.removeItem("pwa_location_prompt_login_token")
       sessionStorage.removeItem("pwa_location_prompt_login_choice")
-    } catch (error) {
-      console.warn("[PWA] Erro ao salvar escolha de localização no login:", error)
+    } catch {
+      /* ignore */
     }
 
     setPermitiuLocalizacaoNoLogin(permitir)
@@ -1196,32 +1178,22 @@ export default function PWAMainPage() {
         throw new Error('Token não encontrado')
       }
       
-      console.log('[PWA Ponto] Dados do usuário:', {
-        id: user.id,
-        email: user.email,
-        profile: user.profile,
-        funcionario_id: user.funcionario_id
-      })
-      
       // Obter funcionarioId - tentar múltiplas abordagens
       let funcionarioId: number | null = null
       
       // Tentar 1: profile.funcionario_id
       if (user.profile?.funcionario_id) {
         funcionarioId = Number(user.profile.funcionario_id)
-        console.log('[PWA Ponto] Funcionário ID encontrado em profile.funcionario_id:', funcionarioId)
       }
       
       // Tentar 2: funcionario_id direto
       if (!funcionarioId && user.funcionario_id) {
         funcionarioId = Number(user.funcionario_id)
-        console.log('[PWA Ponto] Funcionário ID encontrado em funcionario_id:', funcionarioId)
       }
       
       // Tentar 3: user.id se for numérico
       if (!funcionarioId && user.id && !isNaN(Number(user.id)) && !user.id.toString().includes('-')) {
         funcionarioId = Number(user.id)
-        console.log('[PWA Ponto] Funcionário ID encontrado em user.id:', funcionarioId)
       }
       
       // Tentar 4: usar a função utilitária
@@ -1232,11 +1204,8 @@ export default function PWAMainPage() {
             token, 
             'ID do funcionário não encontrado'
           )
-          console.log('[PWA Ponto] Funcionário ID encontrado via getFuncionarioIdWithFallback:', funcionarioId)
-        } catch (error) {
-          console.warn('[PWA Ponto] Erro ao buscar ID via getFuncionarioIdWithFallback:', error)
+        } catch {
           // Se falhar, tentar buscar na API
-          console.warn('[PWA Ponto] Tentando buscar funcionário na API...')
           // Usar URL relativa para aproveitar o rewrite do Next.js
           try {
             const response = await fetch(
@@ -1252,8 +1221,7 @@ export default function PWAMainPage() {
             if (response.ok) {
               const data = await response.json()
               const funcionarios = data.data || []
-              console.log('[PWA Ponto] Funcionários encontrados:', funcionarios.length)
-              
+
               const funcionario = funcionarios.find((f: any) => 
                 f.usuario?.id === user.id || 
                 f.usuario?.email === user.email ||
@@ -1263,24 +1231,18 @@ export default function PWAMainPage() {
               
               if (funcionario && funcionario.id) {
                 funcionarioId = Number(funcionario.id)
-                console.log('[PWA Ponto] Funcionário ID encontrado via API:', funcionarioId)
               }
-            } else {
-              console.error('[PWA Ponto] Erro na resposta da API:', response.status, response.statusText)
             }
-          } catch (apiError) {
-            console.error('[PWA Ponto] Erro ao buscar funcionário na API:', apiError)
+          } catch {
+            /* ignore */
           }
         }
       }
       
       if (!funcionarioId) {
-        console.error('[PWA Ponto] Não foi possível encontrar o ID do funcionário após todas as tentativas')
         throw new Error('Não foi possível identificar o ID do funcionário. Verifique se seu perfil está vinculado a um funcionário no sistema.')
       }
-      
-      console.log('[PWA Ponto] Usando funcionário ID:', funcionarioId)
-      
+
       const agora = new Date()
       const horaAtual = agora.toTimeString().slice(0, 5)
       const hoje = agora.toISOString().split('T')[0]
@@ -1343,8 +1305,8 @@ export default function PWAMainPage() {
         window.location.reload()
       }, 1000)
       
-    } catch (error: any) {
-      console.error('Erro ao registrar ponto:', error)
+    } catch {
+      /* erro já refletido na UI / reload */
     } finally {
       setIsRegistrandoPonto(false)
     }
@@ -1359,8 +1321,8 @@ export default function PWAMainPage() {
       isEncarregador = parsedUser?.cargo?.toLowerCase().includes('encarregador') || 
                       parsedUser?.cargo?.toLowerCase().includes('supervisor') ||
                       parsedUser?.cargo?.toLowerCase().includes('chefe')
-    } catch (error) {
-      console.error('Erro ao parsear dados do usuário:', error)
+    } catch {
+      /* ignore */
     }
   }
 
