@@ -24,7 +24,7 @@ function generateSecurePassword(length = 12) {
 const userSchema = Joi.object({
   nome: Joi.string().min(2).required(),
   email: Joi.string().email().required(),
-  senha: Joi.string().min(6).required(),
+  senha: Joi.string().min(6).optional(),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$/).optional(),
   telefone: Joi.string().optional(),
   data_nascimento: Joi.date().optional(),

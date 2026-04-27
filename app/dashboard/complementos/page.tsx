@@ -39,6 +39,29 @@ const getAuthToken = () => {
   return localStorage.getItem('access_token') || localStorage.getItem('token')
 }
 
+const formatarDecimalBR = (valor: number) => {
+  return Number(valor || 0).toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })
+}
+
+const parseDecimalBR = (valor: string) => {
+  const normalizado = valor
+    .replace(/[^\d,.-]/g, '')
+    .replace(/\./g, '')
+    .replace(',', '.')
+
+  const numero = Number.parseFloat(normalizado)
+  return Number.isFinite(numero) ? numero : 0
+}
+
+const formatarCentavosDigitadosBR = (valor: string) => {
+  const somenteDigitos = valor.replace(/\D/g, '')
+  const centavos = Number.parseInt(somenteDigitos || '0', 10)
+  return formatarDecimalBR(centavos / 100)
+}
+
 type TipoPrecificacao = 'mensal' | 'unico' | 'por_metro' | 'por_hora' | 'por_dia'
 type Unidade = 'm' | 'h' | 'unidade' | 'dia' | 'mes'
 type TipoComplemento = 'acessorio' | 'servico'
@@ -69,6 +92,7 @@ export default function ComplementosPage() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<ComplementoCatalogo | null>(null)
   const [exportandoCsv, setExportandoCsv] = useState(false)
+  const [precoUnitarioInput, setPrecoUnitarioInput] = useState("")
   
   const [formData, setFormData] = useState<Partial<ComplementoCatalogo>>({
     nome: "",
@@ -232,6 +256,7 @@ export default function ComplementosPage() {
         rule_key: item.rule_key,
         ativo: item.ativo,
       })
+      setPrecoUnitarioInput(formatarDecimalBR(item.preco_unitario_centavos / 100))
     } else {
       setEditingItem(null)
       setFormData({
@@ -246,6 +271,7 @@ export default function ComplementosPage() {
         rule_key: undefined,
         ativo: true,
       })
+      setPrecoUnitarioInput("")
     }
     setIsDialogOpen(true)
   }
@@ -265,6 +291,11 @@ export default function ComplementosPage() {
       rule_key: undefined,
       ativo: true,
     })
+    setPrecoUnitarioInput("")
+  }
+
+  const handlePrecoUnitarioChange = (valor: string) => {
+    setPrecoUnitarioInput(formatarCentavosDigitadosBR(valor))
   }
 
   const handleSave = async () => {
@@ -288,17 +319,21 @@ export default function ComplementosPage() {
     }
 
     try {
-      const payload = {
+      const precoUnitario = parseDecimalBR(precoUnitarioInput)
+      const payload: any = {
         nome: formData.nome!,
         sku: formData.sku!,
         tipo: formData.tipo!,
         tipo_precificacao: formData.tipo_precificacao!,
         unidade: formData.unidade!,
-        preco_unitario_centavos: Math.round((formData.preco_unitario_centavos || 0) * 100),
-        fator: formData.fator,
+        preco_unitario_centavos: Math.round(precoUnitario * 100),
         descricao: formData.descricao || '',
         rule_key: formData.rule_key || '',
         ativo: formData.ativo ?? true
+      }
+
+      if (typeof formData.fator === 'number' && Number.isFinite(formData.fator)) {
+        payload.fator = formData.fator
       }
 
       let response
@@ -926,12 +961,13 @@ export default function ComplementosPage() {
               <div>
                 <Label>Preço Unitário (R$) *</Label>
                 <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  value={formData.preco_unitario_centavos || ''}
-                  onChange={(e) => setFormData({ ...formData, preco_unitario_centavos: parseFloat(e.target.value) || 0 })}
-                  placeholder="0.00"
+                  type="text"
+                  inputMode="decimal"
+                  value={precoUnitarioInput}
+                  onChange={(e) => handlePrecoUnitarioChange(e.target.value)}
+                  onBlur={() => setPrecoUnitarioInput(formatarDecimalBR(parseDecimalBR(precoUnitarioInput)))}
+                  onFocus={(e) => e.currentTarget.select()}
+                  placeholder="0,00"
                 />
               </div>
               {(formData.tipo_precificacao === 'por_metro' || formData.tipo_precificacao === 'por_hora') && (

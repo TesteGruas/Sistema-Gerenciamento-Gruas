@@ -12,9 +12,11 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Building2, Lock, User, Eye, EyeOff } from "lucide-react"
 import { useEnhancedToast } from "@/hooks/use-enhanced-toast"
 import { loadUserPermissions } from "@/lib/auth-permissions"
+import { getRedirectPath } from "@/lib/redirect-handler"
 import { useEmpresa, EmpresaProvider } from "@/hooks/use-empresa"
 import Link from "next/link"
 import Image from "next/image"
+import { getApiBasePath } from "@/lib/runtime-config"
 
 export default function LoginPage() {
   return (
@@ -69,7 +71,7 @@ function LoginPageContent() {
       console.log('Tentando fazer login com:', { email, password })
       
       // Fazer login com as credenciais do formulário
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${getApiBasePath()}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
@@ -181,18 +183,13 @@ function LoginPageContent() {
         // Continuar mesmo se não conseguir carregar permissões
       }
       
-      // Determinar redirecionamento baseado no nível de acesso
-      const userLevel = data.data.level || 0
-      const userRole = (data.data.role || '').toLowerCase()
+      const redirectPath = getRedirectPath({
+        role: data.data.role || data.data.user?.role,
+        level: data.data.level ?? data.data.user?.level,
+        perfil: data.data.perfil || data.data.user?.perfil
+      })
       
-      // Apenas Admin (nível 10) → Dashboard (web)
-      // Demais níveis → PWA
-      let redirectPath = '/pwa'
-      if (userLevel === 10 || userRole === 'admin' || userRole === 'administrador') {
-        redirectPath = '/dashboard'
-      }
-      
-      console.log(`🔄 [Login Web] Redirecionando para: ${redirectPath} (nível: ${userLevel}, role: ${data.data.role})`)
+      console.log(`🔄 [Login Web] Redirecionando para: ${redirectPath} (nível: ${data.data.level}, role: ${data.data.role})`)
       window.location.href = redirectPath
     } catch (error) {
       console.error('Erro no login:', error)

@@ -57,6 +57,26 @@ export interface PWALayoutAppShellProps {
   children: React.ReactNode
 }
 
+function shouldUseDashboardAccess(data: any): boolean {
+  const role = String(
+    data?.role ||
+    data?.user?.role ||
+    data?.perfil?.nome ||
+    data?.user?.perfil?.nome ||
+    ''
+  ).toLowerCase()
+  const level = Number(data?.level || data?.user?.level || 0)
+
+  return (
+    level >= 9 ||
+    role === 'admin' ||
+    role === 'administrador' ||
+    role === 'gestores' ||
+    role === 'gestor' ||
+    role === 'gerente'
+  )
+}
+
 export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
   const pathname = usePathname()
   const router = useRouter()
@@ -108,6 +128,59 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
       setIsClient(true)
     }
   }, [])
+
+  // Perfis web (Admin/Gestores) não devem permanecer no shell PWA.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    if (!isClient) return
+    if (sessionLoading || permissionsLoading) return
+    if (!isAuthenticated) return
+    if (isPwaPublicAuthPath(pathname)) return
+
+    let cancelled = false
+
+    const redirectDashboardUsers = async () => {
+      try {
+        const localData = {
+          role: localStorage.getItem('user_role'),
+          level: localStorage.getItem('user_level'),
+          perfil: JSON.parse(localStorage.getItem('user_perfil') || 'null'),
+          user: JSON.parse(localStorage.getItem('user_data') || 'null')
+        }
+
+        if (shouldUseDashboardAccess(localData)) {
+          window.location.replace('/dashboard')
+          return
+        }
+
+        const token = localStorage.getItem('access_token')
+        if (!token) return
+
+        const apiUrl = getApiBasePath()
+        const response = await fetch(`${apiUrl}/auth/me`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        })
+
+        if (!response.ok || cancelled) return
+
+        const payload = await response.json()
+        if (shouldUseDashboardAccess(payload?.data)) {
+          window.location.replace('/dashboard')
+        }
+      } catch {
+        /* Mantem o fluxo PWA se a verificação falhar. */
+      }
+    }
+
+    redirectDashboardUsers()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isClient, isAuthenticated, sessionLoading, permissionsLoading, pathname])
 
   // Inicializar lembretes locais de notificação (ex: almoço 11:30)
   useEffect(() => {

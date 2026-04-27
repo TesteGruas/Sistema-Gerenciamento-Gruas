@@ -111,6 +111,7 @@ export default function UsuariosPage() {
   const [searchTerm, setSearchTerm] = useState("")
   const [filterRole, setFilterRole] = useState<string>("all")
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [createUserType, setCreateUserType] = useState<"gestor" | "admin" | null>(null)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [editingUser, setEditingUser] = useState<any>(null)
@@ -438,7 +439,9 @@ export default function UsuariosPage() {
 
   const getRoleIcon = (role: string) => {
     switch (role) {
+      case 'administrador': return <Shield className="w-4 h-4" />
       case 'admin': return <Shield className="w-4 h-4" />
+      case 'gerente': return <Settings className="w-4 h-4" />
       case 'gestor': return <Settings className="w-4 h-4" />
       case 'cliente': return <UserCheck className="w-4 h-4" />
       default: return <Users className="w-4 h-4" />
@@ -448,21 +451,11 @@ export default function UsuariosPage() {
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Validar senha
-    if (!userFormData.senha || userFormData.senha.length < 6) {
-      toast({
-        title: "Erro",
-        description: "A senha deve ter no mínimo 6 caracteres",
-        variant: "destructive"
-      })
-      return
-    }
 
-    if (userFormData.senha !== userFormData.confirmarSenha) {
+    if (!userFormData.role) {
       toast({
         title: "Erro",
-        description: "As senhas não coincidem",
+        description: "Selecione o tipo de usuário",
         variant: "destructive"
       })
       return
@@ -477,7 +470,6 @@ export default function UsuariosPage() {
         nome: userFormData.name,
         email: userFormData.email,
         telefone: userFormData.phone,
-        senha: userFormData.senha,
         status: 'Ativo' as 'Ativo' | 'Inativo' | 'Bloqueado' | 'Pendente',
         ...(perfilId && { perfil_id: perfilId })
       }
@@ -493,11 +485,12 @@ export default function UsuariosPage() {
       await carregarUsuarios(currentPage, itemsPerPage)
       
       setIsCreateDialogOpen(false)
+      setCreateUserType(null)
       resetForm()
       
       toast({
         title: "Sucesso",
-        description: "Usuário criado com sucesso!"
+        description: "Usuário criado com sucesso! As credenciais serão enviadas por email."
       })
       
     } catch (error: any) {
@@ -713,6 +706,24 @@ export default function UsuariosPage() {
     setUploadProgress({})
   }
 
+  const openCreateUserDialog = (type: "gestor" | "admin") => {
+    resetForm()
+    setCreateUserType(type)
+    setUserFormData(prev => ({
+      ...prev,
+      role: type
+    }))
+    setIsCreateDialogOpen(true)
+  }
+
+  const handleCreateDialogOpenChange = (open: boolean) => {
+    setIsCreateDialogOpen(open)
+    if (!open) {
+      setCreateUserType(null)
+      resetForm()
+    }
+  }
+
   // Função para fazer upload de arquivos após criar/atualizar usuário
   const uploadUserFiles = async (userId: number) => {
     if (selectedFiles.length === 0) return
@@ -842,6 +853,20 @@ export default function UsuariosPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                onClick={() => openCreateUserDialog("gestor")}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Settings className="w-4 h-4" />
+                Novo gestor
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => openCreateUserDialog("admin")}
+                className="flex items-center gap-2 cursor-pointer"
+              >
+                <Shield className="w-4 h-4" />
+                Novo admin
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => router.push('/dashboard/rh')}
                 className="flex items-center gap-2 cursor-pointer"
@@ -1082,12 +1107,12 @@ export default function UsuariosPage() {
       />
 
       {/* Dialog de Criação de Usuário */}
-      <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
+      <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>
         <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Plus className="w-5 h-5" />
-              Novo Usuário
+              {createUserType === "gestor" ? "Novo gestor" : createUserType === "admin" ? "Novo admin" : "Novo usuário"}
             </DialogTitle>
           </DialogHeader>
           <form onSubmit={handleCreateUser} className="space-y-6">
@@ -1136,29 +1161,15 @@ export default function UsuariosPage() {
 
                 <Separator className="my-4" />
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="senha">Senha *</Label>
-                    <Input
-                      id="senha"
-                      type="password"
-                      value={userFormData.senha}
-                      onChange={(e) => setUserFormData({ ...userFormData, senha: e.target.value })}
-                      placeholder="Mínimo 6 caracteres"
-                      required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">A senha deve ter no mínimo 6 caracteres</p>
-                  </div>
-                  <div>
-                    <Label htmlFor="confirmarSenha">Confirmar Senha *</Label>
-                    <Input
-                      id="confirmarSenha"
-                      type="password"
-                      value={userFormData.confirmarSenha}
-                      onChange={(e) => setUserFormData({ ...userFormData, confirmarSenha: e.target.value })}
-                      placeholder="Repita a senha"
-                      required
-                    />
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                  <div className="flex items-start gap-3">
+                    <Mail className="w-5 h-5 text-blue-700 mt-0.5" />
+                    <div>
+                      <h4 className="font-medium text-blue-900">Envio de acesso por email</h4>
+                      <p className="text-sm text-blue-700 mt-1">
+                        O sistema vai gerar uma senha temporária automaticamente e enviar as credenciais para o email informado.
+                      </p>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
@@ -1169,11 +1180,14 @@ export default function UsuariosPage() {
                   <Select
                     value={userFormData.role}
                     onValueChange={(value) => setUserFormData({ ...userFormData, role: value })}
+                    disabled={!!createUserType}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="gestor">Gestor</SelectItem>
                       <SelectItem value="administrador">Administrador</SelectItem>
                       <SelectItem value="gerente">Gerente</SelectItem>
                       <SelectItem value="operador">Operador</SelectItem>
@@ -1380,6 +1394,8 @@ export default function UsuariosPage() {
                       <SelectValue placeholder="Selecione a função" />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="gestor">Gestor</SelectItem>
                       <SelectItem value="administrador">Administrador</SelectItem>
                       <SelectItem value="gerente">Gerente</SelectItem>
                       <SelectItem value="operador">Operador</SelectItem>

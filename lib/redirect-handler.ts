@@ -2,8 +2,8 @@
  * Utilitário para gerenciar redirecionamento inteligente baseado no nível de acesso
  * 
  * Regras de redirecionamento:
- * - Sistema Web (dashboard): Níveis 8+ e Cliente (nível 1)
- * - App PWA: Níveis 7 ou menos (exceto Cliente)
+ * - Sistema Web (dashboard): Admin e Gestores
+ * - App PWA: perfis operacionais/clientes
  */
 
 export interface UserData {
@@ -67,19 +67,25 @@ export function getUserLevel(userData: UserData | null): number {
 
 /**
  * Verifica se o usuário deve acessar o sistema web (dashboard)
- * Regra: APENAS ADMIN (nível 10) pode acessar o dashboard
+ * Regra: Admin e Gestores acessam o dashboard
  */
 export function shouldAccessWeb(userData: UserData | null): boolean {
   if (!userData) return false
 
   const level = getUserLevel(userData)
+  const role = (userData.role || userData.perfil?.nome || '').toLowerCase()
   
-  // Apenas Admin (nível 10) → Web/Dashboard
-  if (level === 10) {
+  if (
+    level >= 9 ||
+    role === 'admin' ||
+    role === 'administrador' ||
+    role === 'gestores' ||
+    role === 'gestor' ||
+    role === 'gerente'
+  ) {
     return true
   }
 
-  // Demais níveis → PWA
   return false
 }
 
@@ -94,15 +100,14 @@ export function isGestorUser(userData: UserData | null): boolean {
 /**
  * Redireciona usuário para a página correta baseado no nível de acesso
  * 
- * - Apenas Admin (nível 10) → Dashboard (web)
- * - Demais níveis → PWA
+ * - Admin e Gestores → Dashboard (web)
+ * - Demais perfis → PWA
  */
 export function getRedirectPath(userData: UserData | null): string {
   if (!userData) {
     return '/pwa/login'
   }
 
-  // Verificar se deve acessar web (apenas Admin)
   if (shouldAccessWeb(userData)) {
     return '/dashboard'
   }

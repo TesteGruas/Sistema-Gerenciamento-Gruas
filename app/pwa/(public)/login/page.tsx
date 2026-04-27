@@ -120,9 +120,7 @@ function PWALoginPageContent(): JSX.Element {
     setIsLoading(true)
 
     try {
-      // Usar o rewrite do Next.js (que redireciona /api/* para o backend correto)
-      // Isso garante que sempre use a porta 3001 configurada no next.config.mjs
-      const loginUrl = '/api/auth/login'
+      const loginUrl = `${getApiBasePath()}/auth/login`
       
       console.log('[PWA Login] Tentando login em:', loginUrl)
       console.log('[PWA Login] Dados:', { email: formData.usuario })
@@ -290,18 +288,14 @@ function PWALoginPageContent(): JSX.Element {
           // Continuar mesmo se não conseguir carregar permissões
         }
 
-        // Determinar redirecionamento baseado no nível de acesso
-        const userLevel = data.data.level || 0
-        const userRole = (data.data.role || '').toLowerCase()
-        
-        // Apenas Admin (nível 10) → Dashboard (web)
-        // Demais níveis → PWA
-        let redirectPath = '/pwa'
-        if (userLevel === 10 || userRole === 'admin' || userRole === 'administrador') {
-          redirectPath = '/dashboard'
-        }
+        const { getRedirectPath } = await import('@/lib/redirect-handler')
+        const redirectPath = getRedirectPath({
+          role: data.data.role || data.data.user?.role,
+          level: data.data.level ?? data.data.user?.level,
+          perfil: data.data.perfil || data.data.user?.perfil
+        })
 
-        console.log(`🔄 [PWA Login] Redirecionando para: ${redirectPath} (nível: ${userLevel}, role: ${data.data.role})`)
+        console.log(`🔄 [PWA Login] Redirecionando para: ${redirectPath} (nível: ${data.data.level}, role: ${data.data.role})`)
 
         // Resetar contador de redirecionamentos após login bem-sucedido
         if (typeof window !== 'undefined') {
@@ -352,7 +346,7 @@ function PWALoginPageContent(): JSX.Element {
         console.error('[PWA Login] Erro de conexão:', {
           message: error.message,
           apiUrl: apiUrl,
-          loginUrl: '/api/auth/login',
+          loginUrl: `${apiUrl}/auth/login`,
           suggestion: 'Verifique se o backend está rodando na porta 3001 e acessível'
         })
       } else {

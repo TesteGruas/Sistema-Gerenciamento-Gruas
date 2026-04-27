@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { getRedirectPath, getUserLevel } from '@/lib/redirect-handler'
+import { getRedirectPath } from '@/lib/redirect-handler'
 
 export default function RedirectPage() {
   const router = useRouter()
@@ -61,19 +61,9 @@ export default function RedirectPage() {
           }
         }
 
-        // Obter nível do usuário
-        const level = getUserLevel(userData)
-        const role = (userData.role || userRole || '').toLowerCase()
+        const redirectPath = getRedirectPath(userData)
 
-        // Determinar redirecionamento baseado no nível
-        // Apenas Admin (nível 10) → Dashboard (web)
-        // Demais níveis → PWA
-        let redirectPath = '/pwa'
-        if (level === 10 || role === 'admin' || role === 'administrador') {
-          redirectPath = '/dashboard'
-        }
-
-        console.log(`🔄 [Redirect] Redirecionando para: ${redirectPath} (nível: ${level}, role: ${role})`)
+        console.log(`🔄 [Redirect] Redirecionando para: ${redirectPath}`)
         router.push(redirectPath)
       } catch (error) {
         console.error('Erro ao redirecionar:', error)

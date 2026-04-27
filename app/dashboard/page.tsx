@@ -48,17 +48,16 @@ export default function Dashboard() {
   const [dashboardData, setDashboardData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   
-  // Redirecionar usuários que não são Admin para o PWA
-  // Apenas Admin pode acessar o dashboard
+  // Redirecionar usuários sem acesso ao dashboard web para o PWA
   useEffect(() => {
     if (!permissionsLoading) {
-      if (!isAdmin() && level !== 10) {
+      if (!canAccessDashboard()) {
         console.log(`🚫 [Dashboard Page] Acesso negado. Redirecionando para PWA. (Level: ${level}, isAdmin: ${isAdmin()})`)
         window.location.href = '/pwa'
         return
       }
     }
-  }, [permissionsLoading, isAdmin, level])
+  }, [permissionsLoading, canAccessDashboard, isAdmin, level])
   
   // Redirecionar Operários para o PWA - não devem ter acesso ao dashboard web
   useEffect(() => {
@@ -68,8 +67,8 @@ export default function Dashboard() {
     }
   }, [permissionsLoading, isOperator])
   
-  // Não renderizar nada se não for Admin (enquanto redireciona)
-  if (!permissionsLoading && !isAdmin() && level !== 10) {
+  // Não renderizar nada se não tiver acesso ao dashboard web (enquanto redireciona)
+  if (!permissionsLoading && !canAccessDashboard()) {
     return null
   }
   
