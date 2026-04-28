@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { AuthService } from "@/app/lib/auth"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,6 +28,7 @@ export default function LoginPage() {
 }
 
 function LoginPageContent() {
+  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [rememberEmail, setRememberEmail] = useState(false)
@@ -36,6 +38,27 @@ function LoginPageContent() {
   const [mounted, setMounted] = useState(false)
   const { showAuthError, showSuccess } = useEnhancedToast()
   const { empresa, getEnderecoCompleto, getContatoCompleto } = useEmpresa()
+
+  const resetLoginForm = () => {
+    setPassword("")
+    if (!rememberEmail) {
+      setEmail("")
+    }
+    setShowPassword(false)
+  }
+
+  const clearAppCachesBeforeRedirect = async () => {
+    if (typeof window === "undefined") return
+
+    try {
+      if ("caches" in window) {
+        const cacheKeys = await caches.keys()
+        await Promise.all(cacheKeys.map((key) => caches.delete(key)))
+      }
+    } catch (error) {
+      console.warn("Não foi possível limpar caches do navegador:", error)
+    }
+  }
 
   // Marcar componente como montado (apenas no cliente)
   useEffect(() => {
@@ -59,9 +82,9 @@ function LoginPageContent() {
     
     if (AuthService.isAuthenticated()) {
       // Se já tem token, redirecionar para dashboard
-      window.location.href = '/dashboard'
+      router.replace('/dashboard')
     }
-  }, [mounted])
+  }, [mounted, router])
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -190,9 +213,12 @@ function LoginPageContent() {
       })
       
       console.log(`🔄 [Login Web] Redirecionando para: ${redirectPath} (nível: ${data.data.level}, role: ${data.data.role})`)
-      window.location.href = redirectPath
+      resetLoginForm()
+      await clearAppCachesBeforeRedirect()
+      router.replace(redirectPath)
     } catch (error) {
       console.error('Erro no login:', error)
+      resetLoginForm()
       showAuthError(error)
     } finally {
       setLoading(false)
