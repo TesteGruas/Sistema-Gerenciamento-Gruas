@@ -104,6 +104,39 @@ const roleColors = {
   user: "bg-gray-100 text-gray-800"
 }
 
+function normalizeNomePerfil(s: string) {
+  return String(s)
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+}
+
+/** Escolhe um perfil_id ao criar usuário pelos atalhos Admin / Gestor, respeitando os perfis reais do banco. */
+function pickSeedPerfilId(
+  type: "gestor" | "admin",
+  lista: Perfil[],
+  legacyRoleToId: (slug: string) => number | null
+): string {
+  const ativos = lista.filter((p) => p.status === "Ativo")
+  if (ativos.length === 0) return ""
+  const want = legacyRoleToId(type === "admin" ? "admin" : "gestor")
+  if (want != null && ativos.some((p) => p.id === want)) return String(want)
+  if (type === "admin") {
+    const hit = ativos.find((p) => normalizeNomePerfil(p.nome).includes("administr"))
+    const sorted = [...ativos].sort((a, b) => b.nivel_acesso - a.nivel_acesso)
+    const id = hit?.id ?? sorted[0]?.id
+    return id != null ? String(id) : ""
+  }
+  const hit = ativos.find((p) => {
+    const n = normalizeNomePerfil(p.nome)
+    return n.includes("gerente") || n === "gestor"
+  })
+  const sorted = [...ativos].sort((a, b) => b.nivel_acesso - a.nivel_acesso)
+  const id = hit?.id ?? sorted[1]?.id ?? sorted[0]?.id
+  return id != null ? String(id) : ""
+}
+
 
 export default function UsuariosPage() {
   const router = useRouter()
@@ -179,6 +212,8 @@ export default function UsuariosPage() {
     gerente: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
     operador: ["obras_read", "gruas_read"],
     visualizador: ["obras_read", "gruas_read"],
+    supervisor: ["obras", "gruas", "funcionarios", "funcionarios_read", "relatorios", "relatorios_read"],
+    financeiro: ["financeiro", "financeiro_read", "relatorios_read"],
     // Manter compatibilidade com roles antigos
     admin: ["all"],
     gestor: ["obras", "gruas", "funcionarios", "financeiro", "estoque", "relatorios"],
@@ -188,46 +223,79 @@ export default function UsuariosPage() {
     cliente: ["obras_read", "gruas_read"]
   }
 
+  const inferRolePermissionsKeyFromPerfilNome = (
+    nome: string
+  ): keyof typeof rolePermissions | undefined => {
+    const n = normalizeNomePerfil(nome)
+    if (n.includes("administr") || n === "admin") return "administrador"
+    if (n.includes("gerente") || n.includes("gestor")) return "gerente"
+    if (n.includes("financeiro")) return "financeiro"
+    if (n.includes("supervisor")) return "supervisor"
+    if (n.includes("operador")) return "operador"
+    if (n.includes("visualizador")) return "visualizador"
+    if (n.includes("cliente")) return "cliente"
+    return undefined
+  }
+
+  const getPermissionsPreviewBadges = (roleFormValue: string): string[] => {
+    if (!roleFormValue) return []
+    if (/^\d+$/.test(roleFormValue.trim())) {
+      const id = parseInt(roleFormValue, 10)
+      const p = perfis.find((x) => x.id === id)
+      if (!p) return []
+      const key = inferRolePermissionsKeyFromPerfilNome(p.nome)
+      if (key && rolePermissions[key]) return [...rolePermissions[key]]
+      return []
+    }
+    const k = roleFormValue as keyof typeof rolePermissions
+    return rolePermissions[k] ? [...rolePermissions[k]] : []
+  }
+
   // Funções para o sistema de permissões
-  const carregarDadosPermissoes = async () => {
+  const carregarDadosPermissoes = async (): Promise<{
+    perfis: Perfil[]
+    permissoes: Permissao[]
+  } | null> => {
     try {
       setLoadingPermissoes(true)
-      
-      // Verificar se já temos os dados carregados
+
       if (perfis.length > 0 && permissoes.length > 0) {
-        setLoadingPermissoes(false)
-        return
+        return { perfis, permissoes }
       }
-      
+
       const [perfisData, permissoesData] = await Promise.all([
         apiPerfis.listar(),
-        apiPermissoes.listar()
+        apiPermissoes.listar(),
       ])
+      const permissoesFiltradas = utilsPermissoes.filtrarAtivas(permissoesData)
       setPerfis(perfisData)
-      setPermissoes(utilsPermissoes.filtrarAtivas(permissoesData))
+      setPermissoes(permissoesFiltradas)
+      return { perfis: perfisData, permissoes: permissoesFiltradas }
     } catch (error: any) {
-      console.error('Erro ao carregar dados de permissões:', error)
-      
-      // Se for erro de autenticação, redirecionar para login
-      if (error.message?.includes('Token de acesso requerido') || 
-          error.message?.includes('401') || 
-          error.message?.includes('403')) {
+      console.error("Erro ao carregar dados de permissões:", error)
+
+      if (
+        error.message?.includes("Token de acesso requerido") ||
+        error.message?.includes("401") ||
+        error.message?.includes("403")
+      ) {
         toast({
           title: "Sessão Expirada",
           description: "Sua sessão expirou. Faça login novamente.",
-          variant: "destructive"
+          variant: "destructive",
         })
         setTimeout(() => {
-          window.location.href = '/'
+          window.location.href = "/"
         }, 2000)
-        return
+        return null
       }
-      
+
       toast({
         title: "Erro",
         description: "Erro ao carregar dados de permissões",
-        variant: "destructive"
+        variant: "destructive",
       })
+      return null
     } finally {
       setLoadingPermissoes(false)
     }
@@ -311,20 +379,40 @@ export default function UsuariosPage() {
   // Função para mapear role para perfil_id
   const getPerfilIdByRole = (role: string): number | null => {
     const roleToPerfilMap: { [key: string]: number } = {
-      'admin': 1,        // Administrador
-      'gerente': 2,      // Gerente
-      'operador': 4,     // Operador
-      'visualizador': 5, // Visualizador
-      'administrador': 1, // Administrador (alternativo)
-      'gestor': 2,       // Gerente (alternativo)
-      'cliente': 5,      // Cliente como Visualizador
-      'funcionario_nivel_1': 4, // Operador
-      'funcionario_nivel_2': 5, // Migrado para Cliente/Visualizador
-      'supervisor': 5,   // Supervisor migrado para Cliente/Visualizador
-      'funcionario_nivel_3': 2  // Gerente
+      admin: 1,
+      gerente: 2,
+      operador: 4,
+      visualizador: 5,
+      administrador: 1,
+      gestor: 2,
+      cliente: 5,
+      funcionario_nivel_1: 4,
+      funcionario_nivel_2: 5,
+      supervisor: 5,
+      funcionario_nivel_3: 2,
     }
-    console.log('🔍 DEBUG: Mapeando role:', role, '-> perfil_id:', roleToPerfilMap[role] || null)
     return roleToPerfilMap[role] || null
+  }
+
+  /** Valor do select: id numérico do perfil (preferencial) ou slug legado. */
+  const resolvePerfilIdFromFormValue = (value: string): number | null => {
+    const trimmed = value.trim()
+    if (/^\d+$/.test(trimmed)) {
+      const id = parseInt(trimmed, 10)
+      return Number.isFinite(id) ? id : null
+    }
+    return getPerfilIdByRole(trimmed)
+  }
+
+  const perfisParaSelectUsuario = (): Perfil[] => {
+    const ativos = perfis.filter((p) => p.status === "Ativo")
+    if (!isEditDialogOpen || !editingUser?.perfil?.id) return ativos
+    const pid = editingUser.perfil.id
+    if (!ativos.some((p) => p.id === pid)) {
+      const extra = perfis.find((p) => p.id === pid)
+      return extra ? [...ativos, extra] : ativos
+    }
+    return ativos
   }
 
   const carregarUsuarios = async (page: number = 1, limit: number = itemsPerPage, search?: string, role?: string) => {
@@ -465,7 +553,7 @@ export default function UsuariosPage() {
       setCreating(true)
       
       // Converter dados do frontend para formato do backend
-      const perfilId = getPerfilIdByRole(userFormData.role)
+      const perfilId = resolvePerfilIdFromFormValue(userFormData.role)
       const dadosBackend = {
         nome: userFormData.name,
         email: userFormData.email,
@@ -505,19 +593,38 @@ export default function UsuariosPage() {
     }
   }
 
-  const handleEditUser = (usuario: any) => {
+  const handleEditUser = async (usuario: UsuarioFrontend) => {
     setEditingUser(usuario)
+    setSelectedFiles([])
+    setUploadProgress({})
+
+    const dados = await carregarDadosPermissoes()
+    const listaPerfis = dados?.perfis ?? perfis
+
+    let roleVal = ""
+    if (usuario.perfil?.id != null) {
+      roleVal = String(usuario.perfil.id)
+    } else {
+      const match = listaPerfis.find(
+        (p) => p.nome.toLowerCase() === usuario.role.toLowerCase()
+      )
+      if (match) {
+        roleVal = String(match.id)
+      } else {
+        const legado = getPerfilIdByRole(usuario.role)
+        roleVal = legado != null ? String(legado) : usuario.role
+      }
+    }
+
     setUserFormData({
       name: usuario.name,
       email: usuario.email,
       phone: usuario.phone,
-      role: usuario.role,
+      role: roleVal,
       permissions: usuario.permissions,
-      senha: '',
-      confirmarSenha: ''
+      senha: "",
+      confirmarSenha: "",
     })
-    setSelectedFiles([])
-    setUploadProgress({})
     setIsEditDialogOpen(true)
   }
 
@@ -551,10 +658,8 @@ export default function UsuariosPage() {
       setUpdating(true)
       
       // Converter dados do frontend para formato do backend
-      const perfilId = getPerfilIdByRole(userFormData.role)
-      console.log('🔍 DEBUG: Role selecionado:', userFormData.role)
-      console.log('🔍 DEBUG: Perfil ID mapeado:', perfilId)
-      
+      const perfilId = resolvePerfilIdFromFormValue(userFormData.role)
+
       const dadosBackend: any = {
         nome: userFormData.name,
         email: userFormData.email,
@@ -567,8 +672,6 @@ export default function UsuariosPage() {
       if (userFormData.senha) {
         dadosBackend.senha = userFormData.senha
       }
-      
-      console.log('🔍 DEBUG: Payload enviado:', dadosBackend)
       
       await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
       
@@ -706,13 +809,22 @@ export default function UsuariosPage() {
     setUploadProgress({})
   }
 
-  const openCreateUserDialog = (type: "gestor" | "admin") => {
-    resetForm()
+  const openCreateUserDialog = async (type: "gestor" | "admin") => {
     setCreateUserType(type)
-    setUserFormData(prev => ({
-      ...prev,
-      role: type
-    }))
+    const dados = await carregarDadosPermissoes()
+    const listaPerfis = dados?.perfis ?? perfis
+    const seed = pickSeedPerfilId(type, listaPerfis, getPerfilIdByRole)
+    setUserFormData({
+      name: "",
+      email: "",
+      phone: "",
+      role: seed || type,
+      permissions: [],
+      senha: "",
+      confirmarSenha: "",
+    })
+    setSelectedFiles([])
+    setUploadProgress({})
     setIsCreateDialogOpen(true)
   }
 
@@ -1180,18 +1292,18 @@ export default function UsuariosPage() {
                   <Select
                     value={userFormData.role}
                     onValueChange={(value) => setUserFormData({ ...userFormData, role: value })}
-                    disabled={!!createUserType}
+                    disabled={!!createUserType || (loadingPermissoes && perfis.length === 0)}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione a função" />
+                      <SelectValue placeholder={loadingPermissoes && perfis.length === 0 ? "Carregando perfis…" : "Selecione o perfil"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="administrador">Administrador</SelectItem>
-                      <SelectItem value="gerente">Gerente</SelectItem>
-                      <SelectItem value="operador">Operador</SelectItem>
-                      <SelectItem value="visualizador">Visualizador</SelectItem>
+                      {perfisParaSelectUsuario().map((perfil) => (
+                        <SelectItem key={perfil.id} value={String(perfil.id)}>
+                          {perfil.nome}
+                          <span className="text-muted-foreground"> — Nível {perfil.nivel_acesso}</span>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1200,15 +1312,21 @@ export default function UsuariosPage() {
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <h4 className="font-medium text-blue-900 mb-2">Permissões Automáticas</h4>
                     <p className="text-sm text-blue-700 mb-3">
-                      As seguintes permissões serão atribuídas automaticamente baseadas na função selecionada:
+                      Prévia aproximada; o acesso real segue o cadastro do perfil em Gerenciar Permissões.
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(rolePermissions[userFormData.role as keyof typeof rolePermissions] || []).map((permission) => (
-                        <Badge key={permission} variant="outline" className="text-xs">
-                          {availablePermissions[permission as keyof typeof availablePermissions] || permission}
-                        </Badge>
-                      ))}
-                    </div>
+                    {getPermissionsPreviewBadges(userFormData.role).length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {getPermissionsPreviewBadges(userFormData.role).map((permission) => (
+                          <Badge key={permission} variant="outline" className="text-xs">
+                            {availablePermissions[permission as keyof typeof availablePermissions] || permission}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-blue-700">
+                        Este perfil usa as permissões configuradas na lista de perfis. Abra Gerenciar Permissões para ver ou editar o detalhamento.
+                      </p>
+                    )}
                   </div>
                 )}
               </TabsContent>
@@ -1389,17 +1507,18 @@ export default function UsuariosPage() {
                   <Select
                     value={userFormData.role}
                     onValueChange={(value) => setUserFormData({ ...userFormData, role: value })}
+                    disabled={loadingPermissoes && perfis.length === 0}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Selecione a função" />
+                      <SelectValue placeholder={loadingPermissoes && perfis.length === 0 ? "Carregando perfis…" : "Selecione o perfil"} />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="gestor">Gestor</SelectItem>
-                      <SelectItem value="administrador">Administrador</SelectItem>
-                      <SelectItem value="gerente">Gerente</SelectItem>
-                      <SelectItem value="operador">Operador</SelectItem>
-                      <SelectItem value="visualizador">Visualizador</SelectItem>
+                      {perfisParaSelectUsuario().map((perfil) => (
+                        <SelectItem key={perfil.id} value={String(perfil.id)}>
+                          {perfil.nome}
+                          <span className="text-muted-foreground"> — Nível {perfil.nivel_acesso}</span>
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -1408,15 +1527,21 @@ export default function UsuariosPage() {
                   <div className="bg-blue-50 p-4 rounded-lg border border-blue-200">
                     <h4 className="font-medium text-blue-900 mb-2">Permissões Automáticas</h4>
                     <p className="text-sm text-blue-700 mb-3">
-                      As seguintes permissões serão atribuídas automaticamente baseadas na função selecionada:
+                      Prévia aproximada; o acesso real segue o cadastro do perfil em Gerenciar Permissões.
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      {(rolePermissions[userFormData.role as keyof typeof rolePermissions] || []).map((permission) => (
-                        <Badge key={permission} variant="outline" className="text-xs">
-                          {availablePermissions[permission as keyof typeof availablePermissions] || permission}
-                        </Badge>
-                      ))}
-                    </div>
+                    {getPermissionsPreviewBadges(userFormData.role).length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {getPermissionsPreviewBadges(userFormData.role).map((permission) => (
+                          <Badge key={permission} variant="outline" className="text-xs">
+                            {availablePermissions[permission as keyof typeof availablePermissions] || permission}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-blue-700">
+                        Este perfil usa as permissões configuradas na lista de perfis. Abra Gerenciar Permissões para ver ou editar o detalhamento.
+                      </p>
+                    )}
                   </div>
                 )}
               </TabsContent>

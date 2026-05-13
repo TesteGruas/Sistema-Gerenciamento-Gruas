@@ -228,10 +228,8 @@ export function getPWAHomePage(roleName: RoleName): string {
   switch (roleName) {
     case 'Admin':
     case 'Gestores':
+    case 'Financeiro':
       return '/pwa' // Dashboard principal do PWA
-    
-    case 'Supervisores':
-      return '/pwa/aprovacoes' // Supervisores vão direto para aprovações
     
     case 'Clientes':
       return '/pwa/aprovacoes' // Clientes vão direto para aprovações (supervisão das horas)
@@ -254,9 +252,9 @@ export function getPWARoleDescription(roleName: RoleName): string {
     
     case 'Gestores':
       return 'Acesso completo com gerenciamento de equipes e aprovações'
-    
-    case 'Supervisores':
-      return 'Mesmo acesso do Cliente: visualização de obras, documentos e assinaturas dos pontos dos funcionários'
+
+    case 'Financeiro':
+      return 'Acesso ao módulo financeiro e relatórios (use o painel web para gestão completa)'
     
     case 'Clientes':
       return 'Vê os funcionários da obra, pode ver documentos da obra e assinaturas dos pontos dos funcionários'
@@ -297,15 +295,8 @@ export const PWA_FEATURES: Record<RoleName, string[]> = {
     'Notificações',
     'Configurações avançadas'
   ],
-  'Supervisores': [
-    'Visualização de obras',
-    'Visualização de gruas',
-    'Visualização de funcionários da obra',
-    'Visualização de ponto dos funcionários',
-    'Aprovação de horas extras dos funcionários',
-    'Visualização de documentos',
-    'Gerenciamento de documentos',
-    'Assinatura de documentos',
+  'Financeiro': [
+    'Dashboard web recomendado para gestão financeira',
     'Notificações'
   ],
   'Clientes': [

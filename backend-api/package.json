@@ -30,7 +30,6 @@
   "author": "Sistema IRBANA",
   "license": "MIT",
   "dependencies": {
-    "-": "^0.0.1",
     "@google/generative-ai": "^0.21.0",
     "@supabase/gotrue-js": "^2.80.0",
     "@supabase/supabase-js": "^2.39.0",

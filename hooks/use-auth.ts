@@ -103,7 +103,13 @@ export function useAuth() {
             let user: User | null = null
 
             if (payload) {
-              const role = perfil?.nome || payload.role || payload.user_metadata?.role
+              const storedRole =
+                typeof window !== "undefined" ? localStorage.getItem("user_role") : null
+              const role =
+                storedRole ||
+                perfil?.nome ||
+                payload.role ||
+                payload.user_metadata?.role
               user = {
                 id: String(payload.sub || payload.user_id || ''),
                 email: String(payload.email || ''),

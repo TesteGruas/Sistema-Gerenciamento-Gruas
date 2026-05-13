@@ -1,7 +1,7 @@
 /**
  * Tipos e Interfaces do Sistema de Permissões Simplificado
  * 
- * Sistema baseado em 4 roles principais com hierarquia de acesso.
+ * Sistema baseado em roles principais com hierarquia de acesso (inclui Financeiro).
  */
 
 // ========================================
@@ -9,9 +9,9 @@
 // ========================================
 
 /**
- * Nomes dos 4 roles principais do sistema
+ * Nomes dos roles principais do sistema (alinhado ao backend `roles.js`)
  */
-export type RoleName = 'Admin' | 'Gestores' | 'Operários' | 'Clientes'
+export type RoleName = 'Admin' | 'Gestores' | 'Financeiro' | 'Operários' | 'Clientes'
 
 /**
  * Formato de uma permissão: "modulo:acao"
@@ -80,7 +80,7 @@ export interface AuthContextType {
 }
 
 // ========================================
-// CONSTANTES DOS 4 ROLES
+// CONSTANTES DOS ROLES
 // ========================================
 
 export const ROLES: Role[] = [
@@ -261,6 +261,42 @@ export const ROLES: Role[] = [
       'notificacoes:visualizar',
       'notificacoes:gerenciar'
     ]
+  },
+  {
+    id: 6,
+    nome: 'Financeiro',
+    nivel: 8,
+    descricao: 'Gestão financeira, orçamentos, contratos e relatórios financeiros',
+    permissoes: [
+      'dashboard:visualizar',
+      'financeiro:visualizar',
+      'financeiro:criar',
+      'financeiro:editar',
+      'financeiro:excluir',
+      'financeiro:gerenciar',
+      'financeiro:relatorios',
+      'orcamentos:visualizar',
+      'orcamentos:criar',
+      'orcamentos:editar',
+      'orcamentos:excluir',
+      'orcamentos:gerenciar',
+      'contratos:visualizar',
+      'contratos:criar',
+      'contratos:editar',
+      'contratos:excluir',
+      'contratos:gerenciar',
+      'clientes:visualizar',
+      'clientes:gerenciar',
+      'documentos:visualizar',
+      'documentos:gerenciar',
+      'assinatura_digital:visualizar',
+      'assinatura_digital:gerenciar',
+      'notificacoes:visualizar',
+      'notificacoes:gerenciar',
+      'relatorios:visualizar',
+      'relatorios:gerenciar',
+      'relatorios:exportar'
+    ]
   }
 ]
 
@@ -275,7 +311,8 @@ export const ROLES_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Admin': ROLES[0].permissoes,
   'Gestores': ROLES[1].permissoes,
   'Operários': ROLES[2].permissoes,
-  'Clientes': ROLES[3].permissoes
+  'Clientes': ROLES[3].permissoes,
+  'Financeiro': ROLES[4].permissoes
 }
 
 /**
@@ -284,6 +321,7 @@ export const ROLES_PERMISSIONS: Record<RoleName, Permission[]> = {
 export const ROLES_LEVELS: Record<RoleName, AccessLevel> = {
   'Admin': 10,
   'Gestores': 9,
+  'Financeiro': 8,
   'Clientes': 6,
   'Operários': 4
 }
@@ -345,6 +383,7 @@ export type ActionName = typeof ACTIONS[keyof typeof ACTIONS]
 export const PWA_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Admin': ['*'],
   'Gestores': ['*'],
+  'Financeiro': ['dashboard:visualizar', 'financeiro:visualizar', 'financeiro:gerenciar'],
   'Clientes': [
     'ponto:visualizar',
     'ponto:aprovacoes',
@@ -423,7 +462,11 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
   'operario': 'Operários',
   'clientes': 'Clientes',
   'cliente': 'Clientes',
-  'visualizador': 'Clientes' // Visualizador tem as mesmas permissões que Cliente
+  'visualizador': 'Clientes', // Visualizador tem as mesmas permissões que Cliente
+  'Financeiro': 'Financeiro',
+  'financeiro': 'Financeiro',
+  'Financeiro/1': 'Financeiro',
+  'financeiro/1': 'Financeiro'
 }
 
 /**
@@ -431,7 +474,11 @@ export const ROLE_NAME_MAPPING: Record<string, RoleName> = {
  */
 export function normalizeRoleName(roleName: string | null | undefined): RoleName | null {
   if (!roleName) return null
-  return ROLE_NAME_MAPPING[roleName] || null
+  const mapped = ROLE_NAME_MAPPING[roleName]
+  if (mapped) return mapped
+  const lower = String(roleName).trim().toLowerCase()
+  if (lower.includes('financeiro')) return 'Financeiro'
+  return null
 }
 
 /**

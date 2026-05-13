@@ -30,29 +30,35 @@ export interface UserData {
 
 /**
  * Obtém o nível de acesso do usuário
- * Prioridade: level direto > perfil.nivel_acesso > role mapeado
+ * Prioridade: perfil.nivel_acesso (banco) > level do login > mapeamento por nome de role
  */
 export function getUserLevel(userData: UserData | null): number {
   if (!userData) return 0
 
-  // 1. Tentar pegar level direto (vem do backend)
-  if (userData.level !== undefined && userData.level !== null) {
-    return userData.level
+  // 1. Nível do perfil no banco (fonte de verdade quando o login envia level inconsistente, ex.: 0)
+  const perfilNivel = userData.perfil?.nivel_acesso
+  if (perfilNivel !== undefined && perfilNivel !== null && Number(perfilNivel) > 0) {
+    return Number(perfilNivel)
   }
 
-  // 2. Tentar pegar do perfil
-  if (userData.perfil?.nivel_acesso !== undefined && userData.perfil.nivel_acesso !== null) {
-    return userData.perfil.nivel_acesso
+  // 2. Level explícito do backend (aceitar 0 como “ausente”: cair para o mapa por role)
+  if (
+    userData.level !== undefined &&
+    userData.level !== null &&
+    Number(userData.level) > 0
+  ) {
+    return Number(userData.level)
   }
 
   // 3. Mapear role para nível (fallback)
-  const role = (userData.role || '').toLowerCase()
+  const role = (userData.role || userData.perfil?.nome || "").toLowerCase()
   const roleLevelMap: Record<string, number> = {
     'admin': 10,
     'administrador': 10,
     'gestores': 9,
     'gerente': 8,
     'financeiro': 8,
+    'financeiro/1': 8,
     'supervisores': 6, // Supervisor migrado para Cliente (nível 6)
     'supervisor': 6, // Supervisor migrado para Cliente (nível 6)
     'clientes': 6,
@@ -67,21 +73,23 @@ export function getUserLevel(userData: UserData | null): number {
 
 /**
  * Verifica se o usuário deve acessar o sistema web (dashboard)
- * Regra: Admin e Gestores acessam o dashboard
+ * Regra: nível ≥ 8 no perfil, ou perfil/role administrativo (admin, gestor, financeiro, etc.)
  */
 export function shouldAccessWeb(userData: UserData | null): boolean {
   if (!userData) return false
 
   const level = getUserLevel(userData)
   const role = (userData.role || userData.perfil?.nome || '').toLowerCase()
-  
+
+  // Web: nível ≥ 8 (Financeiro, Gerente, etc.) ou roles administrativos explícitos
   if (
-    level >= 9 ||
+    level >= 8 ||
     role === 'admin' ||
     role === 'administrador' ||
     role === 'gestores' ||
     role === 'gestor' ||
-    role === 'gerente'
+    role === 'gerente' ||
+    role.includes('financeiro')
   ) {
     return true
   }
@@ -99,8 +107,8 @@ export function isGestorUser(userData: UserData | null): boolean {
 
 /**
  * Redireciona usuário para a página correta baseado no nível de acesso
- * 
- * - Admin e Gestores → Dashboard (web)
+ *
+ * - Equipe web (nível ≥ 8, admin, gestão, financeiro, etc.) → Dashboard
  * - Demais perfis → PWA
  */
 export function getRedirectPath(userData: UserData | null): string {
@@ -109,6 +117,10 @@ export function getRedirectPath(userData: UserData | null): string {
   }
 
   if (shouldAccessWeb(userData)) {
+    const nome = (userData.role || userData.perfil?.nome || '').toLowerCase()
+    if (nome.includes('financeiro')) {
+      return '/dashboard/financeiro'
+    }
     return '/dashboard'
   }
 

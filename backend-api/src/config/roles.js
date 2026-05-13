@@ -426,7 +426,10 @@ export const ROLE_NAME_MAPPING = {
   'operários': 'Operários',
   'clientes': 'Clientes',
   'cliente': 'Clientes',
-  'visualizador': 'Clientes' // Visualizador tem as mesmas permissões que Cliente
+  'visualizador': 'Clientes', // Visualizador tem as mesmas permissões que Cliente
+  // Perfis customizados no banco (ex.: Financeiro/1)
+  'Financeiro/1': 'Financeiro',
+  'financeiro/1': 'Financeiro'
 }
 
 /**
@@ -436,7 +439,16 @@ export const ROLE_NAME_MAPPING = {
  */
 export function normalizeRoleName(roleName) {
   if (!roleName) return null
-  return ROLE_NAME_MAPPING[roleName] || null
+  const direct = ROLE_NAME_MAPPING[roleName]
+  if (direct) return direct
+  const lower = String(roleName).trim().toLowerCase()
+  if (lower.includes('financeiro')) return 'Financeiro'
+  if (lower.includes('gerente') || lower === 'gestor' || lower.includes('gestor')) return 'Gestores'
+  if (lower.includes('administr') || lower === 'admin') return 'Admin'
+  if (lower.includes('operador') || lower.includes('operário') || lower.includes('operario')) return 'Operários'
+  if (lower.includes('cliente') || lower.includes('visualizador')) return 'Clientes'
+  if (lower.includes('supervisor')) return 'Clientes'
+  return null
 }
 
 // ========================================

@@ -3,7 +3,7 @@
 import { useMemo, useEffect, useState, useCallback } from 'react'
 import { useAuth } from './use-auth'
 import { usePWAUser } from './use-pwa-user'
-import type { RoleName, Permission } from '@/types/permissions'
+import { normalizeRoleName, type RoleName, type Permission } from '@/types/permissions'
 import {
   getPWAPermissions,
   hasPWAPermission,
@@ -67,8 +67,8 @@ export const usePWAPermissions = () => {
       return 'Clientes' as RoleName
     }
     
-    // Caso contrário, usar o role do user
-    return (user?.role as RoleName) || null
+    // Caso contrário, usar o role do user (normaliza Financeiro/1, etc.)
+    return normalizeRoleName(user?.role || undefined)
   }, [user?.role, userTipo, isResponsavelObra])
 
   // ========================================

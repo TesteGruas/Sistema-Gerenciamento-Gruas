@@ -162,7 +162,7 @@ export const usePermissions = () => {
    * Admin e Gestores acessam o dashboard web
    */
   const canAccessDashboard = (): boolean => {
-    return isAdmin() || isManager() || level >= 9
+    return isAdmin() || isManager() || userRole === "Financeiro" || level >= 9
   }
 
   /**
