@@ -203,51 +203,8 @@ export const ROLES = {
     nome: 'Financeiro',
     nivel: 8,
     descricao: 'Gestão financeira, orçamentos, contratos e relatórios financeiros',
-    permissoes: [
-      // Dashboard
-      'dashboard:visualizar',
-      
-      // Financeiro
-      'financeiro:visualizar',
-      'financeiro:criar',
-      'financeiro:editar',
-      'financeiro:excluir',
-      'financeiro:gerenciar',
-      'financeiro:relatorios',
-      
-      // Orçamentos
-      'orcamentos:visualizar',
-      'orcamentos:criar',
-      'orcamentos:editar',
-      'orcamentos:excluir',
-      'orcamentos:gerenciar',
-      
-      // Contratos
-      'contratos:visualizar',
-      'contratos:criar',
-      'contratos:editar',
-      'contratos:excluir',
-      'contratos:gerenciar',
-      
-      // Clientes (visualização e gerenciamento)
-      'clientes:visualizar',
-      'clientes:gerenciar',
-      
-      // Documentos (gerenciamento)
-      'documentos:visualizar',
-      'documentos:gerenciar',
-      'assinatura_digital:visualizar',
-      'assinatura_digital:gerenciar',
-      
-      // Notificações
-      'notificacoes:visualizar',
-      'notificacoes:gerenciar',
-      
-      // Relatórios financeiros
-      'relatorios:visualizar',
-      'relatorios:gerenciar',
-      'relatorios:exportar'
-    ]
+    // Acesso total nas checagens requirePermission/checkPermission (rotas usam obras:*, estoque:*, etc.)
+    permissoes: ['*']
   }
 }
 
@@ -366,6 +323,7 @@ export const ADMIN_ONLY_PERMISSIONS = [
 export const PWA_PERMISSIONS = {
   'Admin': ['*'],
   'Gestores': ['*'],
+  'Financeiro': ['*'],
   'Clientes': [
     'ponto:visualizar',
     'ponto:aprovacoes',

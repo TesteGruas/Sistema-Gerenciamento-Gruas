@@ -267,36 +267,7 @@ export const ROLES: Role[] = [
     nome: 'Financeiro',
     nivel: 8,
     descricao: 'Gestão financeira, orçamentos, contratos e relatórios financeiros',
-    permissoes: [
-      'dashboard:visualizar',
-      'financeiro:visualizar',
-      'financeiro:criar',
-      'financeiro:editar',
-      'financeiro:excluir',
-      'financeiro:gerenciar',
-      'financeiro:relatorios',
-      'orcamentos:visualizar',
-      'orcamentos:criar',
-      'orcamentos:editar',
-      'orcamentos:excluir',
-      'orcamentos:gerenciar',
-      'contratos:visualizar',
-      'contratos:criar',
-      'contratos:editar',
-      'contratos:excluir',
-      'contratos:gerenciar',
-      'clientes:visualizar',
-      'clientes:gerenciar',
-      'documentos:visualizar',
-      'documentos:gerenciar',
-      'assinatura_digital:visualizar',
-      'assinatura_digital:gerenciar',
-      'notificacoes:visualizar',
-      'notificacoes:gerenciar',
-      'relatorios:visualizar',
-      'relatorios:gerenciar',
-      'relatorios:exportar'
-    ]
+    permissoes: ['*']
   }
 ]
 
@@ -383,7 +354,7 @@ export type ActionName = typeof ACTIONS[keyof typeof ACTIONS]
 export const PWA_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Admin': ['*'],
   'Gestores': ['*'],
-  'Financeiro': ['dashboard:visualizar', 'financeiro:visualizar', 'financeiro:gerenciar'],
+  'Financeiro': ['*'],
   'Clientes': [
     'ponto:visualizar',
     'ponto:aprovacoes',
