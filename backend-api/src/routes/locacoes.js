@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabase } from '../config/supabase.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -165,12 +166,16 @@ router.get('/', async (req, res) => {
       query = query.or(`numero.ilike.%${search}%,cliente_nome.ilike.%${search}%,equipamento_id.ilike.%${search}%`);
     }
 
-    // Paginação
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero', 'cliente_nome', 'status', 'tipo_equipamento', 'valor_mensal', 'data_inicio', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+
     const offset = (page - 1) * limit;
     query = query.range(offset, offset + limit - 1);
-
-    // Ordenação
-    query = query.order('created_at', { ascending: false });
 
     const { data, error, count } = await query;
 

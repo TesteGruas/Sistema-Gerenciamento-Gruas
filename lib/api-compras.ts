@@ -1,6 +1,7 @@
 // API de Compras integrada com backend real
 
 import api from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces
 export interface Compra {
@@ -59,7 +60,7 @@ export interface CompraUpdate {
   observacoes?: string
 }
 
-export interface CompraFilters {
+export interface CompraFilters extends TableSortParams {
   fornecedor_id?: number
   comprador_id?: number
   status?: string
@@ -95,6 +96,7 @@ export const apiCompras = {
     if (filters?.search) params.append('search', filters.search)
     if (filters?.page) params.append('page', filters.page.toString())
     if (filters?.limit) params.append('limit', filters.limit.toString())
+    appendSortParams(params, filters)
 
     const response = await api.get(`/compras?${params.toString()}`)
     return response.data

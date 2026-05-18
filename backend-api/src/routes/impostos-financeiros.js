@@ -3,6 +3,7 @@ import multer from 'multer';
 import Joi from 'joi';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -225,9 +226,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     if (tipo) query = query.eq('tipo', tipo);
     if (status) query = query.eq('status', status);
 
-    query = query
-      .range(offset, offset + limit - 1)
-      .order('data_vencimento', { ascending: false });
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['tipo', 'competencia', 'valor', 'data_vencimento', 'status', 'created_at'],
+      defaultColumn: 'data_vencimento',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
@@ -39,6 +41,16 @@ export default function OrdemComprasPage() {
   const [showFormDialog, setShowFormDialog] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [activeTab, setActiveTab] = useState("todas")
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
+  const ordensOrdenadas = useMemo(
+    () => sortClientData(ordens as unknown as Record<string, unknown>[]) as OrdemCompraBackend[],
+    [ordens, sortClientData],
+  )
+  const ordensPendentesOrdenadas = useMemo(
+    () => sortClientData(ordensPendentes as unknown as Record<string, unknown>[]),
+    [ordensPendentes, sortClientData],
+  )
 
   useEffect(() => {
     loadData()
@@ -169,16 +181,16 @@ export default function OrdemComprasPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Solicitante</TableHead>
-                      <TableHead>Valor Total</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data</TableHead>
+                      <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="solicitante_nome" label="Solicitante" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_total" label="Valor Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="created_at" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ordens.map((ordem) => (
+                    {ordensOrdenadas.map((ordem) => (
                       <TableRow key={ordem.id}>
                         <TableCell className="font-medium">
                           {ordem.descricao}
@@ -234,15 +246,15 @@ export default function OrdemComprasPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Etapa</TableHead>
-                      <TableHead>Valor Total</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="etapa_atual" label="Etapa" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_total" label="Valor Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {ordensPendentes.map((item) => {
+                    {ordensPendentesOrdenadas.map((item) => {
                       const ordem = item.ordem_compras
                       return (
                         <TableRow key={ordem.id}>

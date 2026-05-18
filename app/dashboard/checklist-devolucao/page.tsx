@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { 
@@ -127,6 +129,20 @@ export default function ChecklistDevolucaoPage() {
     
     return matchesSearch
   })
+
+  const {
+    sortedItems: sortedChecklists,
+    sortColumn: checklistSortColumn,
+    sortDirection: checklistSortDirection,
+    toggleSort: toggleChecklistSort,
+  } = useClientSortedList(filteredChecklists as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedChecklistItens,
+    sortColumn: itemSortColumn,
+    sortDirection: itemSortDirection,
+    toggleSort: toggleItemSort,
+  } = useClientSortedList((selectedChecklist?.itens ?? []) as unknown as Record<string, unknown>[])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -429,18 +445,18 @@ export default function ChecklistDevolucaoPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Número</TableHead>
-                <TableHead>Grua</TableHead>
-                <TableHead>Obra</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Itens</TableHead>
-                <TableHead>Faltantes</TableHead>
+                <SortableTableHead column="numero_checklist" label="Número" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="grua_nome" label="Grua" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="obra_nome" label="Obra" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="data_devolucao" label="Data" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="status" label="Status" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="total_itens" label="Itens" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                <SortableTableHead column="total_faltantes" label="Faltantes" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredChecklists.map(checklist => (
+              {(sortedChecklists as unknown as ChecklistDevolucao[]).map(checklist => (
                 <TableRow key={checklist.id}>
                   <TableCell className="font-medium">{checklist.numero_checklist}</TableCell>
                   <TableCell>{checklist.grua_nome}</TableCell>
@@ -483,7 +499,7 @@ export default function ChecklistDevolucaoPage() {
             </TableBody>
           </Table>
 
-          {filteredChecklists.length === 0 && (
+          {sortedChecklists.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               <Package className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p>Nenhum checklist encontrado</p>
@@ -653,16 +669,16 @@ export default function ChecklistDevolucaoPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Peça</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead className="text-right">Enviada</TableHead>
-                      <TableHead className="text-right">Devolvida</TableHead>
-                      <TableHead className="text-right">Faltante</TableHead>
-                      <TableHead>Condição</TableHead>
+                      <SortableTableHead column="peca_nome" label="Peça" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} />
+                      <SortableTableHead column="peca_tipo" label="Tipo" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} />
+                      <SortableTableHead column="quantidade_enviada" label="Enviada" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} className="text-right" />
+                      <SortableTableHead column="quantidade_devolvida" label="Devolvida" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} className="text-right" />
+                      <SortableTableHead column="quantidade_faltante" label="Faltante" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} className="text-right" />
+                      <SortableTableHead column="condicao" label="Condição" activeColumn={itemSortColumn} direction={itemSortDirection} onSort={toggleItemSort} />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {selectedChecklist.itens?.map(item => (
+                    {(sortedChecklistItens as unknown as ChecklistDevolucaoItem[]).map(item => (
                       <TableRow key={item.id}>
                         <TableCell className="font-medium">{item.peca_nome}</TableCell>
                         <TableCell>{item.peca_tipo}</TableCell>

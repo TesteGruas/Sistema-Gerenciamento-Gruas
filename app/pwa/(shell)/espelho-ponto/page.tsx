@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { 
   FileText, 
   Download, 
@@ -364,6 +366,16 @@ export default function PWAEspelhoPontoPage() {
   const totalHoras = registros.reduce((sum, r) => sum + (r.horas_trabalhadas || 0), 0)
   const totalExtras = registros.reduce((sum, r) => sum + (r.horas_extras || 0), 0)
 
+  const {
+    sortedItems: sortedRegistros,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(registros as unknown as Record<string, unknown>[], {
+    defaultColumn: "data",
+    defaultDirection: "desc",
+  })
+
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar">
       <div className="space-y-4">
@@ -464,9 +476,45 @@ export default function PWAEspelhoPontoPage() {
             </div>
           </div>
 
-          {/* Cards de registros */}
-          <div className="space-y-3">
-            {registros.map((registro) => (
+          {/* Tabela (desktop) */}
+          <div className="hidden md:block border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="entrada" label="Entrada" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="saida" label="Saída" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="horas_trabalhadas" label="Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="horas_extras" label="Extras" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {(sortedRegistros as unknown as RegistroPonto[]).map((registro) => (
+                  <TableRow key={registro.id}>
+                    <TableCell>
+                      {new Date(registro.data).toLocaleDateString("pt-BR", {
+                        weekday: "short",
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                    </TableCell>
+                    <TableCell>{registro.entrada || "--:--"}</TableCell>
+                    <TableCell>{registro.saida || "--:--"}</TableCell>
+                    <TableCell>{registro.horas_trabalhadas?.toFixed(1) || "0.0"}h</TableCell>
+                    <TableCell className="text-green-600 font-medium">
+                      {registro.horas_extras?.toFixed(1) || "0.0"}h
+                    </TableCell>
+                    <TableCell>{getStatusBadge(registro.status)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+
+          {/* Cards de registros (mobile) */}
+          <div className="space-y-3 md:hidden">
+            {(sortedRegistros as unknown as RegistroPonto[]).map((registro) => (
               <Card key={registro.id} className="hover:shadow-md transition-shadow">
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between mb-3">

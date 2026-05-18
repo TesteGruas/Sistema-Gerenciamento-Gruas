@@ -22,6 +22,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 
 function apiErrorMessage(err: unknown): string {
@@ -150,6 +152,13 @@ export function GruasGerenciarTiposDialog({ open, onOpenChange, onCatalogoAltera
     }
   }
 
+  const {
+    sortedItems: sortedTipos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(tipos as unknown as Record<string, unknown>[])
+
   const confirmarExclusao = async () => {
     if (!excluirTipo) return
     const nomeRemovido = excluirTipo.nome
@@ -238,12 +247,12 @@ export function GruasGerenciarTiposDialog({ open, onOpenChange, onCatalogoAltera
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
+                    <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="w-[140px] text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {tipos.map((t) => (
+                  {(sortedTipos as unknown as TipoGrua[]).map((t) => (
                     <TableRow key={t.id}>
                       <TableCell>
                         {editandoId === t.id ? (

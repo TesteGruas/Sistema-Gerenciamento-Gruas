@@ -1,5 +1,6 @@
 // Serviço de API para integração com endpoints de estoque
 import { buildApiUrl } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Importar AuthService para gerenciar autenticação
 import { AuthService } from '../app/lib/auth'
@@ -123,7 +124,7 @@ class EstoqueAPI {
     categoria_id?: number
     status?: string
     tipo_item?: string
-  } = {}): Promise<EstoqueResponse> {
+  } & TableSortParams = {}): Promise<EstoqueResponse> {
     const queryParams = new URLSearchParams()
     
     if (params.page) queryParams.append('page', params.page.toString())
@@ -131,6 +132,7 @@ class EstoqueAPI {
     if (params.categoria_id) queryParams.append('categoria_id', params.categoria_id.toString())
     if (params.tipo_item) queryParams.append('tipo_item', params.tipo_item)
     if (params.status) queryParams.append('status', params.status)
+    appendSortParams(queryParams, params)
 
     const queryString = queryParams.toString()
     return this.request<EstoqueResponse>(`/estoque${queryString ? `?${queryString}` : ''}`)

@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Eye, ChevronLeft, ChevronRight, ArrowUpDown } from "lucide-react"
 import type { GruaPerformance } from "@/lib/types/performance-gruas"
@@ -31,6 +33,10 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
 
   // Garantir que dados é um array válido - memoizado
   const dadosArray = useMemo(() => Array.isArray(dados) ? dados : [], [dados])
+
+  const { sortedItems, sortColumn, sortDirection, toggleSort } = useClientSortedList(
+    dadosArray as Record<string, unknown>[],
+  )
 
   const getStatusBadge = useCallback((status: string) => {
     const statusMap: Record<string, { color: string; label: string }> = {
@@ -72,15 +78,15 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
   const { dadosPagina, inicio, fim, totalPaginasCalculado } = useMemo(() => {
     const inicioCalc = (pagina - 1) * limite
     const fimCalc = inicioCalc + limite
-    const dadosPaginaCalc = dadosArray.slice(inicioCalc, fimCalc)
-    const totalPaginasCalc = Math.ceil(dadosArray.length / limite)
+    const dadosPaginaCalc = sortedItems.slice(inicioCalc, fimCalc)
+    const totalPaginasCalc = Math.ceil(sortedItems.length / limite)
     return {
       dadosPagina: dadosPaginaCalc,
       inicio: inicioCalc,
       fim: fimCalc,
       totalPaginasCalculado: totalPaginasCalc
     }
-  }, [dadosArray, pagina, limite])
+  }, [sortedItems, pagina, limite])
 
   return (
     <>
@@ -93,16 +99,16 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Grua</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead className="text-right">Horas Trabalhadas</TableHead>
-                  <TableHead className="text-right">Taxa Utilização</TableHead>
-                  <TableHead className="text-right">Receita Total</TableHead>
-                  <TableHead className="text-right">Custo Total</TableHead>
-                  <TableHead className="text-right">Lucro Bruto</TableHead>
-                  <TableHead className="text-right">Margem</TableHead>
-                  <TableHead className="text-right">ROI</TableHead>
-                  <TableHead className="text-right">Receita/Hora</TableHead>
+                  <SortableTableHead column="grua.nome" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="grua.status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="metricas.horas_trabalhadas" label="Horas Trabalhadas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="metricas.taxa_utilizacao" label="Taxa Utilização" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="financeiro.receita_total" label="Receita Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="financeiro.custo_total" label="Custo Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="financeiro.lucro_bruto" label="Lucro Bruto" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="financeiro.margem_lucro" label="Margem" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="roi.roi_percentual" label="ROI" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
+                  <SortableTableHead column="financeiro.receita_por_hora" label="Receita/Hora" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
                   <TableHead className="text-center">Ações</TableHead>
                 </TableRow>
               </TableHeader>
@@ -114,7 +120,7 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
                     </TableCell>
                   </TableRow>
                 ) : (
-                  dadosPagina.map((item, index) => (
+                  dadosPagina.map((item: GruaPerformance, index) => (
                     <TableRow key={item?.grua?.id || index}>
                       <TableCell className="font-medium">
                         <div>
@@ -166,10 +172,10 @@ export const PerformanceGruasTabela = memo(function PerformanceGruasTabela({
           </div>
 
           {/* Paginação */}
-          {dadosArray.length > limite && (
+          {sortedItems.length > limite && (
             <div className="flex items-center justify-between mt-4">
               <div className="text-sm text-gray-600">
-                Mostrando {inicio + 1} a {Math.min(fim, dadosArray.length)} de {dadosArray.length} resultados
+                Mostrando {inicio + 1} a {Math.min(fim, sortedItems.length)} de {sortedItems.length} resultados
               </div>
               <div className="flex items-center gap-2">
                 <Button

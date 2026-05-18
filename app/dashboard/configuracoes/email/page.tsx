@@ -24,6 +24,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -413,6 +415,13 @@ export default function EmailConfigPage() {
     return <Badge className={config.color}>{config.label}</Badge>
   }
 
+  const {
+    sortedItems: sortedLogs,
+    sortColumn: logsSortColumn,
+    sortDirection: logsSortDirection,
+    toggleSort: toggleLogsSort,
+  } = useClientSortedList(logs as unknown as Record<string, unknown>[])
+
   if (loadingConfig) {
     return (
       <div className="w-full h-full flex items-center justify-center">
@@ -782,23 +791,23 @@ export default function EmailConfigPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Destinatário</TableHead>
-                        <TableHead>Assunto</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Tentativas</TableHead>
+                        <SortableTableHead column="created_at" label="Data" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
+                        <SortableTableHead column="tipo" label="Tipo" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
+                        <SortableTableHead column="destinatario" label="Destinatário" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
+                        <SortableTableHead column="assunto" label="Assunto" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
+                        <SortableTableHead column="status" label="Status" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
+                        <SortableTableHead column="tentativas" label="Tentativas" activeColumn={logsSortColumn} direction={logsSortDirection} onSort={toggleLogsSort} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {logs.length === 0 ? (
+                      {sortedLogs.length === 0 ? (
                         <TableRow>
                           <TableCell colSpan={6} className="text-center text-muted-foreground">
                             Nenhum email enviado ainda
                           </TableCell>
                         </TableRow>
                       ) : (
-                        logs.map((log) => (
+                        (sortedLogs as unknown as EmailLog[]).map((log) => (
                           <TableRow key={log.id}>
                             <TableCell className="text-xs">
                               {new Date(log.created_at).toLocaleString('pt-BR')}

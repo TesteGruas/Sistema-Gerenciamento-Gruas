@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 import { 
   receitaSchema, 
   receitaUpdateSchema, 
@@ -195,8 +196,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     if (dataInicioStr) query = query.gte('data_receita', dataInicioStr);
     if (dataFimStr) query = query.lte('data_receita', dataFimStr);
 
-    query = query.order('data_receita', { ascending: false })
-                 .range(offset, offset + limit - 1);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['descricao', 'valor', 'data_receita', 'status', 'tipo', 'created_at'],
+      defaultColumn: 'data_receita',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

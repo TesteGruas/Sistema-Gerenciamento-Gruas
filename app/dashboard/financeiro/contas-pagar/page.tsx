@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Pagination, PaginationContent, PaginationItem, PaginationLink, PaginationNext, PaginationPrevious } from "@/components/ui/pagination"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
@@ -212,6 +214,7 @@ export default function ContasPagarPage() {
   const [itemsPerPage] = useState(20)
   const [totalItems, setTotalItems] = useState(0)
   const [totalPages, setTotalPages] = useState(1)
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Formulário de Custos
   const [custoForm, setCustoForm] = useState({
@@ -351,12 +354,22 @@ export default function ContasPagarPage() {
     ]
   }, [filteredCustos, filteredImpostos, contas])
 
+  const sortedRegistros = useMemo(
+    () =>
+      sortClientData(todosRegistros as unknown as Record<string, unknown>[]) as typeof todosRegistros,
+    [todosRegistros, sortClientData],
+  )
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [sortColumn, sortDirection])
+
   // Calcular paginação
-  const totalRegistros = todosRegistros.length
+  const totalRegistros = sortedRegistros.length
   const totalPagesCalculado = Math.ceil(totalRegistros / itemsPerPage)
   const inicio = (currentPage - 1) * itemsPerPage
   const fim = inicio + itemsPerPage
-  const registrosPaginados = todosRegistros.slice(inicio, fim)
+  const registrosPaginados = sortedRegistros.slice(inicio, fim)
 
   // Calcular totais dos custos
   const totaisCustos = useMemo(() => {
@@ -1271,13 +1284,13 @@ export default function ContasPagarPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data.descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Obra</TableHead>
                     <TableHead>Cliente</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="data.data_vencimento" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data.valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data.status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>

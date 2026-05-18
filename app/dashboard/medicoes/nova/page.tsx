@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -431,6 +433,13 @@ export default function NovaMedicaoPage() {
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value)
   }
+
+  const {
+    sortedItems: sortedCustosMensais,
+    sortColumn: custoSortColumn,
+    sortDirection: custoSortDirection,
+    toggleSort: toggleCustoSort,
+  } = useClientSortedList(custosMensais as unknown as Record<string, unknown>[])
 
   const adicionarArquivosAdicionais = (files: File[]) => {
     const arquivosInvalidos = files.filter((file) => !tiposArquivoPermitidos.includes(file.type))
@@ -1463,17 +1472,19 @@ trailer<</Size 4/Root 1 0 R>>
                     <TableHeader>
                       <TableRow>
                         <TableHead className="w-[50px]">#</TableHead>
-                        <TableHead>Item / Descrição</TableHead>
-                        <TableHead className="w-[90px]">Unidade</TableHead>
-                        <TableHead className="w-[90px]">Tipo</TableHead>
-                        <TableHead className="w-[100px]">Qtd.</TableHead>
-                        <TableHead className="w-[120px]">Valor unit.</TableHead>
-                        <TableHead className="w-[120px]">Total</TableHead>
+                        <SortableTableHead column="item" label="Item / Descrição" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} />
+                        <SortableTableHead column="unidade" label="Unidade" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="w-[90px]" />
+                        <SortableTableHead column="tipo" label="Tipo" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="w-[90px]" />
+                        <SortableTableHead column="quantidade_orcamento" label="Qtd." activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="w-[100px]" />
+                        <SortableTableHead column="valor_unitario" label="Valor unit." activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="w-[120px]" />
+                        <SortableTableHead column="valor_total" label="Total" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="w-[120px]" />
                         <TableHead className="w-[100px]">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {custosMensais.map((custo, index) => (
+                      {(sortedCustosMensais as unknown as CustoMensalForm[]).map((custo) => {
+                        const index = custosMensais.indexOf(custo)
+                        return (
                         <TableRow key={`${custo.item}-${index}`}>
                           <TableCell>{index + 1}</TableCell>
                           <TableCell>
@@ -1510,7 +1521,7 @@ trailer<</Size 4/Root 1 0 R>>
                             </div>
                           </TableCell>
                         </TableRow>
-                      ))}
+                      )})}
                     </TableBody>
                   </Table>
                   <div className="p-4 border-t bg-muted/50">

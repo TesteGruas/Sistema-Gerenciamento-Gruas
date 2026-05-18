@@ -1,6 +1,7 @@
 // API de Transferências integrada com backend real
 
 import api from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces
 export interface Transferencia {
@@ -45,7 +46,7 @@ export interface TransferenciaUpdate {
   data_transferencia?: string
 }
 
-export interface TransferenciaFilters {
+export interface TransferenciaFilters extends TableSortParams {
   conta_origem_id?: number
   conta_destino_id?: number
   status?: string
@@ -83,6 +84,7 @@ export const apiTransferencias = {
     if (filters?.search) params.append('search', filters.search)
     if (filters?.page) params.append('page', filters.page.toString())
     if (filters?.limit) params.append('limit', filters.limit.toString())
+    appendSortParams(params, filters)
 
     const response = await api.get(`/transferencias?${params.toString()}`)
     return response.data

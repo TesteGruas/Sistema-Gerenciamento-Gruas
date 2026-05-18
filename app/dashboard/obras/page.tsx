@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -180,7 +182,7 @@ export default function ObrasPage() {
       setError(null)
       const response = await obrasApi.listarObras({ 
         page: currentPage,
-        limit: itemsPerPage
+        limit: itemsPerPage,
       })
       
       // Converter obras - os relacionamentos já vêm incluídos no endpoint
@@ -513,7 +515,6 @@ export default function ObrasPage() {
     // Verificar se houve mudança real nos parâmetros (não apenas no primeiro render)
     const pageChanged = prevPageRef.current !== currentPage
     const itemsPerPageChanged = prevItemsPerPageRef.current !== itemsPerPage
-    
     // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
     if (!pageChanged && !itemsPerPageChanged) {
       return
@@ -544,8 +545,6 @@ export default function ObrasPage() {
       const response = await obrasApi.listarObras({ 
         page: currentPage,
         limit: itemsPerPage,
-        // Adicionar parâmetros de busca se a API suportar
-        // Por enquanto, vamos fazer busca local após carregar
       })
       
       // Converter obras
@@ -585,11 +584,18 @@ export default function ObrasPage() {
       )
     : obras
 
+  const {
+    sortedItems: sortedObras,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredObras as unknown as Record<string, unknown>[])
+
   // Usar dados de paginação da API
   const totalPages = pagination.pages || 1
   const startIndex = ((currentPage - 1) * itemsPerPage) + 1
   const endIndex = Math.min(currentPage * itemsPerPage, pagination.total || obras.length)
-  const paginatedObras = filteredObras
+  const paginatedObras = sortedObras
 
   // Função para resetar página quando termo de busca muda e buscar obras (com debounce)
   useEffect(() => {
@@ -1576,18 +1582,18 @@ export default function ObrasPage() {
               </div>
             </div>
 
-            {filteredObras.length > 0 ? (
+            {sortedObras.length > 0 ? (
               <>
             <div className="overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="min-w-[200px]">Obra</TableHead>
-                    <TableHead className="whitespace-nowrap">Status</TableHead>
-                    <TableHead className="min-w-[160px] whitespace-nowrap">Período</TableHead>
-                    <TableHead className="min-w-[140px]">Cliente</TableHead>
+                    <SortableTableHead column="name" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[200px]" />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTableHead column="startDate" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[160px] whitespace-nowrap" />
+                    <SortableTableHead column="clienteName" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[140px]" />
                     <TableHead className="min-w-[120px] hidden md:table-cell">Responsável</TableHead>
-                    <TableHead className="text-right whitespace-nowrap min-w-[120px]">Orçamento</TableHead>
+                    <SortableTableHead column="budget" label="Orçamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right whitespace-nowrap min-w-[120px]" />
                     <TableHead className="text-center whitespace-nowrap w-[88px]">Gruas</TableHead>
                     <TableHead className="text-right min-w-[140px] whitespace-nowrap">Ações</TableHead>
                   </TableRow>
@@ -1688,7 +1694,7 @@ export default function ObrasPage() {
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4 px-6 py-4 border-t">
                 <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-gray-600">
                   <span>
-                    Mostrando {startIndex} a {endIndex} de {pagination.total || filteredObras.length} obras
+                    Mostrando {startIndex} a {endIndex} de {pagination.total || sortedObras.length} obras
                   </span>
                   <div className="flex items-center gap-2">
                     <span>Itens por página:</span>

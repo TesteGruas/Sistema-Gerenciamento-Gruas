@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -9,6 +9,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Checkbox } from "@/components/ui/checkbox"
 import { 
@@ -38,6 +40,7 @@ import { ptBR } from "date-fns/locale"
 export default function AuditoriaPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
   
   // Estados
   const [auditoria, setAuditoria] = useState<AuditoriaRH[]>([])
@@ -157,6 +160,11 @@ export default function AuditoriaPage() {
     
     return matchesSearch && matchesTabela && matchesAcao && matchesUsuario
   })
+
+  const sortedAuditoria = useMemo(
+    () => sortClientData(auditoriaFiltrada as Record<string, unknown>[]) as AuditoriaRH[],
+    [auditoriaFiltrada, sortClientData],
+  )
 
   // Handlers
   const handleCriarPerfil = async () => {
@@ -374,17 +382,17 @@ export default function AuditoriaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Data/Hora</TableHead>
-                    <TableHead>Usuário</TableHead>
-                    <TableHead>Tabela</TableHead>
-                    <TableHead>Ação</TableHead>
-                    <TableHead>Registro</TableHead>
-                    <TableHead>IP</TableHead>
+                    <SortableTableHead column="created_at" label="Data/Hora" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="usuario_nome" label="Usuário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tabela" label="Tabela" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="acao" label="Ação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="registro_id" label="Registro" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="ip_address" label="IP" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {auditoriaFiltrada.map((item) => (
+                  {sortedAuditoria.map((item) => (
                     <TableRow key={item.id}>
                       <TableCell>
                         <div className="text-sm">
@@ -431,7 +439,7 @@ export default function AuditoriaPage() {
                 </TableBody>
               </Table>
 
-              {auditoriaFiltrada.length === 0 && (
+              {sortedAuditoria.length === 0 && (
                 <div className="text-center py-8">
                   <Shield className="w-12 h-12 mx-auto text-gray-400 mb-4" />
                   <p className="text-gray-500">Nenhum registro de auditoria encontrado</p>

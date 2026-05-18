@@ -4,6 +4,7 @@ import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
 import { criarMovimentacoesCompra } from '../utils/movimentacoes-estoque.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -128,13 +129,20 @@ const compraItemSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('compras')
       .select(`
         *,
         fornecedores(nome, cnpj, telefone, email)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero_pedido', 'data_pedido', 'data_entrega', 'valor_total', 'status', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+    const { data, error } = await query;
 
     if (error) throw error;
 

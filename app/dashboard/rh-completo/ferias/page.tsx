@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,6 +11,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Calendar } from "@/components/ui/calendar"
 import { 
@@ -38,6 +40,8 @@ import { ptBR } from "date-fns/locale"
 export default function FeriasPage() {
   const router = useRouter()
   const { toast } = useToast()
+  const feriasSort = useTableSort()
+  const afastamentosSort = useTableSort()
   
   // Estados
   const [ferias, setFerias] = useState<Ferias[]>([])
@@ -138,6 +142,15 @@ export default function FeriasPage() {
     
     return matchesSearch && matchesFuncionario && matchesStatus
   })
+
+  const sortedFerias = useMemo(
+    () => feriasSort.sortClientData(feriasFiltradas as Record<string, unknown>[]) as Ferias[],
+    [feriasFiltradas, feriasSort.sortClientData],
+  )
+  const sortedAfastamentos = useMemo(
+    () => afastamentosSort.sortClientData(afastamentosFiltrados as Record<string, unknown>[]) as Afastamento[],
+    [afastamentosFiltrados, afastamentosSort.sortClientData],
+  )
 
   // Handlers
   const handleSolicitarFerias = async () => {
@@ -394,16 +407,16 @@ export default function FeriasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Dias</TableHead>
-                    <TableHead>Saldo</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionarios.nome" label="Funcionário" activeColumn={feriasSort.sortColumn} direction={feriasSort.sortDirection} onSort={feriasSort.toggleSort} />
+                    <SortableTableHead column="data_inicio" label="Período" activeColumn={feriasSort.sortColumn} direction={feriasSort.sortDirection} onSort={feriasSort.toggleSort} />
+                    <SortableTableHead column="dias_solicitados" label="Dias" activeColumn={feriasSort.sortColumn} direction={feriasSort.sortDirection} onSort={feriasSort.toggleSort} />
+                    <SortableTableHead column="saldo_restante" label="Saldo" activeColumn={feriasSort.sortColumn} direction={feriasSort.sortDirection} onSort={feriasSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={feriasSort.sortColumn} direction={feriasSort.sortDirection} onSort={feriasSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {feriasFiltradas.map((feria) => {
+                  {sortedFerias.map((feria) => {
                     const funcionario = funcionarios.find(f => f.id === feria.funcionario_id)
                     return (
                       <TableRow key={feria.id}>
@@ -454,7 +467,7 @@ export default function FeriasPage() {
                 </TableBody>
               </Table>
 
-              {feriasFiltradas.length === 0 && (
+              {sortedFerias.length === 0 && (
                 <div className="text-center py-8">
                   <CalendarIcon className="w-12 h-12 mx-auto text-gray-400 mb-4" />
                   <p className="text-gray-500">Nenhuma solicitação de férias encontrada</p>
@@ -477,16 +490,16 @@ export default function FeriasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Dias</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionarios.nome" label="Funcionário" activeColumn={afastamentosSort.sortColumn} direction={afastamentosSort.sortDirection} onSort={afastamentosSort.toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={afastamentosSort.sortColumn} direction={afastamentosSort.sortDirection} onSort={afastamentosSort.toggleSort} />
+                    <SortableTableHead column="data_inicio" label="Período" activeColumn={afastamentosSort.sortColumn} direction={afastamentosSort.sortDirection} onSort={afastamentosSort.toggleSort} />
+                    <SortableTableHead column="dias_solicitados" label="Dias" activeColumn={afastamentosSort.sortColumn} direction={afastamentosSort.sortDirection} onSort={afastamentosSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={afastamentosSort.sortColumn} direction={afastamentosSort.sortDirection} onSort={afastamentosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {afastamentosFiltrados.map((afastamento) => {
+                  {sortedAfastamentos.map((afastamento) => {
                     const funcionario = funcionarios.find(f => f.id === afastamento.funcionario_id)
                     return (
                       <TableRow key={afastamento.id}>
@@ -532,7 +545,7 @@ export default function FeriasPage() {
                 </TableBody>
               </Table>
 
-              {afastamentosFiltrados.length === 0 && (
+              {sortedAfastamentos.length === 0 && (
                 <div className="text-center py-8">
                   <AlertCircle className="w-12 h-12 mx-auto text-gray-400 mb-4" />
                   <p className="text-gray-500">Nenhum afastamento encontrado</p>

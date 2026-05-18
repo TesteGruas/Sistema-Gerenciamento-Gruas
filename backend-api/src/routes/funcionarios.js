@@ -9,6 +9,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -271,7 +272,13 @@ router.get('/', authenticateToken, async (req, res) => {
         q = q.or(condicoes.join(','))
       }
 
-      return q.order('id', { ascending: false })
+      return applyListSort(q, {
+        sortBy: req.query.sort_by,
+        sortOrder: req.query.sort_order,
+        allowedColumns: ['nome', 'cpf', 'email', 'cargo', 'status', 'telefone', 'created_at'],
+        defaultColumn: 'nome',
+        defaultAscending: true,
+      })
     }
 
     console.log('[FUNCIONARIOS] Executando query(ies) no Supabase (lotes para contornar max-rows)...')

@@ -30,6 +30,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import {
   Select,
   SelectContent,
@@ -74,6 +76,13 @@ export default function CargosPage() {
     
     return matchesSearch && matchesNivel && matchesStatus
   })
+
+  const {
+    sortedItems: sortedCargos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(cargosFiltrados as unknown as Record<string, unknown>[])
 
   // Criar cargo
   const handleCreate = useCallback(async (data: any) => {
@@ -347,15 +356,15 @@ export default function CargosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Nível</TableHead>
-                  <TableHead>Faixa Salarial</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="nivel" label="Nível" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="salario_minimo" label="Faixa Salarial" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="ativo" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {cargosFiltrados.map((cargo) => (
+                {(sortedCargos as unknown as Cargo[]).map((cargo) => (
                   <TableRow key={cargo.id}>
                     <TableCell>
                       <div>

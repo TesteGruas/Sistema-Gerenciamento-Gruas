@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { 
@@ -187,12 +189,21 @@ export default function ComprasPage() {
     return filtered
   }, [compras, searchTerm, filterStatus, filterFornecedor, filterPeriodo, dataInicio, dataFim])
 
+  const {
+    sortedItems: sortedCompras,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredCompras as unknown as Record<string, unknown>[], {
+    onPageReset: () => setCurrentPage(1),
+  })
+
   // Paginação
-  const totalPages = Math.ceil(filteredCompras.length / itemsPerPage)
+  const totalPages = Math.ceil(sortedCompras.length / itemsPerPage)
   const paginatedCompras = useMemo(() => {
     const start = (currentPage - 1) * itemsPerPage
-    return filteredCompras.slice(start, start + itemsPerPage)
-  }, [filteredCompras, currentPage])
+    return sortedCompras.slice(start, start + itemsPerPage)
+  }, [sortedCompras, currentPage])
 
 
   const handleViewCompra = (compra: Compra) => {
@@ -463,7 +474,7 @@ export default function ComprasPage() {
         <CardHeader>
           <div className="flex justify-between items-center">
             <div>
-              <CardTitle>Compras ({filteredCompras.length})</CardTitle>
+              <CardTitle>Compras ({sortedCompras.length})</CardTitle>
               <CardDescription>Lista de todas as compras registradas</CardDescription>
             </div>
           </div>
@@ -474,7 +485,7 @@ export default function ComprasPage() {
               <RefreshCw className="w-8 h-8 mx-auto animate-spin text-gray-400 mb-4" />
               <p className="text-gray-500">Carregando compras...</p>
             </div>
-          ) : filteredCompras.length === 0 ? (
+          ) : sortedCompras.length === 0 ? (
             <div className="text-center py-8">
               <ShoppingCart className="w-12 h-12 mx-auto text-gray-400 mb-4" />
               <p className="text-gray-500">Nenhuma compra encontrada</p>
@@ -485,13 +496,13 @@ export default function ComprasPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Número do Pedido</TableHead>
-                      <TableHead>Fornecedor</TableHead>
-                      <TableHead>Data do Pedido</TableHead>
-                      <TableHead>Data de Entrega</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="id" label="ID" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="numero_pedido" label="Número do Pedido" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="fornecedores.nome" label="Fornecedor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data_pedido" label="Data do Pedido" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data_entrega" label="Data de Entrega" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -625,7 +636,7 @@ export default function ComprasPage() {
               {totalPages > 1 && (
                 <div className="flex items-center justify-between mt-4">
                   <div className="text-sm text-gray-500">
-                    Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, filteredCompras.length)} de {filteredCompras.length} compras
+                    Mostrando {(currentPage - 1) * itemsPerPage + 1} a {Math.min(currentPage * itemsPerPage, sortedCompras.length)} de {sortedCompras.length} compras
                   </div>
                   <div className="flex gap-2">
                     <Button

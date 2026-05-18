@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/lib/user-context"
@@ -12,6 +12,9 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Progress } from "@/components/ui/progress"
 import { 
@@ -272,6 +275,8 @@ export default function AssinaturaPage() {
     error
   })
 
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
   const filteredDocumentos = documentos.filter(doc => {
     const matchesSearch = (doc.titulo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
                          (doc.descricao || '').toLowerCase().includes(searchTerm.toLowerCase())
@@ -290,16 +295,33 @@ export default function AssinaturaPage() {
     return matchesSearch && matchesStatus && matchesObra && canView
   })
 
+  const sortedDocumentos = useMemo(
+    () =>
+      sortClientData(filteredDocumentos as unknown as Record<string, unknown>[]) as unknown as DocumentoObra[],
+    [filteredDocumentos, sortClientData],
+  )
+
   // Lógica de paginação
-  const totalPages = Math.ceil(filteredDocumentos.length / itemsPerPage)
+  const totalPages = Math.ceil(sortedDocumentos.length / itemsPerPage)
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = startIndex + itemsPerPage
-  const paginatedDocumentos = filteredDocumentos.slice(startIndex, endIndex)
+  const paginatedDocumentos = sortedDocumentos.slice(startIndex, endIndex)
+
+  const assinaturasResumoLista = resumoAssinaturas?.assinaturas ?? []
+  const {
+    sortedItems: sortedAssinaturasResumo,
+    sortColumn: resumoSortColumn,
+    sortDirection: resumoSortDirection,
+    toggleSort: toggleResumoSort,
+  } = useClientSortedList(assinaturasResumoLista as unknown as Record<string, unknown>[], {
+    defaultColumn: "data_assinatura",
+    defaultDirection: "desc",
+  })
 
   // Resetar página quando filtros mudarem
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedStatus, selectedObra])
+  }, [searchTerm, selectedStatus, selectedObra, sortColumn, sortDirection])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -606,14 +628,14 @@ export default function AssinaturaPage() {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Data</TableHead>
-                              <TableHead>Documento</TableHead>
-                              <TableHead>Tipo</TableHead>
-                              <TableHead>Obra</TableHead>
+                              <SortableTableHead column="data_assinatura" label="Data" activeColumn={resumoSortColumn} direction={resumoSortDirection} onSort={toggleResumoSort} />
+                              <SortableTableHead column="documento.titulo" label="Documento" activeColumn={resumoSortColumn} direction={resumoSortDirection} onSort={toggleResumoSort} />
+                              <SortableTableHead column="tipo" label="Tipo" activeColumn={resumoSortColumn} direction={resumoSortDirection} onSort={toggleResumoSort} />
+                              <SortableTableHead column="documento.obra.nome" label="Obra" activeColumn={resumoSortColumn} direction={resumoSortDirection} onSort={toggleResumoSort} />
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {resumoAssinaturas.assinaturas.map((assinatura: any) => (
+                            {(sortedAssinaturasResumo as unknown as any[]).map((assinatura: any) => (
                               <TableRow key={assinatura.id}>
                                 <TableCell>
                                   {new Date(assinatura.data_assinatura).toLocaleDateString('pt-BR')}
@@ -803,11 +825,11 @@ export default function AssinaturaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Documento</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="titulo" label="Documento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="obra_nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Progresso</TableHead>
-                    <TableHead>Criado em</TableHead>
+                    <SortableTableHead column="created_at" label="Criado em" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -985,6 +1007,38 @@ function DocumentoDetails({ documento, onClose, obras }: { documento: any; onClo
   const progress = getProgressPercentage(documento)
   const currentSigner = documento.ordemAssinatura?.find((a: any) => a.status === 'aguardando')
 
+  const ordemAssinaturaLista = useMemo(
+    () =>
+      (documento.ordemAssinatura ?? []).map((a: any, index: number) => ({
+        ...a,
+        ordem: index + 1,
+        userName: a.userName || a.user_nome || `Usuário ${a.userId}`,
+        role: a.role || a.user_role || "N/A",
+      })),
+    [documento.ordemAssinatura],
+  )
+
+  const {
+    sortedItems: sortedOrdemAssinatura,
+    sortColumn: signatarioSortColumn,
+    sortDirection: signatarioSortDirection,
+    toggleSort: toggleSignatarioSort,
+  } = useClientSortedList(ordemAssinaturaLista as unknown as Record<string, unknown>[], {
+    defaultColumn: "ordem",
+    defaultDirection: "asc",
+  })
+
+  const historicoLista = documento.historicoAssinaturas ?? []
+  const {
+    sortedItems: sortedHistorico,
+    sortColumn: historicoSortColumn,
+    sortDirection: historicoSortDirection,
+    toggleSort: toggleHistoricoSort,
+  } = useClientSortedList(historicoLista as unknown as Record<string, unknown>[], {
+    defaultColumn: "data",
+    defaultDirection: "desc",
+  })
+
   const handleGenerateDocuSignLinks = async (documento: any) => {
     // TODO: Implementar geração real de links quando DocuSign estiver integrado
     try {
@@ -1132,25 +1186,24 @@ function DocumentoDetails({ documento, onClose, obras }: { documento: any; onClo
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Ordem</TableHead>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Papel</TableHead>
-                          <TableHead>Status</TableHead>
+                          <SortableTableHead column="ordem" label="Ordem" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
+                          <SortableTableHead column="userName" label="Nome" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
+                          <SortableTableHead column="role" label="Papel" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
+                          <SortableTableHead column="status" label="Status" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
                           <TableHead>Link DocuSign</TableHead>
                           <TableHead>Email</TableHead>
-                          <TableHead>Data Envio</TableHead>
-                          <TableHead>Data Assinatura</TableHead>
+                          <SortableTableHead column="dataEnvio" label="Data Envio" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
+                          <SortableTableHead column="dataAssinatura" label="Data Assinatura" activeColumn={signatarioSortColumn} direction={signatarioSortDirection} onSort={toggleSignatarioSort} />
                           <TableHead>Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {documento.ordemAssinatura?.map((assinatura: any, index: number) => {
-                          // O usuário já vem na resposta da API ou pode ser buscado se necessário
+                        {(sortedOrdemAssinatura as unknown as any[]).map((assinatura: any) => {
                           const userName = assinatura.userName || assinatura.user_nome || `Usuário ${assinatura.userId}`
                           const userRole = assinatura.role || assinatura.user_role || 'N/A'
                           return (
                             <TableRow key={assinatura.userId}>
-                              <TableCell>{index + 1}</TableCell>
+                              <TableCell>{assinatura.ordem}</TableCell>
                               <TableCell>{userName}</TableCell>
                               <TableCell>{userRole}</TableCell>
                               <TableCell>
@@ -1259,15 +1312,15 @@ function DocumentoDetails({ documento, onClose, obras }: { documento: any; onClo
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Nome</TableHead>
-                            <TableHead>Ação</TableHead>
-                            <TableHead>Data</TableHead>
+                            <SortableTableHead column="userName" label="Nome" activeColumn={historicoSortColumn} direction={historicoSortDirection} onSort={toggleHistoricoSort} />
+                            <SortableTableHead column="acao" label="Ação" activeColumn={historicoSortColumn} direction={historicoSortDirection} onSort={toggleHistoricoSort} />
+                            <SortableTableHead column="data" label="Data" activeColumn={historicoSortColumn} direction={historicoSortDirection} onSort={toggleHistoricoSort} />
                             <TableHead>Arquivo</TableHead>
-                            <TableHead>Observações</TableHead>
+                            <SortableTableHead column="observacoes" label="Observações" activeColumn={historicoSortColumn} direction={historicoSortDirection} onSort={toggleHistoricoSort} />
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {documento.historicoAssinaturas.map((historico: any) => (
+                          {(sortedHistorico as unknown as any[]).map((historico: any) => (
                             <TableRow key={historico.id}>
                               <TableCell>{historico.userName}</TableCell>
                               <TableCell>

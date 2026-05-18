@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { getApiOrigin } from "@/lib/runtime-config"
@@ -106,6 +108,7 @@ export default function ImpostosPage() {
   const [contaBancariaPago, setContaBancariaPago] = useState('')
   const [contasBancariasMain, setContasBancariasMain] = useState<any[]>([])
   const [exportandoCsv, setExportandoCsv] = useState(false)
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Tipos padrão
   const tiposPadrao = [
@@ -119,9 +122,12 @@ export default function ImpostosPage() {
 
   // Carregar dados ao montar o componente
   useEffect(() => {
-    loadImpostos()
     loadTiposImpostos()
     loadContasBancarias()
+  }, [])
+
+  useEffect(() => {
+    loadImpostos()
   }, [])
 
   const loadContasBancarias = async () => {
@@ -146,7 +152,9 @@ export default function ImpostosPage() {
       const API_URL = getApiOrigin()
       const token = getAuthToken()
 
-      const response = await fetch(`${API_URL}/api/impostos-financeiros`, {
+      const response = await fetch(
+        `${API_URL}/api/impostos-financeiros`,
+        {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -343,6 +351,11 @@ export default function ImpostosPage() {
       return matchSearch && matchStatus && matchTipo
     })
   }, [impostos, searchTerm, selectedStatus, selectedTipo])
+
+  const impostosOrdenados = useMemo(
+    () => sortClientData(impostosFiltrados as unknown as Record<string, unknown>[]) as typeof impostosFiltrados,
+    [impostosFiltrados, sortClientData],
+  )
 
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor === null || valor === undefined ? "" : String(valor)
@@ -613,13 +626,13 @@ export default function ImpostosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Descrição</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Vencimento</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Data Pagamento</TableHead>
-                      <TableHead>Número Nota</TableHead>
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data_pagamento" label="Data Pagamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="referencia" label="Número Nota" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -638,7 +651,7 @@ export default function ImpostosPage() {
                             : "Nenhum imposto encontrado para os filtros atuais"}
                         </TableCell>
                       </TableRow>
-                    ) : impostosFiltrados.map((imposto) => {
+                    ) : impostosOrdenados.map((imposto) => {
                       const dataVencimento = imposto.data_vencimento || imposto.vencimento
                       const dataPagamento = imposto.data_pagamento || imposto.dataPagamento
                       const numeroNota = imposto.referencia || imposto.numeroNota
@@ -790,12 +803,12 @@ export default function ImpostosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mês</TableHead>
-                      <TableHead>ICMS</TableHead>
-                      <TableHead>PIS</TableHead>
-                      <TableHead>COFINS</TableHead>
-                      <TableHead>Total</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="mes" label="Mês" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="icms" label="ICMS" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="pis" label="PIS" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="cofins" label="COFINS" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="total" label="Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -812,7 +825,11 @@ export default function ImpostosPage() {
                           Nenhum relatório disponível
                         </TableCell>
                       </TableRow>
-                    ) : groupImpostosByMonth(impostos).map((relatorio, index) => (
+                    ) : (
+                      sortClientData(
+                        groupImpostosByMonth(impostos) as unknown as Record<string, unknown>[],
+                      ) as ReturnType<typeof groupImpostosByMonth>
+                    ).map((relatorio, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{relatorio.mes}</TableCell>
                         <TableCell className="font-semibold">

@@ -1,4 +1,5 @@
 import { api } from './api';
+import { appendSortParams, type TableSortParams } from './table-sort';
 
 export interface Medicao {
   id: number;
@@ -51,7 +52,7 @@ export interface MedicaoUpdate {
   observacoes?: string;
 }
 
-export interface MedicaoFilters {
+export interface MedicaoFilters extends TableSortParams {
   locacao_id?: number;
   periodo?: string;
   status?: 'pendente' | 'finalizada' | 'cancelada';
@@ -72,6 +73,7 @@ export const medicoesApi = {
     if (filters.data_fim) params.append('data_fim', filters.data_fim);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
+    appendSortParams(params, filters);
 
     const response = await api.get(`/medicoes?${params.toString()}`);
     

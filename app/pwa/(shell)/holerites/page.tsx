@@ -1,10 +1,12 @@
 "use client"
 
-import { useState, useEffect, useCallback, useRef } from "react"
+import { useState, useEffect, useCallback, useRef, useMemo } from "react"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -675,6 +677,25 @@ export default function PWAHoleritesPage() {
     return !!holerite.recebido_em
   }
 
+  const holeritesParaOrdenacao = useMemo(
+    () =>
+      holerites.map((h) => ({
+        ...h,
+        status_ordem: estaAssinado(h) ? "assinado" : "pendente",
+      })),
+    [holerites],
+  )
+
+  const {
+    sortedItems: sortedHolerites,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(holeritesParaOrdenacao as unknown as Record<string, unknown>[], {
+    defaultColumn: "mes_referencia",
+    defaultDirection: "desc",
+  })
+
   // Bloquear acesso de clientes
   if (isClientRole()) {
     return (
@@ -751,24 +772,16 @@ export default function PWAHoleritesPage() {
               <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[200px]">Mês/Ano</TableHead>
-                      <TableHead className="w-[70px]">Status</TableHead>
-                      <TableHead className="min-w-[110px] hidden sm:table-cell">Assinatura</TableHead>
-                      <TableHead className="min-w-[120px] hidden md:table-cell">Recebimento</TableHead>
-                      <TableHead className="min-w-[100px] hidden lg:table-cell">Data Criação</TableHead>
+                      <SortableTableHead column="mes_referencia" label="Mês/Ano" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[200px]" />
+                      <SortableTableHead column="status_ordem" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[70px]" />
+                      <SortableTableHead column="assinado_em" label="Assinatura" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[110px] hidden sm:table-cell" />
+                      <SortableTableHead column="recebido_em" label="Recebimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[120px] hidden md:table-cell" />
+                      <SortableTableHead column="created_at" label="Data Criação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[100px] hidden lg:table-cell" />
                       <TableHead className="text-right w-auto">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {holerites
-                      .sort((a, b) => {
-                        // Ordenar por mês/ano (mais recente primeiro)
-                        const [anoA, mesA] = a.mes_referencia.split('-').map(Number)
-                        const [anoB, mesB] = b.mes_referencia.split('-').map(Number)
-                        if (anoA !== anoB) return anoB - anoA
-                        return mesB - mesA
-                      })
-                      .map((holerite) => (
+                    {(sortedHolerites as unknown as (Holerite & { status_ordem?: string })[]).map((holerite) => (
                         <TableRow key={holerite.id} className="hover:bg-gray-50">
                           <TableCell className="font-medium">
                             <div className="flex flex-col">

@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { sortRecordsInMemory } from '../utils/apply-list-sort.js'
 
 const router = express.Router()
 
@@ -18,6 +19,82 @@ function generateSecurePassword(length = 12) {
   }
   
   return password
+}
+
+function normalizeRoleKey(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+}
+
+const ROLE_ALIAS_GROUPS = [
+  ['admin', 'administrador'],
+  ['gestor', 'gerente'],
+  ['operador'],
+  ['visualizador'],
+  ['cliente'],
+  ['supervisor'],
+  ['financeiro'],
+  ['funcionario_nivel_1', 'funcionario nivel 1'],
+  ['funcionario_nivel_2', 'funcionario nivel 2'],
+  ['funcionario_nivel_3', 'funcionario nivel 3'],
+]
+
+function roleMatchesFilter(perfilNome, roleFilter) {
+  const perfilKey = normalizeRoleKey(perfilNome)
+  const filterKey = normalizeRoleKey(roleFilter)
+  if (!filterKey || filterKey === 'all') return true
+  if (!perfilKey) return false
+  if (perfilKey === filterKey) return true
+  if (perfilKey.includes(filterKey) || filterKey.includes(perfilKey)) return true
+
+  for (const group of ROLE_ALIAS_GROUPS) {
+    const normalizedGroup = group.map(normalizeRoleKey)
+    if (normalizedGroup.includes(filterKey)) {
+      return normalizedGroup.some(
+        (alias) => perfilKey === alias || perfilKey.includes(alias) || alias.includes(perfilKey),
+      )
+    }
+  }
+  return false
+}
+
+async function getUsuarioIdsByRoleFilter(roleFilter) {
+  const filterKey = normalizeRoleKey(roleFilter)
+  if (!filterKey || filterKey === 'all') return null
+
+  if (/^\d+$/.test(String(roleFilter).trim())) {
+    const perfilId = parseInt(String(roleFilter).trim(), 10)
+    const { data: upRows, error } = await supabaseAdmin
+      .from('usuario_perfis')
+      .select('usuario_id')
+      .eq('perfil_id', perfilId)
+      .eq('status', 'Ativa')
+    if (error) throw error
+    return new Set((upRows || []).map((r) => r.usuario_id))
+  }
+
+  const { data: perfisRows, error: perfisError } = await supabaseAdmin
+    .from('perfis')
+    .select('id, nome')
+  if (perfisError) throw perfisError
+
+  const matchingPerfilIds = (perfisRows || [])
+    .filter((p) => roleMatchesFilter(p.nome, roleFilter))
+    .map((p) => p.id)
+
+  if (matchingPerfilIds.length === 0) return new Set()
+
+  const { data: upRows, error } = await supabaseAdmin
+    .from('usuario_perfis')
+    .select('usuario_id')
+    .in('perfil_id', matchingPerfilIds)
+    .eq('status', 'Ativa')
+
+  if (error) throw error
+  return new Set((upRows || []).map((r) => r.usuario_id))
 }
 
 // Schema de validação para criação de usuários
@@ -119,7 +196,7 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
     const page = parseInt(req.query.page) || 1
     const limit = Math.min(parseInt(req.query.limit) || 10, 100)
     const offset = (page - 1) * limit
-    const { status, search } = req.query
+    const { status, search, role } = req.query
 
     let usuarios = []
     let count = 0
@@ -168,9 +245,6 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
     if (status) {
       query = query.eq('status', status)
     }
-
-    // Ordenar por data de criação (mais recentes primeiro) para garantir ordem consistente
-    query = query.order('created_at', { ascending: false })
 
     const { data: usuariosPorNomeEmail, error: error1, count: count1 } = await query
 
@@ -239,10 +313,24 @@ router.get('/', authenticateToken, requirePermission('usuarios:visualizar'), asy
       count = count1 || 0
     }
 
+    if (role && String(role).trim() && String(role).trim() !== 'all') {
+      const allowedIds = await getUsuarioIdsByRoleFilter(String(role).trim())
+      if (allowedIds !== null) {
+        usuarios = (usuarios || []).filter((u) => allowedIds.has(u.id))
+        count = usuarios.length
+      }
+    }
+
+    const sortOpts = {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['nome', 'email', 'status', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    }
+
     // Aplicar paginação manualmente já que combinamos resultados
-    const usuariosPaginados = usuarios
-      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
-      .slice(offset, offset + limit)
+    const usuariosPaginados = sortRecordsInMemory(usuarios, sortOpts).slice(offset, offset + limit)
 
     // Buscar perfis e clientes relacionados para cada usuário paginado
     const usuariosComPerfis = await Promise.all(

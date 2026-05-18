@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -247,6 +249,13 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     aplicarFiltro(holerites, filtroMes, filtroAno)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filtroMes, filtroAno, holerites])
+
+  const {
+    sortedItems: sortedHolerites,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(holeritesFiltrados as unknown as Record<string, unknown>[])
 
   const handleAssinar = async (holerite: Holerite) => {
     if (!assinaturaDataUrl) {
@@ -528,14 +537,14 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mês/Ano</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Data de Assinatura</TableHead>
+                  <SortableTableHead column="mes_referencia" label="Mês/Ano" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="assinado" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_assinatura" label="Data de Assinatura" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {holeritesFiltrados.map((holerite) => (
+                {(sortedHolerites as unknown as Holerite[]).map((holerite) => (
                   <TableRow key={holerite.id}>
                     <TableCell className="font-medium capitalize">
                       {holerite.mes} / {holerite.ano}

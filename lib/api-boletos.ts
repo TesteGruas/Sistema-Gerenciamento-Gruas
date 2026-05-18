@@ -1,4 +1,5 @@
 import { api } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 export interface Boleto {
   id: number
@@ -91,7 +92,7 @@ export const boletosApi = {
     page?: number
     limit?: number
     include_medicoes?: boolean
-  }) {
+  } & TableSortParams) {
     const searchParams = new URLSearchParams()
     
     if (params?.cliente_id) searchParams.append('cliente_id', params.cliente_id.toString())
@@ -104,6 +105,7 @@ export const boletosApi = {
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.include_medicoes) searchParams.append('include_medicoes', 'true')
+    appendSortParams(searchParams, params)
 
     const response = await api.get(`/boletos?${searchParams.toString()}`)
     return response.data

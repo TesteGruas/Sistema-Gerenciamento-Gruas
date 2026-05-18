@@ -1,4 +1,5 @@
 import api, { apiWithRetry } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces para os dados financeiros
 export interface FinancialData {
@@ -228,8 +229,11 @@ export const deleteVenda = async (id: number): Promise<void> => {
 
 
 // Compras
-export const getCompras = async (): Promise<Compra[]> => {
-  const response = await api.get('/compras')
+export const getCompras = async (sort?: TableSortParams): Promise<Compra[]> => {
+  const params = new URLSearchParams()
+  appendSortParams(params, sort)
+  const qs = params.toString()
+  const response = await api.get(qs ? `/compras?${qs}` : '/compras')
   return response.data.data
 }
 

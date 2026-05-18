@@ -1,6 +1,7 @@
 import express from 'express';
 import Joi from 'joi';
 import { supabase, supabaseAdmin } from '../config/supabase.js';
+import { applyListSort, sortRecordsInMemory } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -406,8 +407,7 @@ router.get('/', async (req, res) => {
         orcamento_custos_mensais (*),
         orcamento_horas_extras (*),
         orcamento_servicos_adicionais (*)
-      `, { count: 'exact' })
-      .order('created_at', { ascending: false });
+      `, { count: 'exact' });
 
     // Filtros
     if (status) {
@@ -431,8 +431,17 @@ router.get('/', async (req, res) => {
     let orcamentosFiltrados = [];
     let totalCount = 0;
 
+    const sortOpts = {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero', 'status', 'data_orcamento', 'valor_total', 'created_at', 'cliente_id', 'obra_id'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    };
+
     if (search) {
       // Buscar todos os orçamentos (sem paginação) para poder filtrar
+      query = applyListSort(query, sortOpts);
       const { data: allOrcamentos, error: allError, count: allCount } = await query;
 
       if (allError) throw allError;
@@ -447,11 +456,13 @@ router.get('/', async (req, res) => {
       });
 
       totalCount = orcamentosFiltrados.length;
+      orcamentosFiltrados = sortRecordsInMemory(orcamentosFiltrados, sortOpts);
 
       // Aplicar paginação manualmente após filtrar
       orcamentosFiltrados = orcamentosFiltrados.slice(offset, offset + parseInt(limit));
     } else {
       // Sem busca, aplicar paginação normalmente
+      query = applyListSort(query, sortOpts);
       query = query.range(offset, offset + limit - 1);
 
       const { data: orcamentos, error, count } = await query;

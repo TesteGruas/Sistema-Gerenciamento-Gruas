@@ -4,6 +4,7 @@
  */
 
 import { fetchWithAuth } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 import { getApiOrigin } from './runtime-config'
 
 // Configuração da API
@@ -112,7 +113,7 @@ export interface EntradaLivroGruaCompleta extends EntradaLivroGrua {
   obraName?: string
 }
 
-export interface FiltrosLivroGrua {
+export interface FiltrosLivroGrua extends TableSortParams {
   grua_id?: string
   funcionario_id?: number
   data_inicio?: string
@@ -387,7 +388,8 @@ export const livroGruaApi = {
     limit?: number,
     search?: string,
     obraId?: string | number,
-    status?: string
+    status?: string,
+    sort?: TableSortParams,
   ): Promise<{success: boolean, data: any[], total?: number, page?: number, limit?: number, totalPages?: number}> {
     const searchParams = new URLSearchParams()
     
@@ -409,6 +411,7 @@ export const livroGruaApi = {
     if (status && status !== 'all') {
       searchParams.append('status', status)
     }
+    appendSortParams(searchParams, sort)
     
     const params = searchParams.toString() ? `?${searchParams.toString()}` : ''
     const response = await httpRequest(`/livro-grua/relacoes-grua-obra${params}`)

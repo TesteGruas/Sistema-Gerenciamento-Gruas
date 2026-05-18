@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import { Input } from "@/components/ui/input"
@@ -314,6 +316,13 @@ export default function CertificadosPage() {
     setIsAssinaturaDialogOpen(true)
   }
 
+  const {
+    sortedItems: sortedCertificados,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(certificados as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -347,15 +356,15 @@ export default function CertificadosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Data de Validade</TableHead>
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_validade" label="Data de Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {certificados.map((certificado) => {
+                {sortedCertificados.map((certificado) => {
                   const dias = diasParaVencimento(certificado.data_validade)
                   return (
                     <TableRow key={certificado.id}>

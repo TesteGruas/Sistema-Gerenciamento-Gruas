@@ -3,6 +3,7 @@ import multer from 'multer';
 import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
 import { authenticateToken } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -87,8 +88,7 @@ router.get('/', authenticateToken, async (req, res) => {
         obras(id, nome),
         notas_fiscais(id, numero_nf, serie, tipo),
         contas_bancarias!boletos_banco_origem_id_fkey(id, banco, agencia, conta, tipo_conta)
-      `)
-      .order('data_vencimento', { ascending: false });
+      `);
 
     // Filtros
     if (cliente_id) query = query.eq('cliente_id', cliente_id);
@@ -101,6 +101,14 @@ router.get('/', authenticateToken, async (req, res) => {
     if (search) {
       query = query.or(`numero_boleto.ilike.%${search}%,descricao.ilike.%${search}%`);
     }
+
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero_boleto', 'descricao', 'valor', 'data_emissao', 'data_vencimento', 'status', 'created_at'],
+      defaultColumn: 'data_vencimento',
+      defaultAscending: false,
+    });
 
     // Paginação
     const from = (page - 1) * limit;

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { useToast } from "@/hooks/use-toast"
 import {
   FileText,
@@ -269,6 +271,27 @@ export default function RelatoriosJustificativasPage() {
     }))
   }
 
+  const topFuncionarios = useMemo(
+    () =>
+      [...(relatorioMensal?.resumo.por_funcionario ?? [])]
+        .map((f) => ({
+          ...f,
+          pendentes: f.por_status['Pendente'] || 0,
+          aprovadas: f.por_status['Aprovada'] || 0,
+          rejeitadas: f.por_status['Rejeitada'] || 0,
+        }))
+        .sort((a, b) => b.total_justificativas - a.total_justificativas)
+        .slice(0, 10),
+    [relatorioMensal?.resumo.por_funcionario],
+  )
+
+  const {
+    sortedItems,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(topFuncionarios as unknown as Record<string, unknown>[])
+
   return (
     <AdminGuard>
       <div className="space-y-6">
@@ -515,24 +538,21 @@ export default function RelatoriosJustificativasPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Funcionário</TableHead>
-                          <TableHead>Total</TableHead>
-                          <TableHead>Pendentes</TableHead>
-                          <TableHead>Aprovadas</TableHead>
-                          <TableHead>Rejeitadas</TableHead>
+                          <SortableTableHead column="nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                          <SortableTableHead column="total_justificativas" label="Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                          <SortableTableHead column="pendentes" label="Pendentes" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                          <SortableTableHead column="aprovadas" label="Aprovadas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                          <SortableTableHead column="rejeitadas" label="Rejeitadas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {relatorioMensal.resumo.por_funcionario
-                          .sort((a, b) => b.total_justificativas - a.total_justificativas)
-                          .slice(0, 10)
-                          .map((func) => (
+                        {(sortedItems as typeof topFuncionarios).map((func) => (
                             <TableRow key={func.funcionario_id}>
                               <TableCell className="font-medium">{func.nome}</TableCell>
                               <TableCell>{func.total_justificativas}</TableCell>
-                              <TableCell>{func.por_status['Pendente'] || 0}</TableCell>
-                              <TableCell>{func.por_status['Aprovada'] || 0}</TableCell>
-                              <TableCell>{func.por_status['Rejeitada'] || 0}</TableCell>
+                              <TableCell>{func.pendentes}</TableCell>
+                              <TableCell>{func.aprovadas}</TableCell>
+                              <TableCell>{func.rejeitadas}</TableCell>
                             </TableRow>
                           ))}
                       </TableBody>

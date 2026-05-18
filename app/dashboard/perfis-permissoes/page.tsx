@@ -27,6 +27,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import {
   Select,
   SelectContent,
@@ -442,6 +444,13 @@ export default function PerfisPermissoesPage() {
 
   const perfilAtual = perfis.find(p => p.id === perfilSelecionado)
 
+  const {
+    sortedItems: sortedPerfis,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(perfis as unknown as Record<string, unknown>[])
+
   return (
     <ProtectedRoute permission="usuarios:visualizar">
       <div className="w-full h-full p-6 space-y-6 overflow-auto">
@@ -618,15 +627,15 @@ export default function PerfisPermissoesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead className="text-center">Nível</TableHead>
-                        <TableHead className="text-center">Status</TableHead>
+                        <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="nivel_acesso" label="Nível" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-center" />
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-center" />
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {perfis.map((perfil) => (
+                      {(sortedPerfis as unknown as Perfil[]).map((perfil) => (
                         <TableRow key={perfil.id}>
                           <TableCell className="font-medium">
                             <div className="flex items-center gap-2">

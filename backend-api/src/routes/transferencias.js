@@ -1,4 +1,5 @@
 import express from 'express';
+import { applyListSort } from '../utils/apply-list-sort.js';
 import { supabase } from '../config/supabase.js';
 import Joi from 'joi';
 
@@ -80,10 +81,15 @@ const transferenciaSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('transferencias_bancarias')
-      .select('*')
-      .order('data', { ascending: false });
+    let query = supabase.from('transferencias_bancarias').select('*');
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data', 'descricao', 'valor', 'tipo', 'status', 'created_at'],
+      defaultColumn: 'data',
+      defaultAscending: false,
+    });
+    const { data, error } = await query;
 
     if (error) throw error;
 

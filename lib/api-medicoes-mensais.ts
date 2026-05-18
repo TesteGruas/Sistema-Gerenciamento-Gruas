@@ -1,4 +1,5 @@
 import { api } from './api';
+import { appendSortParams, type TableSortParams } from './table-sort';
 
 export interface MedicaoMensal {
   id: number;
@@ -200,7 +201,7 @@ export interface MedicaoMensalUpdate extends Partial<MedicaoMensalCreate> {
   aditivos?: Omit<MedicaoAditivo, 'id' | 'medicao_id' | 'created_at'>[];
 }
 
-export interface MedicaoMensalFilters {
+export interface MedicaoMensalFilters extends TableSortParams {
   orcamento_id?: number | null;
   obra_id?: number | null;
   grua_id?: number | null; // NOVO
@@ -244,6 +245,7 @@ export const medicoesMensaisApi = {
     if (filters.search) params.append('search', filters.search);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
+    appendSortParams(params, filters);
 
     const response = await api.get(`/medicoes-mensais?${params.toString()}`);
     return response.data;

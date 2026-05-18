@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { 
   FileText, 
   Plus, 
@@ -279,9 +281,17 @@ export default function OrcamentosPage() {
     }
   }
 
-
   // A filtragem já é feita pela API
   const filteredOrcamentos = orcamentos
+
+  const {
+    sortedItems: sortedOrcamentos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredOrcamentos as unknown as Record<string, unknown>[], {
+    onPageReset: () => setCurrentPageObra(1),
+  })
 
   const getStatusBadge = (status: StatusOrcamento) => {
     const configs: Record<StatusOrcamento, { label: string; variant: "default" | "secondary" | "destructive" | "outline", icon: any, className: string }> = {
@@ -820,13 +830,13 @@ export default function OrcamentosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nº Orçamento</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Obra</TableHead>
+                        <SortableTableHead column="numero" label="Nº Orçamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="obra_nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         <TableHead>Equipamento</TableHead>
-                        <TableHead>Valor Mensal</TableHead>
-                        <TableHead>Prazo</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="total_mensal" label="Valor Mensal" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="prazo_locacao_meses" label="Prazo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
@@ -838,7 +848,7 @@ export default function OrcamentosPage() {
                           </TableCell>
                         </TableRow>
                       ) : (
-                        filteredOrcamentos.map((orcamento) => (
+                        sortedOrcamentos.map((orcamento) => (
                           <TableRow key={orcamento.id}>
                             <TableCell className="font-medium">{orcamento.numero}</TableCell>
                             <TableCell>{orcamento.cliente_nome}</TableCell>

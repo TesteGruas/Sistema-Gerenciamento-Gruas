@@ -1,6 +1,7 @@
 // API de Contas Bancárias integrada com backend real
 
 import api from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces
 export interface ContaBancaria {
@@ -41,7 +42,7 @@ export interface ContaBancariaUpdate {
   observacoes?: string
 }
 
-export interface ContaBancariaFilters {
+export interface ContaBancariaFilters extends TableSortParams {
   banco?: string
   tipo?: string
   ativa?: boolean
@@ -81,6 +82,7 @@ export const apiContasBancarias = {
     if (filters?.search) params.append('search', filters.search)
     if (filters?.page) params.append('page', filters.page.toString())
     if (filters?.limit) params.append('limit', filters.limit.toString())
+    appendSortParams(params, filters)
 
     // Adicionar timestamp para evitar cache
     params.append('_t', Date.now().toString())

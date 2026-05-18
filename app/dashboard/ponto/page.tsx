@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import {
   Dialog,
   DialogContent,
@@ -232,7 +234,6 @@ export default function PontoPage() {
     total: 0,
     pages: 1
   })
-
   // Estados para horas extras
   const [registrosHorasExtras, setRegistrosHorasExtras] = useState<RegistroPonto[]>([])
   const [estatisticasHorasExtras, setEstatisticasHorasExtras] = useState<EstatisticasHorasExtras | null>(null)
@@ -447,7 +448,6 @@ export default function PontoPage() {
     const searchChanged = prevDebouncedSearchTermRef.current !== debouncedSearchTerm
     const pageChanged = prevCurrentPageRef.current !== currentPage
     const pageSizeChanged = prevPageSizeRef.current !== pageSize
-    
     // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
     if (!filtroDataChanged && !searchChanged && !pageChanged && !pageSizeChanged) {
       return
@@ -1332,13 +1332,14 @@ export default function PontoPage() {
     return data.registrosPonto
   }, [data.registrosPonto])
 
-  const sortedRegistros = useMemo(() => {
-    return filteredRegistros
-      .sort((a, b) => {
-        // Ordenação por data (mais recente primeiro)
-        return new Date(b.data).getTime() - new Date(a.data).getTime()
-      })
-  }, [filteredRegistros])
+  const {
+    sortedItems: sortedRegistros,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredRegistros as unknown as Record<string, unknown>[], {
+    onPageReset: () => setCurrentPage(1),
+  })
 
   const getStatusBadge = (status: string) => {
     // Tratar "Em Andamento" como "Incompleto"
@@ -2643,15 +2644,15 @@ export default function PontoPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Data</TableHead>
+                      <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Tipo Dia</TableHead>
                       <TableHead>Entrada</TableHead>
                       <TableHead>Saída</TableHead>
-                      <TableHead>Horas</TableHead>
-                      <TableHead>Horas +</TableHead>
+                      <SortableTableHead column="horas_trabalhadas" label="Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="horas_extras" label="Horas +" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Horas -</TableHead>
-                      <TableHead className="w-12 max-w-12 min-w-12 text-center">Status</TableHead>
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-12 max-w-12 min-w-12 text-center" />
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>

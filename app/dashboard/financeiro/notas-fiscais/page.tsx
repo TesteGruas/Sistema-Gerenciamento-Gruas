@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
@@ -396,7 +398,7 @@ export default function NotasFiscaisPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const itemsPerPage = 20
-  
+  const resetNotasPage = useCallback(() => setCurrentPage(1), [])
   // Dados para formulários
   const [clientes, setClientes] = useState<Cliente[]>([])
   const [fornecedores, setFornecedores] = useState<Fornecedor[]>([])
@@ -1290,7 +1292,7 @@ export default function NotasFiscaisPage() {
             ? searchChaveEntrada.trim()
             : undefined,
         page: currentPage,
-        limit: itemsPerPage
+        limit: itemsPerPage,
       })
       
       if (response.success) {
@@ -3439,6 +3441,15 @@ export default function NotasFiscaisPage() {
     return filtered
   }, [notasFiscais, tipoNotaFilter, activeTab])
 
+  const {
+    sortedItems: sortedFilteredNotas,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredNotas as unknown as Record<string, unknown>[], {
+    onPageReset: resetNotasPage,
+  })
+
   const escapeCsvCelulaNf = (valor: unknown) => {
     const s = valor === null || valor === undefined ? "" : String(valor)
     if (/[",\r\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -3861,20 +3872,20 @@ export default function NotasFiscaisPage() {
                   <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[11%] min-w-[7rem]">Número</TableHead>
-                        <TableHead className="w-[5%] min-w-[3rem]">Série</TableHead>
-                        <TableHead className="w-[11%] min-w-[7.5rem]">Tipo</TableHead>
-                        <TableHead className="w-[24%] min-w-[11rem]">Cliente</TableHead>
-                        <TableHead className="w-[9%] whitespace-nowrap">Data Emissão</TableHead>
-                        <TableHead className="w-[9%] whitespace-nowrap">Vencimento</TableHead>
-                        <TableHead className="w-[10%] whitespace-nowrap text-right">Valor</TableHead>
+                        <SortableTableHead column="numero_nf" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[11%] min-w-[7rem]" />
+                        <SortableTableHead column="serie" label="Série" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[5%] min-w-[3rem]" />
+                        <SortableTableHead column="tipo_nota" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[11%] min-w-[7.5rem]" />
+                        <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[24%] min-w-[11rem]" />
+                        <SortableTableHead column="data_emissao" label="Data Emissão" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[9%] whitespace-nowrap" />
+                        <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[9%] whitespace-nowrap" />
+                        <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[10%] whitespace-nowrap text-right" />
                         <TableHead className="w-[15%] min-w-0">Cobrança</TableHead>
-                        <TableHead className="w-[8%] whitespace-nowrap">Status</TableHead>
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[8%] whitespace-nowrap" />
                         <TableHead className="w-[88px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredNotas.map((nota) => (
+                      {sortedFilteredNotas.map((nota) => (
                         <TableRow key={nota.id}>
                           <TableCell className="font-medium align-top">{nota.numero_nf}</TableCell>
                           <TableCell className="align-top">{nota.serie || '-'}</TableCell>
@@ -4094,21 +4105,21 @@ export default function NotasFiscaisPage() {
                   <Table className="w-full table-fixed">
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[9%] min-w-[6rem]">Número</TableHead>
-                        <TableHead className="w-[4%] min-w-[2.5rem]">Série</TableHead>
-                        <TableHead className="w-[14%] min-w-[7rem]">Chave / ID eletrônico</TableHead>
-                        <TableHead className="w-[17%] min-w-[8rem]">Fornecedor</TableHead>
-                        <TableHead className="w-[11%] min-w-[6rem]">Compra</TableHead>
-                        <TableHead className="w-[8%] whitespace-nowrap">Data Emissão</TableHead>
-                        <TableHead className="w-[8%] whitespace-nowrap">Vencimento</TableHead>
-                        <TableHead className="w-[9%] whitespace-nowrap text-right">Valor</TableHead>
+                        <SortableTableHead column="numero_nf" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[9%] min-w-[6rem]" />
+                        <SortableTableHead column="serie" label="Série" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[4%] min-w-[2.5rem]" />
+                        <SortableTableHead column="chave_acesso" label="Chave / ID eletrônico" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[14%] min-w-[7rem]" />
+                        <SortableTableHead column="fornecedores.nome" label="Fornecedor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[17%] min-w-[8rem]" />
+                        <SortableTableHead column="compra_id" label="Compra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[11%] min-w-[6rem]" />
+                        <SortableTableHead column="data_emissao" label="Data Emissão" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[8%] whitespace-nowrap" />
+                        <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[8%] whitespace-nowrap" />
+                        <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[9%] whitespace-nowrap text-right" />
                         <TableHead className="w-[13%] min-w-0">Cobrança</TableHead>
-                        <TableHead className="w-[7%] whitespace-nowrap">Status</TableHead>
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[7%] whitespace-nowrap" />
                         <TableHead className="w-[88px] text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredNotas.map((nota) => (
+                      {sortedFilteredNotas.map((nota) => (
                         <TableRow key={nota.id}>
                           <TableCell className="font-medium align-top">{nota.numero_nf}</TableCell>
                           <TableCell className="align-top">{nota.serie || '-'}</TableCell>

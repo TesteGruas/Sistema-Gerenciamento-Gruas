@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
@@ -163,6 +165,16 @@ export default function PWAObraDetalhesPage() {
     () => parseObservacoesManutencao(manutencaoSelecionada?.observacoes),
     [manutencaoSelecionada?.observacoes]
   )
+
+  const {
+    sortedItems: sortedDocumentos,
+    sortColumn: documentoSortColumn,
+    sortDirection: documentoSortDirection,
+    toggleSort: toggleDocumentoSort,
+  } = useClientSortedList(documentos as unknown as Record<string, unknown>[], {
+    defaultColumn: "created_at",
+    defaultDirection: "desc",
+  })
 
   // Verificar status de conexão
   useEffect(() => {
@@ -1594,143 +1606,135 @@ export default function PWAObraDetalhesPage() {
                 <p className="text-xs text-gray-400 mt-1">Os documentos adicionais aparecerão aqui quando forem adicionados à obra</p>
               </div>
             ) : (
-              <div className="space-y-3">
-                {documentos.map((documento) => (
-                  <div
-                    key={documento.id}
-                    className="border rounded-lg p-4 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <h4 className="font-semibold text-sm text-gray-900 mb-1">
-                          {documento.titulo || `Documento ${documento.id}`}
-                        </h4>
-                        {documento.descricao && (
-                          <p className="text-xs text-gray-600 mb-2">{documento.descricao}</p>
-                        )}
-                        <div className="flex items-center gap-4 text-xs text-gray-500">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3" />
-                            {new Date(documento.created_at).toLocaleDateString('pt-BR')}
-                          </span>
-                          <Badge
-                            variant={
-                              documento.status === 'assinado'
-                                ? 'default'
-                                : documento.status === 'aguardando_assinatura'
-                                ? 'secondary'
-                                : 'outline'
-                            }
-                            className="text-xs"
-                          >
-                            {documento.status === 'assinado'
-                              ? 'Assinado'
-                              : documento.status === 'aguardando_assinatura'
-                              ? 'Aguardando'
-                              : documento.status === 'em_assinatura'
-                              ? 'Em Assinatura'
-                              : documento.status === 'rejeitado'
-                              ? 'Rejeitado'
-                              : 'Rascunho'}
-                          </Badge>
-                        </div>
+              <div className="border rounded-lg overflow-hidden">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTableHead column="titulo" label="Documento" activeColumn={documentoSortColumn} direction={documentoSortDirection} onSort={toggleDocumentoSort} />
+                      <SortableTableHead column="created_at" label="Data" activeColumn={documentoSortColumn} direction={documentoSortDirection} onSort={toggleDocumentoSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={documentoSortColumn} direction={documentoSortDirection} onSort={toggleDocumentoSort} />
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                {(sortedDocumentos as unknown as DocumentoObra[]).map((documento) => (
+                  <TableRow key={documento.id}>
+                    <TableCell>
+                      <div>
+                        <div className="font-semibold text-sm text-gray-900">{documento.titulo || `Documento ${documento.id}`}</div>
+                        {documento.descricao && <p className="text-xs text-gray-600 mt-1">{documento.descricao}</p>}
                       </div>
-                      <div className="flex items-center gap-2 ml-4">
+                    </TableCell>
+                    <TableCell>
+                      <span className="flex items-center gap-1 text-xs text-gray-500">
+                        <Clock className="w-3 h-3" />
+                        {new Date(documento.created_at).toLocaleDateString('pt-BR')}
+                      </span>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={documento.status === 'assinado' ? 'default' : documento.status === 'aguardando_assinatura' ? 'secondary' : 'outline'} className="text-xs">
+                        {documento.status === 'assinado' ? 'Assinado' : documento.status === 'aguardando_assinatura' ? 'Aguardando' : documento.status === 'em_assinatura' ? 'Em Assinatura' : documento.status === 'rejeitado' ? 'Rejeitado' : 'Rascunho'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2 flex-wrap">
                         {documento.caminho_arquivo && (
-                          <>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                try {
-                                  const apiUrl = getApiOrigin()
-                                  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                        <>
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                        try {
+                        const apiUrl = getApiOrigin()
+                        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                   
-                                  const urlResponse = await fetch(
-                                    `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
-                                    {
-                                      headers: {
-                                        'Authorization': `Bearer ${token}`
-                                      }
-                                    }
-                                  )
+                        const urlResponse = await fetch(
+                        `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
+                        {
+                        headers: {
+                        'Authorization': `Bearer ${token}`
+                        }
+                        }
+                        )
                                   
-                                  if (urlResponse.ok) {
-                                    const urlData = await urlResponse.json()
-                                    if (urlData.success && urlData.data?.url) {
-                                      window.open(urlData.data.url, '_blank')
-                                    } else {
-                                      throw new Error('URL não retornada')
-                                    }
-                                  } else {
-                                    throw new Error('Erro ao gerar URL')
-                                  }
-                                } catch (error) {
-                                  console.error('Erro ao visualizar documento:', error)
-                                  toast({
-                                    title: "Erro",
-                                    description: "Não foi possível visualizar o documento",
-                                    variant: "destructive"
-                                  })
-                                }
-                              }}
-                              disabled={!isOnline}
-                            >
-                              <Eye className="w-3 h-3 mr-1" />
-                              Visualizar
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={async () => {
-                                try {
-                                  const apiUrl = getApiOrigin()
-                                  const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+                        if (urlResponse.ok) {
+                        const urlData = await urlResponse.json()
+                        if (urlData.success && urlData.data?.url) {
+                        window.open(urlData.data.url, '_blank')
+                        } else {
+                        throw new Error('URL não retornada')
+                        }
+                        } else {
+                        throw new Error('Erro ao gerar URL')
+                        }
+                        } catch (error) {
+                        console.error('Erro ao visualizar documento:', error)
+                        toast({
+                        title: "Erro",
+                        description: "Não foi possível visualizar o documento",
+                        variant: "destructive"
+                        })
+                        }
+                        }}
+                        disabled={!isOnline}
+                        >
+                        <Eye className="w-3 h-3 mr-1" />
+                        Visualizar
+                        </Button>
+                        <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={async () => {
+                        try {
+                        const apiUrl = getApiOrigin()
+                        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
                                   
-                                  const urlResponse = await fetch(
-                                    `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
-                                    {
-                                      headers: {
-                                        'Authorization': `Bearer ${token}`
-                                      }
-                                    }
-                                  )
+                        const urlResponse = await fetch(
+                        `${apiUrl}/api/arquivos/url-assinada?caminho=${encodeURIComponent(documento.caminho_arquivo)}`,
+                        {
+                        headers: {
+                        'Authorization': `Bearer ${token}`
+                        }
+                        }
+                        )
                                   
-                                  if (urlResponse.ok) {
-                                    const urlData = await urlResponse.json()
-                                    if (urlData.success && urlData.data?.url) {
-                                      const link = document.createElement('a')
-                                      link.href = urlData.data.url
-                                      link.download = documento.arquivo_original || `documento_${documento.id}.pdf`
-                                      document.body.appendChild(link)
-                                      link.click()
-                                      document.body.removeChild(link)
-                                    } else {
-                                      throw new Error('URL não retornada')
-                                    }
-                                  } else {
-                                    throw new Error('Erro ao gerar URL')
-                                  }
-                                } catch (error) {
-                                  console.error('Erro ao baixar documento:', error)
-                                  toast({
-                                    title: "Erro",
-                                    description: "Não foi possível baixar o documento",
-                                    variant: "destructive"
-                                  })
-                                }
-                              }}
-                              disabled={!isOnline}
-                            >
-                              <Download className="w-3 h-3 mr-1" />
-                              Baixar
-                            </Button>
-                          </>
+                        if (urlResponse.ok) {
+                        const urlData = await urlResponse.json()
+                        if (urlData.success && urlData.data?.url) {
+                        const link = document.createElement('a')
+                        link.href = urlData.data.url
+                        link.download = documento.arquivo_original || `documento_${documento.id}.pdf`
+                        document.body.appendChild(link)
+                        link.click()
+                        document.body.removeChild(link)
+                        } else {
+                        throw new Error('URL não retornada')
+                        }
+                        } else {
+                        throw new Error('Erro ao gerar URL')
+                        }
+                        } catch (error) {
+                        console.error('Erro ao baixar documento:', error)
+                        toast({
+                        title: "Erro",
+                        description: "Não foi possível baixar o documento",
+                        variant: "destructive"
+                        })
+                        }
+                        }}
+                        disabled={!isOnline}
+                        >
+                        <Download className="w-3 h-3 mr-1" />
+                        Baixar
+                        </Button>
+                        </>
                         )}
                       </div>
-                    </div>
-                  </div>
+                    </TableCell>
+                  </TableRow>
                 ))}
+                  </TableBody>
+                </Table>
               </div>
             )}
           </CardContent>

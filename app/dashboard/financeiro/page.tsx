@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   FileCheck,
@@ -73,6 +75,23 @@ export default function FinanceiroPage() {
   const [notasEntradaCompleta, setNotasEntradaCompleta] = useState<NotaFiscal[]>([])
   const [contasBancariasCompleta, setContasBancariasCompleta] = useState<ContaBancaria[]>([])
   const [exportandoCsv, setExportandoCsv] = useState<string | null>(null)
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
+  const notasReceberOrdenadas = useMemo(
+    () =>
+      sortClientData(notasResumo.aReceber.lista as unknown as Record<string, unknown>[]) as NotaFiscal[],
+    [notasResumo.aReceber.lista, sortClientData],
+  )
+  const notasPagarOrdenadas = useMemo(
+    () =>
+      sortClientData(notasResumo.aPagar.lista as unknown as Record<string, unknown>[]) as NotaFiscal[],
+    [notasResumo.aPagar.lista, sortClientData],
+  )
+  const contasBancariasOrdenadas = useMemo(
+    () =>
+      sortClientData(bancosResumo.contas as unknown as Record<string, unknown>[]) as ContaBancaria[],
+    [bancosResumo.contas, sortClientData],
+  )
 
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor === null || valor === undefined ? "" : String(valor)
@@ -581,17 +600,17 @@ export default function FinanceiroPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número NF</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
+                        <SortableTableHead column="numero_nf" label="Número NF" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         <TableHead>Cobrança</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {notasResumo.aReceber.lista.length > 0 ? (
-                        notasResumo.aReceber.lista.map((nota) => (
+                      {notasReceberOrdenadas.length > 0 ? (
+                        notasReceberOrdenadas.map((nota) => (
                           <TableRow key={nota.id}>
                             <TableCell className="font-medium">{nota.numero_nf}</TableCell>
                             <TableCell>{nota.clientes?.nome || '-'}</TableCell>
@@ -634,17 +653,17 @@ export default function FinanceiroPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número NF</TableHead>
-                        <TableHead>Fornecedor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Valor</TableHead>
+                        <SortableTableHead column="numero_nf" label="Número NF" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="fornecedores.nome" label="Fornecedor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         <TableHead>Cobrança</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {notasResumo.aPagar.lista.length > 0 ? (
-                        notasResumo.aPagar.lista.map((nota) => (
+                      {notasPagarOrdenadas.length > 0 ? (
+                        notasPagarOrdenadas.map((nota) => (
                           <TableRow key={nota.id}>
                             <TableCell className="font-medium">{nota.numero_nf}</TableCell>
                             <TableCell>{nota.fornecedores?.nome || '-'}</TableCell>
@@ -738,17 +757,17 @@ export default function FinanceiroPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Banco</TableHead>
-                    <TableHead>Agência</TableHead>
-                    <TableHead>Conta</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Saldo</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="banco" label="Banco" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="agencia" label="Agência" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="conta" label="Conta" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tipo_conta" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="saldo_atual" label="Saldo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bancosResumo.contas.length > 0 ? (
-                    bancosResumo.contas.map((conta) => (
+                  {contasBancariasOrdenadas.length > 0 ? (
+                    contasBancariasOrdenadas.map((conta) => (
                       <TableRow key={conta.id}>
                         <TableCell className="font-medium">{conta.banco}</TableCell>
                         <TableCell>{conta.agencia}</TableCell>

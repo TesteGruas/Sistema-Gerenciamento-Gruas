@@ -1,4 +1,5 @@
 import { api } from './api';
+import { appendSortParams, type TableSortParams } from './table-sort';
 
 export interface Imposto {
   id: string;
@@ -67,7 +68,7 @@ export const impostosApi = {
     status?: string;
     page?: number;
     limit?: number;
-  } = {}): Promise<{ impostos: Imposto[], total: number }> {
+  } & TableSortParams = {}): Promise<{ impostos: Imposto[], total: number }> {
     const params = new URLSearchParams();
     
     if (filters.competencia) params.append('competencia', filters.competencia);
@@ -75,6 +76,7 @@ export const impostosApi = {
     if (filters.status) params.append('status', filters.status);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
+    appendSortParams(params, filters);
 
     const response = await api.get(`/impostos?${params.toString()}`);
     

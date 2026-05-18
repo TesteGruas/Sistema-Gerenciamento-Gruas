@@ -12,6 +12,7 @@ import {
   adicionarAssinaturaPorAncorasOuFallback,
   normalizarTipoDocumentoParaRegraAssinatura
 } from '../utils/pdf-signature.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 const router = express.Router()
 
@@ -115,7 +116,14 @@ router.get('/funcionarios', authenticateToken, requirePermission('rh:visualizar'
       query = query.eq('cargo', cargo)
     }
 
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['nome', 'cpf', 'cargo', 'departamento', 'status', 'data_admissao', 'created_at'],
+      defaultColumn: 'nome',
+      defaultAscending: true,
+    })
+    query = query.range(offset, offset + limit - 1)
 
     const { data: funcionarios, error, count } = await query
 

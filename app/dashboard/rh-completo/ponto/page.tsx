@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
@@ -70,6 +72,8 @@ export default function PontoEletronicoPage() {
   const [filtroData, setFiltroData] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("all")
   const { toast } = useToast()
+  const registrosSort = useTableSort()
+  const funcionariosSort = useTableSort()
 
   // Carregar registros de ponto
   useEffect(() => {
@@ -236,6 +240,15 @@ export default function PontoEletronicoPage() {
     const matchesStatus = filtroStatus === "all" || registro.status === filtroStatus
     return matchesFuncionario && matchesData && matchesStatus
   })
+
+  const sortedRegistros = useMemo(
+    () => registrosSort.sortClientData(filteredRegistros as Record<string, unknown>[]),
+    [filteredRegistros, registrosSort.sortClientData],
+  )
+  const sortedFuncionarios = useMemo(
+    () => funcionariosSort.sortClientData(funcionarios as Record<string, unknown>[]),
+    [funcionarios, funcionariosSort.sortClientData],
+  )
 
   return (
     <div className="space-y-6">
@@ -404,18 +417,18 @@ export default function PontoEletronicoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
-                    <TableHead>Saída</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
+                    <SortableTableHead column="data" label="Data" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
+                    <SortableTableHead column="entrada" label="Entrada" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
+                    <SortableTableHead column="saida" label="Saída" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
                     <TableHead>Almoço</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="horasTrabalhadas" label="Horas" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
+                    <SortableTableHead column="obra.nome" label="Obra" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={registrosSort.sortColumn} direction={registrosSort.sortDirection} onSort={registrosSort.toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRegistros.map((registro) => (
+                  {sortedRegistros.map((registro) => (
                     <TableRow key={registro.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -485,17 +498,17 @@ export default function PontoEletronicoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Total Horas</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Faltas</TableHead>
-                    <TableHead>Atrasos</TableHead>
-                    <TableHead>Último Ponto</TableHead>
+                    <SortableTableHead column="nome" label="Funcionário" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="cargo" label="Cargo" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="totalHoras" label="Total Horas" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="horasExtras" label="Horas Extras" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="faltas" label="Faltas" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="atrasos" label="Atrasos" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
+                    <SortableTableHead column="ultimoPonto" label="Último Ponto" activeColumn={funcionariosSort.sortColumn} direction={funcionariosSort.sortDirection} onSort={funcionariosSort.toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {funcionarios.map((funcionario) => (
+                  {sortedFuncionarios.map((funcionario) => (
                     <TableRow key={funcionario.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">

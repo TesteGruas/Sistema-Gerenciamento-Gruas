@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 import { Input } from "@/components/ui/input"
@@ -2033,6 +2035,20 @@ export default function FuncionarioDetalhesPage() {
     )
   }
 
+  const {
+    sortedItems: sortedSalarios,
+    sortColumn: salariosSortColumn,
+    sortDirection: salariosSortDirection,
+    toggleSort: salariosToggleSort,
+  } = useClientSortedList(salarios as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedDocumentos,
+    sortColumn: documentosSortColumn,
+    sortDirection: documentosSortDirection,
+    toggleSort: documentosToggleSort,
+  } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2557,18 +2573,18 @@ export default function FuncionarioDetalhesPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Mês/Ano</TableHead>
-                        <TableHead>Salário Base</TableHead>
-                        <TableHead>Proventos</TableHead>
-                        <TableHead>Descontos</TableHead>
-                        <TableHead>Líquido</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data Pagamento</TableHead>
+                        <SortableTableHead column="mes" label="Mês/Ano" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="salario_base" label="Salário Base" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="total_proventos" label="Proventos" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="total_descontos" label="Descontos" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="salario_liquido" label="Líquido" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="status" label="Status" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
+                        <SortableTableHead column="data_pagamento" label="Data Pagamento" activeColumn={salariosSortColumn} direction={salariosSortDirection} onSort={salariosToggleSort} />
                         <TableHead className="text-right">Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {salarios.map((salario) => {
+                      {sortedSalarios.map((salario) => {
                         // Extrair mês e ano do formato YYYY-MM ou usar mes/ano separados
                         let mesExibicao = salario.mes
                         let anoExibicao = salario.ano
@@ -3271,17 +3287,17 @@ export default function FuncionarioDetalhesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Data Emissão</TableHead>
-                      <TableHead>Data Vencimento</TableHead>
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={documentosSortColumn} direction={documentosSortDirection} onSort={documentosToggleSort} />
+                      <SortableTableHead column="nome" label="Nome" activeColumn={documentosSortColumn} direction={documentosSortDirection} onSort={documentosToggleSort} />
+                      <SortableTableHead column="numero" label="Número" activeColumn={documentosSortColumn} direction={documentosSortDirection} onSort={documentosToggleSort} />
+                      <SortableTableHead column="data_emissao" label="Data Emissão" activeColumn={documentosSortColumn} direction={documentosSortDirection} onSort={documentosToggleSort} />
+                      <SortableTableHead column="data_vencimento" label="Data Vencimento" activeColumn={documentosSortColumn} direction={documentosSortDirection} onSort={documentosToggleSort} />
                       <TableHead>Assinatura colaborador</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {documentos.map((documento) => {
+                    {sortedDocumentos.map((documento) => {
                       const assColab = getAssinaturaColaboradorDocStatus(documento)
                       return (
                       <TableRow key={documento.id}>

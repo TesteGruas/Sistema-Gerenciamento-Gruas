@@ -54,6 +54,8 @@ import {
   AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import { useToast } from '@/hooks/use-toast'
 import { AlugueisAPI, AluguelResidencia, formatarMoeda } from '@/lib/api-alugueis-residencias'
 import { CobrancasAluguelAPI, CobrancaAluguel, formatarMes } from '@/lib/api-cobrancas-aluguel'
@@ -595,6 +597,13 @@ export default function AluguelDetalhesPage() {
     return cobrancasArray.filter((c) => c.mes === mesFiltroUnificado)
   }, [cobrancasArray, mesFiltroUnificado])
 
+  const {
+    sortedItems: sortedCobrancasNaTabela,
+    sortColumn: cobrancaSortColumn,
+    sortDirection: cobrancaSortDirection,
+    toggleSort: toggleCobrancaSort,
+  } = useClientSortedList(cobrancasNaTabela as unknown as Record<string, unknown>[])
+
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -807,18 +816,18 @@ export default function AluguelDetalhesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Item</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Vencimento</TableHead>
+                    <SortableTableHead column="mes" label="Mês" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
+                    <SortableTableHead column="valor_aluguel" label="Item" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
+                    <SortableTableHead column="valor_custos" label="Tipo" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
+                    <SortableTableHead column="valor_total" label="Valor" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
+                    <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
                     <TableHead>Documento</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="status" label="Status" activeColumn={cobrancaSortColumn} direction={cobrancaSortDirection} onSort={toggleCobrancaSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {cobrancasNaTabela.map((cobranca) => {
+                  {(sortedCobrancasNaTabela as unknown as CobrancaAluguel[]).map((cobranca) => {
                     const tipo = descricaoTipoCobranca(cobranca)
                     return (
                     <TableRow key={`cob-${cobranca.id}-${cobranca.mes}`}>

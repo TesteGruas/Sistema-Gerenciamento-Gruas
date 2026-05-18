@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
@@ -183,6 +185,13 @@ export default function TrabalhoCorridoPage() {
     }
   }
 
+  const {
+    sortedItems: sortedRegistros,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(registros as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-6 p-6">
       {/* Cabeçalho */}
@@ -256,18 +265,18 @@ export default function TrabalhoCorridoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
-                    <TableHead>Saída</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="funcionario.obra.nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="entrada" label="Entrada" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="saida" label="Saída" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="horas_trabalhadas" label="Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="trabalho_corrido_confirmado" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {registros.map((registro) => (
+                  {sortedRegistros.map((registro) => (
                     <TableRow key={registro.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">

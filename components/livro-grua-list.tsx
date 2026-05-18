@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
@@ -62,14 +64,16 @@ export default function LivroGruaList({
   })
 
   const [searchTerm, setSearchTerm] = useState("")
-
+  const resetPage = useCallback(() => {
+    setFiltros((prev) => ({ ...prev, page: 1 }))
+  }, [])
   // Carregar entradas
   const carregarEntradas = async () => {
     try {
       setLoading(true)
       setError(null)
 
-      const response = await livroGruaApi.listarEntradas(filtros)
+      const response = await livroGruaApi.listarEntradas({ ...filtros })
       setEntradas(response.data)
       setPagination(response.pagination)
 
@@ -175,6 +179,15 @@ export default function LivroGruaList({
   const tiposEntrada = livroGruaApi.getTiposEntrada()
   const statusEntrada = livroGruaApi.getStatusEntrada()
 
+  const {
+    sortedItems: sortedEntradas,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(entradas as unknown as Record<string, unknown>[], {
+    onPageReset: resetPage,
+  })
+
   if (modoCompacto) {
     return (
       <Card>
@@ -199,7 +212,7 @@ export default function LivroGruaList({
             </Alert>
           ) : entradas.length > 0 ? (
             <div className="space-y-3">
-              {entradas.map((entrada) => (
+              {sortedEntradas.map((entrada) => (
                 <div key={entrada.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div className="flex items-center gap-3">
                     <div className={`w-2 h-2 rounded-full ${
@@ -365,17 +378,17 @@ export default function LivroGruaList({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[120px]">Data</TableHead>
-                    <TableHead className="w-[150px]">Grua</TableHead>
-                    <TableHead className="w-[150px]">Funcionário</TableHead>
-                    <TableHead className="w-[100px]">Tipo</TableHead>
-                    <TableHead className="w-[100px]">Status</TableHead>
-                    <TableHead className="min-w-[200px]">Descrição</TableHead>
+                    <SortableTableHead column="data_entrada" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[120px]" />
+                    <SortableTableHead column="grua_id" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[150px]" />
+                    <SortableTableHead column="funcionario_nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[150px]" />
+                    <SortableTableHead column="tipo_entrada" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[100px]" />
+                    <SortableTableHead column="status_entrada" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[100px]" />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[200px]" />
                     <TableHead className="w-[100px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {entradas.map((entrada) => (
+                  {sortedEntradas.map((entrada) => (
                     <TableRow key={entrada.id} className="hover:bg-gray-50">
                       <TableCell className="text-sm">
                         <div className="flex items-center gap-2">

@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -32,6 +34,7 @@ interface AgendaPreventivaProps {
 
 export function AgendaPreventiva({ gruaId }: AgendaPreventivaProps) {
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
   const [loading, setLoading] = useState(false)
   const [agendas, setAgendas] = useState<AgendaPreventivaBackend[]>([])
   const [showDialog, setShowDialog] = useState(false)
@@ -162,6 +165,11 @@ export function AgendaPreventiva({ gruaId }: AgendaPreventivaProps) {
     }
   }
 
+  const sortedAgendas = useMemo(
+    () => sortClientData(agendas as Record<string, unknown>[]) as AgendaPreventivaBackend[],
+    [agendas, sortClientData],
+  )
+
   const getStatusBadge = (agenda: AgendaPreventivaBackend) => {
     if (!agenda.proxima_manutencao_data && !agenda.proxima_manutencao_horimetro) {
       return <Badge variant="outline">Sem data definida</Badge>
@@ -219,16 +227,16 @@ export function AgendaPreventiva({ gruaId }: AgendaPreventivaProps) {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo de Manutenção</TableHead>
-                  <TableHead>Intervalo</TableHead>
-                  <TableHead>Última Manutenção</TableHead>
-                  <TableHead>Próxima Manutenção</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTableHead column="tipo_manutencao" label="Tipo de Manutenção" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="intervalo_valor" label="Intervalo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="ultima_manutencao_data" label="Última Manutenção" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="proxima_manutencao_data" label="Próxima Manutenção" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {agendas.map((agenda) => (
+                {sortedAgendas.map((agenda) => (
                   <TableRow key={agenda.id}>
                     <TableCell className="font-medium">
                       {agenda.tipo_manutencao}

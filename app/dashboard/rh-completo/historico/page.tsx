@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
@@ -47,6 +49,7 @@ export default function HistoricoRHPage() {
   const [filtroFuncionario, setFiltroFuncionario] = useState("")
   const [filtroData, setFiltroData] = useState("")
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Formulário de novo evento
   const [eventoForm, setEventoForm] = useState({
@@ -216,6 +219,11 @@ export default function HistoricoRHPage() {
     const matchesData = !filtroData || evento.data_evento.includes(filtroData)
     return matchesTipo && matchesFuncionario && matchesData
   })
+
+  const sortedEventos = useMemo(
+    () => sortClientData(filteredEventos as Record<string, unknown>[]) as HistoricoEvento[],
+    [filteredEventos, sortClientData],
+  )
 
   const exportarHistorico = () => {
     toast({
@@ -448,17 +456,17 @@ export default function HistoricoRHPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Evento</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Valor</TableHead>
+                    <SortableTableHead column="tipo_evento" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="funcionario_id" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="titulo" label="Evento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_evento" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="obra_id" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredEventos.map((evento) => (
+                  {sortedEventos.map((evento) => (
                     <TableRow key={evento.id}>
                       <TableCell>
                         <Badge className={`${getTipoColor(evento.tipo)} border`}>

@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { 
@@ -109,6 +111,13 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
     
     return matchesSearch && matchesStatus
   })
+
+  const {
+    sortedItems: sortedGruasObra,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredGruasObra as unknown as Record<string, unknown>[])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -342,16 +351,16 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Grua</TableHead>
-                <TableHead>Modelo</TableHead>
-                <TableHead>Capacidade</TableHead>
-                <TableHead>Data Instalação</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead column="grua.name" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="grua.modelo" label="Modelo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="grua.capacidade" label="Capacidade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="data_instalacao" label="Data Instalação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredGruasObra.map(gruaObra => (
+              {(sortedGruasObra as unknown as ObraGruaConfiguracao[]).map(gruaObra => (
                 <TableRow key={gruaObra.id}>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
@@ -397,7 +406,7 @@ export default function MultipleGruasManager({ obraId, obraNome }: MultipleGruas
             </TableBody>
           </Table>
 
-          {filteredGruasObra.length === 0 && (
+          {sortedGruasObra.length === 0 && (
             <div className="text-center py-8 text-gray-500">
               <Crane className="w-12 h-12 mx-auto mb-4 opacity-50" />
               <p>Nenhuma grua encontrada nesta obra</p>

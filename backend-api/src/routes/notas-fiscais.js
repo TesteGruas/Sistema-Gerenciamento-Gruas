@@ -12,6 +12,7 @@ import {
   ensureTiposImpostos,
   coletarNomesTributoDoItem
 } from '../services/ensure-tipos-impostos-xml.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 async function fetchUrlBufferForEmail(url) {
   const res = await fetch(url);
@@ -443,10 +444,14 @@ router.get('/', async (req, res) => {
       query = query.ilike('chave_acesso', `%${chaveFiltro}%`);
     }
 
-    // Aplicar ordenação e paginação
-    query = query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero_nf', 'serie', 'tipo', 'status', 'valor_total', 'data_emissao', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

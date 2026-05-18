@@ -10,6 +10,7 @@ import {
   medicaoMensalFiltersSchema,
   gerarMedicaoAutomaticaSchema
 } from '../schemas/medicao-mensal-schemas.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
@@ -366,10 +367,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       }
     }
 
-    // Aplicar paginação e ordenação
-    query = query.order('periodo', { ascending: false })
-                 .order('data_medicao', { ascending: false })
-                 .range(offset, offset + limit - 1);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero', 'periodo', 'data_medicao', 'status', 'valor_total', 'created_at'],
+      defaultColumn: 'periodo',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error, count } = await query;
 

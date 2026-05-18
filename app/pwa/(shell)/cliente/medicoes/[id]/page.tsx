@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter, useParams } from "next/navigation"
 import { ProtectedRoute } from "@/components/protected-route"
 import { Button } from "@/components/ui/button"
@@ -10,6 +10,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { ArrowLeft, Receipt, Building2, Forklift, CheckCircle, XCircle, Calendar, DollarSign } from "lucide-react"
 import { medicoesMensaisApi, MedicaoMensal } from "@/lib/api-medicoes-mensais"
 import { useToast } from "@/hooks/use-toast"
@@ -135,6 +137,26 @@ export default function PWAClienteMedicaoDetalhesPage() {
     return <Badge variant={statusInfo.variant}>{statusInfo.label}</Badge>
   }
 
+  const valoresDetalhados = useMemo(
+    () =>
+      medicao
+        ? [
+            { campo: "valor_mensal_bruto", label: "Valor Mensal Bruto", valor: medicao.valor_mensal_bruto || 0 },
+            { campo: "valor_aditivos", label: "Aditivos", valor: medicao.valor_aditivos || 0 },
+            { campo: "valor_custos_extras", label: "Custos Extras", valor: medicao.valor_custos_extras || 0 },
+            { campo: "valor_descontos", label: "Descontos", valor: medicao.valor_descontos || 0 },
+          ]
+        : [],
+    [medicao],
+  )
+
+  const {
+    sortedItems: sortedValoresDetalhados,
+    sortColumn: valoresSortColumn,
+    sortDirection: valoresSortDirection,
+    toggleSort: toggleValoresSort,
+  } = useClientSortedList(valoresDetalhados as unknown as Record<string, unknown>[])
+
   if (loading) {
     return (
       <ProtectedRoute>
@@ -232,23 +254,26 @@ export default function PWAClienteMedicaoDetalhesPage() {
               {/* Valores Detalhados */}
               <div className="border-t pt-6">
                 <h3 className="font-semibold mb-4">Valores Detalhados</h3>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div>
-                    <Label className="text-xs text-gray-600">Valor Mensal Bruto</Label>
-                    <p className="font-medium">{formatCurrency(medicao.valor_mensal_bruto || 0)}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-gray-600">Aditivos</Label>
-                    <p className="font-medium">{formatCurrency(medicao.valor_aditivos || 0)}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-gray-600">Custos Extras</Label>
-                    <p className="font-medium">{formatCurrency(medicao.valor_custos_extras || 0)}</p>
-                  </div>
-                  <div>
-                    <Label className="text-xs text-gray-600">Descontos</Label>
-                    <p className="font-medium text-red-600">-{formatCurrency(medicao.valor_descontos || 0)}</p>
-                  </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTableHead column="label" label="Item" activeColumn={valoresSortColumn} direction={valoresSortDirection} onSort={toggleValoresSort} />
+                        <SortableTableHead column="valor" label="Valor" activeColumn={valoresSortColumn} direction={valoresSortDirection} onSort={toggleValoresSort} />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {(sortedValoresDetalhados as unknown as { label: string; valor: number; campo: string }[]).map((item) => (
+                        <TableRow key={item.campo}>
+                          <TableCell className="text-sm text-gray-600">{item.label}</TableCell>
+                          <TableCell className={`font-medium ${item.campo === "valor_descontos" ? "text-red-600" : ""}`}>
+                            {item.campo === "valor_descontos" ? "-" : ""}
+                            {formatCurrency(item.valor)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
                 </div>
               </div>
 

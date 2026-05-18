@@ -1,5 +1,6 @@
 // API client para funcionários
 import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces baseadas no backend funcionarios.js
 export interface FuncionarioBackend {
@@ -216,7 +217,7 @@ export const funcionariosApi = {
     apenasFuncionarios?: boolean
     /** Inclui registros com exclusão lógica (deleted_at), ex. para reativar no RH */
     incluirExcluidos?: boolean
-  }): Promise<FuncionariosResponse> {
+  } & TableSortParams): Promise<FuncionariosResponse> {
     const searchParams = new URLSearchParams()
     
     if (params?.page) searchParams.append('page', params.page.toString())
@@ -227,6 +228,7 @@ export const funcionariosApi = {
     if (params?.search) searchParams.append('search', params.search)
     if (params?.apenasFuncionarios) searchParams.append('apenas_funcionarios', 'true')
     if (params?.incluirExcluidos) searchParams.append('incluir_excluidos', 'true')
+    appendSortParams(searchParams, params)
 
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}?${searchParams.toString()}`)
     return apiRequest(url)

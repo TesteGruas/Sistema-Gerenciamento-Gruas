@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription, DialogTrigger } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -233,6 +235,47 @@ function ObraDetailsPageContent() {
   /** Ao editar: reenviar e-mail + WhatsApp com link de login */
   const [notificarAcessoResponsavelObra, setNotificarAcessoResponsavelObra] = useState(true)
   const responsaveisObraCarregadosRef = useRef(false)
+
+  const medicoesFiltradas = useMemo(() => {
+    return medicoesMensais.filter((m) => {
+      if (filtroAno && filtroAno !== "todos" && filtroMes && filtroMes !== "todos") {
+        return m.periodo === `${filtroAno}-${filtroMes}`
+      }
+      if (filtroAno && filtroAno !== "todos") {
+        return m.periodo.startsWith(filtroAno)
+      }
+      if (filtroMes && filtroMes !== "todos") {
+        return m.periodo.endsWith(`-${filtroMes}`)
+      }
+      return true
+    })
+  }, [medicoesMensais, filtroAno, filtroMes])
+
+  const custosMensaisParaSort = useMemo(() => {
+    if (custosMensais.length > 0) return custosMensais
+    return (((obra as { custos_mensais?: unknown[] } | null)?.custos_mensais as unknown[]) || [])
+  }, [custosMensais, obra])
+
+  const {
+    sortedItems: sortedResponsaveisObra,
+    sortColumn: respSortColumn,
+    sortDirection: respSortDirection,
+    toggleSort: toggleRespSort,
+  } = useClientSortedList(responsaveisObra as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedMedicoesMensais,
+    sortColumn: medSortColumn,
+    sortDirection: medSortDirection,
+    toggleSort: toggleMedSort,
+  } = useClientSortedList(medicoesFiltradas as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedCustosMensaisExibir,
+    sortColumn: custoSortColumn,
+    sortDirection: custoSortDirection,
+    toggleSort: toggleCustoSort,
+  } = useClientSortedList(custosMensaisParaSort as unknown as Record<string, unknown>[])
   
   // Estados para devolução de componentes
   const [componentesDevolucao, setComponentesDevolucao] = useState<Array<ComponenteGrua & { grua_nome?: string }>>([])
@@ -4811,15 +4854,15 @@ useEffect(() => {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Usuário</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Telefone</TableHead>
+                          <SortableTableHead column="nome" label="Nome" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="usuario" label="Usuário" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="email" label="Email" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="telefone" label="Telefone" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
                           <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {responsaveisObra.map((responsavel) => (
+                        {(sortedResponsaveisObra as unknown as ResponsavelObra[]).map((responsavel) => (
                           <TableRow key={responsavel.id}>
                             <TableCell className="font-medium">{responsavel.nome}</TableCell>
                             <TableCell>{responsavel.usuario || '-'}</TableCell>
@@ -5166,164 +5209,12 @@ useEffect(() => {
                               ) : (
                                 <div className="space-y-3">
                                   <div className="overflow-x-auto">
-                                    <Table>
-                                      <TableHeader>
-                                        <TableRow>
-                                          <TableHead>Componente</TableHead>
-                                          <TableHead>Quantidade Total</TableHead>
-                                          <TableHead>Quantidade em Uso</TableHead>
-                                          <TableHead>Valor Unitário</TableHead>
-                                          <TableHead>Devolução Completa</TableHead>
-                                          <TableHead>Devolução Parcial</TableHead>
-                                        </TableRow>
-                                      </TableHeader>
-                                      <TableBody>
-                                        {componentesDestaGrua.map((componente) => {
-                                        const devolucao = devolucoes[componente.id] || { tipo: null }
-                                        const isCompleta = devolucao.tipo === 'completa'
-                                        const isParcial = devolucao.tipo === 'parcial'
-                                        
-                                        return (
-                                          <TableRow key={componente.id}>
-                                            <TableCell>
-                                              <div>
-                                                <div className="font-medium">{componente.nome}</div>
-                                                <div className="text-xs text-gray-500">{componente.tipo}</div>
-                                                {componente.modelo && (
-                                                  <div className="text-xs text-gray-500">Modelo: {componente.modelo}</div>
-                                                )}
-                                              </div>
-                                            </TableCell>
-                                            <TableCell>{componente.quantidade_total}</TableCell>
-                                            <TableCell>{componente.quantidade_em_uso}</TableCell>
-                                            <TableCell>R$ {componente.valor_unitario.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</TableCell>
-                                            <TableCell>
-                                              <Button
-                                                size="sm"
-                                                variant={isCompleta ? "default" : "outline"}
-                                                onClick={() => {
-                                                  setDevolucoes({
-                                                    ...devolucoes,
-                                                    [componente.id]: {
-                                                      tipo: isCompleta ? null : 'completa',
-                                                      quantidade_devolvida: componente.quantidade_em_uso,
-                                                      valor: componente.valor_unitario * componente.quantidade_em_uso
-                                                    }
-                                                  })
-                                                }}
-                                                className={isCompleta ? "bg-green-600 hover:bg-green-700" : ""}
-                                              >
-                                                <Check className="w-4 h-4" />
-                                              </Button>
-                                            </TableCell>
-                                            <TableCell>
-                                              <div className="flex items-center gap-2">
-                                                <Button
-                                                  size="sm"
-                                                  variant={isParcial ? "destructive" : "outline"}
-                                                  onClick={() => {
-                                                    if (!isParcial) {
-                                                      setDevolucoes({
-                                                        ...devolucoes,
-                                                        [componente.id]: {
-                                                          tipo: 'parcial',
-                                                          quantidade_devolvida: componente.quantidade_em_uso,
-                                                          valor: 0
-                                                        }
-                                                      })
-                                                    }
-                                                  }}
-                                                >
-                                                  <X className="w-4 h-4" />
-                                                </Button>
-                                                {isParcial && (
-                                                  <Dialog>
-                                                    <DialogTrigger asChild>
-                                                      <Button size="sm" variant="outline">
-                                                        Editar
-                                                      </Button>
-                                                    </DialogTrigger>
-                                                    <DialogContent>
-                                                      <DialogHeader>
-                                                        <DialogTitle>Devolução Parcial - {componente.nome}</DialogTitle>
-                                                        <DialogDescription>
-                                                          Informe a quantidade que retornou e o valor do que não retornou
-                                                        </DialogDescription>
-                                                      </DialogHeader>
-                                                      <div className="space-y-4">
-                                                        <div>
-                                                          <Label>Quantidade Total Enviada</Label>
-                                                          <Input value={componente.quantidade_em_uso} disabled />
-                                                        </div>
-                                                        <div>
-                                                          <Label>Quantidade que Retornou *</Label>
-                                                          <Input
-                                                            type="number"
-                                                            min="0"
-                                                            max={componente.quantidade_em_uso}
-                                                            value={devolucao.quantidade_devolvida || 0}
-                                                            onChange={(e) => {
-                                                              const qtd = parseInt(e.target.value) || 0
-                                                              setDevolucoes({
-                                                                ...devolucoes,
-                                                                [componente.id]: {
-                                                                  ...devolucao,
-                                                                  quantidade_devolvida: qtd,
-                                                                  valor: (componente.quantidade_em_uso - qtd) * componente.valor_unitario
-                                                                }
-                                                              })
-                                                            }}
-                                                          />
-                                                        </div>
-                                                        <div>
-                                                          <Label>Valor do que Não Retornou (R$) *</Label>
-                                                          <Input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            value={devolucao.valor || 0}
-                                                            onChange={(e) => {
-                                                              setDevolucoes({
-                                                                ...devolucoes,
-                                                                [componente.id]: {
-                                                                  ...devolucao,
-                                                                  valor: parseFloat(e.target.value) || 0
-                                                                }
-                                                              })
-                                                            }}
-                                                          />
-                                                          <p className="text-xs text-gray-500 mt-1">
-                                                            Valor calculado: R$ {((componente.quantidade_em_uso - (devolucao.quantidade_devolvida || 0)) * componente.valor_unitario).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                                          </p>
-                                                        </div>
-                                                        <div>
-                                                          <Label>Observações</Label>
-                                                          <Textarea
-                                                            value={devolucao.observacoes || ''}
-                                                            onChange={(e) => {
-                                                              setDevolucoes({
-                                                                ...devolucoes,
-                                                                [componente.id]: {
-                                                                  ...devolucao,
-                                                                  observacoes: e.target.value
-                                                                }
-                                                              })
-                                                            }}
-                                                            placeholder="Descreva o que aconteceu com os componentes que não retornaram..."
-                                                            rows={3}
-                                                          />
-                                                        </div>
-                                                      </div>
-                                                    </DialogContent>
-                                                  </Dialog>
-                                                )}
-                                              </div>
-                                            </TableCell>
-                                          </TableRow>
-                                        )
-                                      })}
-                                      </TableBody>
-                                    </Table>
+                                    <ComponentesDevolucaoGruaTable
+                                      componentes={componentesDestaGrua}
+                                      devolucoes={devolucoes}
+                                      setDevolucoes={setDevolucoes}
+                                    />
+                                    
                                   </div>
                                 </div>
                               )}
@@ -6562,14 +6453,14 @@ useEffect(() => {
                         <Table>
                           <TableHeader>
                             <TableRow>
-                              <TableHead>Item</TableHead>
-                              <TableHead>Descrição</TableHead>
-                              <TableHead>Mês</TableHead>
-                              <TableHead className="text-right">Total Orçamento</TableHead>
+                              <SortableTableHead column="item" label="Item" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} />
+                              <SortableTableHead column="descricao" label="Descrição" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} />
+                              <SortableTableHead column="mes" label="Mês" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} />
+                              <SortableTableHead column="total_orcamento" label="Total Orçamento" activeColumn={custoSortColumn} direction={custoSortDirection} onSort={toggleCustoSort} className="text-right" />
                             </TableRow>
                           </TableHeader>
                           <TableBody>
-                            {custosMensaisParaExibir.map((custo: any, index: number) => (
+                            {sortedCustosMensaisExibir.map((custo: Record<string, unknown>, index: number) => (
                               <TableRow key={custo.id || `${custo.item}-${custo.mes}`}>
                                 <TableCell className="font-medium">{custo.item || '-'}</TableCell>
                                 <TableCell>{custo.descricao || '-'}</TableCell>
@@ -6724,34 +6615,19 @@ useEffect(() => {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Número</TableHead>
-                            <TableHead>Orçamento</TableHead>
-                            <TableHead>Período</TableHead>
-                            <TableHead>Data</TableHead>
-                            <TableHead>Valor Mensal Bruto</TableHead>
-                            <TableHead>Valor Total</TableHead>
-                            <TableHead>Status</TableHead>
+                            <SortableTableHead column="numero" label="Número" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="orcamentos.numero" label="Orçamento" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="periodo" label="Período" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="data_medicao" label="Data" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="valor_mensal_bruto" label="Valor Mensal Bruto" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="valor_total" label="Valor Total" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
+                            <SortableTableHead column="status" label="Status" activeColumn={medSortColumn} direction={medSortDirection} onSort={toggleMedSort} />
                             <TableHead>Ações</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
                           {(() => {
-                            // Filtrar medições baseado nos filtros
-                            const medicoesFiltradas = medicoesMensais.filter((m) => {
-                              if (filtroAno && filtroAno !== 'todos' && filtroMes && filtroMes !== 'todos') {
-                                const periodoFiltro = `${filtroAno}-${filtroMes}`
-                                return m.periodo === periodoFiltro
-                              }
-                              if (filtroAno && filtroAno !== 'todos') {
-                                return m.periodo.startsWith(filtroAno)
-                              }
-                              if (filtroMes && filtroMes !== 'todos') {
-                                return m.periodo.endsWith(`-${filtroMes}`)
-                              }
-                              return true
-                            })
-                            
-                            return medicoesFiltradas.map((medicao) => (
+                            return (sortedMedicoesMensais as unknown as MedicaoMensal[]).map((medicao) => (
                             <TableRow key={medicao.id}>
                               <TableCell className="font-medium">{medicao.numero}</TableCell>
                               <TableCell>
@@ -7275,6 +7151,197 @@ useEffect(() => {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+type DevolucaoComponenteState = {
+  tipo: "completa" | "parcial" | null
+  quantidade_devolvida?: number
+  valor?: number
+  observacoes?: string
+}
+
+function ComponentesDevolucaoGruaTable({
+  componentes,
+  devolucoes,
+  setDevolucoes,
+}: {
+  componentes: Array<ComponenteGrua & { grua_nome?: string }>
+  devolucoes: Record<number, DevolucaoComponenteState>
+  setDevolucoes: React.Dispatch<React.SetStateAction<Record<number, DevolucaoComponenteState>>>
+}) {
+  const {
+    sortedItems: sortedComponentes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(componentes as unknown as Record<string, unknown>[])
+
+  return (
+    <Table>
+      <TableHeader>
+        <TableRow>
+          <SortableTableHead column="nome" label="Componente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+          <SortableTableHead column="quantidade_total" label="Quantidade Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+          <SortableTableHead column="quantidade_em_uso" label="Quantidade em Uso" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+          <SortableTableHead column="valor_unitario" label="Valor Unitário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+          <TableHead>Devolução Completa</TableHead>
+          <TableHead>Devolução Parcial</TableHead>
+        </TableRow>
+      </TableHeader>
+      <TableBody>
+        {(sortedComponentes as unknown as Array<ComponenteGrua & { grua_nome?: string }>).map((componente) => {
+          const devolucao = devolucoes[componente.id] || { tipo: null }
+          const isCompleta = devolucao.tipo === "completa"
+          const isParcial = devolucao.tipo === "parcial"
+
+          return (
+            <TableRow key={componente.id}>
+              <TableCell>
+                <div>
+                  <div className="font-medium">{componente.nome}</div>
+                  <div className="text-xs text-gray-500">{componente.tipo}</div>
+                  {componente.modelo && (
+                    <div className="text-xs text-gray-500">Modelo: {componente.modelo}</div>
+                  )}
+                </div>
+              </TableCell>
+              <TableCell>{componente.quantidade_total}</TableCell>
+              <TableCell>{componente.quantidade_em_uso}</TableCell>
+              <TableCell>
+                R$ {componente.valor_unitario.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+              </TableCell>
+              <TableCell>
+                <Button
+                  size="sm"
+                  variant={isCompleta ? "default" : "outline"}
+                  onClick={() => {
+                    setDevolucoes({
+                      ...devolucoes,
+                      [componente.id]: {
+                        tipo: isCompleta ? null : "completa",
+                        quantidade_devolvida: componente.quantidade_em_uso,
+                        valor: componente.valor_unitario * componente.quantidade_em_uso,
+                      },
+                    })
+                  }}
+                  className={isCompleta ? "bg-green-600 hover:bg-green-700" : ""}
+                >
+                  <Check className="w-4 h-4" />
+                </Button>
+              </TableCell>
+              <TableCell>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant={isParcial ? "destructive" : "outline"}
+                    onClick={() => {
+                      if (!isParcial) {
+                        setDevolucoes({
+                          ...devolucoes,
+                          [componente.id]: {
+                            tipo: "parcial",
+                            quantidade_devolvida: componente.quantidade_em_uso,
+                            valor: 0,
+                          },
+                        })
+                      }
+                    }}
+                  >
+                    <X className="w-4 h-4" />
+                  </Button>
+                  {isParcial && (
+                    <Dialog>
+                      <DialogTrigger asChild>
+                        <Button size="sm" variant="outline">
+                          Editar
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Devolução Parcial - {componente.nome}</DialogTitle>
+                          <DialogDescription>
+                            Informe a quantidade que retornou e o valor do que não retornou
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="space-y-4">
+                          <div>
+                            <Label>Quantidade Total Enviada</Label>
+                            <Input value={componente.quantidade_em_uso} disabled />
+                          </div>
+                          <div>
+                            <Label>Quantidade que Retornou *</Label>
+                            <Input
+                              type="number"
+                              min="0"
+                              max={componente.quantidade_em_uso}
+                              value={devolucao.quantidade_devolvida || 0}
+                              onChange={(e) => {
+                                const qtd = parseInt(e.target.value) || 0
+                                setDevolucoes({
+                                  ...devolucoes,
+                                  [componente.id]: {
+                                    ...devolucao,
+                                    quantidade_devolvida: qtd,
+                                    valor: (componente.quantidade_em_uso - qtd) * componente.valor_unitario,
+                                  },
+                                })
+                              }}
+                            />
+                          </div>
+                          <div>
+                            <Label>Valor do que Não Retornou (R$) *</Label>
+                            <Input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              value={devolucao.valor || 0}
+                              onChange={(e) => {
+                                setDevolucoes({
+                                  ...devolucoes,
+                                  [componente.id]: {
+                                    ...devolucao,
+                                    valor: parseFloat(e.target.value) || 0,
+                                  },
+                                })
+                              }}
+                            />
+                            <p className="text-xs text-gray-500 mt-1">
+                              Valor calculado: R${" "}
+                              {(
+                                (componente.quantidade_em_uso - (devolucao.quantidade_devolvida || 0)) *
+                                componente.valor_unitario
+                              ).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                            </p>
+                          </div>
+                          <div>
+                            <Label>Observações</Label>
+                            <Textarea
+                              value={devolucao.observacoes || ""}
+                              onChange={(e) => {
+                                setDevolucoes({
+                                  ...devolucoes,
+                                  [componente.id]: {
+                                    ...devolucao,
+                                    observacoes: e.target.value,
+                                  },
+                                })
+                              }}
+                              placeholder="Descreva o que aconteceu com os componentes que não retornaram..."
+                              rows={3}
+                            />
+                          </div>
+                        </div>
+                      </DialogContent>
+                    </Dialog>
+                  )}
+                </div>
+              </TableCell>
+            </TableRow>
+          )
+        })}
+      </TableBody>
+    </Table>
   )
 }
 

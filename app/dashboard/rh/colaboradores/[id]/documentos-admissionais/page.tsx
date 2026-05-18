@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -291,6 +293,13 @@ export default function DocumentosAdmissionaisPage() {
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
+  const {
+    sortedItems: sortedDocumentos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -333,14 +342,14 @@ export default function DocumentosAdmissionaisPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Data de Validade</TableHead>
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_validade" label="Data de Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {documentos.map((documento) => {
+                {sortedDocumentos.map((documento) => {
                   const dias = diasParaVencimento(documento.data_validade)
                   return (
                     <TableRow key={documento.id}>

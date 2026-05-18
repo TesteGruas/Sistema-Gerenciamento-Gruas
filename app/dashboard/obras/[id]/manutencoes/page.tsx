@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   ArrowLeft,
@@ -64,6 +66,13 @@ export default function ManutencoesObraPage() {
       setLoading(false)
     }
   }
+
+  const {
+    sortedItems: sortedManutencoes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(manutencoes as unknown as Record<string, unknown>[])
 
   const handleCreate = () => {
     setSelectedManutencao(null)
@@ -216,17 +225,17 @@ export default function ManutencoesObraPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Grua</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Prioridade</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Data Prevista</TableHead>
-                  <TableHead>Valor Total</TableHead>
+                  <SortableTableHead column="gruas.name" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="prioridade" label="Prioridade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_prevista" label="Data Prevista" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="valor_total" label="Valor Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {manutencoes.map((manutencao) => (
+                {(sortedManutencoes as unknown as ManutencaoOrdemBackend[]).map((manutencao) => (
                   <TableRow key={manutencao.id}>
                     <TableCell>
                       {manutencao.gruas?.name || manutencao.gruas?.modelo || 'N/A'}

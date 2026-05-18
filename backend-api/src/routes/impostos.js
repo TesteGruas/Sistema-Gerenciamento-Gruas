@@ -1,4 +1,5 @@
 import express from 'express';
+import { applyListSort } from '../utils/apply-list-sort.js';
 import multer from 'multer';
 import { supabaseAdmin, supabase } from '../config/supabase.js';
 import { authenticateToken } from '../middleware/auth.js';
@@ -110,10 +111,15 @@ const impostoSchema = Joi.object({
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('impostos')
-      .select('*')
-      .order('data_vencimento', { ascending: true });
+    let query = supabase.from('impostos').select('*');
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['tipo', 'descricao', 'valor', 'competencia', 'data_vencimento', 'status', 'created_at'],
+      defaultColumn: 'data_vencimento',
+      defaultAscending: true,
+    });
+    const { data, error } = await query;
 
     if (error) throw error;
 

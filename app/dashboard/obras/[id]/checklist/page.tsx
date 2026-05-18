@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { 
   ArrowLeft,
@@ -92,6 +94,13 @@ export default function ChecklistDiarioObraPage() {
     setShowModeloDialog(false)
     await loadData()
   }
+
+  const {
+    sortedItems: sortedChecklists,
+    sortColumn: checklistSortColumn,
+    sortDirection: checklistSortDirection,
+    toggleSort: toggleChecklistSort,
+  } = useClientSortedList(checklists as unknown as Record<string, unknown>[])
 
   const handleCreateChecklist = () => {
     if (modelos.length === 0) {
@@ -217,15 +226,15 @@ export default function ChecklistDiarioObraPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Modelo</TableHead>
-                      <TableHead>Responsável</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="data" label="Data" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                      <SortableTableHead column="checklists_modelos.nome" label="Modelo" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                      <SortableTableHead column="funcionarios.nome" label="Responsável" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={checklistSortColumn} direction={checklistSortDirection} onSort={toggleChecklistSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {checklists.map((checklist) => (
+                    {(sortedChecklists as unknown as ChecklistDiarioBackend[]).map((checklist) => (
                       <TableRow key={checklist.id}>
                         <TableCell>
                           <div className="flex items-center gap-2">
@@ -401,6 +410,13 @@ function NaoConformidadesList({ obraId, onViewNC }: { obraId: number; onViewNC: 
   const [ncs, setNcs] = useState<any[]>([])
   const { toast } = useToast()
 
+  const {
+    sortedItems: sortedNcs,
+    sortColumn: ncSortColumn,
+    sortDirection: ncSortDirection,
+    toggleSort: toggleNcSort,
+  } = useClientSortedList(ncs as unknown as Record<string, unknown>[])
+
   useEffect(() => {
     loadNCs()
   }, [obraId])
@@ -442,15 +458,15 @@ function NaoConformidadesList({ obraId, onViewNC }: { obraId: number; onViewNC: 
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead>Data</TableHead>
-                <TableHead>Status Correção</TableHead>
-                <TableHead>Responsável</TableHead>
+                <SortableTableHead column="checklist_itens.descricao" label="Item" activeColumn={ncSortColumn} direction={ncSortDirection} onSort={toggleNcSort} />
+                <SortableTableHead column="checklists_diarios.data" label="Data" activeColumn={ncSortColumn} direction={ncSortDirection} onSort={toggleNcSort} />
+                <SortableTableHead column="status_correcao" label="Status Correção" activeColumn={ncSortColumn} direction={ncSortDirection} onSort={toggleNcSort} />
+                <SortableTableHead column="funcionarios.nome" label="Responsável" activeColumn={ncSortColumn} direction={ncSortDirection} onSort={toggleNcSort} />
                 <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {ncs.map((nc) => (
+              {(sortedNcs as any[]).map((nc) => (
                 <TableRow key={nc.id}>
                   <TableCell>
                     {nc.checklist_itens?.descricao || 'N/A'}

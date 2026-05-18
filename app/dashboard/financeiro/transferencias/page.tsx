@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { getTransferencias, createTransferencia, deleteTransferencia, confirmarTransferencia, type Transferencia } from "@/lib/api-financial"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -12,6 +12,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { 
   Plus, 
   Search, 
@@ -31,6 +33,7 @@ export default function TransferenciasPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Carregar transferências
   const loadTransferencias = async () => {
@@ -54,6 +57,11 @@ export default function TransferenciasPage() {
     transferencia.descricao.toLowerCase().includes(searchTerm.toLowerCase()) ||
     transferencia.banco_origem?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     transferencia.banco_destino?.toLowerCase().includes(searchTerm.toLowerCase())
+  )
+
+  const sortedTransferencias = useMemo(
+    () => sortClientData(filteredTransferencias as unknown as Record<string, unknown>[]) as Transferencia[],
+    [filteredTransferencias, sortClientData],
   )
 
   const getStatusColor = (status: string) => {
@@ -122,7 +130,7 @@ export default function TransferenciasPage() {
       {/* Lista de Transferências */}
       <Card>
         <CardHeader>
-          <CardTitle>Transferências ({filteredTransferencias.length})</CardTitle>
+          <CardTitle>Transferências ({sortedTransferencias.length})</CardTitle>
           <CardDescription>Lista de todas as transferências registradas</CardDescription>
         </CardHeader>
         <CardContent>
@@ -130,7 +138,7 @@ export default function TransferenciasPage() {
             <div className="text-center py-8">
               <p>Carregando transferências...</p>
             </div>
-          ) : filteredTransferencias.length === 0 ? (
+          ) : sortedTransferencias.length === 0 ? (
             <div className="text-center py-8">
               <CreditCard className="w-12 h-12 mx-auto text-gray-400 mb-4" />
               <p className="text-gray-500">Nenhuma transferência encontrada</p>
@@ -139,18 +147,18 @@ export default function TransferenciasPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Valor</TableHead>
-                  <TableHead>Banco Origem</TableHead>
-                  <TableHead>Banco Destino</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="banco_origem" label="Banco Origem" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="banco_destino" label="Banco Destino" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredTransferencias.map((transferencia) => (
+                {sortedTransferencias.map((transferencia) => (
                   <TableRow key={transferencia.id}>
                     <TableCell>
                       <div className="flex items-center gap-2">

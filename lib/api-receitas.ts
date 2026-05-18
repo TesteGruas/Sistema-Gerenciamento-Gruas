@@ -1,4 +1,5 @@
 import { api } from './api';
+import { appendSortParams, type TableSortParams } from './table-sort';
 
 export interface Receita {
   id: string;
@@ -41,7 +42,7 @@ export interface ReceitaUpdate extends Partial<ReceitaCreate> {
   status?: 'pendente' | 'confirmada' | 'cancelada';
 }
 
-export interface ReceitaFilters {
+export interface ReceitaFilters extends TableSortParams {
   obra_id?: number;
   tipo?: string;
   status?: string;
@@ -73,6 +74,7 @@ export const receitasApi = {
     if (filters.data_fim) params.append('data_fim', filters.data_fim);
     if (filters.page) params.append('page', filters.page.toString());
     if (filters.limit) params.append('limit', filters.limit.toString());
+    appendSortParams(params, filters);
 
     const response = await api.get(`/receitas?${params.toString()}`);
     

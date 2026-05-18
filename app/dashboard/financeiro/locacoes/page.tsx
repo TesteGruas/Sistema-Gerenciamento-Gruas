@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -11,6 +11,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Truck, 
@@ -73,11 +75,46 @@ export default function LocacoesPage() {
   const [gruas, setGruas] = useState<any[]>([])
   
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
+  const carregarLocacoes = useCallback(async () => {
+    try {
+      const locacoesResponse = await locacoesApi.list({ limit: 50 })
+      setLocacoes(locacoesResponse.data || [])
+    } catch (error) {
+      console.error("Erro ao carregar locações:", error)
+    }
+  }, [])
 
   // Carregar dados iniciais
   useEffect(() => {
     loadInitialData()
   }, [])
+
+  useEffect(() => {
+    carregarLocacoes()
+  }, [carregarLocacoes])
+
+  const locacoesOrdenadas = useMemo(
+    () => sortClientData(locacoes as unknown as Record<string, unknown>[]) as Locacao[],
+    [locacoes, sortClientData],
+  )
+  const medicoesOrdenadas = useMemo(
+    () => sortClientData(medicoes as unknown as Record<string, unknown>[]) as Medicao[],
+    [medicoes, sortClientData],
+  )
+  const aditivosOrdenados = useMemo(
+    () => sortClientData(aditivos as unknown as Record<string, unknown>[]) as Aditivo[],
+    [aditivos, sortClientData],
+  )
+  const notasDebitoOrdenadas = useMemo(
+    () => sortClientData(notasDebito as unknown as Record<string, unknown>[]) as NotaDebito[],
+    [notasDebito, sortClientData],
+  )
+  const notasFiscaisOrdenadas = useMemo(
+    () => sortClientData(notasFiscais as unknown as Record<string, unknown>[]) as NotaFiscalLocacao[],
+    [notasFiscais, sortClientData],
+  )
 
   const loadInitialData = async () => {
     try {
@@ -387,14 +424,14 @@ export default function LocacoesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Valor Mensal</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="numero_contrato" label="Contrato" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_inicio" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor_mensal" label="Valor Mensal" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Medições</TableHead>
                     <TableHead>Aditivos</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -410,7 +447,7 @@ export default function LocacoesPage() {
                       </TableRow>
                     ))
                   ) : (
-                    locacoes
+                    locacoesOrdenadas
                       .filter(locacao => locacao.tipo_equipamento === 'grua')
                       .map((locacao) => (
                         <TableRow key={locacao.id}>
@@ -468,14 +505,14 @@ export default function LocacoesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Contrato</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Valor Mensal</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="numero_contrato" label="Contrato" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_inicio" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor_mensal" label="Valor Mensal" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Medições</TableHead>
                     <TableHead>Aditivos</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -491,7 +528,7 @@ export default function LocacoesPage() {
                       </TableRow>
                     ))
                   ) : (
-                    locacoes
+                    locacoesOrdenadas
                       .filter(locacao => locacao.tipo_equipamento === 'plataforma')
                       .map((locacao) => (
                         <TableRow key={locacao.id}>
@@ -579,14 +616,14 @@ export default function LocacoesPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Cliente</TableHead>
-                      <TableHead>Equipamento</TableHead>
-                      <TableHead>Período</TableHead>
-                      <TableHead>Valor Base</TableHead>
-                      <TableHead>Aditivos</TableHead>
-                      <TableHead>Valor Total</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="locacoes.clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="locacoes.equipamento_id" label="Equipamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="periodo" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_base" label="Valor Base" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_aditivos" label="Aditivos" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_total" label="Valor Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -602,7 +639,7 @@ export default function LocacoesPage() {
                         </TableRow>
                       ))
                     ) : (
-                      medicoes.map((medicao) => (
+                      medicoesOrdenadas.map((medicao) => (
                         <TableRow key={medicao.id}>
                           <TableCell className="font-medium">{medicao.numero}</TableCell>
                           <TableCell>{medicao.locacoes?.clientes?.nome || 'N/A'}</TableCell>
@@ -654,13 +691,13 @@ export default function LocacoesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Série</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Tipo</TableHead>
+                    <SortableTableHead column="numero_nf" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="serie" label="Série" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_emissao" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -676,7 +713,7 @@ export default function LocacoesPage() {
                       </TableRow>
                     ))
                   ) : (
-                    notasFiscais.map((nf) => (
+                    notasFiscaisOrdenadas.map((nf) => (
                       <TableRow key={nf.id}>
                         <TableCell className="font-medium">{nf.numero_nf}</TableCell>
                         <TableCell>{nf.serie || 'N/A'}</TableCell>
@@ -725,12 +762,12 @@ export default function LocacoesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_emissao" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -746,7 +783,7 @@ export default function LocacoesPage() {
                       </TableRow>
                     ))
                   ) : (
-                    notasDebito.map((nota) => (
+                    notasDebitoOrdenadas.map((nota) => (
                       <TableRow key={nota.id}>
                         <TableCell className="font-medium">{nota.numero}</TableCell>
                         <TableCell>{nota.clientes?.nome || 'N/A'}</TableCell>

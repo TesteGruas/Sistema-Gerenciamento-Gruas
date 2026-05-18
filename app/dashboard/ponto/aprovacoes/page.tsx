@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { useToast } from "@/hooks/use-toast"
 import { 
   Clock, 
@@ -421,6 +423,13 @@ export default function AprovacoesDashboard() {
     setPaginacao(prev => ({ ...prev, page: 1 }))
   }
 
+  const {
+    sortedItems: sortedAprovacoes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(aprovacoes as unknown as Record<string, unknown>[])
+
   return (
     <AdminGuard>
       <div className="space-y-6">
@@ -614,18 +623,18 @@ export default function AprovacoesDashboard() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Data</TableHead>
+                      <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Horários</TableHead>
-                      <TableHead>Horas Extras</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Aprovado Por</TableHead>
-                      <TableHead>Data Aprovação</TableHead>
+                      <SortableTableHead column="horas_extras" label="Horas Extras" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="aprovador.nome" label="Aprovado Por" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data_aprovacao" label="Data Aprovação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {aprovacoes.map((aprovacao) => (
+                    {sortedAprovacoes.map((aprovacao) => (
                       <TableRow key={aprovacao.id}>
                         <TableCell>
                           <div>

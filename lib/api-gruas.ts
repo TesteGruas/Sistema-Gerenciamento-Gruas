@@ -1,4 +1,5 @@
 import { api } from './api'
+import type { TableSortParams } from './table-sort'
 
 // ============================================
 // INTERFACES E TIPOS
@@ -76,7 +77,7 @@ export interface TipoGrua {
   created_at?: string;
 }
 
-export interface GruaFiltros {
+export interface GruaFiltros extends TableSortParams {
   status?: string;
   obra_id?: number;
   funcionario_id?: number;

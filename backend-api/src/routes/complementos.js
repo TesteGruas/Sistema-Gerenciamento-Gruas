@@ -2,6 +2,7 @@ import express from 'express';
 import Joi from 'joi';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -95,10 +96,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
       query = query.or(`nome.ilike.%${searchTerm}%,sku.ilike.%${searchTerm}%,descricao.ilike.%${searchTerm}%`);
     }
 
-    // Aplicar paginação e ordenação
-    query = query
-      .range(offset, offset + limitNum - 1)
-      .order('created_at', { ascending: false });
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['nome', 'sku', 'tipo', 'ativo', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limitNum - 1);
 
     const { data, error, count } = await query;
 

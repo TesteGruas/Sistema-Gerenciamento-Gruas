@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   AlertCircle, 
@@ -107,6 +109,7 @@ export function LivroGruaChecklistList({
   const [checklists, setChecklists] = useState<ChecklistDiario[]>([])
   const [filtroMes, setFiltroMes] = useState("")
   const [filtroFuncionario, setFiltroFuncionario] = useState<string>("todos")
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Carregar checklists
   const carregarChecklists = async () => {
@@ -181,6 +184,11 @@ export function LivroGruaChecklistList({
     [checklists, filtroMes, filtroFuncionario]
   )
 
+  const checklistsOrdenados = useMemo(
+    () => sortClientData(checklistsFiltrados as Record<string, unknown>[]) as ChecklistDiario[],
+    [checklistsFiltrados, sortClientData],
+  )
+
   const contarItensMarcados = useCallback((checklist: ChecklistDiario): number => {
     return contagemChecklistLivroGrua(checklist as unknown as Record<string, unknown>).marcados
   }, [])
@@ -191,7 +199,7 @@ export function LivroGruaChecklistList({
 
   // Função para formatar dados para exportação
   const formatarDadosParaExportacao = useCallback(() => {
-    return checklistsFiltrados.map((checklist) => {
+    return checklistsOrdenados.map((checklist) => {
       const itensMarcados = contarItensMarcados(checklist)
       const totalItens = totalItensChecklist(checklist)
       const status = itensMarcados === totalItens ? 'Completo' : 'Incompleto'
@@ -218,7 +226,7 @@ export function LivroGruaChecklistList({
         'Observações': checklist.observacoes || ''
       }
     })
-  }, [checklistsFiltrados, contarItensMarcados, totalItensChecklist])
+  }, [checklistsOrdenados, contarItensMarcados, totalItensChecklist])
 
   const listaVaziaPorFiltro = checklists.length > 0 && checklistsFiltrados.length === 0
 
@@ -372,8 +380,8 @@ export function LivroGruaChecklistList({
             >
               <TableHeader>
                 <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="whitespace-nowrap pl-3 font-semibold">Data</TableHead>
-                  <TableHead className="min-w-[6.5rem] pl-2 font-semibold">Quem</TableHead>
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="whitespace-nowrap pl-3 font-semibold" />
+                  <SortableTableHead column="funcionario_nome" label="Quem" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[6.5rem] pl-2 font-semibold" />
                   {CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map(({ key, label }) => (
                     <TableHead
                       key={key}
@@ -395,7 +403,7 @@ export function LivroGruaChecklistList({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {checklistsFiltrados.map((checklist) => {
+                {checklistsOrdenados.map((checklist) => {
                   const itensMarcados = contarItensMarcados(checklist)
                   const totalItens = totalItensChecklist(checklist)
                   const todosMarcados = itensMarcados === totalItens

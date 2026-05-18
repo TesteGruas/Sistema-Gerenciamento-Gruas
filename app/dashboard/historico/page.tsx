@@ -1,12 +1,14 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   FileText, 
@@ -47,6 +49,7 @@ export default function HistoricoPage() {
   const [pagination, setPagination] = useState<any>({})
   
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Carregar dados iniciais
   useEffect(() => {
@@ -84,7 +87,7 @@ export default function HistoricoPage() {
     try {
       const params = {
         page: currentPage,
-        limit: pageSize
+        limit: pageSize,
       }
 
       switch (activeTab) {
@@ -178,6 +181,23 @@ export default function HistoricoPage() {
       setLoading(false)
     }
   }
+
+  const sortedHistoricoGeral = useMemo(
+    () => sortClientData(historicoGeral as Record<string, unknown>[]),
+    [historicoGeral, sortClientData],
+  )
+  const sortedHistoricoGruas = useMemo(
+    () => sortClientData(historicoGruas as Record<string, unknown>[]),
+    [historicoGruas, sortClientData],
+  )
+  const sortedHistoricoComponentes = useMemo(
+    () => sortClientData(historicoComponentes as Record<string, unknown>[]),
+    [historicoComponentes, sortClientData],
+  )
+  const sortedHistoricoPonto = useMemo(
+    () => sortClientData(historicoPonto as Record<string, unknown>[]),
+    [historicoPonto, sortClientData],
+  )
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
@@ -427,15 +447,15 @@ export default function HistoricoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Data/Hora</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Atividade</TableHead>
-                    <TableHead>Usuário</TableHead>
-                    <TableHead>Detalhes</TableHead>
+                    <SortableTableHead column="timestamp" label="Data/Hora" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="titulo" label="Atividade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="usuario_nome" label="Usuário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="descricao" label="Detalhes" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historicoGeral.map((atividade: any) => (
+                  {sortedHistoricoGeral.map((atividade: any) => (
                     <TableRow key={atividade.id}>
                       <TableCell>
                         {format(new Date(atividade.timestamp), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
@@ -516,17 +536,17 @@ export default function HistoricoPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Grua</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Responsável</TableHead>
-                <TableHead>Status</TableHead>
+                <SortableTableHead column="grua.name" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="obra.nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <TableHead>Cliente</TableHead>
+                <SortableTableHead column="data_inicio" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="tipo_operacao" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="funcionario.nome" label="Responsável" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
               </TableRow>
             </TableHeader>
             <TableBody>
-                  {historicoGruas.map((locacao: any) => (
+                  {sortedHistoricoGruas.map((locacao: any) => (
                     <TableRow key={locacao.id}>
                       <TableCell>
                         <div>
@@ -586,18 +606,18 @@ export default function HistoricoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Componente</TableHead>
+                    <SortableTableHead column="componente.nome" label="Componente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Tipo</TableHead>
-                    <TableHead>Movimentação</TableHead>
-                    <TableHead>Quantidade</TableHead>
+                    <SortableTableHead column="tipo_movimentacao" label="Movimentação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="quantidade_movimentada" label="Quantidade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Origem</TableHead>
                     <TableHead>Destino</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Responsável</TableHead>
+                    <SortableTableHead column="data_movimentacao" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="funcionario.nome" label="Responsável" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historicoComponentes.map((componente: any) => (
+                  {sortedHistoricoComponentes.map((componente: any) => (
                     <TableRow key={componente.id}>
                       <TableCell>
                         <div>
@@ -657,22 +677,22 @@ export default function HistoricoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Entrada</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="entrada" label="Entrada" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Saída Almoço</TableHead>
                     <TableHead>Volta Almoço</TableHead>
-                    <TableHead>Saída</TableHead>
-                    <TableHead>Horas Trabalhadas</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="saida" label="Saída" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="horas_trabalhadas" label="Horas Trabalhadas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="horas_extras" label="Horas Extras" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Aprovado Por</TableHead>
-                    <TableHead>Data Aprovação</TableHead>
+                    <SortableTableHead column="data_aprovacao" label="Data Aprovação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Observações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {historicoPonto.map((registro: any) => {
+                  {sortedHistoricoPonto.map((registro: any) => {
                     // Verificar se está em atraso (múltiplas variações do status)
                     const isAtraso = registro.status === 'Atraso' || 
                                     registro.status === 'atraso' || 

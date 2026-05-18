@@ -1,4 +1,5 @@
 import { api } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 export interface Locacao {
   id: number
@@ -39,7 +40,7 @@ export interface LocacaoFormData {
   funcionario_responsavel_id?: number
 }
 
-export interface LocacaoFilters {
+export interface LocacaoFilters extends TableSortParams {
   page?: number
   limit?: number
   status?: string
@@ -73,6 +74,7 @@ export const locacoesApi = {
     if (filters.tipo_equipamento && filters.tipo_equipamento !== 'all') params.append('tipo_equipamento', filters.tipo_equipamento)
     if (filters.cliente_id) params.append('cliente_id', filters.cliente_id.toString())
     if (filters.search) params.append('search', filters.search)
+    appendSortParams(params, filters)
 
     const response = await api.get(`/locacoes?${params.toString()}`)
     return response.data

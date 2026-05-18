@@ -1,5 +1,6 @@
 // API client para obras
 import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api.ts'
+import { appendSortParams, type TableSortParams } from './table-sort'
 import { gruaObraApi, converterGruaObraBackendParaFrontend } from './api-grua-obra'
 
 // Interfaces baseadas no backend
@@ -444,13 +445,14 @@ export const obrasApi = {
     limit?: number
     status?: string
     cliente_id?: number
-  }): Promise<ObrasResponse> {
+  } & TableSortParams): Promise<ObrasResponse> {
     const searchParams = new URLSearchParams()
     
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.status) searchParams.append('status', params.status)
     if (params?.cliente_id) searchParams.append('cliente_id', params.cliente_id.toString())
+    appendSortParams(searchParams, params)
 
     const url = buildApiUrl(`${API_ENDPOINTS.OBRAS}?${searchParams.toString()}`)
     return apiRequest(url)

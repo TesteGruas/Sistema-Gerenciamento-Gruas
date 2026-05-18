@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { 
@@ -58,6 +60,8 @@ export default function HorasTrabalhadasPage() {
   const [filtroMes, setFiltroMes] = useState("")
   const [filtroStatus, setFiltroStatus] = useState("all")
   const { toast } = useToast()
+  const horasSort = useTableSort()
+  const resumosSort = useTableSort()
 
   // Formulário de horas
   const [horasForm, setHorasForm] = useState({
@@ -327,6 +331,15 @@ export default function HorasTrabalhadasPage() {
     return matchesFuncionario && matchesMes
   })
 
+  const sortedHoras = useMemo(
+    () => horasSort.sortClientData(filteredHoras as Record<string, unknown>[]),
+    [filteredHoras, horasSort.sortClientData],
+  )
+  const sortedResumos = useMemo(
+    () => resumosSort.sortClientData(resumos as Record<string, unknown>[]),
+    [resumos, resumosSort.sortClientData],
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -493,19 +506,19 @@ export default function HorasTrabalhadasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Horas Trabalhadas</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Faltas</TableHead>
-                    <TableHead>Frequência</TableHead>
-                    <TableHead>Valor Total</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="mes" label="Mês" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="horasTrabalhadas" label="Horas Trabalhadas" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="horasExtras" label="Horas Extras" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="horasFaltas" label="Faltas" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="percentualFrequencia" label="Frequência" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="totalReceber" label="Valor Total" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={horasSort.sortColumn} direction={horasSort.sortDirection} onSort={horasSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredHoras.map((horas) => (
+                  {sortedHoras.map((horas) => (
                     <TableRow key={horas.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -594,17 +607,17 @@ export default function HorasTrabalhadasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Funcionários</TableHead>
-                    <TableHead>Total Horas</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Horas Faltas</TableHead>
-                    <TableHead>Média Frequência</TableHead>
-                    <TableHead>Valor Total</TableHead>
+                    <SortableTableHead column="mes" label="Mês" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="totalFuncionarios" label="Funcionários" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="totalHoras" label="Total Horas" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="totalHorasExtras" label="Horas Extras" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="totalHorasFaltas" label="Horas Faltas" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="mediaFrequencia" label="Média Frequência" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
+                    <SortableTableHead column="valorTotal" label="Valor Total" activeColumn={resumosSort.sortColumn} direction={resumosSort.sortDirection} onSort={resumosSort.toggleSort} />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {resumos.map((resumo) => (
+                  {sortedResumos.map((resumo) => (
                     <TableRow key={resumo.mes}>
                       <TableCell>
                         <span className="font-medium">{resumo.mes}</span>

@@ -1,4 +1,5 @@
-import api from './api';
+import api from './api'
+import type { TableSortParams } from './table-sort';
 import { parseYYYYMMDDLocal } from './date-local';
 
 function getApiBaseUrlFromClient(): string {
@@ -223,9 +224,14 @@ export const apiRegistrosPonto = {
     horas_extras_max?: number;
     order_by?: 'data' | 'funcionario' | 'horas_trabalhadas' | 'horas_extras' | 'status' | 'created_at';
     order_direction?: 'asc' | 'desc';
-  }): Promise<{ data: RegistroPonto[]; pagination?: any; recalculated?: boolean }> {
+  } & TableSortParams): Promise<{ data: RegistroPonto[]; pagination?: any; recalculated?: boolean }> {
     try {
-      const response = await api.get('ponto-eletronico/registros', { params });
+      const apiParams = { ...params } as Record<string, unknown>
+      if (params?.sort_by && !params.order_by) {
+        apiParams.order_by = params.sort_by
+        apiParams.order_direction = params.sort_order
+      }
+      const response = await api.get('ponto-eletronico/registros', { params: apiParams });
       return { 
         data: response.data.data || response.data || [],
         pagination: response.data.pagination,

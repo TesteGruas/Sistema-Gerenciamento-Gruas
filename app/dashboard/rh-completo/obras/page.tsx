@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -81,6 +83,8 @@ export default function ObrasRHPage() {
   const [filtroStatus, setFiltroStatus] = useState("all")
   const [isAlocacaoDialogOpen, setIsAlocacaoDialogOpen] = useState(false)
   const { toast } = useToast()
+  const alocacoesSort = useTableSort()
+  const obrasSort = useTableSort()
 
   // Carregar alocações
   useEffect(() => {
@@ -248,6 +252,15 @@ export default function ObrasRHPage() {
     const matchesStatus = filtroStatus === "all" || alocacao.status === filtroStatus
     return matchesFuncionario && matchesObra && matchesStatus
   })
+
+  const sortedAlocacoes = useMemo(
+    () => alocacoesSort.sortClientData(filteredAlocacoes as Record<string, unknown>[]),
+    [filteredAlocacoes, alocacoesSort.sortClientData],
+  )
+  const sortedObras = useMemo(
+    () => obrasSort.sortClientData(obras as Record<string, unknown>[]),
+    [obras, obrasSort.sortClientData],
+  )
 
   return (
     <div className="space-y-6">
@@ -477,18 +490,18 @@ export default function ObrasRHPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Horas</TableHead>
-                    <TableHead>Valor/Hora</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="obra.nome" label="Obra" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="dataInicio" label="Período" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="horasTrabalhadas" label="Horas" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="valorHora" label="Valor/Hora" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="totalReceber" label="Total" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={alocacoesSort.sortColumn} direction={alocacoesSort.sortDirection} onSort={alocacoesSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAlocacoes.map((alocacao) => (
+                  {sortedAlocacoes.map((alocacao) => (
                     <TableRow key={alocacao.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -582,17 +595,17 @@ export default function ObrasRHPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Obra</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Endereço</TableHead>
-                    <TableHead>Funcionários</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Valor Total</TableHead>
+                    <SortableTableHead column="nome" label="Obra" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
+                    <SortableTableHead column="cliente" label="Cliente" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
+                    <SortableTableHead column="endereco" label="Endereço" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
+                    <SortableTableHead column="totalFuncionarios" label="Funcionários" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
+                    <SortableTableHead column="valorTotal" label="Valor Total" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {obras.map((obra) => (
+                  {sortedObras.map((obra) => (
                     <TableRow key={obra.id}>
                       <TableCell>
                         <div className="font-medium">{obra.nome}</div>

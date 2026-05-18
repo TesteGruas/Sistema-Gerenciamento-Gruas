@@ -2,6 +2,7 @@ import express from 'express'
 import Joi from 'joi'
 import { supabase, supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 const router = express.Router()
 
@@ -581,8 +582,14 @@ router.get('/', async (req, res) => {
       query = query.or(`id.ilike.%${searchTerm}%,name.ilike.%${searchTerm}%,modelo.ilike.%${searchTerm}%,fabricante.ilike.%${searchTerm}%`)
     }
 
-    // Aplicar paginação
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['name', 'modelo', 'fabricante', 'tipo', 'status', 'capacidade', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    })
+    query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
 

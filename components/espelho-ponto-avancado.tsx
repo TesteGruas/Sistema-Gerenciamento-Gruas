@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import {
   Dialog,
   DialogContent,
@@ -77,6 +79,15 @@ export function EspelhoPontoAvancado({ trigger }: EspelhoPontoAvancadoProps) {
   const [registros, setRegistros] = useState<RegistroPonto[]>([])
   const [dataInicio, setDataInicio] = useState("")
   const [dataFim, setDataFim] = useState("")
+  const {
+    sortedItems: sortedRegistros,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(registros as unknown as Record<string, unknown>[], {
+    defaultColumn: 'data',
+    defaultDirection: 'desc',
+  })
   const [assinaturaFuncionario, setAssinaturaFuncionario] = useState('')
   const [assinaturaGestor, setAssinaturaGestor] = useState('')
   const searchRef = useRef<HTMLDivElement>(null)
@@ -576,18 +587,18 @@ export function EspelhoPontoAvancado({ trigger }: EspelhoPontoAvancadoProps) {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Entrada</TableHead>
-                        <TableHead>Saída Almoço</TableHead>
-                        <TableHead>Volta Almoço</TableHead>
-                        <TableHead>Saída</TableHead>
-                        <TableHead>Horas</TableHead>
-                        <TableHead>Extras</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="entrada" label="Entrada" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="saida_almoco" label="Saída Almoço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="volta_almoco" label="Volta Almoço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="saida" label="Saída" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="horas_trabalhadas" label="Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="horas_extras" label="Extras" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {registros.map((registro) => (
+                      {(sortedRegistros as unknown as RegistroPonto[]).map((registro) => (
                         <TableRow key={registro.id}>
                           <TableCell>{new Date(registro.data).toLocaleDateString('pt-BR')}</TableCell>
                           <TableCell>{registro.entrada || '-'}</TableCell>

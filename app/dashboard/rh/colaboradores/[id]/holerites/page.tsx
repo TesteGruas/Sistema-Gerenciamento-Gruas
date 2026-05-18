@@ -6,6 +6,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { SignaturePad } from "@/components/signature-pad"
 import { Download, CheckCircle2, Clock, Loader2, ArrowLeft, FileText, FileSignature } from "lucide-react"
@@ -182,6 +184,13 @@ export default function HoleritesPage() {
     return !!holerite.assinatura_digital && !!holerite.assinado_em
   }
 
+  const {
+    sortedItems: sortedHolerites,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(holerites as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -220,14 +229,14 @@ export default function HoleritesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Mês/Ano</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Data de Assinatura</TableHead>
+                  <SortableTableHead column="mes_referencia" label="Mês/Ano" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="assinado_em" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="assinado_em" label="Data de Assinatura" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {holerites.map((holerite) => (
+                {sortedHolerites.map((holerite) => (
                   <TableRow key={holerite.id}>
                     <TableCell className="font-medium capitalize">
                       {formatarMesReferencia(holerite.mes_referencia)}

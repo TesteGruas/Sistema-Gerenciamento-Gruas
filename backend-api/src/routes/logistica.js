@@ -1,5 +1,6 @@
 import express from 'express';
 import { supabase } from '../config/supabase.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -111,13 +112,20 @@ const veiculoSchema = Joi.object({
  */
 router.get('/manifestos', async (req, res) => {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('logistica_manifestos')
       .select(`
         *,
         funcionarios(nome, telefone)
-      `)
-      .order('created_at', { ascending: false });
+      `);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero', 'data', 'status', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+    const { data, error } = await query;
 
     if (error) throw error;
 

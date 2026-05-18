@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   FileText, 
@@ -36,6 +38,7 @@ export default function RelatoriosRHPage() {
   const [filtroTipo, setFiltroTipo] = useState("all")
   const [filtroPeriodo, setFiltroPeriodo] = useState("")
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Formulário de novo relatório
   const [relatorioForm, setRelatorioForm] = useState({
@@ -199,6 +202,11 @@ export default function RelatoriosRHPage() {
     return matchesTipo && matchesPeriodo
   })
 
+  const sortedRelatorios = useMemo(
+    () => sortClientData(filteredRelatorios as Record<string, unknown>[]) as RelatorioData[],
+    [filteredRelatorios, sortClientData],
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -333,25 +341,25 @@ export default function RelatoriosRHPage() {
         <TabsContent value="gerados" className="space-y-6">
           <Card>
             <CardHeader>
-              <CardTitle>Relatórios Gerados ({filteredRelatorios.length})</CardTitle>
+              <CardTitle>Relatórios Gerados ({sortedRelatorios.length})</CardTitle>
               <CardDescription>Lista de todos os relatórios gerados</CardDescription>
             </CardHeader>
             <CardContent>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Funcionários</TableHead>
-                    <TableHead>Total Horas</TableHead>
-                    <TableHead>Total Salários</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Data Geração</TableHead>
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="periodo" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="total_funcionarios" label="Funcionários" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="total_horas" label="Total Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="total_salarios" label="Total Salários" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="created_at" label="Data Geração" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredRelatorios.map((relatorio) => (
+                  {sortedRelatorios.map((relatorio) => (
                     <TableRow key={relatorio.id}>
                       <TableCell className="font-medium">{relatorio.tipo}</TableCell>
                       <TableCell>{relatorio.periodo}</TableCell>

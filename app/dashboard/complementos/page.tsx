@@ -1,11 +1,13 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import {
   Dialog,
   DialogContent,
@@ -167,6 +169,13 @@ export default function ComplementosPage() {
     return matchesSearch && matchesTipo
   })
 
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+  const sortedComplementos = useMemo(
+    () =>
+      sortClientData(filteredComplementos as unknown as Record<string, unknown>[]) as ComplementoCatalogo[],
+    [filteredComplementos, sortClientData],
+  )
+
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor == null ? "" : String(valor)
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -186,7 +195,7 @@ export default function ComplementosPage() {
     }
     try {
       setExportandoCsv(true)
-      const lista = filteredComplementos
+      const lista = sortedComplementos
       if (lista.length === 0) {
         toast({
           title: "Nada para exportar",
@@ -536,8 +545,8 @@ export default function ComplementosPage() {
     return labels[tipo] || tipo
   }
 
-  const acessorios = filteredComplementos.filter(c => c.tipo === 'acessorio')
-  const servicos = filteredComplementos.filter(c => c.tipo === 'servico')
+  const acessorios = sortedComplementos.filter(c => c.tipo === 'acessorio')
+  const servicos = sortedComplementos.filter(c => c.tipo === 'servico')
 
   return (
     <div className="space-y-6">
@@ -625,13 +634,13 @@ export default function ComplementosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Tipo</TableHead>
+                      <SortableTableHead column="sku" label="SKU" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Precificação</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Preço Unitário</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="unidade" label="Unidade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="preco_unitario_centavos" label="Preço Unitário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="ativo" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -643,7 +652,7 @@ export default function ComplementosPage() {
                         </TableCell>
                       </TableRow>
                     ) : (
-                      filteredComplementos.map((item) => (
+                      sortedComplementos.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell className="font-mono text-sm">{item.sku}</TableCell>
                           <TableCell>
@@ -713,12 +722,12 @@ export default function ComplementosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Nome</TableHead>
+                      <SortableTableHead column="sku" label="SKU" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Precificação</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Preço Unitário</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="unidade" label="Unidade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="preco_unitario_centavos" label="Preço Unitário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="ativo" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -795,12 +804,12 @@ export default function ComplementosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>SKU</TableHead>
-                      <TableHead>Nome</TableHead>
+                      <SortableTableHead column="sku" label="SKU" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Precificação</TableHead>
-                      <TableHead>Unidade</TableHead>
-                      <TableHead>Preço Unitário</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="unidade" label="Unidade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="preco_unitario_centavos" label="Preço Unitário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="ativo" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>

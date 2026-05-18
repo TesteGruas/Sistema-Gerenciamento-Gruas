@@ -1,5 +1,6 @@
 import express from 'express';
 import { supabase } from '../config/supabase.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -95,10 +96,15 @@ const normalizarContaBancariaPayload = (value) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const { data, error } = await supabase
-      .from('contas_bancarias')
-      .select('*')
-      .order('created_at', { ascending: false });
+    let query = supabase.from('contas_bancarias').select('*');
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['banco', 'agencia', 'conta', 'tipo_conta', 'saldo_atual', 'ativa', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    });
+    const { data, error } = await query;
 
     if (error) throw error;
 

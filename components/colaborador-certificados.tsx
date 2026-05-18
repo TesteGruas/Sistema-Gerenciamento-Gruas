@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -303,6 +305,13 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     return Math.ceil(diff / (1000 * 60 * 60 * 24))
   }
 
+  const {
+    sortedItems: sortedCertificados,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(certificados as unknown as Record<string, unknown>[])
+
   return (
     <div className="space-y-4">
       <Card>
@@ -331,16 +340,16 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Data de Validade</TableHead>
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_validade" label="Data de Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Validade</TableHead>
                   <TableHead>Assinatura colaborador</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {certificados.map((certificado) => {
+                {(sortedCertificados as unknown as CertificadoColaborador[]).map((certificado) => {
                   const dias = diasParaVencimento(certificado.data_validade)
                   return (
                     <TableRow key={certificado.id}>

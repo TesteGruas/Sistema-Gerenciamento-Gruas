@@ -1,6 +1,7 @@
 import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
-import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { applyListSort } from '../utils/apply-list-sort.js';
 import Joi from 'joi';
 
 const router = express.Router();
@@ -182,8 +183,7 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
       .select(`
         *,
         fornecedor:fornecedores(id, nome, cnpj)
-      `, { count: 'exact' })
-      .order('data_vencimento', { ascending: true });
+      `, { count: 'exact' });
 
     // Aplicar filtros nas contas
     if (status) {
@@ -203,6 +203,14 @@ router.get('/', authenticateToken, requirePermission('financeiro:visualizar'), a
     }
 
     // Paginação
+    queryContas = applyListSort(queryContas, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['descricao', 'valor', 'data_vencimento', 'data_pagamento', 'status', 'categoria', 'created_at'],
+      defaultColumn: 'data_vencimento',
+      defaultAscending: true,
+    });
+
     const paginaNum = Math.max(1, parseInt(pagina, 10) || 1);
     const offset = (paginaNum - 1) * limite;
     queryContas = queryContas.range(offset, offset + limite - 1);

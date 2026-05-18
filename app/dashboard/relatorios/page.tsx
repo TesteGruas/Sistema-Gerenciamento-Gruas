@@ -60,6 +60,8 @@ import { impostosApi } from "@/lib/api-impostos"
 import { AlugueisAPI } from "@/lib/api-alugueis-residencias"
 import { apiContasBancarias } from "@/lib/api-contas-bancarias"
 import type { ReactNode } from "react"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 
 type FiltrosColunasRelatorios = {
   financeiro: { origem: string; referencia: string; descricao: string; data: string; valor: string }
@@ -1685,6 +1687,86 @@ export default function RelatoriosPage() {
     [relatorioManutencao]
   )
 
+  const financeiroSort = useTableSort()
+  const impostosSort = useTableSort()
+  const boletosSort = useTableSort()
+  const medicoesSort = useTableSort()
+  const orcamentosSort = useTableSort()
+  const obrasSort = useTableSort()
+  const estoqueSort = useTableSort()
+  const complementosSort = useTableSort()
+  const manutencaoSort = useTableSort()
+
+  const sortedFinanceiroIntegrado = useMemo(
+    () => financeiroSort.sortClientData(financeiroIntegradoFiltrado as Record<string, unknown>[]),
+    [financeiroIntegradoFiltrado, financeiroSort.sortClientData],
+  )
+  const sortedImpostosPorTipo = useMemo(
+    () => impostosSort.sortClientData(impostosPorTipoFiltrado as Record<string, unknown>[]),
+    [impostosPorTipoFiltrado, impostosSort.sortClientData],
+  )
+  const sortedRelatorioBoletos = useMemo(
+    () =>
+      boletosSort.sortClientData(
+        relatorioBoletosFiltrado.map((b: Record<string, unknown>) => ({
+          ...b,
+          _obraNome: nomeObraBoleto(b),
+        })),
+      ),
+    [relatorioBoletosFiltrado, boletosSort.sortClientData],
+  )
+  const sortedRelatorioMedicoes = useMemo(
+    () => medicoesSort.sortClientData(relatorioMedicoesFiltrado as Record<string, unknown>[]),
+    [relatorioMedicoesFiltrado, medicoesSort.sortClientData],
+  )
+  const sortedRelatorioOrcamentos = useMemo(
+    () => orcamentosSort.sortClientData(relatorioOrcamentosFiltrado as Record<string, unknown>[]),
+    [relatorioOrcamentosFiltrado, orcamentosSort.sortClientData],
+  )
+  const sortedRelatorioObras = useMemo(
+    () =>
+      obrasSort.sortClientData(
+        relatorioObrasFiltrado.map((o: Record<string, unknown>) => ({
+          ...o,
+          _qtdGruas: qtdGruasObra(o),
+        })),
+      ),
+    [relatorioObrasFiltrado, obrasSort.sortClientData],
+  )
+  const sortedRelatorioEstoque = useMemo(
+    () =>
+      estoqueSort.sortClientData(
+        relatorioEstoqueFiltrado.map((item: Record<string, unknown>) => {
+          const estRaw = item.estoque
+          const est = (Array.isArray(estRaw) ? estRaw[0] : estRaw) ?? {}
+          const estRec = est as Record<string, unknown>
+          return {
+            ...item,
+            _qtdEstoque: qtdEstoqueRow(item),
+            _valorTotalEstoque: valorMonetarioNum(estRec?.valor_total),
+            _precoUnit: valorMonetarioNum(item.preco ?? item.valor_unitario),
+            _statusLabel: item.status ?? (item.ativo ? "Ativo" : "Inativo"),
+          }
+        }),
+      ),
+    [relatorioEstoqueFiltrado, estoqueSort.sortClientData],
+  )
+  const sortedRelatorioComplementos = useMemo(
+    () =>
+      complementosSort.sortClientData(
+        relatorioComplementosFiltrado.map((c: Record<string, unknown>) => ({
+          ...c,
+          _precoSort: obterValorComplemento(c),
+          _statusLabel: statusComplementoLabel(c),
+        })),
+      ),
+    [relatorioComplementosFiltrado, complementosSort.sortClientData],
+  )
+  const sortedLinhasManutencao = useMemo(
+    () => manutencaoSort.sortClientData(linhasManutencaoFiltradas as Record<string, unknown>[]),
+    [linhasManutencaoFiltradas, manutencaoSort.sortClientData],
+  )
+
   const performancePorGruaFiltrado = useMemo(() => {
     const rows = dadosPerformance?.performance_por_grua || []
     const f = filtrosColunas.gruas
@@ -2779,17 +2861,17 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Origem</TableHead>
-                        <TableHead>Referência</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Natureza</TableHead>
-                        <TableHead>Valor</TableHead>
+                        <SortableTableHead column="origem" label="Origem" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="referencia" label="Referência" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="descricao" label="Descrição" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="data" label="Data" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="status" label="Status" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="natureza" label="Natureza" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="valor" label="Valor" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {financeiroIntegradoFiltrado.map((item, index) => (
+                      {sortedFinanceiroIntegrado.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell>
                             <Badge variant="outline">{item.origem}</Badge>
@@ -2925,14 +3007,14 @@ export default function RelatoriosPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Tipo</TableHead>
-                          <TableHead>Total</TableHead>
-                          <TableHead>Pago</TableHead>
-                          <TableHead>Pendente</TableHead>
+                          <SortableTableHead column="tipo" label="Tipo" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                          <SortableTableHead column="valor_total" label="Total" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                          <SortableTableHead column="valor_pago" label="Pago" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                          <SortableTableHead column="valor_pendente" label="Pendente" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {impostosPorTipoFiltrado.map((item: any, index: number) => (
+                        {sortedImpostosPorTipo.map((item: any, index: number) => (
                           <TableRow key={`${item.tipo || "tipo"}-${index}`}>
                             <TableCell className="font-medium">{item.tipo || "N/A"}</TableCell>
                             <TableCell className="text-blue-700 font-medium">{formatarMoeda(item.valor_total)}</TableCell>
@@ -3069,16 +3151,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Descrição</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Vencimento</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Obra</TableHead>
+                        <SortableTableHead column="numero_boleto" label="Número" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="descricao" label="Descrição" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="valor" label="Valor" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="data_vencimento" label="Vencimento" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="status" label="Status" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_obraNome" label="Obra" activeColumn={boletosSort.sortColumn} direction={boletosSort.sortDirection} onSort={boletosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioBoletosFiltrado.map((boleto: any, index: number) => (
+                      {sortedRelatorioBoletos.map((boleto: any, index: number) => (
                         <TableRow key={boleto.id || index}>
                           <TableCell className="font-medium">{boleto.numero_boleto || 'N/A'}</TableCell>
                           <TableCell>{boleto.descricao || 'N/A'}</TableCell>
@@ -3215,16 +3297,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Período</TableHead>
-                        <TableHead>Obra</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data</TableHead>
+                        <SortableTableHead column="numero" label="Número" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="periodo" label="Período" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="obras.nome" label="Obra" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="valor_total" label="Valor Total" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="status" label="Status" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="created_at" label="Data" activeColumn={medicoesSort.sortColumn} direction={medicoesSort.sortDirection} onSort={medicoesSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioMedicoesFiltrado.map((medicao: any, index: number) => (
+                      {sortedRelatorioMedicoes.map((medicao: any, index: number) => (
                         <TableRow key={medicao.id || index}>
                           <TableCell className="font-medium">{medicao.numero || `MED-${medicao.id}`}</TableCell>
                           <TableCell>{medicao.periodo || 'N/A'}</TableCell>
@@ -3362,16 +3444,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Obra</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data</TableHead>
+                        <SortableTableHead column="numero" label="Número" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="obras.nome" label="Obra" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="valor_total" label="Valor Total" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="status" label="Status" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="created_at" label="Data" activeColumn={orcamentosSort.sortColumn} direction={orcamentosSort.sortDirection} onSort={orcamentosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioOrcamentosFiltrado.map((orcamento: any, index: number) => (
+                      {sortedRelatorioOrcamentos.map((orcamento: any, index: number) => (
                         <TableRow key={orcamento.id || index}>
                           <TableCell className="font-medium">{orcamento.numero || `ORC-${orcamento.id}`}</TableCell>
                           <TableCell>{orcamento.clientes?.nome || 'N/A'}</TableCell>
@@ -3509,16 +3591,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Endereço</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Data Início</TableHead>
-                        <TableHead>Gruas</TableHead>
+                        <SortableTableHead column="nome" label="Nome" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="clientes.nome" label="Cliente" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="endereco" label="Endereço" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="status" label="Status" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="data_inicio" label="Data Início" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_qtdGruas" label="Gruas" activeColumn={obrasSort.sortColumn} direction={obrasSort.sortDirection} onSort={obrasSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioObrasFiltrado.map((obra: any, index: number) => (
+                      {sortedRelatorioObras.map((obra: any, index: number) => (
                         <TableRow key={obra.id || index}>
                           <TableCell className="font-medium">{obra.nome || 'N/A'}</TableCell>
                           <TableCell>{obra.clientes?.nome || 'N/A'}</TableCell>
@@ -3657,16 +3739,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Categoria</TableHead>
-                        <TableHead>Quantidade</TableHead>
-                        <TableHead>Valor Unitário</TableHead>
-                        <TableHead>Valor Total</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="nome" label="Nome" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="categorias.nome" label="Categoria" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_qtdEstoque" label="Quantidade" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_precoUnit" label="Valor Unitário" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_valorTotalEstoque" label="Valor Total" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_statusLabel" label="Status" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioEstoqueFiltrado.map((item: any, index: number) => {
+                      {sortedRelatorioEstoque.map((item: any, index: number) => {
                         const estoque = item.estoque?.[0] || item.estoque || {};
                         return (
                           <TableRow key={item.id || index}>
@@ -3805,16 +3887,16 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Nome</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>SKU</TableHead>
-                        <TableHead>Preço</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Descrição</TableHead>
+                        <SortableTableHead column="nome" label="Nome" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="tipo" label="Tipo" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="sku" label="SKU" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_precoSort" label="Preço" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="_statusLabel" label="Status" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="descricao" label="Descrição" activeColumn={complementosSort.sortColumn} direction={complementosSort.sortDirection} onSort={complementosSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {relatorioComplementosFiltrado.map((complemento: any, index: number) => (
+                      {sortedRelatorioComplementos.map((complemento: any, index: number) => (
                         <TableRow key={complemento.id || index}>
                           <TableCell className="font-medium">{complemento.nome || 'N/A'}</TableCell>
                           <TableCell>
@@ -3965,17 +4047,17 @@ export default function RelatoriosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Grua</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Próxima Manutenção</TableHead>
-                        <TableHead>Dias Restantes</TableHead>
-                        <TableHead>Prioridade</TableHead>
-                        <TableHead>Valor Estimado</TableHead>
-                        <TableHead>Obra Atual</TableHead>
+                        <SortableTableHead column="grua.modelo" label="Grua" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="grua.status" label="Status" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="manutencao.proxima_manutencao" label="Próxima Manutenção" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="manutencao.dias_restantes" label="Dias Restantes" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="manutencao.prioridade" label="Prioridade" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="manutencao.valor_estimado" label="Valor Estimado" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
+                        <SortableTableHead column="obra_atual.nome" label="Obra Atual" activeColumn={manutencaoSort.sortColumn} direction={manutencaoSort.sortDirection} onSort={manutencaoSort.toggleSort} className="px-6 py-3 text-xs uppercase tracking-wider" />
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {linhasManutencaoFiltradas.map((item, index) => (
+                      {sortedLinhasManutencao.map((item, index) => (
                         <TableRow key={index}>
                           <TableCell className="font-medium">
                             {item.grua.modelo} - {item.grua.fabricante}

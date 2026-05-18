@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { 
   User, 
@@ -249,6 +251,15 @@ function PWAPerfilPageContent() {
     }
   }, [searchParams])
   const [salarios, setSalarios] = useState<FolhaPagamento[]>([])
+  const {
+    sortedItems: sortedSalarios,
+    sortColumn: salarioSortColumn,
+    sortDirection: salarioSortDirection,
+    toggleSort: toggleSalarioSort,
+  } = useClientSortedList(salarios as unknown as Record<string, unknown>[], {
+    defaultColumn: "mes",
+    defaultDirection: "desc",
+  })
   const [beneficios, setBeneficios] = useState<FuncionarioBeneficio[]>([])
   const [certificados, setCertificados] = useState<CertificadoBackend[]>([])
   const [documentosAdmissionais, setDocumentosAdmissionais] = useState<DocumentoAdmissionalBackend[]>([])
@@ -2014,44 +2025,42 @@ function PWAPerfilPageContent() {
                   <p className="text-gray-600">Nenhum registro de salário encontrado</p>
                 </div>
               ) : (
-                <div className="space-y-3">
-                  {salarios.map((salario) => (
-                    <div 
-                      key={salario.id} 
-                      className="bg-white rounded-xl p-4 hover:shadow-md transition-shadow border border-gray-100"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-lg mb-3">
-                            {new Date(salario.mes + '-01').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })}
-                          </h4>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Salário Líquido</p>
-                              <p className="font-bold text-lg text-emerald-600">
-                                R$ {salario.salario_liquido.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Salário Base</p>
-                              <p className="font-medium">
-                                R$ {salario.salario_base.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <SortableTableHead column="mes" label="Mês/Ano" activeColumn={salarioSortColumn} direction={salarioSortDirection} onSort={toggleSalarioSort} />
+                        <SortableTableHead column="salario_liquido" label="Salário Líquido" activeColumn={salarioSortColumn} direction={salarioSortDirection} onSort={toggleSalarioSort} />
+                        <SortableTableHead column="salario_base" label="Salário Base" activeColumn={salarioSortColumn} direction={salarioSortDirection} onSort={toggleSalarioSort} />
+                        <TableHead className="text-right">Ações</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                  {(sortedSalarios as unknown as FolhaPagamento[]).map((salario) => (
+                    <TableRow key={salario.id}>
+                      <TableCell className="font-medium">
+                        {new Date(salario.mes + "-01").toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                      </TableCell>
+                      <TableCell className="font-bold text-emerald-600">
+                        R$ {salario.salario_liquido.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell>
+                        R$ {salario.salario_base.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
+                      </TableCell>
+                      <TableCell className="text-right">
                         <Button
                           variant="outline"
                           size="sm"
                           onClick={() => handleVisualizarSalario(salario)}
-                          className="ml-4"
                         >
                           <Eye className="w-4 h-4 mr-2" />
                           Detalhes
                         </Button>
-                      </div>
-                    </div>
+                      </TableCell>
+                    </TableRow>
                   ))}
+                    </TableBody>
+                  </Table>
                 </div>
               )}
             </div>

@@ -2,6 +2,7 @@ import express from 'express';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
 import { medicaoSchema, medicaoUpdateSchema, medicaoFiltersSchema } from '../schemas/medicao-schemas.js';
+import { applyListSort } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -48,9 +49,14 @@ router.get('/', authenticateToken, requirePermission('obras:visualizar'), async 
     // Contar total
     const { count } = await query;
     
-    // Aplicar paginação
-    query = query.order('data_medicao', { ascending: false })
-                 .range(offset, offset + limit - 1);
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data_medicao', 'periodo', 'status', 'valor_total', 'created_at'],
+      defaultColumn: 'data_medicao',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
 
     const { data, error } = await query;
 

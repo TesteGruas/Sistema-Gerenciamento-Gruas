@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import {
@@ -91,6 +93,7 @@ export default function MedicoesPage() {
   const [totalPages, setTotalPages] = useState(1)
   const [totalItems, setTotalItems] = useState(0)
   const itemsPerPage = 100
+  const resetMedicoesPage = useCallback(() => setCurrentPage(1), [])
   
   // Estados de diálogos
   const [excluindoId, setExcluindoId] = useState<number | null>(null)
@@ -128,7 +131,7 @@ export default function MedicoesPage() {
       setIsLoading(true)
       const filters: any = { 
         limit: itemsPerPage,
-        page: currentPage
+        page: currentPage,
       }
       if (gruaFilter !== "all") {
         filters.grua_id = parseInt(gruaFilter)
@@ -212,6 +215,15 @@ export default function MedicoesPage() {
 
     return data
   }, [medicoes, clienteFilter, obraFilter])
+
+  const {
+    sortedItems: sortedFilteredMedicoes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredMedicoes as unknown as Record<string, unknown>[], {
+    onPageReset: resetMedicoesPage,
+  })
 
   const clientesOptions = useMemo(() => {
     const mapa = new Map<string, { id: string; nome: string }>()
@@ -691,15 +703,15 @@ export default function MedicoesPage() {
                   >
                     <TableHeader>
                       <TableRow>
-                        <TableHead className="w-[5.5rem] min-w-0 whitespace-nowrap">Período</TableHead>
-                        <TableHead className="min-w-0">Cliente</TableHead>
-                        <TableHead className="min-w-0">Obra</TableHead>
-                        <TableHead className="w-[6.75rem] whitespace-nowrap">Total</TableHead>
-                        <TableHead className="w-[6.75rem] whitespace-nowrap">Locação</TableHead>
-                        <TableHead className="w-[6.75rem] whitespace-nowrap">Aditivos</TableHead>
-                        <TableHead className="w-[6.75rem] whitespace-nowrap">Serviço</TableHead>
-                        <TableHead className="w-[6.75rem] whitespace-nowrap">Descontos</TableHead>
-                        <TableHead className="w-[9rem] whitespace-nowrap">Status / Faturamento</TableHead>
+                        <SortableTableHead column="periodo" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[5.5rem] min-w-0 whitespace-nowrap" />
+                        <SortableTableHead column="obras.clientes.nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-0" />
+                        <SortableTableHead column="obras.nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-0" />
+                        <SortableTableHead column="valor_total" label="Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[6.75rem] whitespace-nowrap" />
+                        <SortableTableHead column="valor_locacao" label="Locação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[6.75rem] whitespace-nowrap" />
+                        <SortableTableHead column="valor_aditivos" label="Aditivos" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[6.75rem] whitespace-nowrap" />
+                        <SortableTableHead column="valor_servicos" label="Serviço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[6.75rem] whitespace-nowrap" />
+                        <SortableTableHead column="valor_descontos" label="Descontos" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[6.75rem] whitespace-nowrap" />
+                        <SortableTableHead column="status" label="Status / Faturamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[9rem] whitespace-nowrap" />
                         <TableHead className="w-[7.5rem] min-w-0">NF</TableHead>
                         <TableHead className="w-[13rem] min-w-[13rem] whitespace-nowrap text-right">
                           Ações
@@ -707,7 +719,7 @@ export default function MedicoesPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredMedicoes.map((medicao) => {
+                      {sortedFilteredMedicoes.map((medicao) => {
                         const faturada = medicaoEstaFaturada(medicao)
                         const numeros = medicao.notas_fiscais_numeros || []
                         const nfTexto =

@@ -2,6 +2,7 @@ import express from 'express';
 import Joi from 'joi';
 import { supabaseAdmin } from '../config/supabase.js';
 import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { applyListSort, sortRecordsInMemory, parseSortQuery } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -506,12 +507,18 @@ router.get('/geral', authenticateToken, requirePermission('historico:visualizar'
         ? todasAtividades.filter((atividade) => normalizarAcao(atividade.acao) === acaoNormalizada)
         : todasAtividades;
 
-    // Ordenar todas as atividades por timestamp (mais recente primeiro)
-    atividadesFiltradasPorAcao.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    const { sortBy, sortOrder } = parseSortQuery(req);
+    const atividadesOrdenadas = sortRecordsInMemory(atividadesFiltradasPorAcao, {
+      sortBy,
+      sortOrder,
+      allowedColumns: ['timestamp', 'tipo', 'titulo', 'descricao', 'usuario_nome', 'acao', 'entidade'],
+      defaultColumn: 'timestamp',
+      defaultAscending: false,
+    });
 
     // Aplicar paginação
-    const total = atividadesFiltradasPorAcao.length;
-    const atividadesPaginadas = atividadesFiltradasPorAcao.slice(offset, offset + limit);
+    const total = atividadesOrdenadas.length;
+    const atividadesPaginadas = atividadesOrdenadas.slice(offset, offset + limit);
     const totalPages = Math.ceil(total / limit);
 
     res.json({
@@ -568,16 +575,25 @@ router.get('/gruas', authenticateToken, requirePermission('historico:visualizar'
     const offset = (page - 1) * limit;
 
     // Buscar histórico de locações com paginação
-    const { data: locacoes, error: locacoesError, count } = await supabaseAdmin
+    let query = supabaseAdmin
       .from('historico_locacoes')
       .select(`
         *,
         obra:obras(id, nome, status, cliente:clientes(nome)),
         funcionario:funcionarios(nome, cargo),
         grua:gruas(name, modelo)
-      `, { count: 'exact' })
-      .order('data_inicio', { ascending: false })
-      .range(offset, offset + limit - 1);
+      `, { count: 'exact' });
+
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data_inicio', 'data_fim', 'tipo_operacao', 'valor_locacao', 'status', 'grua_id', 'obra_id', 'funcionario_id'],
+      defaultColumn: 'data_inicio',
+      defaultAscending: false,
+    });
+    query = query.range(offset, offset + limit - 1);
+
+    const { data: locacoes, error: locacoesError, count } = await query;
 
     if (locacoesError) {
       return res.status(500).json({
@@ -641,7 +657,7 @@ router.get('/componentes', authenticateToken, requirePermission('historico:visua
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    const { data: componentes, error: componentesError, count } = await supabaseAdmin
+    let queryComponentes = supabaseAdmin
       .from('historico_componentes')
       .select(`
         *,
@@ -650,9 +666,18 @@ router.get('/componentes', authenticateToken, requirePermission('historico:visua
         obra:obras(nome, cliente:clientes(nome)),
         grua_origem:gruas!historico_componentes_grua_origem_id_fkey(name, modelo),
         grua_destino:gruas!historico_componentes_grua_destino_id_fkey(name, modelo)
-      `, { count: 'exact' })
-      .order('data_movimentacao', { ascending: false })
-      .range(offset, offset + limit - 1);
+      `, { count: 'exact' });
+
+    queryComponentes = applyListSort(queryComponentes, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data_movimentacao', 'tipo_movimentacao', 'quantidade_movimentada', 'componente_id', 'funcionario_responsavel_id'],
+      defaultColumn: 'data_movimentacao',
+      defaultAscending: false,
+    });
+    queryComponentes = queryComponentes.range(offset, offset + limit - 1);
+
+    const { data: componentes, error: componentesError, count } = await queryComponentes;
 
     if (componentesError) {
       return res.status(500).json({
@@ -838,15 +863,24 @@ router.get('/ponto', authenticateToken, requirePermission('historico:visualizar'
     const limit = parseInt(req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
-    const { data: registros, error: registrosError, count } = await supabaseAdmin
+    let queryPonto = supabaseAdmin
       .from('registros_ponto')
       .select(`
         *,
         funcionario:funcionarios(nome, cargo),
         aprovado_por_usuario:usuarios(nome, email)
-      `, { count: 'exact' })
-      .order('data', { ascending: false })
-      .range(offset, offset + limit - 1);
+      `, { count: 'exact' });
+
+    queryPonto = applyListSort(queryPonto, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data', 'entrada', 'saida', 'horas_trabalhadas', 'horas_extras', 'status', 'funcionario_id', 'data_aprovacao'],
+      defaultColumn: 'data',
+      defaultAscending: false,
+    });
+    queryPonto = queryPonto.range(offset, offset + limit - 1);
+
+    const { data: registros, error: registrosError, count } = await queryPonto;
 
     if (registrosError) {
       return res.status(500).json({

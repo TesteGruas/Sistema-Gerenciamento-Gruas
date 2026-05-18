@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -68,6 +70,9 @@ export default function RemuneracaoPage() {
   const [isDescontoDialogOpen, setIsDescontoDialogOpen] = useState(false)
   const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
   const { toast } = useToast()
+  const salariosSort = useTableSort()
+  const descontosSort = useTableSort()
+  const beneficiosSort = useTableSort()
 
   // Formulários
   const [folhaForm, setFolhaForm] = useState({
@@ -467,6 +472,19 @@ export default function RemuneracaoPage() {
     return matchesFuncionario && matchesMes && matchesStatus
   })
 
+  const sortedSalarios = useMemo(
+    () => salariosSort.sortClientData(filteredSalarios as Record<string, unknown>[]),
+    [filteredSalarios, salariosSort.sortClientData],
+  )
+  const sortedDescontos = useMemo(
+    () => descontosSort.sortClientData(descontos as Record<string, unknown>[]),
+    [descontos, descontosSort.sortClientData],
+  )
+  const sortedBeneficios = useMemo(
+    () => beneficiosSort.sortClientData(beneficios as Record<string, unknown>[]),
+    [beneficios, beneficiosSort.sortClientData],
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -634,18 +652,18 @@ export default function RemuneracaoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Salário Base</TableHead>
-                    <TableHead>Horas Extras</TableHead>
-                    <TableHead>Proventos</TableHead>
-                    <TableHead>Descontos</TableHead>
-                    <TableHead>Líquido</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="salarioBase" label="Salário Base" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="horasExtras" label="Horas Extras" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="totalProventos" label="Proventos" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="totalDescontos" label="Descontos" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="salarioLiquido" label="Líquido" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={salariosSort.sortColumn} direction={salariosSort.sortDirection} onSort={salariosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredSalarios.map((salario) => (
+                  {sortedSalarios.map((salario) => (
                     <TableRow key={salario.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -833,15 +851,15 @@ export default function RemuneracaoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Valor/Percentual</TableHead>
-                    <TableHead>Obrigatório</TableHead>
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={descontosSort.sortColumn} direction={descontosSort.sortDirection} onSort={descontosSort.toggleSort} />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={descontosSort.sortColumn} direction={descontosSort.sortDirection} onSort={descontosSort.toggleSort} />
+                    <SortableTableHead column="valor" label="Valor/Percentual" activeColumn={descontosSort.sortColumn} direction={descontosSort.sortDirection} onSort={descontosSort.toggleSort} />
+                    <SortableTableHead column="obrigatorio" label="Obrigatório" activeColumn={descontosSort.sortColumn} direction={descontosSort.sortDirection} onSort={descontosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {descontos.map((desconto) => (
+                  {sortedDescontos.map((desconto) => (
                     <TableRow key={desconto.id}>
                       <TableCell>
                         <Badge className={`${getTipoDescontoColor(desconto.tipo)} border`}>
@@ -993,15 +1011,15 @@ export default function RemuneracaoPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="ativo" label="Status" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {beneficios.map((beneficio) => (
+                  {sortedBeneficios.map((beneficio) => (
                     <TableRow key={beneficio.id}>
                       <TableCell>
                         <Badge className={`${getTipoBeneficioColor(beneficio.tipo)} border`}>

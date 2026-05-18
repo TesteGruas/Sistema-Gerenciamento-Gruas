@@ -59,6 +59,8 @@ import { useDebugMode } from "@/hooks/use-debug-mode"
 import { DebugButton } from "@/components/debug-button"
 import { responsaveisObraApi, type ResponsavelObraCreateData } from "@/lib/api-responsaveis-obra"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { gruasApi } from "@/lib/api-gruas"
 import { obrasArquivosApi } from "@/lib/api-obras-arquivos"
 import { getApiOrigin } from "@/lib/runtime-config"
@@ -514,6 +516,13 @@ export default function NovaObraPage() {
   const [formResponsavelObra, setFormResponsavelObra] = useState<ResponsavelObraCreateData>({
     nome: '', usuario: '', email: '', telefone: ''
   })
+
+  const {
+    sortedItems: sortedResponsaveisObra,
+    sortColumn: respSortColumn,
+    sortDirection: respSortDirection,
+    toggleSort: toggleRespSort,
+  } = useClientSortedList(responsaveisObra as unknown as Record<string, unknown>[])
 
   /** Um funcionário cadastrado como operador da obra (empresa) — exibido no Livro da Grua */
   const [operadorObraFuncionario, setOperadorObraFuncionario] = useState<{
@@ -3983,15 +3992,17 @@ startxref
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead>Nome</TableHead>
-                          <TableHead>Usuário</TableHead>
-                          <TableHead>Email</TableHead>
-                          <TableHead>Telefone</TableHead>
+                          <SortableTableHead column="nome" label="Nome" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="usuario" label="Usuário" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="email" label="Email" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
+                          <SortableTableHead column="telefone" label="Telefone" activeColumn={respSortColumn} direction={respSortDirection} onSort={toggleRespSort} />
                           <TableHead className="text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {responsaveisObra.map((responsavel, index) => (
+                        {(sortedResponsaveisObra as unknown as ResponsavelObraCreateData[]).map((responsavel) => {
+                          const index = responsaveisObra.indexOf(responsavel)
+                          return (
                           <TableRow key={index}>
                             <TableCell className="font-medium">{responsavel.nome}</TableCell>
                             <TableCell>{responsavel.usuario || '-'}</TableCell>
@@ -4039,7 +4050,7 @@ startxref
                               </div>
                             </TableCell>
                           </TableRow>
-                        ))}
+                        )})}
                       </TableBody>
                     </Table>
                   </div>

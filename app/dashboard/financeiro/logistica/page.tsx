@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { 
   Package, 
@@ -53,6 +55,20 @@ export default function LogisticaPage() {
   const [motoristas, setMotoristas] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
+  const manifestosOrdenados = useMemo(
+    () => sortClientData(manifestos as unknown as Record<string, unknown>[]) as Manifesto[],
+    [manifestos, sortClientData],
+  )
+  const motoristasOrdenados = useMemo(
+    () => sortClientData(motoristas as unknown as Record<string, unknown>[]),
+    [motoristas, sortClientData],
+  )
+  const veiculosOrdenados = useMemo(
+    () => sortClientData(veiculos as unknown as Record<string, unknown>[]) as Veiculo[],
+    [veiculos, sortClientData],
+  )
 
   // Carregar dados ao montar o componente
   useEffect(() => {
@@ -319,18 +335,18 @@ export default function LogisticaPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Série</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Valor</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Descrição</TableHead>
+                      <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="serie" label="Série" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {manifestos.map((manifesto) => (
+                    {manifestosOrdenados.map((manifesto) => (
                       <TableRow key={manifesto.id}>
                         <TableCell className="font-medium">{manifesto.numero}</TableCell>
                         <TableCell>{manifesto.serie}</TableCell>
@@ -382,18 +398,18 @@ export default function LogisticaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Série</TableHead>
-                    <TableHead>Data</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Descrição</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="serie" label="Série" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {manifestos.map((cte) => (
+                  {manifestosOrdenados.map((cte) => (
                     <TableRow key={cte.id}>
                       <TableCell className="font-medium">{cte.numero}</TableCell>
                       <TableCell>{cte.serie}</TableCell>
@@ -444,19 +460,19 @@ export default function LogisticaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>CNH</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Última Viagem</TableHead>
+                    <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cpf" label="CPF" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cnh" label="CNH" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="email" label="Email" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="veiculo" label="Veículo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="ultimaViagem" label="Última Viagem" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {motoristas.map((motorista) => (
+                  {motoristasOrdenados.map((motorista) => (
                     <TableRow key={motorista.id}>
                       <TableCell className="font-medium">{motorista.nome}</TableCell>
                       <TableCell>{motorista.cpf}</TableCell>
@@ -497,21 +513,21 @@ export default function LogisticaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Motorista</TableHead>
-                    <TableHead>Veículo</TableHead>
-                    <TableHead>Origem</TableHead>
-                    <TableHead>Destino</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Carga</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Distância</TableHead>
-                    <TableHead>Valor</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="motorista" label="Motorista" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="veiculo" label="Veículo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="origem" label="Origem" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="destino" label="Destino" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="periodo" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="carga" label="Carga" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="distancia" label="Distância" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {manifestos.map((viagem) => (
+                  {manifestosOrdenados.map((viagem) => (
                     <TableRow key={viagem.id}>
                       <TableCell className="font-medium">{viagem.numero}</TableCell>
                       <TableCell>{viagem.motorista}</TableCell>

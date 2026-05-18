@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   LineChart,
@@ -105,6 +107,44 @@ export default function RelatoriosPage() {
   const [isLoadingImpostos, setIsLoadingImpostos] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+
+  const financeiroSort = useTableSort()
+  const vendasSort = useTableSort()
+  const contratosSort = useTableSort()
+  const faturamentoSort = useTableSort()
+  const locacoesSort = useTableSort()
+  const estoqueSort = useTableSort()
+  const impostosSort = useTableSort()
+
+  const sortedRelatorioFinanceiro = useMemo(
+    () => financeiroSort.sortClientData(relatorioFinanceiro as Record<string, unknown>[]),
+    [relatorioFinanceiro, financeiroSort.sortClientData],
+  )
+  const sortedRelatorioVendas = useMemo(
+    () => vendasSort.sortClientData(relatorioVendas as Record<string, unknown>[]),
+    [relatorioVendas, vendasSort.sortClientData],
+  )
+  const sortedRelatorioContratos = useMemo(
+    () => contratosSort.sortClientData(relatorioContratos as Record<string, unknown>[]),
+    [relatorioContratos, contratosSort.sortClientData],
+  )
+  const sortedRelatorioFaturamento = useMemo(
+    () => faturamentoSort.sortClientData(relatorioFaturamento as Record<string, unknown>[]),
+    [relatorioFaturamento, faturamentoSort.sortClientData],
+  )
+  const sortedRelatorioLocacoes = useMemo(
+    () => locacoesSort.sortClientData(relatorioLocacoes as Record<string, unknown>[]),
+    [relatorioLocacoes, locacoesSort.sortClientData],
+  )
+  const sortedRelatorioEstoque = useMemo(
+    () => estoqueSort.sortClientData(relatorioEstoque as Record<string, unknown>[]),
+    [relatorioEstoque, estoqueSort.sortClientData],
+  )
+  const impostosPorTipo = relatorioImpostos?.impostos_por_tipo || []
+  const sortedImpostosPorTipo = useMemo(
+    () => impostosSort.sortClientData(impostosPorTipo as Record<string, unknown>[]),
+    [impostosPorTipo, impostosSort.sortClientData],
+  )
 
   // Função para carregar relatório de impostos
   const carregarRelatorioImpostos = async (mes?: number, ano?: number) => {
@@ -1110,22 +1150,22 @@ export default function RelatoriosPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Mês</TableHead>
-                      <TableHead>Receitas</TableHead>
-                      <TableHead>Despesas</TableHead>
-                      <TableHead>Saldo</TableHead>
-                      <TableHead>Crescimento</TableHead>
+                      <SortableTableHead column="mes" label="Mês" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} />
+                      <SortableTableHead column="receitas" label="Receitas" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} />
+                      <SortableTableHead column="despesas" label="Despesas" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} />
+                      <SortableTableHead column="saldo" label="Saldo" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} />
+                      <SortableTableHead column="crescimento" label="Crescimento" activeColumn={financeiroSort.sortColumn} direction={financeiroSort.sortDirection} onSort={financeiroSort.toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {relatorioFinanceiro.length === 0 ? (
+                    {sortedRelatorioFinanceiro.length === 0 ? (
                       <TableRow>
                         <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                           {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                         </TableCell>
                       </TableRow>
-                    ) : relatorioFinanceiro.map((relatorio, index) => (
+                    ) : sortedRelatorioFinanceiro.map((relatorio, index) => (
                       <TableRow key={index}>
                         <TableCell className="font-medium">{relatorio?.mes || 'N/A'}</TableCell>
                         <TableCell className="font-semibold text-green-600">
@@ -1172,22 +1212,22 @@ export default function RelatoriosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Total Vendas</TableHead>
-                    <TableHead>Quantidade</TableHead>
-                    <TableHead>Ticket Médio</TableHead>
-                    <TableHead>Última Venda</TableHead>
+                    <SortableTableHead column="cliente" label="Cliente" activeColumn={vendasSort.sortColumn} direction={vendasSort.sortDirection} onSort={vendasSort.toggleSort} />
+                    <SortableTableHead column="totalVendas" label="Total Vendas" activeColumn={vendasSort.sortColumn} direction={vendasSort.sortDirection} onSort={vendasSort.toggleSort} />
+                    <SortableTableHead column="quantidade" label="Quantidade" activeColumn={vendasSort.sortColumn} direction={vendasSort.sortDirection} onSort={vendasSort.toggleSort} />
+                    <SortableTableHead column="ticketMedio" label="Ticket Médio" activeColumn={vendasSort.sortColumn} direction={vendasSort.sortDirection} onSort={vendasSort.toggleSort} />
+                    <SortableTableHead column="ultimaVenda" label="Última Venda" activeColumn={vendasSort.sortColumn} direction={vendasSort.sortDirection} onSort={vendasSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatorioVendas.length === 0 ? (
+                  {sortedRelatorioVendas.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                         {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                       </TableCell>
                     </TableRow>
-                  ) : relatorioVendas.map((venda, index) => (
+                  ) : sortedRelatorioVendas.map((venda, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{venda?.cliente || 'N/A'}</TableCell>
                       <TableCell className="font-semibold">
@@ -1232,23 +1272,23 @@ export default function RelatoriosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Valor Total</TableHead>
-                    <TableHead>Valor Mensal</TableHead>
-                    <TableHead>Período</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="numero" label="Número" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
+                    <SortableTableHead column="cliente" label="Cliente" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
+                    <SortableTableHead column="valorTotal" label="Valor Total" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
+                    <SortableTableHead column="valorMensal" label="Valor Mensal" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
+                    <SortableTableHead column="inicio" label="Período" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={contratosSort.sortColumn} direction={contratosSort.sortDirection} onSort={contratosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatorioContratos.length === 0 ? (
+                  {sortedRelatorioContratos.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                         {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                       </TableCell>
                     </TableRow>
-                  ) : relatorioContratos.map((contrato, index) => (
+                  ) : sortedRelatorioContratos.map((contrato, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{contrato?.numero || 'N/A'}</TableCell>
                       <TableCell>{contrato?.cliente || 'N/A'}</TableCell>
@@ -1297,22 +1337,22 @@ export default function RelatoriosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Mês</TableHead>
-                    <TableHead>Vendas</TableHead>
-                    <TableHead>Locações</TableHead>
-                    <TableHead>Serviços</TableHead>
-                    <TableHead>Total</TableHead>
+                    <SortableTableHead column="mes" label="Mês" activeColumn={faturamentoSort.sortColumn} direction={faturamentoSort.sortDirection} onSort={faturamentoSort.toggleSort} />
+                    <SortableTableHead column="vendas" label="Vendas" activeColumn={faturamentoSort.sortColumn} direction={faturamentoSort.sortDirection} onSort={faturamentoSort.toggleSort} />
+                    <SortableTableHead column="locacoes" label="Locações" activeColumn={faturamentoSort.sortColumn} direction={faturamentoSort.sortDirection} onSort={faturamentoSort.toggleSort} />
+                    <SortableTableHead column="servicos" label="Serviços" activeColumn={faturamentoSort.sortColumn} direction={faturamentoSort.sortDirection} onSort={faturamentoSort.toggleSort} />
+                    <SortableTableHead column="total" label="Total" activeColumn={faturamentoSort.sortColumn} direction={faturamentoSort.sortDirection} onSort={faturamentoSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatorioFaturamento.length === 0 ? (
+                  {sortedRelatorioFaturamento.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                         {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                       </TableCell>
                     </TableRow>
-                  ) : relatorioFaturamento.map((faturamento, index) => (
+                  ) : sortedRelatorioFaturamento.map((faturamento, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{faturamento?.mes || 'N/A'}</TableCell>
                       <TableCell className="font-semibold">
@@ -1356,23 +1396,23 @@ export default function RelatoriosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Equipamento</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Dias Locados</TableHead>
-                    <TableHead>Valor Total</TableHead>
-                    <TableHead>Aditivos</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="equipamento" label="Equipamento" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
+                    <SortableTableHead column="cliente" label="Cliente" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
+                    <SortableTableHead column="diasLocados" label="Dias Locados" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
+                    <SortableTableHead column="valorTotal" label="Valor Total" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
+                    <SortableTableHead column="aditivos" label="Aditivos" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={locacoesSort.sortColumn} direction={locacoesSort.sortDirection} onSort={locacoesSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatorioLocacoes.length === 0 ? (
+                  {sortedRelatorioLocacoes.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                         {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                       </TableCell>
                     </TableRow>
-                  ) : relatorioLocacoes.map((locacao, index) => (
+                  ) : sortedRelatorioLocacoes.map((locacao, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{locacao?.equipamento || 'N/A'}</TableCell>
                       <TableCell>{locacao?.cliente || 'N/A'}</TableCell>
@@ -1417,23 +1457,23 @@ export default function RelatoriosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Produto</TableHead>
-                    <TableHead>Categoria</TableHead>
-                    <TableHead>Estoque</TableHead>
-                    <TableHead>Valor Unitário</TableHead>
-                    <TableHead>Valor Total</TableHead>
-                    <TableHead>Última Movimentação</TableHead>
+                    <SortableTableHead column="produto" label="Produto" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
+                    <SortableTableHead column="categoria" label="Categoria" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
+                    <SortableTableHead column="estoque" label="Estoque" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
+                    <SortableTableHead column="valorUnitario" label="Valor Unitário" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
+                    <SortableTableHead column="valorTotal" label="Valor Total" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
+                    <SortableTableHead column="ultimaMovimentacao" label="Última Movimentação" activeColumn={estoqueSort.sortColumn} direction={estoqueSort.sortDirection} onSort={estoqueSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {relatorioEstoque.length === 0 ? (
+                  {sortedRelatorioEstoque.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={7} className="text-center text-gray-500 py-8">
                         {isLoading ? 'Carregando...' : 'Nenhum dado disponível'}
                       </TableCell>
                     </TableRow>
-                  ) : relatorioEstoque.map((estoque, index) => (
+                  ) : sortedRelatorioEstoque.map((estoque, index) => (
                     <TableRow key={index}>
                       <TableCell className="font-medium">{estoque?.produto || 'N/A'}</TableCell>
                       <TableCell>
@@ -1655,15 +1695,15 @@ export default function RelatoriosPage() {
                       <Table>
                         <TableHeader>
                           <TableRow>
-                            <TableHead>Tipo de Imposto</TableHead>
-                            <TableHead>Valor Total</TableHead>
-                            <TableHead>Valor Pago</TableHead>
-                            <TableHead>Valor Pendente</TableHead>
+                            <SortableTableHead column="tipo" label="Tipo de Imposto" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} />
+                            <SortableTableHead column="valor_total" label="Valor Total" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} />
+                            <SortableTableHead column="valor_pago" label="Valor Pago" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} />
+                            <SortableTableHead column="valor_pendente" label="Valor Pendente" activeColumn={impostosSort.sortColumn} direction={impostosSort.sortDirection} onSort={impostosSort.toggleSort} />
                             <TableHead>Status</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {(relatorioImpostos?.impostos_por_tipo || []).map((imposto, index) => (
+                          {sortedImpostosPorTipo.map((imposto, index) => (
                             <TableRow key={index}>
                               <TableCell className="font-medium">{imposto?.tipo || 'N/A'}</TableCell>
                               <TableCell>

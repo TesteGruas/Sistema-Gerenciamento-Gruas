@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { 
@@ -107,6 +109,7 @@ export default function BancosPage() {
   const [filtroBanco, setFiltroBanco] = useState<string>("all")
   const [searchTerm, setSearchTerm] = useState("")
   const [exportandoCsv, setExportandoCsv] = useState<"contas" | "mov" | null>(null)
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
   
   // Formulários
   const [bancoForm, setBancoForm] = useState({
@@ -491,6 +494,12 @@ export default function BancosPage() {
       return matchesSearch
     })
   }, [movimentacoes, searchTerm])
+
+  const movimentacoesOrdenadas = useMemo(
+    () =>
+      sortClientData(movimentacoesFiltradas as unknown as Record<string, unknown>[]) as Movimentacao[],
+    [movimentacoesFiltradas, sortClientData],
+  )
 
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor === null || valor === undefined ? "" : String(valor)
@@ -1069,18 +1078,18 @@ export default function BancosPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Banco</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Descrição</TableHead>
-                  <TableHead>Forma de Pagamento</TableHead>
-                  <TableHead>Referência</TableHead>
-                  <TableHead className="text-right">Valor</TableHead>
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="contas_bancarias.banco" label="Banco" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="categoria" label="Forma de Pagamento" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="referencia" label="Referência" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="valor" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-right" />
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {movimentacoesFiltradas.map((mov) => (
+                {movimentacoesOrdenadas.map((mov) => (
                   <TableRow 
                     key={mov.id}
                     className={mov.referencia?.startsWith('NF-') ? 'cursor-pointer hover:bg-muted/50' : ''}

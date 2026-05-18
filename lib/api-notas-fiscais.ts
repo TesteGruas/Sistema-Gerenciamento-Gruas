@@ -1,4 +1,5 @@
 import { api } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 export interface NotaFiscal {
   id: number
@@ -113,7 +114,7 @@ export const notasFiscaisApi = {
     locacao_id?: number
     page?: number
     limit?: number
-  }) {
+  } & TableSortParams) {
     const searchParams = new URLSearchParams()
     
     if (params?.tipo) searchParams.append('tipo', params.tipo)
@@ -126,6 +127,7 @@ export const notasFiscaisApi = {
     if (params?.locacao_id) searchParams.append('locacao_id', params.locacao_id.toString())
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
+    appendSortParams(searchParams, params)
 
     const response = await api.get(`/notas-fiscais?${searchParams.toString()}`)
     return response.data

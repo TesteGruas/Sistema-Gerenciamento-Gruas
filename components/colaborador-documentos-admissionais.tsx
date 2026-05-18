@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -465,6 +467,13 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
     return dias !== null && dias >= 0 && dias <= 30
   })
 
+  const {
+    sortedItems: sortedDocumentos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
+
   // Validar colaboradorId antes de renderizar
   if (!colaboradorId || colaboradorId <= 0) {
     return (
@@ -547,17 +556,17 @@ export function ColaboradorDocumentosAdmissionais({ colaboradorId, readOnly = fa
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Data</TableHead>
-                  <TableHead>Data de Validade</TableHead>
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="data_validade" label="Data de Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Validade doc.</TableHead>
                   <TableHead>Assinatura</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {documentos.map((documento) => {
+                {(sortedDocumentos as unknown as DocumentoAdmissional[]).map((documento) => {
                   const dias = diasParaVencimento(documento.data_validade)
                   return (
                     <TableRow key={documento.id}>

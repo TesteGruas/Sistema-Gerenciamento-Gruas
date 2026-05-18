@@ -1,4 +1,5 @@
 import { getApiOrigin } from './runtime-config'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 const API_BASE_URL = getApiOrigin();
 
@@ -185,13 +186,14 @@ export const apiHistorico = {
     page?: number; 
     limit?: number; 
     modulo?: string; 
-    acao?: string; 
-  }): Promise<{ success: boolean; data: AtividadeHistorico[]; pagination?: any }> {
+    acao?: string;
+  } & TableSortParams): Promise<{ success: boolean; data: AtividadeHistorico[]; pagination?: any }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     if (params?.modulo) queryParams.append('modulo', params.modulo);
     if (params?.acao) queryParams.append('acao', params.acao);
+    appendSortParams(queryParams, params);
     
     const token = localStorage.getItem('access_token');
     const response = await fetch(`${API_BASE_URL}/api/historico/geral?${queryParams}`, {
@@ -212,10 +214,11 @@ export const apiHistorico = {
   async listar(params?: {
     page?: number;
     limit?: number;
-  }): Promise<HistoricoResponse> {
+  } & TableSortParams): Promise<HistoricoResponse> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
+    appendSortParams(queryParams, params);
     
     const token = localStorage.getItem('access_token');
     const response = await fetch(`${API_BASE_URL}/api/historico/gruas?${queryParams}`, {
@@ -233,10 +236,11 @@ export const apiHistorico = {
   },
 
   // Histórico de componentes
-  async listarComponentes(params?: { page?: number; limit?: number; }): Promise<{ success: boolean; data: HistoricoComponente[]; pagination?: any }> {
+  async listarComponentes(params?: { page?: number; limit?: number; } & TableSortParams): Promise<{ success: boolean; data: HistoricoComponente[]; pagination?: any }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
+    appendSortParams(queryParams, params);
     
     const token = localStorage.getItem('access_token');
     const response = await fetch(`${API_BASE_URL}/api/historico/componentes?${queryParams}`, {
@@ -254,10 +258,11 @@ export const apiHistorico = {
   },
 
   // Registros de ponto
-  async listarPonto(params?: { page?: number; limit?: number; }): Promise<{ success: boolean; data: RegistroPonto[]; pagination?: any }> {
+  async listarPonto(params?: { page?: number; limit?: number; } & TableSortParams): Promise<{ success: boolean; data: RegistroPonto[]; pagination?: any }> {
     const queryParams = new URLSearchParams();
     if (params?.page) queryParams.append('page', params.page.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
+    appendSortParams(queryParams, params);
     
     const token = localStorage.getItem('access_token');
     const url = `${API_BASE_URL}/api/ponto-eletronico/registros?${queryParams}`;

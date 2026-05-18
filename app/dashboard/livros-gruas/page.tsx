@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -9,6 +9,9 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
+import { useSortablePaginatedList } from "@/hooks/use-sortable-paginated-list"
 import { BookOpen, Search, Wrench, Eye, AlertCircle, Download, Loader2 } from "lucide-react"
 import { PageLoader } from "@/components/ui/loader"
 import { livroGruaApi } from "@/lib/api-livro-grua"
@@ -79,6 +82,8 @@ export default function LivrosGruasPage() {
   const prevSearchTermRef = useRef(searchTerm)
   const prevFilterObraRef = useRef(filterObra)
   const prevFilterStatusRef = useRef(filterStatus)
+  const resetLivrosPage = useCallback(() => setCurrentPage(1), [])
+  const { sortColumn, sortDirection, toggleSort } = useSortablePaginatedList(resetLivrosPage)
 
   // Carregar relações grua-obra
   const carregarRelacoes = async (page: number = currentPage, limit: number = itemsPerPage) => {
@@ -105,7 +110,7 @@ export default function LivrosGruasPage() {
         limit,
         searchTerm.trim() || undefined,
         filterObra !== 'all' ? filterObra : undefined,
-        filterStatus !== 'all' ? filterStatus : undefined
+        filterStatus !== 'all' ? filterStatus : undefined,
       )
       const duration = Math.round(performance.now() - startTime)
       
@@ -143,7 +148,7 @@ export default function LivrosGruasPage() {
       setLoading(false)
     }
   }
-  
+
   // Handler para mudança de página
   const handlePageChange = (page: number) => {
     setCurrentPage(page)
@@ -161,6 +166,10 @@ export default function LivrosGruasPage() {
 
   // Usar dados diretamente da API (filtros já aplicados no backend)
   const relacoesFiltradas = relacoes
+  const { sortedItems: sortedRelacoes } = useClientSortedList(
+    relacoesFiltradas as unknown as Record<string, unknown>[],
+    { onPageReset: resetLivrosPage },
+  )
 
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor == null ? "" : String(valor)
@@ -324,7 +333,6 @@ export default function LivrosGruasPage() {
     const searchChanged = prevSearchTermRef.current !== searchTerm
     const obraChanged = prevFilterObraRef.current !== filterObra
     const statusChanged = prevFilterStatusRef.current !== filterStatus
-    
     // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
     if (!searchChanged && !obraChanged && !statusChanged) {
       return
@@ -475,22 +483,22 @@ export default function LivrosGruasPage() {
             </div>
           </div>
 
-          {relacoesFiltradas.length > 0 ? (
+          {sortedRelacoes.length > 0 ? (
             <>
               <div className="overflow-x-auto px-4 py-4 sm:px-6 sm:py-5">
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="min-w-[140px]">Grua</TableHead>
-                      <TableHead className="whitespace-nowrap">Status</TableHead>
-                      <TableHead className="min-w-[160px]">Obra</TableHead>
+                      <SortableTableHead column="grua.id" label="Grua" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[140px]" />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="whitespace-nowrap" />
+                      <SortableTableHead column="obra.nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[160px]" />
                       <TableHead className="min-w-[200px] hidden lg:table-cell">Local</TableHead>
-                      <TableHead className="min-w-[200px] whitespace-nowrap">Período</TableHead>
+                      <SortableTableHead column="data_inicio_locacao" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[200px] whitespace-nowrap" />
                       <TableHead className="text-right min-w-[72px]">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {relacoesFiltradas.map((relacao) => {
+                    {sortedRelacoes.map((relacao) => {
                       if (!relacao.grua || !relacao.obra) return null
                       const localStr = [relacao.obra.endereco, [relacao.obra.cidade, relacao.obra.estado].filter(Boolean).join("/")]
                         .filter(Boolean)

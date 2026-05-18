@@ -7,6 +7,8 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { 
   AlertCircle, 
@@ -77,6 +79,7 @@ export function LivroGruaManutencaoList({
   const [manutencoes, setManutencoes] = useState<Manutencao[]>([])
   const [filtroMes, setFiltroMes] = useState("")
   const [filtroResponsavel, setFiltroResponsavel] = useState("todos")
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Carregar manutenções
   const carregarManutencoes = async () => {
@@ -138,16 +141,21 @@ export function LivroGruaManutencaoList({
     [manutencoes, filtroMes, filtroResponsavel]
   )
 
+  const manutencoesOrdenadas = useMemo(
+    () => sortClientData(manutencoesFiltradas as Record<string, unknown>[]) as Manutencao[],
+    [manutencoesFiltradas, sortClientData],
+  )
+
   // Função para formatar dados para exportação
   const formatarDadosParaExportacao = useCallback(() => {
-    return manutencoesFiltradas.map((manutencao) => ({
+    return manutencoesOrdenadas.map((manutencao) => ({
       'Data': new Date(manutencao.data).toLocaleDateString('pt-BR'),
       'Realizado Por': manutencao.realizado_por_nome || 'N/A',
       'Cargo': manutencao.cargo || 'N/A',
       'Descrição': manutencao.descricao || 'Sem descrição',
       'Observações': manutencao.observacoes || ''
     }))
-  }, [manutencoesFiltradas])
+  }, [manutencoesOrdenadas])
 
   const listaVaziaPorFiltro = manutencoes.length > 0 && manutencoesFiltradas.length === 0
 
@@ -303,15 +311,15 @@ export function LivroGruaManutencaoList({
             >
               <TableHeader>
                 <TableRow className="border-b bg-muted/40 hover:bg-muted/40">
-                  <TableHead className="pl-3 font-semibold">Data</TableHead>
-                  <TableHead className="font-semibold">Realizado por</TableHead>
-                  <TableHead className="font-semibold">Cargo</TableHead>
-                  <TableHead className="pr-3 font-semibold">Descrição</TableHead>
+                  <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="pl-3 font-semibold" />
+                  <SortableTableHead column="realizado_por_nome" label="Realizado por" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="font-semibold" />
+                  <SortableTableHead column="cargo" label="Cargo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="font-semibold" />
+                  <SortableTableHead column="descricao" label="Descrição" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="pr-3 font-semibold" />
                   {mostrarAcoes && <TableHead className="text-right font-semibold">Ações</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {manutencoesFiltradas.map((manutencao) => (
+                {manutencoesOrdenadas.map((manutencao) => (
                   <TableRow
                     key={manutencao.id}
                     className="border-b border-border/60 transition-colors hover:bg-muted/35"

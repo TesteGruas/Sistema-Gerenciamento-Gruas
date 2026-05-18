@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { getApiOrigin } from "@/lib/runtime-config"
@@ -60,6 +62,24 @@ export default function CadastroPage() {
   const [produtos, setProdutos] = useState<any[]>([])
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [isLoading, setIsLoading] = useState(false)
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+
+  const clientesOrdenados = useMemo(
+    () => sortClientData(clientes as unknown as Record<string, unknown>[]),
+    [clientes, sortClientData],
+  )
+  const fornecedoresOrdenados = useMemo(
+    () => sortClientData(fornecedores as unknown as Record<string, unknown>[]),
+    [fornecedores, sortClientData],
+  )
+  const produtosOrdenados = useMemo(
+    () => sortClientData(produtos as unknown as Record<string, unknown>[]),
+    [produtos, sortClientData],
+  )
+  const funcionariosOrdenados = useMemo(
+    () => sortClientData(funcionarios as unknown as Record<string, unknown>[]),
+    [funcionarios, sortClientData],
+  )
 
   // Carregar dados ao montar o componente e ao trocar de aba
   useEffect(() => {
@@ -283,12 +303,12 @@ export default function CadastroPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>CNPJ</TableHead>
-                      <TableHead>Contato</TableHead>
-                      <TableHead>Telefone</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Endereço</TableHead>
+                      <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="cnpj" label="CNPJ" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="contato" label="Contato" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="email" label="Email" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="endereco" label="Endereço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Total Compras</TableHead>
                       <TableHead>Última Compra</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
@@ -307,7 +327,7 @@ export default function CadastroPage() {
                           Nenhum cliente encontrado
                         </TableCell>
                       </TableRow>
-                    ) : clientes.map((cliente) => (
+                    ) : clientesOrdenados.map((cliente) => (
                       <TableRow key={cliente.id}>
                         <TableCell className="font-medium">{cliente.nome}</TableCell>
                         <TableCell>{cliente.cnpj}</TableCell>
@@ -316,9 +336,15 @@ export default function CadastroPage() {
                         <TableCell>{cliente.email}</TableCell>
                         <TableCell className="max-w-xs truncate">{cliente.endereco}</TableCell>
                         <TableCell className="font-semibold">
-                          R$ {cliente.totalCompras.toLocaleString('pt-BR')}
+                          {cliente.total_compras != null
+                            ? `R$ ${Number(cliente.total_compras).toLocaleString('pt-BR')}`
+                            : '—'}
                         </TableCell>
-                        <TableCell>{new Date(cliente.ultimaCompra).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>
+                          {cliente.ultima_compra
+                            ? new Date(cliente.ultima_compra).toLocaleDateString('pt-BR')
+                            : '—'}
+                        </TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button variant="outline" size="sm">
@@ -349,12 +375,12 @@ export default function CadastroPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CNPJ</TableHead>
-                    <TableHead>Contato</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Endereço</TableHead>
+                    <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cnpj" label="CNPJ" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="contato" label="Contato" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="email" label="Email" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="endereco" label="Endereço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead>Total Compras</TableHead>
                     <TableHead>Última Compra</TableHead>
                     <TableHead className="text-right">Ações</TableHead>
@@ -373,7 +399,7 @@ export default function CadastroPage() {
                         Nenhum fornecedor encontrado
                       </TableCell>
                     </TableRow>
-                  ) : fornecedores.map((fornecedor) => (
+                  ) : fornecedoresOrdenados.map((fornecedor) => (
                     <TableRow key={fornecedor.id}>
                       <TableCell className="font-medium">{fornecedor.nome}</TableCell>
                       <TableCell>{fornecedor.cnpj}</TableCell>
@@ -382,9 +408,15 @@ export default function CadastroPage() {
                       <TableCell>{fornecedor.email}</TableCell>
                       <TableCell className="max-w-xs truncate">{fornecedor.endereco}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {fornecedor.totalCompras.toLocaleString('pt-BR')}
+                        {fornecedor.total_compras != null
+                          ? `R$ ${Number(fornecedor.total_compras).toLocaleString('pt-BR')}`
+                          : '—'}
                       </TableCell>
-                      <TableCell>{new Date(fornecedor.ultimaCompra).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>
+                        {fornecedor.ultima_compra
+                          ? new Date(fornecedor.ultima_compra).toLocaleDateString('pt-BR')
+                          : '—'}
+                      </TableCell>
                       <TableCell className="text-right">
                         <div className="flex justify-end gap-2">
                           <Button variant="outline" size="sm">
@@ -445,12 +477,12 @@ export default function CadastroPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Nome</TableHead>
-                      <TableHead>Categoria</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Preço</TableHead>
-                      <TableHead>Estoque</TableHead>
-                      <TableHead>Fornecedor</TableHead>
+                      <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="categoria" label="Categoria" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="preco" label="Preço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="estoque" label="Estoque" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="fornecedores.nome" label="Fornecedor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Última Venda</TableHead>
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
@@ -468,7 +500,7 @@ export default function CadastroPage() {
                           Nenhum produto encontrado
                         </TableCell>
                       </TableRow>
-                    ) : produtos.map((produto) => (
+                    ) : produtosOrdenados.map((produto) => (
                       <TableRow key={produto.id}>
                         <TableCell className="font-medium">{produto.nome}</TableCell>
                         <TableCell>
@@ -485,8 +517,8 @@ export default function CadastroPage() {
                           R$ {produto.preco.toLocaleString('pt-BR')}
                         </TableCell>
                         <TableCell>{produto.estoque}</TableCell>
-                        <TableCell>{produto.fornecedor}</TableCell>
-                        <TableCell>{new Date(produto.ultimaVenda).toLocaleDateString('pt-BR')}</TableCell>
+                        <TableCell>{produto.fornecedores?.nome ?? '—'}</TableCell>
+                        <TableCell>—</TableCell>
                         <TableCell className="text-right">
                           <div className="flex justify-end gap-2">
                             <Button variant="outline" size="sm">
@@ -517,14 +549,14 @@ export default function CadastroPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Nome</TableHead>
-                    <TableHead>CPF</TableHead>
-                    <TableHead>Cargo</TableHead>
-                    <TableHead>Telefone</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Salário</TableHead>
-                    <TableHead>Data Admissão</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cpf" label="CPF" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cargo" label="Cargo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="email" label="Email" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="salario" label="Salário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_admissao" label="Data Admissão" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -541,7 +573,7 @@ export default function CadastroPage() {
                         Nenhum funcionário encontrado
                       </TableCell>
                     </TableRow>
-                  ) : funcionarios.map((funcionario) => (
+                  ) : funcionariosOrdenados.map((funcionario) => (
                     <TableRow key={funcionario.id}>
                       <TableCell className="font-medium">{funcionario.nome}</TableCell>
                       <TableCell>{funcionario.cpf}</TableCell>
@@ -549,9 +581,15 @@ export default function CadastroPage() {
                       <TableCell>{funcionario.telefone}</TableCell>
                       <TableCell>{funcionario.email}</TableCell>
                       <TableCell className="font-semibold">
-                        R$ {funcionario.salario.toLocaleString('pt-BR')}
+                        {funcionario.salario != null
+                          ? `R$ ${Number(funcionario.salario).toLocaleString('pt-BR')}`
+                          : '—'}
                       </TableCell>
-                      <TableCell>{new Date(funcionario.dataAdmissao).toLocaleDateString('pt-BR')}</TableCell>
+                      <TableCell>
+                        {funcionario.data_admissao
+                          ? new Date(funcionario.data_admissao).toLocaleDateString('pt-BR')
+                          : '—'}
+                      </TableCell>
                       <TableCell>
                         <Badge className={getStatusColor(funcionario.status)}>
                           {funcionario.status}

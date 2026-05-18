@@ -365,12 +365,17 @@ router.get('/registros', async (req, res) => {
       turno,
       horas_extras_min,
       horas_extras_max,
-      order_by = 'data',
-      order_direction = 'desc',
+      order_by: orderByParam = 'data',
+      order_direction: orderDirectionParam = 'desc',
+      sort_by,
+      sort_order,
       page = 1, 
       limit = 50,
       recalcular = 'false'
     } = req.query;
+
+    const order_by = sort_by || orderByParam;
+    const order_direction = sort_order || orderDirectionParam;
 
     // ========================================
     // VALIDAÇÕES

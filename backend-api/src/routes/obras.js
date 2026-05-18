@@ -6,6 +6,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendWelcomeEmail, sendResponsavelObraNotificacaoEmail } from '../services/email.service.js'
 import { enviarWhatsAppResponsavelObraAcesso } from '../services/whatsapp-service.js'
 import { validarTelefoneWhatsappBrasil } from '../utils/telefone-brasil.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -918,7 +919,14 @@ router.get('/', authenticateToken, async (req, res) => {
       query = query.eq('cliente_id', cliente_id)
     }
 
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['nome', 'status', 'data_inicio', 'data_fim', 'cliente_id', 'orcamento', 'cidade', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    })
+    query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
 

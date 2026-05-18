@@ -4,6 +4,7 @@ import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -169,7 +170,14 @@ router.get('/', authenticateToken, requirePermission('clientes:visualizar'), asy
       query = query.eq('status', req.query.status)
     }
 
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['nome', 'cnpj', 'email', 'telefone', 'cidade', 'estado', 'status', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    })
+    query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
 

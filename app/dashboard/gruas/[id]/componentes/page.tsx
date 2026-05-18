@@ -10,6 +10,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Badge } from "@/components/ui/badge"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { 
@@ -234,6 +236,20 @@ export default function ComponentesGruaPage() {
 
   // Os componentes já vêm filtrados da API
   const filteredComponentes = componentes
+
+  const {
+    sortedItems: sortedComponentes,
+    sortColumn: compSortColumn,
+    sortDirection: compSortDirection,
+    toggleSort: toggleCompSort,
+  } = useClientSortedList(filteredComponentes as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedComponentesDevolucao,
+    sortColumn: devSortColumn,
+    sortDirection: devSortDirection,
+    toggleSort: toggleDevSort,
+  } = useClientSortedList(componentes as unknown as Record<string, unknown>[])
 
   // Buscar componentes do estoque
   const buscarComponentesEstoque = useCallback(async (termo: string) => {
@@ -1058,17 +1074,17 @@ export default function ComponentesGruaPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Nome</TableHead>
-                  <TableHead>Tipo</TableHead>
-                  <TableHead>Modelo/Fabricante</TableHead>
-                  <TableHead>Quantidades</TableHead>
-                  <TableHead>Valor Unitário</TableHead>
-                  <TableHead>Status</TableHead>
+                  <SortableTableHead column="nome" label="Nome" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
+                  <SortableTableHead column="tipo" label="Tipo" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
+                  <SortableTableHead column="modelo" label="Modelo/Fabricante" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
+                  <SortableTableHead column="quantidade_total" label="Quantidades" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
+                  <SortableTableHead column="valor_unitario" label="Valor Unitário" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={compSortColumn} direction={compSortDirection} onSort={toggleCompSort} />
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredComponentes.map((componente) => (
+                {(sortedComponentes as unknown as typeof filteredComponentes).map((componente) => (
                   <TableRow key={componente.id}>
                     <TableCell className="font-medium">
                       <div>
@@ -2061,16 +2077,16 @@ export default function ComponentesGruaPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Componente</TableHead>
-                    <TableHead>Quantidade em Uso</TableHead>
-                    <TableHead>Valor Unitário</TableHead>
+                    <SortableTableHead column="nome" label="Componente" activeColumn={devSortColumn} direction={devSortDirection} onSort={toggleDevSort} />
+                    <SortableTableHead column="quantidade_em_uso" label="Quantidade em Uso" activeColumn={devSortColumn} direction={devSortDirection} onSort={toggleDevSort} />
+                    <SortableTableHead column="valor_unitario" label="Valor Unitário" activeColumn={devSortColumn} direction={devSortDirection} onSort={toggleDevSort} />
                     <TableHead>Devolução Completa</TableHead>
                     <TableHead>Devolução Parcial</TableHead>
                     <TableHead>Quantidade Devolvida</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {componentes.map((componente) => {
+                  {(sortedComponentesDevolucao as unknown as typeof componentes).map((componente) => {
                       const devolucao = devolucoesItens[componente.id] || { tipo: null, quantidade_devolvida: componente.quantidade_em_uso || 0 }
                       const isCompleta = devolucao.tipo === 'completa'
                       const isParcial = devolucao.tipo === 'parcial'

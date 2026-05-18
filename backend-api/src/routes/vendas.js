@@ -4,6 +4,7 @@ import { supabase, supabaseAdmin } from '../config/supabase.js';
 import Joi from 'joi';
 import { criarMovimentacoesVenda } from '../utils/movimentacoes-estoque.js';
 import { authenticateToken } from '../middleware/auth.js';
+import { applyListSort, sortRecordsInMemory } from '../utils/apply-list-sort.js';
 
 const router = express.Router();
 
@@ -137,15 +138,21 @@ const vendaItemSchema = Joi.object({
 router.get('/', async (req, res) => {
   try {
     const { search } = req.query;
-    
+    const sortOpts = {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['numero_venda', 'data_venda', 'valor_total', 'status', 'tipo_venda', 'created_at'],
+      defaultColumn: 'created_at',
+      defaultAscending: false,
+    };
+
     let query = supabase
       .from('vendas')
       .select(`
         *,
         clientes(nome, cnpj),
         obras(nome, endereco)
-      `)
-      .order('created_at', { ascending: false });
+      `);
 
     // Aplicar busca se fornecida
     if (search && search.trim()) {
@@ -158,8 +165,7 @@ router.get('/', async (req, res) => {
           *,
           clientes(nome, cnpj),
           obras(nome, endereco)
-        `)
-        .order('created_at', { ascending: false });
+        `);
 
       if (allError) throw allError;
 
@@ -173,10 +179,11 @@ router.get('/', async (req, res) => {
 
       return res.json({
         success: true,
-        data: filteredVendas || []
+        data: sortRecordsInMemory(filteredVendas || [], sortOpts),
       });
     }
 
+    query = applyListSort(query, sortOpts);
     const { data, error } = await query;
 
     if (error) throw error;

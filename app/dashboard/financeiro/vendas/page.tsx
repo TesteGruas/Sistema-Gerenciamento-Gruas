@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { 
   getVendas, 
@@ -42,6 +42,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
@@ -126,6 +128,7 @@ export default function VendasPage() {
     total: 0,
     pages: 0
   })
+  const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
 
   // Carregar vendas
   const loadVendas = async (search?: string, isSearch = false) => {
@@ -162,7 +165,7 @@ export default function VendasPage() {
       setOrcamentosLoading(true)
     }
     try {
-      const response = await getOrcamentos(orcamentoFilters)
+      const response = await getOrcamentos({ ...orcamentoFilters })
       setOrcamentos(response.data)
       setOrcamentoPagination(response.pagination)
     } catch (error) {
@@ -230,17 +233,31 @@ export default function VendasPage() {
   // Usar vendas diretamente (já filtradas pela API)
   const filteredVendas = vendas
 
+  const sortedVendas = useMemo(
+    () => sortClientData(filteredVendas as unknown as Record<string, unknown>[]) as Venda[],
+    [filteredVendas, sortClientData],
+  )
+
+  const sortedOrcamentos = useMemo(
+    () => sortClientData(orcamentos as unknown as Record<string, unknown>[]),
+    [orcamentos, sortClientData],
+  )
+
   // Calcular paginação
-  const totalVendas = filteredVendas.length
+  const totalVendas = sortedVendas.length
   const totalPages = Math.ceil(totalVendas / vendasPagination.limit)
   const startIndex = (vendasPagination.page - 1) * vendasPagination.limit
   const endIndex = startIndex + vendasPagination.limit
-  const paginatedVendas = filteredVendas.slice(startIndex, endIndex)
+  const paginatedVendas = sortedVendas.slice(startIndex, endIndex)
 
-  // Resetar página quando o filtro mudar
+  // Resetar página quando o filtro ou ordenação mudar
   useEffect(() => {
     setVendasPagination(prev => ({ ...prev, page: 1 }))
-  }, [searchTerm])
+  }, [searchTerm, sortColumn, sortDirection])
+
+  useEffect(() => {
+    setOrcamentoFilters((prev) => ({ ...prev, page: 1 }))
+  }, [sortColumn, sortDirection])
 
   const getTipoVendaColor = (tipo: string) => {
     switch (tipo) {
@@ -1114,14 +1131,14 @@ export default function VendasPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>ID</TableHead>
-                      <TableHead>Número</TableHead>
-                      <TableHead>Cliente</TableHead>
+                      <SortableTableHead column="id" label="ID" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="numero_venda" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Obra</TableHead>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Valor</TableHead>
+                      <SortableTableHead column="data_venda" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="valor_final" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Tipo</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead>Ações</TableHead>
                     </TableRow>
                   </TableHeader>
@@ -1393,18 +1410,18 @@ export default function VendasPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Número</TableHead>
-                    <TableHead>Cliente</TableHead>
-                    <TableHead>Data</TableHead>
-                        <TableHead>Validade</TableHead>
-                        <TableHead>Tipo</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Status</TableHead>
-                        <TableHead>Ações</TableHead>
+                    <SortableTableHead column="id" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_orcamento" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="data_validade" label="Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                    <TableHead>Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                      {orcamentos.map((orcamento) => {
+                      {sortedOrcamentos.map((orcamento) => {
                         const statusInfo = formatarStatusOrcamento(orcamento.status)
                         return (
                           <TableRow key={orcamento.id}>

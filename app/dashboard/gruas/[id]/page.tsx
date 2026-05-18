@@ -7,6 +7,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { 
@@ -35,6 +37,13 @@ export default function GruaDetalhesPage() {
   const [loading, setLoading] = useState(true)
   const [selectedMedicao, setSelectedMedicao] = useState<MedicaoMensal | null>(null)
   const [isViewDialogOpen, setIsViewDialogOpen] = useState(false)
+
+  const {
+    sortedItems: sortedMedicoes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(medicoes as unknown as Record<string, unknown>[])
 
   useEffect(() => {
     if (gruaId) {
@@ -232,17 +241,17 @@ export default function GruaDetalhesPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Número</TableHead>
-                  <TableHead>Período</TableHead>
-                  <TableHead>Obra</TableHead>
-                  <TableHead>Valor Total</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Aprovação</TableHead>
+                  <SortableTableHead column="numero" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="periodo" label="Período" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="obras.nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="valor_total" label="Valor Total" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                  <SortableTableHead column="status_aprovacao" label="Aprovação" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {medicoes.map((medicao) => (
+                {(sortedMedicoes as unknown as MedicaoMensal[]).map((medicao) => (
                   <TableRow key={medicao.id}>
                     <TableCell className="font-medium">{medicao.numero}</TableCell>
                     <TableCell>{medicao.periodo}</TableCell>

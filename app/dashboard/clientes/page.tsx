@@ -12,6 +12,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
@@ -259,7 +261,7 @@ export default function ClientesPage() {
       const response = await clientesApi.listarClientes({
         page: pagination.page,
         limit: pagination.limit,
-        status: statusFilter || undefined
+        status: statusFilter || undefined,
       })
       const duration = Math.round(performance.now() - startTime)
       console.log(`✅ [Preload] Clientes carregados (${duration}ms) - ${response.data.length} registros`)
@@ -332,7 +334,7 @@ export default function ClientesPage() {
         searchTerm, 
         pagination.page, 
         pagination.limit,
-        statusFilter || undefined
+        statusFilter || undefined,
       )
       console.log('✅ Busca concluída:', response.data.length, 'clientes encontrados')
       setClientes(response.data)
@@ -376,6 +378,12 @@ export default function ClientesPage() {
 
   // Os clientes já vêm filtrados do backend, não precisamos filtrar novamente
   const filteredClientes = clientes
+  const {
+    sortedItems: sortedClientes,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredClientes as unknown as Record<string, unknown>[])
 
   const formatarLinhaCidadeEstado = (cidade?: string, estado?: string) => {
     if (cidade && estado) return `${cidade}/${estado}`
@@ -896,7 +904,7 @@ export default function ClientesPage() {
     if (!v) setClienteNotificarIndividual(null)
   }, [])
 
-  const visIdsPaginaClientes = useMemo(() => filteredClientes.map((c) => c.id), [filteredClientes])
+  const visIdsPaginaClientes = useMemo(() => sortedClientes.map((c) => c.id), [sortedClientes])
   const nSelecionadosClientesNaPagina = useMemo(
     () => visIdsPaginaClientes.filter((id) => destinatariosClientesIdSet.has(id)).length,
     [visIdsPaginaClientes, destinatariosClientesIdSet],
@@ -911,7 +919,7 @@ export default function ClientesPage() {
       if (checked === true) {
         setDestinatariosNotificacaoClientes((prev) => {
           const map = new Map(prev.map((d) => [d.id, d]))
-          for (const c of filteredClientes) {
+          for (const c of sortedClientes) {
             map.set(c.id, {
               id: c.id,
               nome: c.nome,
@@ -925,7 +933,7 @@ export default function ClientesPage() {
       const visSet = new Set(visIdsPaginaClientes)
       setDestinatariosNotificacaoClientes((prev) => prev.filter((d) => !visSet.has(d.id)))
     },
-    [filteredClientes, visIdsPaginaClientes],
+    [sortedClientes, visIdsPaginaClientes],
   )
 
   const adicionarClienteBuscaNotificacao = useCallback(
@@ -1135,7 +1143,7 @@ export default function ClientesPage() {
                 <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
                 <span className="ml-2 text-gray-600">Carregando clientes...</span>
               </div>
-            ) : filteredClientes.length > 0 ? (
+            ) : sortedClientes.length > 0 ? (
               <div className="p-6 space-y-4">
             <div className="rounded-md border">
               <Table className="table-fixed">
@@ -1153,26 +1161,24 @@ export default function ClientesPage() {
                                   : false
                             }
                             onCheckedChange={onNotificarSelectAllPaginaClientes}
-                            disabled={filteredClientes.length === 0}
+                            disabled={sortedClientes.length === 0}
                             aria-label="Selecionar ou limpar todos desta página para notificação em massa"
                           />
                         </div>
                       </TableHead>
                     ) : null}
-                    <TableHead className="w-48 min-w-[12rem] px-3 text-left whitespace-nowrap">
-                      Cliente
-                    </TableHead>
-                    <TableHead className="whitespace-nowrap">CNPJ</TableHead>
-                    <TableHead className="min-w-[140px]">Email</TableHead>
-                    <TableHead className="whitespace-nowrap">Telefone</TableHead>
-                    <TableHead className="min-w-[120px]">Localização</TableHead>
-                    <TableHead className="min-w-[100px]">Contato</TableHead>
-                    <TableHead className="text-center whitespace-nowrap">Status</TableHead>
+                    <SortableTableHead column="nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-48 min-w-[12rem]" />
+                    <SortableTableHead column="cnpj" label="CNPJ" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTableHead column="email" label="Email" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[140px]" />
+                    <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="whitespace-nowrap" />
+                    <SortableTableHead column="cidade" label="Localização" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[120px]" />
+                    <SortableTableHead column="contato" label="Contato" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[100px]" />
+                    <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-center whitespace-nowrap" />
                     <TableHead className="text-right w-[168px]">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredClientes.map((cliente) => (
+                  {sortedClientes.map((cliente) => (
                     <TableRow key={cliente.id}>
                       {modoNotificacaoMassa ? (
                         <TableCell className="w-11 px-2 align-middle">

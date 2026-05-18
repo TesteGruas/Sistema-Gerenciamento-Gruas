@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Textarea } from "@/components/ui/textarea"
@@ -132,6 +134,7 @@ export default function RHPage() {
   // Debounce do termo de busca
   const debouncedQuery = useDebouncedValue(query, 500)
 
+  const resetRhPage = useCallback(() => setCurrentPage(1), [])
   const escapeCsvCelula = (valor: unknown) => {
     const s = valor == null ? "" : String(valor)
     if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
@@ -303,6 +306,15 @@ export default function RHPage() {
       setExportandoCsv(false)
     }
   }
+
+  const {
+    sortedItems: sortedFuncionarios,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(funcionarios as unknown as Record<string, unknown>[], {
+    onPageReset: resetRhPage,
+  })
 
   // Carregar funcionários quando mudar página, itens por página, busca ou filtros
   useEffect(() => {
@@ -631,7 +643,7 @@ export default function RHPage() {
     if (!v) setFuncionarioNotificarIndividual(null)
   }, [])
 
-  const visIdsPagina = useMemo(() => funcionarios.map((f) => f.id), [funcionarios])
+  const visIdsPagina = useMemo(() => sortedFuncionarios.map((f) => f.id), [sortedFuncionarios])
   const nSelecionadosNaPagina = useMemo(
     () => visIdsPagina.filter((id) => destinatariosRhIdSet.has(id)).length,
     [visIdsPagina, destinatariosRhIdSet]
@@ -975,15 +987,15 @@ export default function RHPage() {
                               />
                             </div>
                           </TableHead>
-                          <TableHead className="w-[200px] max-w-[200px]">Nome</TableHead>
-                          <TableHead className="w-[180px]">CPF</TableHead>
-                          <TableHead className="w-[180px]">Telefone</TableHead>
-                          <TableHead className="flex-1">Cargo</TableHead>
+                          <SortableTableHead column="nome" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[200px] max-w-[200px]" />
+                          <SortableTableHead column="cpf" label="CPF" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[180px]" />
+                          <SortableTableHead column="telefone" label="Telefone" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-[180px]" />
+                          <SortableTableHead column="cargo" label="Cargo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="flex-1" />
                           <TableHead className="w-[168px] text-right">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {funcionarios.map((funcionario) => (
+                        {sortedFuncionarios.map((funcionario) => (
                           <FuncionarioRow
                             key={funcionario.id}
                             funcionario={funcionario}

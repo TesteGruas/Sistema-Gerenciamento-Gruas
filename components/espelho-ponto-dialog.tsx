@@ -7,6 +7,8 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
+import { SortableTableHead } from '@/components/ui/sortable-table-head'
+import { useClientSortedList } from '@/hooks/use-client-sorted-list'
 import {
   Dialog,
   DialogContent,
@@ -76,6 +78,17 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
   const [ano, setAno] = useState(new Date().getFullYear())
   const searchRef = useRef<HTMLDivElement>(null)
   const { toast } = useToast()
+
+  const registrosEspelho = espelhoData?.registros ?? []
+  const {
+    sortedItems: sortedRegistrosEspelho,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(registrosEspelho as unknown as Record<string, unknown>[], {
+    defaultColumn: 'data',
+    defaultDirection: 'asc',
+  })
 
   // Reset do estado quando abrir o modal
   useEffect(() => {
@@ -755,19 +768,19 @@ export function EspelhoPontoDialog({ trigger }: EspelhoPontoDialogProps) {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Data</TableHead>
-                      <TableHead>Tipo Dia</TableHead>
-                      <TableHead>Entrada</TableHead>
-                      <TableHead>Saída Almoço</TableHead>
-                      <TableHead>Volta Almoço</TableHead>
-                      <TableHead>Saída</TableHead>
-                      <TableHead>Horas</TableHead>
-                      <TableHead>Extras</TableHead>
-                      <TableHead>Status</TableHead>
+                      <SortableTableHead column="data" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tipo_dia" label="Tipo Dia" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="entrada" label="Entrada" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="saida_almoco" label="Saída Almoço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="volta_almoco" label="Volta Almoço" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="saida" label="Saída" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="horas_trabalhadas" label="Horas" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="horas_extras" label="Extras" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {espelhoData.registros.map((registro, index) => {
+                    {(sortedRegistrosEspelho as unknown as EspelhoData['registros']).map((registro, index) => {
                       const tipoDia = formatarTipoDia(registro.tipo_dia, registro.is_facultativo)
                       const tipoDiaMap: Record<string, { label: string; color: string }> = {
                         'Normal': { label: 'Normal', color: 'bg-gray-100 text-gray-800' },

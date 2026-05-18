@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ProtectedRoute } from "@/components/protected-route"
@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
@@ -110,6 +112,39 @@ function normalizeNomePerfil(s: string) {
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
     .trim()
+}
+
+const ROLE_ALIAS_GROUPS = [
+  ["admin", "administrador"],
+  ["gestor", "gerente"],
+  ["operador"],
+  ["visualizador"],
+  ["cliente"],
+  ["supervisor"],
+  ["financeiro"],
+]
+
+function usuarioMatchesRoleFilter(usuario: UsuarioFrontend, filterRole: string): boolean {
+  if (filterRole === "all") return true
+  const filterKey = normalizeNomePerfil(filterRole)
+  const roleKey = normalizeNomePerfil(usuario.role)
+  const perfilKey = usuario.perfil?.nome ? normalizeNomePerfil(usuario.perfil.nome) : ""
+  const keysToMatch = new Set([roleKey, perfilKey].filter(Boolean))
+
+  if (keysToMatch.has(filterKey)) return true
+
+  for (const group of ROLE_ALIAS_GROUPS) {
+    const normalizedGroup = group.map(normalizeNomePerfil)
+    if (normalizedGroup.includes(filterKey)) {
+      return [...keysToMatch].some((k) =>
+        normalizedGroup.some((alias) => k === alias || k.includes(alias) || alias.includes(k)),
+      )
+    }
+  }
+
+  return [...keysToMatch].some(
+    (k) => k === filterKey || k.includes(filterKey) || filterKey.includes(k),
+  )
 }
 
 /** Escolhe um perfil_id ao criar usuário pelos atalhos Admin / Gestor, respeitando os perfis reais do banco. */
@@ -422,7 +457,7 @@ export default function UsuariosPage() {
         page, 
         limit,
         ...(search && search.trim() && { search: search.trim() }),
-        ...(role && role !== "all" && { role: role })
+        ...(role && role !== "all" && { role: role }),
       })
       setUsuariosBackend(response.data)
       
@@ -488,9 +523,10 @@ export default function UsuariosPage() {
   // Debounce do termo de busca (500ms)
   const debouncedSearchTerm = useDebounce(searchTerm, 500)
 
-  // Carregar dados quando o componente montar
   useEffect(() => {
-    carregarUsuarios(1, itemsPerPage)
+    if (perfis.length === 0) {
+      carregarDadosPermissoes()
+    }
   }, [])
 
   // Recarregar usuários quando o termo de busca ou filtro de função mudar (com debounce)
@@ -513,17 +549,32 @@ export default function UsuariosPage() {
     carregarUsuarios(1, newItemsPerPage, debouncedSearchTerm, filterRole)
   }
   
-  // Obter funções únicas dos usuários para o filtro
-  // Combinar funções dos usuários carregados com funções padrão do sistema
-  const funcoesDosUsuarios = [...new Set(usuarios.map(u => u.role))].filter(Boolean)
-  const funcoesPadrao = ['administrador', 'gerente', 'operador', 'visualizador', 'cliente', 'admin', 'gestor']
-  const funcoesUnicas = [...new Set([...funcoesDosUsuarios, ...funcoesPadrao])].sort()
+  // Opções do filtro: perfis do banco + slugs legados dos usuários já carregados
+  const funcoesDosUsuarios = [
+    ...new Set(
+      usuarios.flatMap((u) => {
+        const keys = [u.role, u.perfil?.nome?.toLowerCase()].filter(Boolean) as string[]
+        return keys
+      }),
+    ),
+  ]
+  const funcoesDosPerfis = perfis
+    .filter((p) => p.status === "Ativo")
+    .map((p) => normalizeNomePerfil(p.nome))
+  const funcoesPadrao = ["administrador", "gerente", "operador", "visualizador", "cliente", "admin", "gestor"]
+  const funcoesUnicas = [...new Set([...funcoesDosPerfis, ...funcoesDosUsuarios, ...funcoesPadrao])].sort()
 
-  // Aplicar filtro local caso o backend não suporte (fallback)
-  const filteredUsuarios = usuarios.filter(usuario => {
-    if (filterRole === "all") return true
-    return usuario.role === filterRole
-  })
+  // Fallback client-side (aliases); a API também filtra por `role` antes da paginação
+  const filteredUsuarios = usuarios.filter((usuario) =>
+    usuarioMatchesRoleFilter(usuario, filterRole),
+  )
+
+  const {
+    sortedItems: sortedUsuarios,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredUsuarios as unknown as Record<string, unknown>[])
 
   const getRoleIcon = (role: string) => {
     switch (role) {
@@ -570,7 +621,7 @@ export default function UsuariosPage() {
       }
       
       // Recarregar lista de usuários
-      await carregarUsuarios(currentPage, itemsPerPage)
+      await carregarUsuarios(currentPage, itemsPerPage, debouncedSearchTerm, filterRole)
       
       setIsCreateDialogOpen(false)
       setCreateUserType(null)
@@ -681,7 +732,7 @@ export default function UsuariosPage() {
       }
       
       // Recarregar lista de usuários
-      await carregarUsuarios(currentPage, itemsPerPage)
+      await carregarUsuarios(currentPage, itemsPerPage, debouncedSearchTerm, filterRole)
       
       setIsEditDialogOpen(false)
       setEditingUser(null)
@@ -773,7 +824,7 @@ export default function UsuariosPage() {
       await apiUsuarios.excluir(parseInt(userToDelete.id))
       
       // Recarregar lista de usuários
-      await carregarUsuarios(currentPage, itemsPerPage)
+      await carregarUsuarios(currentPage, itemsPerPage, debouncedSearchTerm, filterRole)
       
       setIsDeleteDialogOpen(false)
       setUserToDelete(null)
@@ -1112,15 +1163,15 @@ export default function UsuariosPage() {
               <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Usuário</TableHead>
+                  <SortableTableHead column="name" label="Usuário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Função</TableHead>
-                  <TableHead>Último Acesso</TableHead>
+                  <SortableTableHead column="lastLogin" label="Último Acesso" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                   <TableHead>Permissões</TableHead>
                   <TableHead className="text-right">Ações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredUsuarios.map((usuario) => (
+                {sortedUsuarios.map((usuario) => (
                   <TableRow key={usuario.id}>
                     <TableCell>
                       <div className="flex items-center gap-3">

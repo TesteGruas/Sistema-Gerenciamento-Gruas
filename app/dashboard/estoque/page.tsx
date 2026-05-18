@@ -2,12 +2,15 @@
 
 import type React from "react"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
+import { useSortablePaginatedList } from "@/hooks/use-sortable-paginated-list"
 import {
   Dialog,
   DialogContent,
@@ -228,7 +231,6 @@ export default function EstoquePage() {
       if (filtros.tipo_item && filtros.tipo_item !== "todos") {
         params.tipo_item = filtros.tipo_item
       }
-
       const [produtosResponse, categoriasResponse] = await Promise.all([
         estoqueAPI.listarProdutos(params),
         estoqueAPI.listarCategorias()
@@ -259,6 +261,15 @@ export default function EstoquePage() {
       setLoading(false)
     }
   }
+
+  const resetEstoquePage = useCallback(() => {
+    setFiltros((prev) => ({ ...prev, page: 1 }))
+  }, [])
+  const { sortColumn, sortDirection, toggleSort } = useSortablePaginatedList(resetEstoquePage)
+  const { sortedItems: sortedEstoque } = useClientSortedList(
+    estoque as unknown as Record<string, unknown>[],
+    { onPageReset: resetEstoquePage },
+  )
 
   const carregarMovimentacoes = async () => {
     try {
@@ -1276,7 +1287,7 @@ export default function EstoquePage() {
                       <SelectValue placeholder="Selecione um produto" />
                     </SelectTrigger>
                     <SelectContent>
-                      {estoque.map((item) => (
+                      {sortedEstoque.map((item) => (
                         <SelectItem key={item.id} value={item.id}>
                           {item.nome} - {item.categorias?.nome}
                         </SelectItem>
@@ -1833,7 +1844,7 @@ export default function EstoquePage() {
                 <Table className="table-fixed">
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-56 text-center whitespace-nowrap">Item</TableHead>
+                      <SortableTableHead column="nome" label="Item" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="w-56 text-center whitespace-nowrap" />
                       <TableHead className="text-center">Categoria</TableHead>
                       <TableHead className="w-24 px-2 text-center text-xs whitespace-nowrap">
                         Disponível
@@ -1841,7 +1852,7 @@ export default function EstoquePage() {
                       <TableHead className="w-24 px-2 text-center text-xs whitespace-nowrap">
                         Reservada
                       </TableHead>
-                      <TableHead className="text-center">Status</TableHead>
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-center" />
                       <TableHead className="text-center">Valor Unit.</TableHead>
                       <TableHead className="text-center">Valor Total</TableHead>
                       <TableHead className="text-center">Localização</TableHead>

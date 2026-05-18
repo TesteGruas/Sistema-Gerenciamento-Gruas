@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useTableSort } from "@/hooks/use-table-sort"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -84,6 +86,8 @@ export default function ValesBeneficiosPage() {
   const [isValeDialogOpen, setIsValeDialogOpen] = useState(false)
   const [isBeneficioDialogOpen, setIsBeneficioDialogOpen] = useState(false)
   const { toast } = useToast()
+  const valesSort = useTableSort()
+  const beneficiosSort = useTableSort()
 
   // Formulário de vale
   const [valeForm, setValeForm] = useState({
@@ -393,6 +397,15 @@ export default function ValesBeneficiosPage() {
     return matchesFuncionario && matchesTipo && matchesStatus
   })
 
+  const sortedVales = useMemo(
+    () => valesSort.sortClientData(filteredVales as Record<string, unknown>[]) as ValeFuncionario[],
+    [filteredVales, valesSort.sortClientData],
+  )
+  const sortedBeneficios = useMemo(
+    () => beneficiosSort.sortClientData(filteredBeneficios as Record<string, unknown>[]) as BeneficioFuncionario[],
+    [filteredBeneficios, beneficiosSort.sortClientData],
+  )
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -662,17 +675,17 @@ export default function ValesBeneficiosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Data Solicitação</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario_id" label="Funcionário" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
+                    <SortableTableHead column="tipo" label="Tipo" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
+                    <SortableTableHead column="descricao" label="Descrição" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
+                    <SortableTableHead column="valor" label="Valor" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
+                    <SortableTableHead column="data_solicitacao" label="Data Solicitação" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={valesSort.sortColumn} direction={valesSort.sortDirection} onSort={valesSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredVales.map((vale) => (
+                  {sortedVales.map((vale) => (
                     <TableRow key={vale.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">
@@ -857,17 +870,17 @@ export default function ValesBeneficiosPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Funcionário</TableHead>
-                    <TableHead>Tipo</TableHead>
-                    <TableHead>Descrição</TableHead>
-                    <TableHead>Valor</TableHead>
-                    <TableHead>Data Início</TableHead>
-                    <TableHead>Status</TableHead>
+                    <SortableTableHead column="funcionario.nome" label="Funcionário" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="beneficios_tipo.tipo" label="Tipo" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="beneficios_tipo.descricao" label="Descrição" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="beneficios_tipo.valor" label="Valor" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="data_inicio" label="Data Início" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
+                    <SortableTableHead column="status" label="Status" activeColumn={beneficiosSort.sortColumn} direction={beneficiosSort.sortDirection} onSort={beneficiosSort.toggleSort} />
                     <TableHead className="text-right">Ações</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredBeneficios.map((beneficio) => (
+                  {sortedBeneficios.map((beneficio) => (
                     <TableRow key={beneficio.id}>
                       <TableCell>
                         <div className="flex items-center gap-2">

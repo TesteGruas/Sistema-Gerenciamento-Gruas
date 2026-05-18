@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { 
   getOrcamentos, 
@@ -32,6 +32,8 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"
 import { 
@@ -76,11 +78,23 @@ export default function OrcamentosPage() {
     pages: 0
   })
 
+  const resetOrcamentosPage = useCallback(() => {
+    setFilters((prev) => ({ ...prev, page: 1 }))
+  }, [])
+  const {
+    sortedItems: sortedOrcamentos,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(orcamentos as unknown as Record<string, unknown>[], {
+    onPageReset: resetOrcamentosPage,
+  })
+
   // Carregar orçamentos
   const loadOrcamentos = async () => {
     setLoading(true)
     try {
-      const response = await getOrcamentos(filters)
+      const response = await getOrcamentos({ ...filters })
       setOrcamentos(response.data)
       setPagination(response.pagination)
     } catch (error) {
@@ -357,18 +371,18 @@ export default function OrcamentosPage() {
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Número</TableHead>
-                        <TableHead>Cliente</TableHead>
-                        <TableHead>Data</TableHead>
-                        <TableHead>Validade</TableHead>
-                        <TableHead>Tipo</TableHead>
-                        <TableHead>Valor</TableHead>
-                        <TableHead>Status</TableHead>
+                        <SortableTableHead column="id" label="Número" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="cliente_nome" label="Cliente" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="data_orcamento" label="Data" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="data_validade" label="Validade" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="valor_total" label="Valor" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                        <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                         <TableHead>Ações</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {orcamentos.map((orcamento) => {
+                      {sortedOrcamentos.map((orcamento) => {
                         const statusInfo = formatarStatusOrcamento(orcamento.status)
                         return (
                           <TableRow key={orcamento.id}>

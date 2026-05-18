@@ -1,5 +1,6 @@
 // API client para clientes
 import { buildApiUrl, API_ENDPOINTS, fetchWithAuth } from './api'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // Interfaces baseadas no backend
 export interface ClienteBackend {
@@ -171,19 +172,26 @@ export const clientesApi = {
     page?: number
     limit?: number
     status?: string
-  }): Promise<ClientesResponse> {
+  } & TableSortParams): Promise<ClientesResponse> {
     const searchParams = new URLSearchParams()
     
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.status) searchParams.append('status', params.status)
+    appendSortParams(searchParams, params)
 
     const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?${searchParams.toString()}`)
     return apiRequest(url)
   },
 
   // Buscar clientes por nome ou CNPJ
-  async buscarClientes(termo: string, page: number = 1, limit: number = 10, status?: string): Promise<ClientesResponse> {
+  async buscarClientes(
+    termo: string,
+    page: number = 1,
+    limit: number = 10,
+    status?: string,
+    sort?: TableSortParams,
+  ): Promise<ClientesResponse> {
     if (!termo || termo.length < 2) {
       return { 
         success: true, 
@@ -202,6 +210,7 @@ export const clientesApi = {
     searchParams.append('page', page.toString())
     searchParams.append('limit', limit.toString())
     if (status) searchParams.append('status', status)
+    appendSortParams(searchParams, sort)
 
     const url = buildApiUrl(`${API_ENDPOINTS.CLIENTES}?${searchParams.toString()}`)
     return apiRequest(url)

@@ -11,6 +11,8 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { 
@@ -361,7 +363,6 @@ export default function GruasPage() {
     const tipoChanged = prevSelectedTipoRef.current !== selectedTipo
     const pageChanged = prevCurrentPageRef.current !== currentPage
     const itemsPerPageChanged = prevItemsPerPageRef.current !== itemsPerPage
-    
     // Se não houve mudança real, não executar (evita carregamento duplo no primeiro render)
     if (!statusChanged && !tipoChanged && !pageChanged && !itemsPerPageChanged) {
       return
@@ -431,6 +432,13 @@ export default function GruasPage() {
     
     return matchesObra
   })
+
+  const {
+    sortedItems: sortedGruas,
+    sortColumn,
+    sortDirection,
+    toggleSort,
+  } = useClientSortedList(filteredGruas as unknown as Record<string, unknown>[])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1674,7 +1682,7 @@ export default function GruasPage() {
               <div className="p-8">
                 <Loading size="lg" text="Carregando gruas..." />
               </div>
-            ) : filteredGruas.length === 0 ? (
+            ) : sortedGruas.length === 0 ? (
               <div className="px-6 py-12 text-center text-muted-foreground">
                 <Crane className="w-12 h-12 mx-auto mb-3 opacity-50" />
                 <p className="font-medium text-foreground">Nenhuma grua encontrada</p>
@@ -1687,16 +1695,16 @@ export default function GruasPage() {
                     <Table>
                       <TableHeader>
                         <TableRow>
-                          <TableHead className="min-w-[160px]">Nome</TableHead>
-                          <TableHead className="min-w-[120px]">Modelo / Cap.</TableHead>
-                          <TableHead className="min-w-[140px]">Tipo</TableHead>
+                          <SortableTableHead column="name" label="Nome" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[160px]" />
+                          <SortableTableHead column="modelo" label="Modelo / Cap." activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[120px]" />
+                          <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="min-w-[140px]" />
                           <TableHead className="min-w-[120px]">Obra</TableHead>
-                          <TableHead className="text-center whitespace-nowrap">Status</TableHead>
+                          <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} className="text-center whitespace-nowrap" />
                           <TableHead className="text-right whitespace-nowrap min-w-[420px]">Ações</TableHead>
                         </TableRow>
                       </TableHeader>
                       <TableBody>
-                        {filteredGruas.map((grua) => {
+                        {sortedGruas.map((grua) => {
                           const obraNome = grua.currentObraName || "Sem obra"
                           return (
                             <TableRow key={grua.id} className="hover:bg-muted/50">

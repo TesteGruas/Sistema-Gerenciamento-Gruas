@@ -16,6 +16,7 @@ import Joi from 'joi'
 import { supabase, supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
 import { normalizeRoleName, getRoleLevel } from '../config/roles.js'
+import { applyListSort } from '../utils/apply-list-sort.js'
 
 const router = express.Router()
 
@@ -168,11 +169,13 @@ router.get('/relacoes-grua-obra', async (req, res) => {
       // Para uma solução mais eficiente, seria necessário criar uma view ou usar full-text search.
     }
 
-    // Aplicar ordenação
-    query = query.order('obras(nome)', { ascending: true })
-      .order('gruas(id)', { ascending: true })
-
-    // Aplicar paginação
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data_inicio_locacao', 'data_fim_locacao', 'status', 'grua_id', 'obra_id', 'valor_locacao_mensal'],
+      defaultColumn: 'data_inicio_locacao',
+      defaultAscending: false,
+    })
     query = query.range(offset, offset + limit - 1)
 
     const { data, error, count } = await query
@@ -536,11 +539,14 @@ router.get('/', async (req, res) => {
       query = query.eq('status_entrada', status_entrada)
     }
 
-    // Aplicar paginação e ordenação
-    query = query
-      .order('data_entrada', { ascending: false })
-      .order('hora_entrada', { ascending: false })
-      .range(offset, offset + limit - 1)
+    query = applyListSort(query, {
+      sortBy: req.query.sort_by,
+      sortOrder: req.query.sort_order,
+      allowedColumns: ['data_entrada', 'hora_entrada', 'tipo_entrada', 'status_entrada', 'grua_id', 'funcionario_id', 'obra_nome', 'grua_nome'],
+      defaultColumn: 'data_entrada',
+      defaultAscending: false,
+    })
+    query = query.range(offset, offset + limit - 1)
 
     const { data, error: queryError, count } = await query
 

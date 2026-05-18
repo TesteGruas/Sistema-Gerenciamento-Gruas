@@ -7,6 +7,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { SortableTableHead } from "@/components/ui/sortable-table-head"
+import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { 
   Download, 
@@ -222,6 +224,10 @@ export function WhatsAppRelatorios() {
     return true
   })
 
+  const { sortedItems: logsOrdenados, sortColumn, sortDirection, toggleSort } = useClientSortedList(
+    logsFiltrados as Record<string, unknown>[],
+  )
+
   const getPaginasVisiveis = () => {
     const totalPages = Math.max(1, paginacao.pages)
     const current = paginacao.page
@@ -416,18 +422,18 @@ export function WhatsAppRelatorios() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Data/Hora</TableHead>
-                      <TableHead>Tipo</TableHead>
-                      <TableHead>Destinatário</TableHead>
-                      <TableHead>Funcionário</TableHead>
-                      <TableHead>Obra</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Tentativa</TableHead>
+                      <SortableTableHead column="created_at" label="Data/Hora" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tipo" label="Tipo" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="telefone_destino" label="Destinatário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="aprovacao.funcionario_nome" label="Funcionário" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="aprovacao.obra_nome" label="Obra" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="status" label="Status" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
+                      <SortableTableHead column="tentativa" label="Tentativa" activeColumn={sortColumn} direction={sortDirection} onSort={toggleSort} />
                       <TableHead className="text-right">Ações</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {logsFiltrados.map((log) => (
+                    {(logsOrdenados as WhatsAppLog[]).map((log) => (
                       <TableRow key={log.id}>
                         <TableCell>
                           <div className="text-sm">

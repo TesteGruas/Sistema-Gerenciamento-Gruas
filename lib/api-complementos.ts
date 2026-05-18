@@ -1,5 +1,6 @@
 // API client para complementos do catálogo
 import { buildApiUrl, fetchWithAuth } from './api.ts'
+import { appendSortParams, type TableSortParams } from './table-sort'
 
 // ==================== INTERFACES ====================
 
@@ -63,7 +64,7 @@ export interface ComplementoResponse {
   data: ComplementoCatalogo
 }
 
-export interface ComplementosListParams {
+export interface ComplementosListParams extends TableSortParams {
   page?: number
   limit?: number
   tipo?: 'acessorio' | 'servico'
@@ -101,6 +102,7 @@ export const complementosApi = {
     if (params?.tipo) searchParams.append('tipo', params.tipo)
     if (params?.ativo !== undefined) searchParams.append('ativo', params.ativo.toString())
     if (params?.search) searchParams.append('search', params.search)
+    appendSortParams(searchParams, params)
 
     const url = buildApiUrl(`complementos?${searchParams.toString()}`)
     return apiRequest(url)
