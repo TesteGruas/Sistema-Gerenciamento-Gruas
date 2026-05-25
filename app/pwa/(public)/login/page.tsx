@@ -201,29 +201,44 @@ function PWALoginPageContent(): JSX.Element {
         // Salvar dados de autenticação
         localStorage.setItem('access_token', data.data.access_token)
         
-        // Salvar dados do usuário - incluir profile.funcionario_id e user_metadata.funcionario_id no user_data
+        // Salvar dados do usuário
         if (data.data.user) {
-          // PRIORIDADE: Usar profile.id (ID numérico) ao invés de user.id (UUID)
-          // O profile.id é o ID correto da tabela usuarios (119)
-          // O user.id é o UUID do Supabase Auth e não deve ser usado como funcionario_id
           const profileId = data.data.profile?.id || null
-          
+          const isCliente = data.data.role === 'Clientes' || String(data.data.perfil?.nome || '').toLowerCase().includes('cliente')
+
           const userData = {
             ...data.data.user,
-            // SOBRESCREVER user.id com profile.id se profile.id existir (ID numérico correto)
             ...(profileId && { id: profileId }),
-            // Incluir funcionario_id do profile se existir
-            ...(data.data.profile?.funcionario_id && { funcionario_id: data.data.profile.funcionario_id }),
-            // Incluir funcionario_id do user_metadata se existir (Supabase Auth)
-            ...(data.data.user.user_metadata?.funcionario_id && { 
-              funcionario_id: data.data.user.user_metadata.funcionario_id,
-              user_metadata: data.data.user.user_metadata
-            }),
-            // Incluir profile completo
-            ...(data.data.profile && { profile: data.data.profile })
+            role: data.data.role || data.data.user.role,
+            level: data.data.level,
+            eh_funcionario: isCliente ? false : data.data.eh_funcionario,
+            pwa_profile: data.data.pwa_profile || null,
+            obras_responsavel: data.data.obras_responsavel || [],
+            is_responsavel_obra: Boolean(data.data.is_responsavel_obra),
+            ...(data.data.profile && { profile: data.data.profile }),
+            ...(data.data.perfil && { perfil: data.data.perfil }),
           }
+
+          if (isCliente) {
+            userData.funcionario_id = null
+            userData.user_metadata = {
+              ...(data.data.user.user_metadata || {}),
+              tipo: 'cliente',
+            }
+            delete userData.user_metadata.funcionario_id
+            delete userData.user_metadata.cargo
+          } else {
+            if (data.data.profile?.funcionario_id) {
+              userData.funcionario_id = data.data.profile.funcionario_id
+            }
+            if (data.data.user.user_metadata?.funcionario_id) {
+              userData.funcionario_id = data.data.user.user_metadata.funcionario_id
+              userData.user_metadata = data.data.user.user_metadata
+            }
+          }
+
           localStorage.setItem('user_data', JSON.stringify(userData))
-          console.log('[PWA Login] user_data salvo com id:', userData.id, 'funcionario_id:', userData.funcionario_id || userData.user_metadata?.funcionario_id)
+          console.log('[PWA Login] user_data salvo:', { id: userData.id, pwa_profile: userData.pwa_profile, role: userData.role })
         }
         
         // Salvar dados adicionais se existirem

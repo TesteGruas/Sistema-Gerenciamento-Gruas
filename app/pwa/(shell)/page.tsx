@@ -35,6 +35,7 @@ import {
 import { usePWAUser } from "@/hooks/use-pwa-user"
 import { useToast } from "@/hooks/use-toast"
 import { usePWAPermissions } from "@/hooks/use-pwa-permissions"
+import type { PWAProfile } from "@/app/pwa/lib/pwa-profile"
 import * as pontoApi from "@/lib/api-ponto-eletronico"
 import { formatDateYYYYMMDDLocal } from "@/lib/date-local"
 import {
@@ -147,7 +148,16 @@ export default function PWAMainPage() {
   const pwaUserData = usePWAUser()
   
   // Hook de permissões para obter role do usuário e verificar permissões
-  const { userRole, canApproveHoras, isClient: isClientRole, hasPermission, canAccessModule } = usePWAPermissions()
+  const {
+    userRole,
+    pwaProfile,
+    canApproveHoras,
+    isClient: isClientRole,
+    isSupervisor: isSupervisorRole,
+    isTecnico: isTecnicoRole,
+    hasPermission,
+    canAccessModule,
+  } = usePWAPermissions()
   
   // Obter role também do perfil (fallback)
   const [roleFromPerfil, setRoleFromPerfil] = useState<string | null>(null)
@@ -905,7 +915,18 @@ export default function PWAMainPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentTime, pwaUserData.pontoHoje])
 
-  const quickActions = [
+  const quickActions: Array<{
+    title: string
+    description: string
+    icon: typeof Clock
+    href: string
+    color: string
+    bgColor: string
+    borderColor: string
+    priority?: boolean
+    requiresObra?: boolean
+    profiles?: PWAProfile[]
+  }> = [
     {
       title: "Ponto",
       description: "Registrar entrada e saída",
@@ -915,8 +936,8 @@ export default function PWAMainPage() {
       bgColor: "bg-red-50",
       borderColor: "border-red-100",
       priority: true,
-      requiresObra: true, // Requer obra ativa
-      hideForClient: true // Ocultar para clientes
+      requiresObra: true,
+      profiles: ['tecnico'],
     },
     {
       title: "Espelho",
@@ -927,7 +948,18 @@ export default function PWAMainPage() {
       bgColor: "bg-green-50",
       borderColor: "border-green-100",
       priority: true,
-      hideForClient: true // Ocultar para clientes
+      profiles: ['tecnico'],
+    },
+    {
+      title: "Medições",
+      description: "Medições das obras",
+      icon: Calculator,
+      href: "/pwa/cliente/medicoes",
+      color: "text-blue-600",
+      bgColor: "bg-blue-50",
+      borderColor: "border-blue-100",
+      priority: true,
+      profiles: ['cliente'],
     },
     {
       title: "Obras",
@@ -937,7 +969,7 @@ export default function PWAMainPage() {
       color: "text-purple-600",
       bgColor: "bg-purple-50",
       borderColor: "border-purple-100",
-      requiresObra: true // Requer obra ativa
+      profiles: ['cliente', 'supervisor', 'tecnico'],
     },
     {
       title: "Checklist",
@@ -947,7 +979,8 @@ export default function PWAMainPage() {
       color: "text-emerald-600",
       bgColor: "bg-emerald-50",
       borderColor: "border-emerald-100",
-      requiresObra: true
+      requiresObra: true,
+      profiles: ['tecnico'],
     },
     {
       title: "Manutenções",
@@ -957,7 +990,8 @@ export default function PWAMainPage() {
       color: "text-amber-600",
       bgColor: "bg-amber-50",
       borderColor: "border-amber-100",
-      requiresObra: true
+      requiresObra: true,
+      profiles: ['tecnico'],
     },
     {
       title: "Aprovações de horas",
@@ -968,7 +1002,7 @@ export default function PWAMainPage() {
       bgColor: "bg-orange-50",
       borderColor: "border-orange-100",
       priority: true,
-      requiresSupervisor: true // Apenas Supervisor para cima
+      profiles: ['supervisor'],
     },
     {
       title: "Perfil",
@@ -977,7 +1011,8 @@ export default function PWAMainPage() {
       href: "/pwa/perfil",
       color: "text-indigo-600",
       bgColor: "bg-indigo-50",
-      borderColor: "border-indigo-100"
+      borderColor: "border-indigo-100",
+      profiles: ['cliente', 'supervisor', 'tecnico'],
     },
     {
       title: "Configurações",
@@ -986,7 +1021,8 @@ export default function PWAMainPage() {
       href: "/pwa/configuracoes",
       color: "text-gray-600",
       bgColor: "bg-gray-50",
-      borderColor: "border-gray-100"
+      borderColor: "border-gray-100",
+      profiles: ['cliente', 'supervisor', 'tecnico'],
     },
     {
       title: "Holerites",
@@ -996,7 +1032,7 @@ export default function PWAMainPage() {
       color: "text-green-600",
       bgColor: "bg-green-50",
       borderColor: "border-green-100",
-      hideForClient: true // Ocultar para clientes
+      profiles: ['tecnico'],
     },
     {
       title: "Benefícios",
@@ -1006,7 +1042,7 @@ export default function PWAMainPage() {
       color: "text-pink-600",
       bgColor: "bg-pink-50",
       borderColor: "border-pink-100",
-      hideForClient: true // Ocultar para clientes
+      profiles: ['tecnico'],
     },
     {
       title: "Certificados",
@@ -1016,7 +1052,7 @@ export default function PWAMainPage() {
       color: "text-amber-600",
       bgColor: "bg-amber-50",
       borderColor: "border-amber-100",
-      hideForClient: true // Ocultar para clientes
+      profiles: ['tecnico'],
     },
     {
       title: "Documentos",
@@ -1025,7 +1061,8 @@ export default function PWAMainPage() {
       href: "/pwa/documentos",
       color: "text-cyan-600",
       bgColor: "bg-cyan-50",
-      borderColor: "border-cyan-100"
+      borderColor: "border-cyan-100",
+      profiles: ['cliente', 'supervisor', 'tecnico'],
     },
     
   ]
@@ -1374,7 +1411,7 @@ export default function PWAMainPage() {
             : "border-slate-200/90 bg-slate-100 text-slate-700"
 
   const mostrarChipJornadaNoHero =
-    !loadingObra && temObraAtiva !== false && !isClientRole()
+    !loadingObra && temObraAtiva !== false && isTecnicoRole()
 
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
@@ -1446,32 +1483,12 @@ export default function PWAMainPage() {
           return null
         }
         
-        // Verificar se é cliente
-        const isClient = (() => {
-          if (isClientRole()) return true
-          try {
-            const userDataStr = localStorage.getItem('user_data')
-            if (userDataStr) {
-              const userData = JSON.parse(userDataStr)
-              const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-              if (tipo === 'cliente' || tipo === 'responsavel_obra') return true
-            }
-          } catch (error) {
-            // Ignorar erro
-          }
-          if (userRole === 'Clientes' || userRole === 'cliente') return true
-          return false
-        })()
-        
-        // Se for cliente, não renderizar o bloco
-        if (isClient) {
+        if (isClientRole() || isSupervisorRole()) {
           return null
         }
         
         return (
-          <div className={`grid gap-3 ${isSupervisorUser ? 'grid-cols-1' : 'grid-cols-2'}`}>
-            {!isSupervisorUser && (
-              <>
+          <div className="grid gap-3 grid-cols-2">
                 <div className="bg-white rounded-2xl p-4 shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-200">
                   <div className="flex flex-col items-center text-center">
                     <div className={`w-11 h-11 rounded-xl flex items-center justify-center mb-2 shadow-md ${
@@ -1499,8 +1516,6 @@ export default function PWAMainPage() {
                     <p className="text-[10px] text-gray-500 font-medium">Saída</p>
                   </div>
                 </div>
-              </>
-            )}
           </div>
         )
       })()}
@@ -1543,248 +1558,23 @@ export default function PWAMainPage() {
         <div className="grid grid-cols-2 gap-3">
           {quickActions
             .filter(action => {
-              const userData = (() => {
-                try {
-                  const userDataStr = localStorage.getItem('user_data')
-                  return userDataStr ? JSON.parse(userDataStr) : null
-                } catch {
-                  return null
-                }
-              })()
-
-              // Verificar se é cliente (múltiplas fontes)
-              const isClient = (() => {
-                // 1. Verificar pelo hook
-                if (isClientRole()) return true
-                
-                // 2. Verificar user_metadata.tipo diretamente
-                try {
-                  const userDataStr = localStorage.getItem('user_data')
-                  if (userDataStr) {
-                    const userData = JSON.parse(userDataStr)
-                    const tipo = userData?.user_metadata?.tipo || userData?.user?.user_metadata?.tipo
-                    const responsavelFlag = Boolean(userData?.is_responsavel_obra) ||
-                      (Array.isArray(userData?.obras_responsavel) && userData.obras_responsavel.length > 0)
-                    if (tipo === 'cliente' || tipo === 'responsavel_obra' || responsavelFlag) return true
-                  }
-                } catch (error) {
-                  // Ignorar erro
-                }
-                
-                // 3. Verificar role
-                if (userRole === 'Clientes' || userRole === 'cliente') return true
-                
+              if (action.profiles?.length && pwaProfile && !action.profiles.includes(pwaProfile)) {
                 return false
-              })()
+              }
 
-              // Cards de checklist/manutenções: funcionário ou responsável com obra vinculada
-              if (action.title === "Checklist" || action.title === "Manutenções") {
+              if (action.requiresObra) {
                 if (loadingObra) return false
-                // Exibir sempre que houver vínculo de obra resolvido, mesmo quando
-                // o formato do user_data não permite classificar corretamente o tipo de usuário.
-                return Boolean(obraAtalhoId) || temObraAtiva === true
-              }
-              
-              // Filtrar ações que devem ser ocultadas para clientes
-              if (action.hideForClient && isClient) {
-                return false
-              }
-              
-              // Filtrar ações que requerem obra ativa (Ponto, Espelho)
-              // NOTA: "Obras" NÃO deve ser filtrada por temObraAtiva porque o usuário precisa
-              // ver suas obras mesmo que não esteja alocado em nenhuma no momento
-              if (action.requiresObra || action.title === "Ponto" || action.title === "Espelho") {
-                // Se não tem obra ativa, ocultar Ponto e Espelho
-                if (temObraAtiva === false) {
-                  return false
-                }
-                
-                // Se ainda está carregando, não mostrar ainda
-                if (loadingObra) {
-                  return false
+                if (temObraAtiva === false) return false
+                if (action.title === "Checklist" || action.title === "Manutenções") {
+                  return Boolean(obraAtalhoId) || temObraAtiva === true
                 }
               }
-              
-              // "Obras" deve ser mostrada baseado apenas em permissões, não em temObraAtiva
+
               if (action.title === "Obras") {
-                // Verificar permissão usando o hook
-                try {
-                  const podeVerObras = hasPermission('obras:visualizar') || canAccessModule('obras')
-                  if (!podeVerObras) {
-                    return false
-                  }
-                  // Se tem permissão, mostrar independente de temObraAtiva
-                  return true
-                } catch (e) {
-                  // Em caso de erro, verificar por role como fallback
-                  const roleLower = (userRole || '').toLowerCase()
-                  const podeVerObras = roleLower.includes('operador') || 
-                                      roleLower.includes('operário') || 
-                                      roleLower.includes('operario')
-                  return podeVerObras
-                }
+                return hasPermission('obras:visualizar') || canAccessModule('obras')
               }
-              
-              // Filtrar Ponto e Espelho - apenas Operários e Sinaleiros podem bater ponto
-              if (action.title === "Ponto" || action.title === "Espelho") {
-                // Obter cargo do user_metadata (mais confiável que perfil)
-                let cargoFromMetadata: string | null = null
-                try {
-                  const userDataStr = localStorage.getItem('user_data')
-                  if (userDataStr) {
-                    const userData = JSON.parse(userDataStr)
-                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
-                  }
-                } catch (e) {
-                  // Ignorar erro
-                }
-                
-                // Obter todos os roles possíveis de todas as fontes
-                const hookRole = userRole?.toLowerCase() || ''
-                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
-                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
-                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
-                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
-                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
-                const currentRoleLower = currentUserRole?.toLowerCase() || ''
-                
-                // Criar array de todos os roles (sem duplicatas)
-                const allRolesArray = [
-                  cargoFromMetadataLower,
-                  pwaCargoLower,
-                  roleFromUserDataLower,
-                  currentRoleLower,
-                  hookRole,
-                  roleFromPerfilLower,
-                  pwaRoleLower
-                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
-                
-                // Validação de cargo removida - todos os funcionários podem bater ponto
-                return true
-              }
-              
-              // Filtrar Aprovações - Supervisor para cima, Responsável de obra, ou funcionário com pendentes
-              if (action.requiresSupervisor) {
-                // Responsável de obra sempre pode ver aprovações
-                if (isResponsavelObra) return true
 
-                // Funcionário com registros pendentes de assinatura
-                if (registrosPendentesAssinatura > 0) return true
-
-                // Obter cargo do user_metadata (mais confiável que perfil)
-                let cargoFromMetadata: string | null = null
-                try {
-                  const userDataStr = localStorage.getItem('user_data')
-                  if (userDataStr) {
-                    const userData = JSON.parse(userDataStr)
-                    cargoFromMetadata = userData?.user_metadata?.cargo || userData?.cargo || null
-                  }
-                } catch (e) {
-                  // Ignorar erro
-                }
-                
-                // Obter todos os roles possíveis de todas as fontes
-                const hookRole = userRole?.toLowerCase() || ''
-                const roleFromPerfilLower = roleFromPerfil?.toLowerCase() || ''
-                const roleFromUserDataLower = roleFromUserData?.toLowerCase() || ''
-                const cargoFromMetadataLower = cargoFromMetadata?.toLowerCase() || ''
-                const pwaRoleLower = pwaUserData.user?.role?.toLowerCase() || ''
-                const pwaCargoLower = pwaUserData.user?.cargo?.toLowerCase() || ''
-                const currentRoleLower = currentUserRole?.toLowerCase() || ''
-                
-                // Criar array de todos os roles (sem duplicatas)
-                // PRIORIDADE: cargo do metadata primeiro
-                const allRolesArray = [
-                  cargoFromMetadataLower, // PRIORIDADE: cargo do user_metadata
-                  pwaCargoLower,
-                  roleFromUserDataLower,
-                  currentRoleLower,
-                  hookRole,
-                  roleFromPerfilLower,
-                  pwaRoleLower
-                ].filter(Boolean).filter((role, index, self) => self.indexOf(role) === index)
-                
-                const roleLower = allRolesArray.join(' ')
-                
-                // PRIORIDADE 1: Verificar se o cargo contém "supervisor" (mesmo que perfil seja "Operador")
-                if (cargoFromMetadataLower.includes('supervisor') || pwaCargoLower.includes('supervisor')) {
-                  return true
-                }
-                
-                // Verificar se tem permissão de aprovar horas (mais confiável)
-                if (canApproveHoras()) {
-                  return true
-                }
-                
-                // Verificar role manualmente - PRIORIDADE: verificar se algum role contém "supervisor"
-                const isSupervisorRole = allRolesArray.some(role => 
-                  role.includes('supervisor') || 
-                  role === 'supervisores' || 
-                  role === 'supervisor'
-                )
-                
-                if (isSupervisorRole) {
-                  return true
-                }
-                
-                // Verificar se é Operário (todas as variações) - se for, NÃO mostrar
-                // MAS: só bloquear se NÃO tiver cargo com supervisor
-                const isOperario = allRolesArray.some(role => 
-                  (role.includes('operário') || 
-                  role.includes('operario') || 
-                  (role.includes('operador') && !role.includes('supervisor')) ||
-                  role === 'operários' ||
-                  role === 'operarios' ||
-                  role === 'operador' ||
-                  role === 'operador teste' ||
-                  role === '4') && !role.includes('supervisor')
-                )
-                
-                if (isOperario && !cargoFromMetadataLower.includes('supervisor') && !pwaCargoLower.includes('supervisor')) {
-                  return false
-                }
-                
-                // Verificar outros roles com permissão (Gestor, Admin)
-                const canSee = allRolesArray.some(role =>
-                  role.includes('gestor') ||
-                  role.includes('admin') ||
-                  role === 'gestores' || 
-                  role === 'gestor' || 
-                  role === 'admin' || 
-                  role === 'administrador'
-                )
-                
-                return canSee
-              }
               return true
-            })
-            .filter(action => {
-              if (!isResponsavelObra) return true
-
-              const allowedResponsavelCards = [
-                "Obras",
-                "Aprovações de horas",
-                "Checklist",
-                "Manutenções",
-                "Perfil",
-                "Configurações"
-              ]
-
-              return allowedResponsavelCards.includes(action.title)
-            })
-            .sort((a, b) => {
-              if (!isResponsavelObra) return 0
-
-              const responsavelOrder = [
-                "Obras",
-                "Aprovações de horas",
-                "Checklist",
-                "Manutenções",
-                "Perfil",
-                "Configurações"
-              ]
-
-              return responsavelOrder.indexOf(a.title) - responsavelOrder.indexOf(b.title)
             })
             .map((action, index) => {
               const Icon = action.icon

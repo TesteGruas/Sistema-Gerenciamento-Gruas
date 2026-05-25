@@ -199,6 +199,12 @@ class AuthCache {
               parsedUserData.obras_responsavel = data.data.obras_responsavel
               parsedUserData.is_responsavel_obra = data.data.obras_responsavel.length > 0
             }
+            if (data.data?.pwa_profile) {
+              parsedUserData.pwa_profile = data.data.pwa_profile
+            }
+            if (data.data?.user?.pwa_profile) {
+              parsedUserData.pwa_profile = data.data.user.pwa_profile
+            }
             localStorage.setItem('user_data', JSON.stringify(parsedUserData))
             console.log(`🔐 user_data atualizado: id=${profileId}, role=${data.data?.role}, level=${data.data?.level}, funcionario_id=${funcionarioId}`)
           } catch (e) {
@@ -220,6 +226,7 @@ class AuthCache {
             profile: data.data?.profile || null,
             obras_responsavel: data.data?.obras_responsavel || null,
             is_responsavel_obra: (data.data?.obras_responsavel?.length || 0) > 0,
+            pwa_profile: data.data?.pwa_profile || data.data?.user?.pwa_profile || null,
             ...userData
           }
           localStorage.setItem('user_data', JSON.stringify(newUserData))

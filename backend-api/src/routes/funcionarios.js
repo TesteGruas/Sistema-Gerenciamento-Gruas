@@ -10,6 +10,7 @@ import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
+import { assertEmailAvailableForRole, TARGET_OPERARIO } from '../utils/email-role-guard.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -1358,6 +1359,14 @@ router.post('/', async (req, res) => {
     // Criar usuário se solicitado
     if (criar_usuario && value.email) {
       try {
+        const guard = await assertEmailAvailableForRole(value.email, TARGET_OPERARIO)
+        if (!guard.allowed) {
+          return res.status(409).json({
+            error: 'E-mail em uso',
+            message: guard.message,
+          })
+        }
+
         // Verificar se já existe um usuário com este email
         const { data: existingUser } = await supabaseAdmin
           .from('usuarios')

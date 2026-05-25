@@ -7,6 +7,7 @@ import { sendWelcomeEmail, sendResponsavelObraNotificacaoEmail } from '../servic
 import { enviarWhatsAppResponsavelObraAcesso } from '../services/whatsapp-service.js'
 import { validarTelefoneWhatsappBrasil } from '../utils/telefone-brasil.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
+import { assertEmailAvailableForRole, TARGET_SUPERVISOR } from '../utils/email-role-guard.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -5251,8 +5252,33 @@ function telefoneResponsavelObraParaSalvar(telefone) {
 }
 
 /**
+ * ID do perfil Supervisores (fallback para Cliente id 6 se não existir)
+ */
+async function obterPerfilIdSupervisorObra() {
+  const { data: perfilSupervisor } = await supabaseAdmin
+    .from('perfis')
+    .select('id')
+    .in('nome', ['Supervisores', 'Supervisor'])
+    .eq('status', 'Ativo')
+    .order('id', { ascending: true })
+    .limit(1)
+    .maybeSingle()
+
+  if (perfilSupervisor?.id) return perfilSupervisor.id
+
+  const { data: perfilCliente } = await supabaseAdmin
+    .from('perfis')
+    .select('id')
+    .eq('nome', 'Clientes')
+    .eq('status', 'Ativo')
+    .maybeSingle()
+
+  return perfilCliente?.id || 6
+}
+
+/**
  * E-mail já cadastrado em `usuarios`: redefine senha no Auth (ou cria conta Auth se faltar),
- * garante perfil Cliente (6), envia e-mail de boas-vindas com senha provisória e WhatsApp coerente.
+ * garante perfil Supervisores, envia e-mail de boas-vindas com senha provisória e WhatsApp coerente.
  */
 async function garantirCredenciaisResponsavelObraUsuarioExistente({
   usuarioId,
@@ -5296,11 +5322,13 @@ async function garantirCredenciaisResponsavelObraUsuarioExistente({
     console.log(`✅ Conta Auth criada para e-mail já existente em usuarios: ${email}`)
   }
 
+  const perfilSupervisorId = await obterPerfilIdSupervisorObra()
+
   const { data: perfilExiste } = await supabaseAdmin
     .from('usuario_perfis')
     .select('id')
     .eq('usuario_id', usuarioId)
-    .eq('perfil_id', 6)
+    .eq('perfil_id', perfilSupervisorId)
     .eq('status', 'Ativa')
     .maybeSingle()
 
@@ -5309,16 +5337,16 @@ async function garantirCredenciaisResponsavelObraUsuarioExistente({
       .from('usuario_perfis')
       .insert({
         usuario_id: usuarioId,
-        perfil_id: 6,
+        perfil_id: perfilSupervisorId,
         status: 'Ativa',
         data_atribuicao: new Date().toISOString(),
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       })
     if (perfilErr) {
-      console.error('[responsavel-obra] insert usuario_perfis (6):', perfilErr)
+      console.error('[responsavel-obra] insert usuario_perfis:', perfilErr)
     } else {
-      console.log(`✅ Perfil Cliente (6) atribuído ao responsável de obra: ${nome}`)
+      console.log(`✅ Perfil Supervisores (${perfilSupervisorId}) atribuído ao responsável de obra: ${nome}`)
     }
   }
 
@@ -5415,6 +5443,17 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
     }
     const telefoneSalvar = telRes.valor
 
+    if (value.email) {
+      const guard = await assertEmailAvailableForRole(value.email, TARGET_SUPERVISOR)
+      if (!guard.allowed) {
+        return res.status(409).json({
+          success: false,
+          error: 'E-mail em uso',
+          message: guard.message,
+        })
+      }
+    }
+
     // Salvar na tabela responsaveis_obra
     const { data, error } = await supabaseAdmin
       .from('responsaveis_obra')
@@ -5505,12 +5544,14 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
             } else {
               usuarioCriado = novoUsuario
 
-              // Atribuir perfil de Cliente (para ter acesso limitado)
+              const perfilSupervisorId = await obterPerfilIdSupervisorObra()
+
+              // Atribuir perfil de Supervisor (aprovação de horas)
               await supabaseAdmin
                 .from('usuario_perfis')
                 .insert({
                   usuario_id: novoUsuario.id,
-                  perfil_id: 6,
+                  perfil_id: perfilSupervisorId,
                   status: 'Ativa',
                   data_atribuicao: new Date().toISOString(),
                   created_at: new Date().toISOString(),

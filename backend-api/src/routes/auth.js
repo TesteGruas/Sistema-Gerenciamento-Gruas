@@ -6,6 +6,8 @@ import { generateToken, hashToken, isTokenExpired, getTokenExpiry } from '../uti
 import { sendResetPasswordEmail, sendPasswordChangedEmail } from '../services/email.service.js'
 import { enviarMensagemForgotPassword } from '../services/whatsapp-service.js'
 import { getRolePermissions, getRoleLevel, normalizeRoleName } from '../config/roles.js'
+import { resolvePwaProfile, isFuncionarioAtivo } from '../utils/pwa-profile.js'
+import { buscarClientePorUsuarioComAutoVinculo } from '../utils/cliente-usuario-link.js'
 
 const router = express.Router()
 
@@ -123,8 +125,49 @@ async function syncProfileWithFuncionario(profile) {
   }
 }
 
-function isUsuarioFuncionario(profile) {
-  return Boolean(profile?.eh_funcionario || profile?.funcionario_id)
+function isUsuarioFuncionario(profile, role = null) {
+  if (normalizeRoleName(role) === 'Clientes') return false
+  const perfilNome = profile?.perfil?.nome || ''
+  const raw = String(perfilNome).trim().toLowerCase()
+  if (raw === 'clientes' || raw === 'cliente' || raw === 'visualizador') return false
+  return Boolean(profile?.eh_funcionario && profile?.funcionario_id)
+}
+
+async function buscarObrasResponsavel(email) {
+  if (!email) return []
+  const { data: responsaveisData, error } = await supabaseAdmin
+    .from('responsaveis_obra')
+    .select('id, obra_id, nome, ativo, obras(id, nome, status)')
+    .eq('email', email)
+    .eq('ativo', true)
+
+  if (error) {
+    console.error('❌ Erro ao buscar responsaveis_obra:', error)
+    return []
+  }
+
+  return (responsaveisData || []).map((r) => ({
+    responsavel_id: r.id,
+    obra_id: r.obra_id,
+    obra_nome: r.obras?.nome || '',
+    obra_status: r.obras?.status || '',
+  }))
+}
+
+async function buildPwaContext({ profile, authUser, perfilData, role }) {
+  const obrasResponsavel = await buscarObrasResponsavel(profile?.email || authUser?.email)
+  const funcionarioAtivo = await isFuncionarioAtivo(supabaseAdmin, profile?.funcionario_id)
+  const perfilNome = perfilData?.nome || null
+  const pwaProfile = resolvePwaProfile({
+    profile,
+    user: authUser,
+    obrasResponsavel,
+    role,
+    perfilNome,
+    funcionarioAtivo,
+  })
+  const ehFuncionario = isUsuarioFuncionario(profile, role)
+  return { pwaProfile, obrasResponsavel, ehFuncionario, funcionarioAtivo }
 }
 
 async function garantirFlagFuncionario(profile) {
@@ -323,8 +366,10 @@ router.post('/login', async (req, res) => {
       .eq('email', email)
       .single()
 
-    let profile = await syncProfileWithFuncionario(rawProfile)
-    profile = await garantirFlagFuncionario(profile)
+    let profile = rawProfile
+    if (profile?.funcionario_id) {
+      profile = await syncProfileWithFuncionario(rawProfile)
+    }
 
     if (profileError) {
       console.error('Erro ao buscar perfil:', profileError)
@@ -389,7 +434,17 @@ router.post('/login', async (req, res) => {
       }
     }
 
-    const ehFuncionario = isUsuarioFuncionario(profile)
+  // Só marcar eh_funcionario para perfis operacionais (não Cliente)
+  if (profile && role && normalizeRoleName(role) !== 'Clientes') {
+    profile = await garantirFlagFuncionario(profile)
+  }
+
+  const { pwaProfile, obrasResponsavel, ehFuncionario } = await buildPwaContext({
+    profile,
+    authUser: authData.user,
+    perfilData,
+    role,
+  })
 
     res.json({
       success: true,
@@ -398,9 +453,12 @@ router.post('/login', async (req, res) => {
         session: authData.session,
         profile: profile,
         perfil: perfilData,
-        role: role, // Nome do role (v2.0)
-        level: level, // Nível de acesso (v2.0)
+        role: role,
+        level: level,
         eh_funcionario: ehFuncionario,
+        pwa_profile: pwaProfile,
+        obras_responsavel: obrasResponsavel,
+        is_responsavel_obra: obrasResponsavel.length > 0,
         permissoes: permissoes,
         access_token: authData.session.access_token,
         refresh_token: authData.session.refresh_token
@@ -702,29 +760,19 @@ router.get('/me', authenticateToken, async (req, res) => {
     }
 
     // Verificar se o usuário é responsável de obra
-    let obrasResponsavel = []
-    if (profile?.email) {
-      const { data: responsaveisData, error: responsaveisError } = await supabaseAdmin
-        .from('responsaveis_obra')
-        .select('id, obra_id, nome, ativo, obras(id, nome, status)')
-        .eq('email', profile.email)
-        .eq('ativo', true)
+    const obrasResponsavel = await buscarObrasResponsavel(profile?.email)
 
-      if (responsaveisError) {
-        console.error('❌ Erro ao buscar responsaveis_obra:', responsaveisError)
-      }
+    const funcionarioAtivo = await isFuncionarioAtivo(supabaseAdmin, profile?.funcionario_id)
+    const pwaProfile = resolvePwaProfile({
+      profile,
+      user: req.user,
+      obrasResponsavel,
+      role,
+      perfilNome: perfilData?.nome || null,
+      funcionarioAtivo,
+    })
 
-      console.log(`🔍 Responsaveis obra para ${profile.email}:`, responsaveisData?.length || 0, 'registros')
-
-      if (responsaveisData && responsaveisData.length > 0) {
-        obrasResponsavel = responsaveisData.map(r => ({
-          responsavel_id: r.id,
-          obra_id: r.obra_id,
-          obra_nome: r.obras?.nome || '',
-          obra_status: r.obras?.status || ''
-        }))
-      }
-    }
+    const ehFuncionario = isUsuarioFuncionario(profile, role)
 
     // Preparar objeto user com informações adicionais
     const userData = {
@@ -732,7 +780,8 @@ router.get('/me', authenticateToken, async (req, res) => {
       id: profile?.id || req.user.id,
       role: role || req.user.role,
       level: level,
-      eh_funcionario: isUsuarioFuncionario(profile),
+      eh_funcionario: ehFuncionario,
+      pwa_profile: pwaProfile,
       permissions: permissoes.map(p => p.nome),
       obras_responsavel: obrasResponsavel,
       is_responsavel_obra: obrasResponsavel.length > 0
@@ -746,7 +795,8 @@ router.get('/me', authenticateToken, async (req, res) => {
         perfil: perfilData,
         role: role,
         level: level,
-        eh_funcionario: isUsuarioFuncionario(profile),
+        eh_funcionario: ehFuncionario,
+        pwa_profile: pwaProfile,
         permissoes: permissoes,
         obras_responsavel: obrasResponsavel
       }
@@ -792,8 +842,114 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Usuário não encontrado' })
     }
 
-    // 1) Verificar se é funcionário (tem funcionario_id vinculado)
-    if (usuario.funcionario_id) {
+    const { data: perfilUsuario } = await supabaseAdmin
+      .from('usuario_perfis')
+      .select(`
+        perfil_id,
+        status,
+        perfis!inner(id, nome, nivel_acesso, descricao)
+      `)
+      .eq('usuario_id', usuario.id)
+      .eq('status', 'Ativa')
+      .maybeSingle()
+
+    const perfilNome = perfilUsuario?.perfis?.nome || null
+    const role = normalizeRoleName(perfilNome)
+    const obrasResponsavel = await buscarObrasResponsavel(usuario.email)
+    const funcionarioAtivo = await isFuncionarioAtivo(supabaseAdmin, usuario.funcionario_id)
+
+    const pwaProfile = resolvePwaProfile({
+      profile: usuario,
+      user: req.user,
+      obrasResponsavel,
+      role,
+      perfilNome,
+      funcionarioAtivo,
+    })
+
+    const rawPerfil = String(perfilNome || '').trim().toLowerCase()
+    const isClientePerfil =
+      rawPerfil === 'clientes' || rawPerfil === 'cliente' || rawPerfil === 'visualizador' || role === 'Clientes'
+    const isSupervisorPerfil = rawPerfil === 'supervisores' || rawPerfil === 'supervisor'
+    const isOperarioPerfil =
+      rawPerfil === 'operários' ||
+      rawPerfil === 'operarios' ||
+      rawPerfil === 'operário' ||
+      rawPerfil === 'operario' ||
+      rawPerfil === 'operador' ||
+      role === 'Operários'
+
+    // 1) Cliente — prioridade sobre funcionario_id/responsavel_obra legados
+    if (isClientePerfil) {
+      const cliente = await buscarClientePorUsuarioComAutoVinculo(
+        supabaseAdmin,
+        { usuarioId: usuario.id, email: usuario.email },
+        { autoVincular: true }
+      )
+
+      return res.json({
+        success: true,
+        data: {
+          tipo: 'cliente',
+          pwa_profile: pwaProfile || 'cliente',
+          id: cliente?.id || usuario.id,
+          nome: cliente?.nome || usuario.nome,
+          email: usuario.email,
+          telefone: cliente?.telefone || usuario.telefone,
+          cargo: 'Cliente',
+          cpf: usuario.cpf,
+          status: usuario.status,
+          foto_url: usuario.foto_url,
+          usuario_id: usuario.id,
+          cliente_id: cliente?.id || null,
+          obras: [],
+          created_at: usuario.created_at,
+          updated_at: usuario.updated_at,
+        },
+      })
+    }
+
+    // 2) Supervisor
+    if (isSupervisorPerfil) {
+      const { data: responsaveis } = await supabaseAdmin
+        .from('responsaveis_obra')
+        .select('*, obras(id, nome, status)')
+        .eq('email', usuario.email)
+        .eq('ativo', true)
+
+      const primeiro = responsaveis?.[0]
+      if (primeiro) {
+        return res.json({
+          success: true,
+          data: {
+            tipo: 'responsavel_obra',
+            pwa_profile: pwaProfile || 'supervisor',
+            id: primeiro.id,
+            nome: primeiro.nome || usuario.nome,
+            email: usuario.email,
+            telefone: primeiro.telefone || usuario.telefone,
+            cargo: 'Responsável de Obra',
+            pedido: primeiro.pedido,
+            usuario_login: primeiro.usuario,
+            cpf: usuario.cpf,
+            status: primeiro.ativo ? 'Ativo' : 'Inativo',
+            foto_url: usuario.foto_url,
+            usuario_id: usuario.id,
+            obras: (responsaveis || []).map((r) => ({
+              responsavel_id: r.id,
+              obra_id: r.obra_id,
+              obra_nome: r.obras?.nome || '',
+              obra_status: r.obras?.status || '',
+            })),
+            created_at: primeiro.created_at,
+            updated_at: primeiro.updated_at,
+          },
+        })
+      }
+    }
+
+    // 3) Operário / funcionário ativo
+    if (isOperarioPerfil && usuario.funcionario_id && funcionarioAtivo) {
       const { data: funcionario, error: funcError } = await supabaseAdmin
         .from('funcionarios')
         .select(`
@@ -816,6 +972,7 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
           success: true,
           data: {
             tipo: 'funcionario',
+            pwa_profile: pwaProfile || 'tecnico',
             id: funcionario.id,
             nome: funcionario.nome,
             email: funcionario.email || usuario.email,
@@ -832,66 +989,27 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
             usuario_id: usuario.id,
             funcionario_id: funcionario.id,
             obras: (funcionario.funcionarios_obras || [])
-              .filter(fo => fo.ativo)
-              .map(fo => ({
+              .filter((fo) => fo.ativo)
+              .map((fo) => ({
                 obra_id: fo.obra_id,
                 obra_nome: fo.obras?.nome || '',
                 obra_status: fo.obras?.status || '',
                 data_inicio: fo.data_inicio,
-                data_fim: fo.data_fim
+                data_fim: fo.data_fim,
               })),
             created_at: funcionario.created_at,
-            updated_at: funcionario.updated_at
-          }
+            updated_at: funcionario.updated_at,
+          },
         })
       }
     }
 
-    // 2) Verificar se é responsável de obra
-    const { data: responsaveis, error: respError } = await supabaseAdmin
-      .from('responsaveis_obra')
-      .select('*, obras(id, nome, status)')
-      .eq('email', usuario.email)
-      .eq('ativo', true)
-
-    if (respError) {
-      console.error('Erro ao buscar responsaveis_obra:', respError)
-    }
-
-    if (responsaveis && responsaveis.length > 0) {
-      const primeiro = responsaveis[0]
-      return res.json({
-        success: true,
-        data: {
-          tipo: 'responsavel_obra',
-          id: primeiro.id,
-          nome: primeiro.nome || usuario.nome,
-          email: usuario.email,
-          telefone: primeiro.telefone || usuario.telefone,
-          cargo: 'Responsável de Obra',
-          pedido: primeiro.pedido,
-          usuario_login: primeiro.usuario,
-          cpf: usuario.cpf,
-          status: primeiro.ativo ? 'Ativo' : 'Inativo',
-          foto_url: usuario.foto_url,
-          usuario_id: usuario.id,
-          obras: responsaveis.map(r => ({
-            responsavel_id: r.id,
-            obra_id: r.obra_id,
-            obra_nome: r.obras?.nome || '',
-            obra_status: r.obras?.status || ''
-          })),
-          created_at: primeiro.created_at,
-          updated_at: primeiro.updated_at
-        }
-      })
-    }
-
-    // 3) Usuário sem vínculo de funcionário nem de responsável - retornar dados básicos do usuario
+    // 4) Fallback genérico
     return res.json({
       success: true,
       data: {
         tipo: 'usuario',
+        pwa_profile: pwaProfile,
         id: usuario.id,
         nome: usuario.nome,
         email: usuario.email,
@@ -903,8 +1021,8 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
         usuario_id: usuario.id,
         obras: [],
         created_at: usuario.created_at,
-        updated_at: usuario.updated_at
-      }
+        updated_at: usuario.updated_at,
+      },
     })
   } catch (error) {
     console.error('Erro ao buscar meu perfil:', error)

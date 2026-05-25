@@ -117,16 +117,17 @@ async function buscarInformacoesUsuarios(assinaturas) {
     clienteIds.length > 0 ? (async () => {
       const { data: clientes } = await supabaseAdmin
         .from('clientes')
-        .select('id, nome, email')
+        .select('id, nome, email, contato, contato_email')
         .in('id', clienteIds)
       
       const map = new Map()
       if (clientes) {
         clientes.forEach(cliente => {
           map.set(String(cliente.id), {
-            user_nome: cliente.nome || 'Cliente',
-            user_email: cliente.email || '',
-            user_cargo: 'Cliente'
+            user_nome: cliente.contato || cliente.nome || 'Cliente',
+            user_email: cliente.contato_email || cliente.email || '',
+            user_cargo: 'Cliente',
+            user_empresa: cliente.nome || null,
           })
         })
       }
@@ -174,9 +175,104 @@ async function buscarInformacoesUsuarios(assinaturas) {
 
     return {
       ...ass,
-      ...userInfo
+      ...userInfo,
+      usuario: {
+        id: ass.user_id,
+        nome: userInfo.user_nome,
+        email: userInfo.user_email,
+        role: userInfo.user_cargo || ass.tipo || null,
+        empresa: userInfo.user_empresa || null,
+      },
     }
   })
+}
+
+function montarUsuarioAssinatura(ass, userInfo) {
+  return {
+    id: ass.user_id,
+    nome: userInfo.user_nome,
+    email: userInfo.user_email,
+    role: userInfo.user_cargo || ass.tipo || null,
+    empresa: userInfo.user_empresa || null,
+  }
+}
+
+/**
+ * Usa o histórico (acao=assinou) para exibir quem realmente assinou via PWA/login.
+ */
+function enriquecerAssinaturasComHistorico(assinaturas, historicoLista = []) {
+  if (!Array.isArray(assinaturas) || assinaturas.length === 0) return assinaturas
+
+  const assinouEntries = (historicoLista || []).filter((h) => h.acao === 'assinou')
+
+  return assinaturas.map((ass) => {
+    if (ass.status !== 'assinado' || assinouEntries.length === 0) {
+      return ass.usuario ? ass : { ...ass, usuario: montarUsuarioAssinatura(ass, ass) }
+    }
+
+    let entry = assinouEntries.find(
+      (h) => h.user_id?.toString() === ass.user_id?.toString()
+    )
+
+    if (!entry && ass.data_assinatura) {
+      const assinaturaTs = new Date(ass.data_assinatura).getTime()
+      entry = assinouEntries.find((h) => {
+        const diff = Math.abs(new Date(h.data_acao).getTime() - assinaturaTs)
+        return diff <= 60_000
+      })
+    }
+
+    if (!entry && assinouEntries.length === 1) {
+      entry = assinouEntries[0]
+    }
+
+    if (entry?.user_nome) {
+      const userInfo = {
+        user_nome: entry.user_nome,
+        user_email: entry.user_email || ass.user_email || '',
+        user_cargo: entry.user_role || ass.user_cargo || ass.tipo || 'Assinante',
+      }
+      return {
+        ...ass,
+        ...userInfo,
+        usuario: {
+          id: entry.user_id,
+          nome: entry.user_nome,
+          email: userInfo.user_email,
+          role: userInfo.user_cargo,
+        },
+      }
+    }
+
+    return ass.usuario
+      ? ass
+      : {
+          ...ass,
+          usuario: montarUsuarioAssinatura(ass, ass),
+        }
+  })
+}
+
+async function buscarHistoricoPorDocumentos(documentoIds) {
+  if (!documentoIds?.length) return new Map()
+
+  const { data, error } = await supabaseAdmin
+    .from('obras_documento_historico')
+    .select('*')
+    .in('documento_id', documentoIds)
+    .order('data_acao', { ascending: true })
+
+  if (error) {
+    console.error('Erro ao buscar histórico de assinaturas:', error)
+    return new Map()
+  }
+
+  const map = new Map()
+  for (const item of data || []) {
+    if (!map.has(item.documento_id)) map.set(item.documento_id, [])
+    map.get(item.documento_id).push(item)
+  }
+  return map
 }
 
 /**
@@ -371,11 +467,18 @@ router.get('/todos', authenticateToken, requirePermission('obras:visualizar'), a
     })
 
     // Combinar documentos com suas assinaturas e histórico
-    const documentosComAssinaturas = (data || []).map(documento => ({
-      ...documento,
-      assinaturas: assinaturasPorDocumento.get(documento.id) || [],
-      historico: historicoPorDocumento.get(documento.id) || []
-    }))
+    const documentosComAssinaturas = (data || []).map(documento => {
+      const assinaturasBrutas = assinaturasPorDocumento.get(documento.id) || []
+      const assinaturas = enriquecerAssinaturasComHistorico(
+        assinaturasBrutas,
+        historicoPorDocumento.get(documento.id) || []
+      )
+      return {
+        ...documento,
+        assinaturas,
+        historico: historicoPorDocumento.get(documento.id) || [],
+      }
+    })
 
     res.json({
       success: true,
@@ -524,6 +627,7 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('obras:vi
 
     // Buscar informações de usuários em batch para todas as assinaturas
     const assinaturasComUsuario = await buscarInformacoesUsuarios(todasAssinaturas)
+    const historicoPorDocumento = await buscarHistoricoPorDocumentos(documentoIds)
     
     // Agrupar assinaturas com informações de usuários por documento_id
     const assinaturasPorDocumento = new Map()
@@ -535,10 +639,18 @@ router.get('/:obraId/documentos', authenticateToken, requirePermission('obras:vi
     })
 
     // Combinar documentos com suas assinaturas
-    const documentosComAssinaturas = data.map(documento => ({
-      ...documento,
-      ordemAssinatura: assinaturasPorDocumento.get(documento.id) || []
-    }))
+    const documentosComAssinaturas = data.map((documento) => {
+      const assinaturasBrutas = assinaturasPorDocumento.get(documento.id) || []
+      const assinaturas = enriquecerAssinaturasComHistorico(
+        assinaturasBrutas,
+        historicoPorDocumento.get(documento.id) || []
+      )
+      return {
+        ...documento,
+        assinaturas,
+        ordemAssinatura: assinaturas,
+      }
+    })
 
     res.json({
       success: true,
@@ -1028,7 +1140,6 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
       console.error('Erro ao buscar assinaturas:', assinaturasError)
     }
 
-    // Buscar histórico
     const { data: historico, error: historicoError } = await supabaseAdmin
       .from('obras_documento_historico')
       .select('*')
@@ -1039,13 +1150,20 @@ router.get('/:obraId/documentos/:documentoId', authenticateToken, requirePermiss
       console.error('Erro ao buscar histórico:', historicoError)
     }
 
+    const assinaturasComUsuario = await buscarInformacoesUsuarios(assinaturas || [])
+    const assinaturasEnriquecidas = enriquecerAssinaturasComHistorico(
+      assinaturasComUsuario,
+      historico || []
+    )
+
     res.json({
       success: true,
       data: {
         ...documento,
-        ordemAssinatura: assinaturas || [],
-        historicoAssinaturas: historico || []
-      }
+        assinaturas: assinaturasEnriquecidas,
+        ordemAssinatura: assinaturasEnriquecidas,
+        historicoAssinaturas: historico || [],
+      },
     })
   } catch (error) {
     console.error('Erro ao buscar documento:', error)

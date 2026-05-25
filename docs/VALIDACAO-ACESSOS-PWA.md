@@ -1,16 +1,53 @@
 # Validação de Acessos do PWA
 
-## 📋 Resumo Executivo
+## Resumo Executivo
 
-Este documento valida os acessos do aplicativo PWA (Progressive Web App) para os três perfis principais de usuário:
+O PWA opera com **3 perfis operacionais** (camada `PWAProfile`), além de Admin/Gestores redirecionados ao dashboard web:
 
-1. **Admin** - Acesso geral (total)
-2. **Cliente (Supervisor)** - Assinaturas de ponto, documento e obras
-3. **Operário** - Bate ponto, holerites, documentos
+| Perfil | Quem é | Home PWA | Navbar |
+|--------|--------|----------|--------|
+| **Cliente** | Dono da obra (`user_metadata.tipo = cliente`) | `/pwa/cliente/medicoes` | Medições · Obras · Home · Perfil |
+| **Supervisor** | Responsável de obra (`responsaveis_obra`, `tipo = responsavel_obra`) | `/pwa/aprovacoes` | Aprovações · Obras · Home · Perfil |
+| **Técnico** | Funcionário alocado (`funcionario_id`, `tipo = funcionario`) | `/pwa/ponto` | Ponto · Espelho · Home · Perfil |
+
+Arquivos centrais:
+- `app/pwa/lib/pwa-profile.ts` — resolução de perfil, permissões e rotas
+- `hooks/use-pwa-permissions.ts` — hook com `pwaProfile`, `isClient`, `isSupervisor`, `isTecnico`
+- `components/pwa-profile-guard.tsx` — bloqueio de URL por perfil
+- `backend-api/src/utils/pwa-profile.js` — `pwa_profile` em `/api/auth/me`
 
 ---
 
-## 🔐 1. Admin - Acesso Geral
+## Matriz de permissões
+
+### Cliente — dono da obra
+- **Pode:** medições, obras, gruas, documentos (ver/gerenciar/assinar), notificações, perfil
+- **Não pode:** aprovar horas, bater ponto, holerites, checklist operacional
+
+### Supervisor — responsável de obra
+- **Pode:** aprovar horas extras, ver obras vinculadas, notificações, perfil
+- **Não pode:** medições de cliente, ponto, holerites, checklist
+
+### Técnico — funcionário de campo
+- **Pode:** ponto, espelho, holerites, documentos, checklist, manutenções, obras alocadas, perfil
+- **Não pode:** aprovações, medições de cliente
+
+### Backend — aprovações de horas
+- Notificações/aprovações vão ao **responsável de obra** (`responsaveis_obra`), não ao cliente da obra
+- Implementado em `backend-api/src/utils/aprovacoes-helpers.js` → `buscarSupervisorPorObra()`
+
+---
+
+## Checklist de validação manual
+
+1. **Cliente** — vê Medições/Obras; **não** acessa `/pwa/aprovacoes`, `/pwa/ponto`, `/pwa/holerites`
+2. **Supervisor** — vê Aprovações; aprova hora extra da sua obra; **não** vê Medições
+3. **Técnico** alocado — bate ponto, vê holerite, preenche checklist; **não** vê Aprovações
+4. Ponto com hora extra → aprovação/notificação para e-mail do `responsaveis_obra`
+
+---
+
+## Admin — Acesso Geral (redirecionado ao dashboard web)
 
 ### Permissões Configuradas
 - ✅ **Acesso Total**: `*` (wildcard - todas as permissões)

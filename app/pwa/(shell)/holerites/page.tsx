@@ -65,7 +65,7 @@ function pointerToCanvasCoords(canvas: HTMLCanvasElement, clientX: number, clien
 export default function PWAHoleritesPage() {
   const { toast } = useToast()
   const router = useRouter()
-  const { isClient: isClientRole } = usePWAPermissions()
+  const { isTecnico: isTecnicoRole } = usePWAPermissions()
   const [holerites, setHolerites] = useState<Holerite[]>([])
   const [loading, setLoading] = useState(false) // Iniciar como false para não bloquear
   const [isOnline, setIsOnline] = useState(true)
@@ -696,8 +696,8 @@ export default function PWAHoleritesPage() {
     defaultDirection: "desc",
   })
 
-  // Bloquear acesso de clientes
-  if (isClientRole()) {
+  // Bloquear acesso fora do perfil técnico
+  if (!isTecnicoRole()) {
     return (
       <div className="space-y-4">
         <div className="bg-red-50 border border-red-200 rounded-lg p-4">

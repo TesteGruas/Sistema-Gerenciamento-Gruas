@@ -357,9 +357,7 @@ export const PWA_PERMISSIONS: Record<RoleName, Permission[]> = {
   'Financeiro': ['*'],
   'Clientes': [
     'ponto:visualizar',
-    'ponto:aprovacoes',
     'ponto_eletronico:visualizar',
-    'ponto_eletronico:aprovacoes',
     'documentos:visualizar',
     'documentos:gerenciar',
     'documentos:assinatura',

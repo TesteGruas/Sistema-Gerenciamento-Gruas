@@ -5,6 +5,52 @@ import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendWelcomeEmail } from '../services/email.service.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
+import {
+  assertEmailAvailableForRole,
+  limparVinculosIncompatiblesComCliente,
+  atualizarAuthMetadataCliente,
+  TARGET_CLIENTE,
+} from '../utils/email-role-guard.js'
+import {
+  buscarClientePorUsuarioComAutoVinculo,
+} from '../utils/cliente-usuario-link.js'
+
+async function vincularUsuarioExistenteComoCliente({ usuarioId, email, nome }) {
+  const guard = await assertEmailAvailableForRole(email, TARGET_CLIENTE, usuarioId)
+  if (!guard.allowed) {
+    return { ok: false, status: 409, message: guard.message }
+  }
+
+  await limparVinculosIncompatiblesComCliente(email, usuarioId)
+  await atualizarAuthMetadataCliente(email, nome)
+
+  await buscarClientePorUsuarioComAutoVinculo(
+    supabaseAdmin,
+    { usuarioId, email },
+    { autoVincular: true }
+  )
+
+  const { data: perfilExistente } = await supabaseAdmin
+    .from('usuario_perfis')
+    .select('id')
+    .eq('usuario_id', usuarioId)
+    .eq('perfil_id', 6)
+    .eq('status', 'Ativa')
+    .maybeSingle()
+
+  if (!perfilExistente) {
+    await supabaseAdmin.from('usuario_perfis').insert({
+      usuario_id: usuarioId,
+      perfil_id: 6,
+      status: 'Ativa',
+      data_atribuicao: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  }
+
+  return { ok: true }
+}
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -378,38 +424,26 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
           .maybeSingle()
 
         if (existingUser) {
-          // Usuário já existe, apenas vincular ao cliente
           console.log(`ℹ️ Usuário já existe com email ${value.contato_email}, vinculando ao cliente`)
+          const vinculo = await vincularUsuarioExistenteComoCliente({
+            usuarioId: existingUser.id,
+            email: value.contato_email,
+            nome: value.contato || existingUser.nome,
+          })
+          if (!vinculo.ok) {
+            return res.status(vinculo.status).json({ error: 'E-mail em uso', message: vinculo.message })
+          }
           usuarioId = existingUser.id
           usuarioJaExistia = true
-          
-          // Verificar se o usuário já tem perfil de cliente, se não tiver, adicionar
-          const { data: perfilExistente } = await supabaseAdmin
-            .from('usuario_perfis')
-            .select('id')
-            .eq('usuario_id', usuarioId)
-            .eq('perfil_id', 6) // ID do perfil "Cliente"
-            .eq('status', 'Ativa')
-            .maybeSingle()
-          
-          if (!perfilExistente) {
-            // Adicionar perfil de cliente ao usuário existente
-            const { error: perfilError } = await supabaseAdmin
-              .from('usuario_perfis')
-              .insert({
-                usuario_id: usuarioId,
-                perfil_id: 6, // ID do perfil "Cliente"
-                status: 'Ativa',
-                data_atribuicao: new Date().toISOString(),
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-            
-            if (perfilError) {
-              console.error('Erro ao atribuir perfil de cliente ao usuário existente:', perfilError)
-            }
-          }
         } else {
+          const guard = await assertEmailAvailableForRole(value.contato_email, TARGET_CLIENTE)
+          if (!guard.allowed) {
+            return res.status(409).json({
+              error: 'E-mail em uso',
+              message: guard.message,
+            })
+          }
+
           // Usuário não existe, criar novo
 
           // Gerar senha temporária (usar a fornecida ou gerar uma nova)
@@ -704,7 +738,6 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
 
     if (criar_usuario && !usuarioId && clienteData.contato && clienteData.contato_email) {
       try {
-        // Verificar se já existe um usuário com este email
         const { data: existingUser } = await supabaseAdmin
           .from('usuarios')
           .select('id, nome')
@@ -712,38 +745,26 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
           .maybeSingle()
 
         if (existingUser) {
-          // Usuário já existe, apenas vincular ao cliente
           console.log(`ℹ️ Usuário já existe com email ${clienteData.contato_email}, vinculando ao cliente`)
+          const vinculo = await vincularUsuarioExistenteComoCliente({
+            usuarioId: existingUser.id,
+            email: clienteData.contato_email,
+            nome: clienteData.contato || existingUser.nome,
+          })
+          if (!vinculo.ok) {
+            return res.status(vinculo.status).json({ error: 'E-mail em uso', message: vinculo.message })
+          }
           usuarioId = existingUser.id
           usuarioJaExistia = true
-          
-          // Verificar se o usuário já tem perfil de cliente, se não tiver, adicionar
-          const { data: perfilExistente } = await supabaseAdmin
-            .from('usuario_perfis')
-            .select('id')
-            .eq('usuario_id', usuarioId)
-            .eq('perfil_id', 6) // ID do perfil "Cliente"
-            .eq('status', 'Ativa')
-            .maybeSingle()
-          
-          if (!perfilExistente) {
-            // Adicionar perfil de cliente ao usuário existente
-            const { error: perfilError } = await supabaseAdmin
-              .from('usuario_perfis')
-              .insert({
-                usuario_id: usuarioId,
-                perfil_id: 6, // ID do perfil "Cliente"
-                status: 'Ativa',
-                data_atribuicao: new Date().toISOString(),
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString()
-              })
-            
-            if (perfilError) {
-              console.error('Erro ao atribuir perfil de cliente ao usuário existente:', perfilError)
-            }
-          }
         } else {
+          const guard = await assertEmailAvailableForRole(clienteData.contato_email, TARGET_CLIENTE)
+          if (!guard.allowed) {
+            return res.status(409).json({
+              error: 'E-mail em uso',
+              message: guard.message,
+            })
+          }
+
           // Usuário não existe, criar novo
           senhaTemporaria = usuario_senha || generateSecurePassword()
 
@@ -1006,23 +1027,23 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Buscar cliente pelo ID numérico do usuário (vínculo direto)
-    const { data: cliente, error } = await supabaseAdmin
-      .from('clientes')
-      .select('*')
-      .eq('contato_usuario_id', usuarioIdNumerico)
-      .single()
+    // Buscar cliente pelo ID numérico do usuário (vínculo direto ou e-mail)
+    const isClienteRole = userRole.includes('cliente') || req.user?.level === 1
+    const cliente = await buscarClientePorUsuarioComAutoVinculo(
+      supabaseAdmin,
+      { usuarioId: usuarioIdNumerico, email: userEmail },
+      { autoVincular: isClienteRole }
+    )
 
-    if (cliente && !error) {
+    if (cliente) {
       return res.json({
         success: true,
-        data: cliente
+        data: cliente,
       })
     }
 
     // Fallback: quando o usuário for funcionário sem vínculo direto em contato_usuario_id,
     // buscar o cliente pela obra ativa do funcionário.
-    const isClienteRole = userRole.includes('cliente') || req.user?.level === 1
     if (!isClienteRole) {
       const { data: usuarioComFuncionario, error: usuarioComFuncionarioError } = await supabaseAdmin
         .from('usuarios')
@@ -1077,16 +1098,9 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
     }
 
     // Se não encontrou, manter erro amigável
-    if (error?.code === 'PGRST116') {
-      return res.status(404).json({
-        error: 'Cliente não encontrado',
-        message: 'Nenhum cliente encontrado para este usuário. Verifique se o cliente está vinculado ao usuário.'
-      })
-    }
-
     return res.status(404).json({
       error: 'Cliente não encontrado',
-      message: 'Nenhum cliente encontrado para este usuário'
+      message: 'Nenhum cliente encontrado para este usuário. Verifique se o cliente está vinculado ao usuário.'
     })
   } catch (error) {
     console.error('Erro ao buscar cliente por usuario_id:', error)

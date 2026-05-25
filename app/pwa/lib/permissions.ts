@@ -12,6 +12,7 @@ import {
   ROLES_LEVELS,
   PWA_PERMISSIONS as BASE_PWA_PERMISSIONS
 } from '@/types/permissions'
+import { type PWAProfile, hasPWAProfilePermission } from '@/app/pwa/lib/pwa-profile'
 import { LucideIcon, Clock, FileText, CheckCircle, Building2, User, Settings, Bell, Receipt, Forklift } from 'lucide-react'
 
 // ========================================
@@ -167,31 +168,52 @@ export function hasPWAAllPermissions(roleName: RoleName, permissionList: Permiss
 }
 
 /**
- * Filtra itens do menu PWA baseado no role
+ * Filtra itens do menu PWA baseado no role e perfil operacional
  */
-export function getAccessiblePWAMenuItems(roleName: RoleName | null): PWAMenuItem[] {
-  if (!roleName) return []
+export function getAccessiblePWAMenuItems(roleName: RoleName | null, pwaProfile?: PWAProfile | null): PWAMenuItem[] {
+  if (!roleName && !pwaProfile) return []
   
   return PWA_MENU_ITEMS.filter(item => {
-    // Clientes não devem ter acesso a Holerites, mesmo tendo documentos:visualizar
-    if (roleName === 'Clientes' && item.path === '/pwa/holerites') {
+    // Por perfil PWA
+    if (pwaProfile === 'cliente') {
+      if (['/pwa/ponto', '/pwa/espelho-ponto', '/pwa/holerites', '/pwa/aprovacoes'].includes(item.path)) {
+        return false
+      }
+    }
+    if (pwaProfile === 'supervisor') {
+      if (['/pwa/ponto', '/pwa/espelho-ponto', '/pwa/holerites', '/pwa/cliente/medicoes', '/pwa/cliente/gruas'].includes(item.path)) {
+        return false
+      }
+    }
+    if (pwaProfile === 'tecnico') {
+      if (['/pwa/aprovacoes', '/pwa/cliente/medicoes', '/pwa/cliente/gruas'].includes(item.path)) {
+        return false
+      }
+    }
+
+    // Clientes não devem ter acesso a Holerites
+    if ((roleName === 'Clientes' || pwaProfile === 'cliente') && item.path === '/pwa/holerites') {
       return false
     }
     
     // Permissão universal (*)
     if (item.permission === '*') return true
+
+    const checkPerm = (perm: Permission) => {
+      if (pwaProfile) return hasPWAProfilePermission(pwaProfile, perm)
+      if (!roleName) return false
+      return hasPWAPermission(roleName, perm)
+    }
     
     // Array de permissões
     if (Array.isArray(item.permission)) {
       if (item.requireAll) {
-        return hasPWAAllPermissions(roleName, item.permission)
-      } else {
-        return hasPWAAnyPermission(roleName, item.permission)
+        return item.permission.every(checkPerm)
       }
+      return item.permission.some(checkPerm)
     }
     
-    // Permissão única
-    return hasPWAPermission(roleName, item.permission)
+    return checkPerm(item.permission)
   })
 }
 
@@ -224,7 +246,11 @@ export function hasPWAMinLevel(roleName: RoleName, minLevel: AccessLevel): boole
 /**
  * Redireciona para página inicial apropriada do PWA baseado no role
  */
-export function getPWAHomePage(roleName: RoleName): string {
+export function getPWAHomePage(roleName: RoleName, pwaProfile?: PWAProfile | null): string {
+  if (pwaProfile === 'cliente') return '/pwa/cliente/medicoes'
+  if (pwaProfile === 'supervisor') return '/pwa/aprovacoes'
+  if (pwaProfile === 'tecnico') return '/pwa/ponto'
+
   switch (roleName) {
     case 'Admin':
     case 'Gestores':

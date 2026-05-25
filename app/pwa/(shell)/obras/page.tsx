@@ -153,6 +153,11 @@ export default function PWAObrasPage() {
       const clienteResponse = await clientesApi.buscarPorUsuarioId(userId)
       
       if (!clienteResponse.success || !clienteResponse.data) {
+        toast({
+          title: "Cliente não vinculado",
+          description: "Não foi possível localizar o cadastro de cliente para sua conta. Entre em contato com o suporte.",
+          variant: "destructive"
+        })
         setObras([])
         setIsLoading(false)
         return

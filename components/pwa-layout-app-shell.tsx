@@ -110,8 +110,11 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     hasPermission,
     canViewNotifications,
     userRole,
+    pwaProfile,
     loading: permissionsLoading,
-    isClient: isClientRole
+    isClient: isClientRole,
+    isSupervisor: isSupervisorRole,
+    isTecnico: isTecnicoRole,
   } = usePWAPermissions()
   
   // Hook para obter documentos pendentes
@@ -676,150 +679,93 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
     description: 'Meu perfil'
   }
   
-  // Verificar se o usuário é cliente/dono da obra (quem aprova horas extras)
-  // Supervisor não é mais um cargo, é uma atribuição. Quem aprova horas extras é o cliente da obra.
-  const verificarSeSupervisor = () => {
-    if (typeof window === 'undefined') return false
-    
-    try {
-      const hookRole = userRole?.toLowerCase() || ''
-      const storedRole = localStorage.getItem('user_role')?.toLowerCase() || ''
-      
-      const isCliente = hookRole.includes('cliente') || storedRole.includes('cliente')
-      
-      return isCliente
-    } catch {
-      return false
-    }
-  }
-
-  const isSupervisorUser = verificarSeSupervisor()
-  
-  // Verificar se é responsável de obra (tipo especial de cliente que aprova horas)
-  const isResponsavelObraUser = (() => {
-    if (typeof window === 'undefined') return false
-    try {
-      const userDataStr = localStorage.getItem('user_data')
-      if (userDataStr) {
-        const ud = JSON.parse(userDataStr)
-        const tipo = ud?.user_metadata?.tipo || ud?.user?.user_metadata?.tipo
-        const responsavelFlag = Boolean(ud?.is_responsavel_obra) ||
-          (Array.isArray(ud?.obras_responsavel) && ud.obras_responsavel.length > 0)
-        return tipo === 'responsavel_obra' || responsavelFlag
-      }
-    } catch { /* ignore */ }
-    return false
-  })()
-
-  // Se for cliente (mas NÃO responsavel_obra), usar layout de cliente
-  // Responsável de obra usa layout de supervisor (com Aprovações)
-  const isClientUser = isClientRole() && !isResponsavelObraUser
-  
-  // Responsável de obra SEMPRE entra no branch de supervisor (independente do hook de role)
-  const isSupervisorOrResponsavel = isSupervisorUser || isResponsavelObraUser
-  // Só libera Ponto/Espelho quando confirmação explícita de obra ativa.
-  // Evita "flash" inicial enquanto a checagem ainda está em andamento (temObraAtiva === null).
+  // Só libera Ponto quando confirmação explícita de obra ativa (técnico)
   const mostrarPontoFuncionario = temObraAtiva === true
-  
-  // Se for cliente, usar Medições, Obras, Home e Perfil
-  const essentialNavItems = isClientUser ? [
-    // Medições
-    allNavigationItems.find(item => item.href === '/pwa/cliente/medicoes') || {
-      name: 'Medições',
-      href: '/pwa/cliente/medicoes',
-      icon: Calculator,
-      label: 'Medições',
-      description: 'Medições das obras'
-    },
-    // Obras
-    allNavigationItems.find(item => item.href === '/pwa/obras') || {
-      name: 'Obras',
-      href: '/pwa/obras',
-      icon: Building2,
-      label: 'Obras',
-      description: 'Minhas obras'
-    },
-    // Home (no meio)
-    {
-      name: 'Home',
-      href: '/pwa',
-      icon: Home,
-      label: 'Home',
-      description: 'Página inicial'
-    },
-    // Perfil - SEMPRE presente
-    perfilItem
-  ] : isSupervisorOrResponsavel ? [
-    // Aprovações - para supervisores e responsáveis de obra
-    allNavigationItems.find(item => item.href === '/pwa/aprovacoes') || {
-      name: 'Aprovações',
-      href: '/pwa/aprovacoes',
-      icon: CheckCircle,
-      label: 'Aprovações',
-      description: 'Aprovar horas extras'
-    },
-    // Obras - para supervisores
-    allNavigationItems.find(item => item.href === '/pwa/obras') || {
-      name: 'Obras',
-      href: '/pwa/obras',
-      icon: Building2,
-      label: 'Obras',
-      description: 'Ver obras'
-    },
-    // Home (no meio)
-    {
-      name: 'Home',
-      href: '/pwa',
-      icon: Home,
-      label: 'Home',
-      description: 'Página inicial'
-    },
-    // Perfil aparece apenas para supervisor (não para responsável de obra)
-    ...(isResponsavelObraUser ? [] : [perfilItem])
-  ] : [
-    ...(mostrarPontoFuncionario ? [
-      allNavigationItems.find(item => item.href === '/pwa/ponto') || {
-        name: 'Ponto',
-        href: '/pwa/ponto',
-        icon: Clock,
-        label: 'Ponto',
-        description: 'Registrar ponto'
-      }
-    ] : []),
-    // Espelho deve estar sempre visível para funcionário, com ou sem obra ativa
-    allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
-      name: 'Espelho',
-      href: '/pwa/espelho-ponto',
-      icon: FileText,
-      label: 'Espelho',
-      description: 'Ver espelho de ponto'
-    },
-    // Home (no meio)
-    {
-      name: 'Home',
-      href: '/pwa',
-      icon: Home,
-      label: 'Home',
-      description: 'Página inicial'
-    },
-    // Perfil - SEMPRE presente
-    perfilItem
-  ].filter(Boolean) // Remove itens undefined
+
+  // Navbar inferior por perfil PWA
+  const essentialNavItems =
+    pwaProfile === 'cliente' ? [
+      allNavigationItems.find(item => item.href === '/pwa/cliente/medicoes') || {
+        name: 'Medições',
+        href: '/pwa/cliente/medicoes',
+        icon: Calculator,
+        label: 'Medições',
+        description: 'Medições das obras'
+      },
+      allNavigationItems.find(item => item.href === '/pwa/obras') || {
+        name: 'Obras',
+        href: '/pwa/obras',
+        icon: Building2,
+        label: 'Obras',
+        description: 'Minhas obras'
+      },
+      {
+        name: 'Home',
+        href: '/pwa',
+        icon: Home,
+        label: 'Home',
+        description: 'Página inicial'
+      },
+      perfilItem
+    ] : pwaProfile === 'supervisor' ? [
+      allNavigationItems.find(item => item.href === '/pwa/aprovacoes') || {
+        name: 'Aprovações',
+        href: '/pwa/aprovacoes',
+        icon: CheckCircle,
+        label: 'Aprovações',
+        description: 'Aprovar horas extras'
+      },
+      allNavigationItems.find(item => item.href === '/pwa/obras') || {
+        name: 'Obras',
+        href: '/pwa/obras',
+        icon: Building2,
+        label: 'Obras',
+        description: 'Ver obras'
+      },
+      {
+        name: 'Home',
+        href: '/pwa',
+        icon: Home,
+        label: 'Home',
+        description: 'Página inicial'
+      },
+      perfilItem
+    ] : [
+      ...(mostrarPontoFuncionario ? [
+        allNavigationItems.find(item => item.href === '/pwa/ponto') || {
+          name: 'Ponto',
+          href: '/pwa/ponto',
+          icon: Clock,
+          label: 'Ponto',
+          description: 'Registrar ponto'
+        }
+      ] : []),
+      allNavigationItems.find(item => item.href === '/pwa/espelho-ponto') || {
+        name: 'Espelho',
+        href: '/pwa/espelho-ponto',
+        icon: FileText,
+        label: 'Espelho',
+        description: 'Ver espelho de ponto'
+      },
+      {
+        name: 'Home',
+        href: '/pwa',
+        icon: Home,
+        label: 'Home',
+        description: 'Página inicial'
+      },
+      perfilItem
+    ].filter(Boolean)
 
   // Usar apenas os itens essenciais na navegação inferior
   const filteredNavigationItems = essentialNavItems.slice(0, 5)
 
-  // Para o menu lateral (drawer), separar em "Principal" e "Mais"
-  // Filtrar itens irrelevantes para responsável de obra (não é funcionário)
-  const hiddenForResponsavel = ['/pwa/ponto', '/pwa/espelho-ponto', '/pwa/documentos', '/pwa/holerites']
-  const filterResponsavel = (items: typeof priorityItems) =>
-    isResponsavelObraUser ? items.filter(i => !hiddenForResponsavel.includes(i.href)) : items
+  const hiddenForSupervisor = ['/pwa/ponto', '/pwa/espelho-ponto', '/pwa/documentos', '/pwa/holerites', '/pwa/cliente/medicoes', '/pwa/cliente/gruas']
+  const filterSupervisor = (items: typeof priorityItems) =>
+    isSupervisorRole() ? items.filter(i => !hiddenForSupervisor.includes(i.href)) : items
 
-  // Itens principais para o drawer (mesmos da prioridade)
-  const drawerMainItems = filterResponsavel(priorityItems)
-  
-  // Demais itens para o drawer (outros + sempre visíveis)
-  const drawerSideItems = filterResponsavel([...otherItems, ...alwaysVisibleItems])
+  const drawerMainItems = filterSupervisor(priorityItems)
+  const drawerSideItems = filterSupervisor([...otherItems, ...alwaysVisibleItems])
 
   return (
     <PWAErrorBoundary>

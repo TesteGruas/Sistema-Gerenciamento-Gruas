@@ -1,84 +1,57 @@
 import { supabaseAdmin } from '../config/supabase.js';
 
 /**
- * Busca o supervisor responsável por uma obra (cliente/dono da obra)
- * O supervisor é o cliente da obra, não um funcionário
+ * Busca o supervisor responsável por uma obra (responsável de obra cadastrado)
  * @param {number} obra_id - ID da obra
- * @returns {Promise<Object|null>} - Supervisor da obra (cliente) ou null
+ * @returns {Promise<Object|null>} - Usuário supervisor ou null
  */
 async function buscarSupervisorPorObra(obra_id) {
   try {
-    // Buscar a obra com o cliente vinculado
-    const { data: obra, error: obraError } = await supabaseAdmin
-      .from('obras')
-      .select(`
-        id,
-        nome,
-        cliente_id,
-        responsavel_id,
-        responsavel_nome,
-        clientes (
-          id,
-          nome,
-          email,
-          contato_usuario_id
-        )
-      `)
-      .eq('id', obra_id)
-      .single();
+    const { data: responsaveis, error: respError } = await supabaseAdmin
+      .from('responsaveis_obra')
+      .select('id, nome, email, telefone, obra_id')
+      .eq('obra_id', obra_id)
+      .eq('ativo', true)
+      .order('created_at', { ascending: true })
+      .limit(1);
 
-    if (obraError) {
-      console.error('[aprovacoes-helpers] Erro ao buscar obra:', obraError);
+    if (respError) {
+      console.error('[aprovacoes-helpers] Erro ao buscar responsaveis_obra:', respError);
       return null;
     }
 
-    if (!obra) {
-      console.warn(`[aprovacoes-helpers] Obra ${obra_id} não encontrada`);
+    const responsavel = responsaveis?.[0];
+    if (!responsavel?.email) {
+      console.warn(`[aprovacoes-helpers] Obra ${obra_id} não possui responsável de obra ativo`);
       return null;
     }
 
-    // Prioridade 1: Buscar pelo cliente da obra (contato_usuario_id)
-    if (obra.clientes && obra.clientes.contato_usuario_id) {
-      const { data: usuarioCliente, error: usuarioError } = await supabaseAdmin
-        .from('usuarios')
-        .select('id, nome, email, role, telefone')
-        .eq('id', obra.clientes.contato_usuario_id)
-        .single();
+    const emailNorm = String(responsavel.email).toLowerCase().trim();
+    const { data: usuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email, role, telefone')
+      .ilike('email', emailNorm)
+      .maybeSingle();
 
-      if (!usuarioError && usuarioCliente) {
-        return {
-          id: usuarioCliente.id,
-          nome: usuarioCliente.nome || obra.clientes.nome,
-          email: usuarioCliente.email || obra.clientes.email,
-          telefone: usuarioCliente.telefone || null,
-          cargo: 'Cliente',
-          role: usuarioCliente.role
-        };
-      }
+    if (usuarioError) {
+      console.error('[aprovacoes-helpers] Erro ao buscar usuário do responsável:', usuarioError);
+      return null;
     }
 
-    // Prioridade 2: Buscar pelo responsavel_id da obra (se for um usuário)
-    if (obra.responsavel_id) {
-      const { data: responsavelUsuario, error: responsavelError } = await supabaseAdmin
-        .from('usuarios')
-        .select('id, nome, email, role, telefone')
-        .eq('id', obra.responsavel_id)
-        .single();
-
-      if (!responsavelError && responsavelUsuario) {
-        return {
-          id: responsavelUsuario.id,
-          nome: responsavelUsuario.nome || obra.responsavel_nome,
-          email: responsavelUsuario.email,
-          telefone: responsavelUsuario.telefone || null,
-          cargo: 'Responsável',
-          role: responsavelUsuario.role
-        };
-      }
+    if (usuario) {
+      return {
+        id: usuario.id,
+        nome: usuario.nome || responsavel.nome,
+        email: usuario.email || responsavel.email,
+        telefone: usuario.telefone || responsavel.telefone || null,
+        cargo: 'Responsável de Obra',
+        role: usuario.role,
+      };
     }
 
-    // Se não encontrou supervisor (cliente), retornar null
-    console.warn(`[aprovacoes-helpers] Obra ${obra_id} não possui supervisor (cliente) definido`);
+    console.warn(
+      `[aprovacoes-helpers] Responsável de obra ${responsavel.email} sem usuário vinculado (obra ${obra_id})`
+    );
     return null;
   } catch (error) {
     console.error('[aprovacoes-helpers] Erro ao buscar supervisor por obra:', error);
@@ -134,10 +107,6 @@ async function criarNotificacaoAprovacao(aprovacao, usuario_id, tipo, titulo, me
 
     console.log(`[aprovacoes-helpers] Notificação criada: ${tipo} para usuário ${usuario_id}`);
     
-    // Nota: O envio de WhatsApp é feito separadamente pela função enviarMensagemAprovacao
-    // para evitar duplicação e garantir que use a função mais completa que busca telefone
-    // em funcionarios, usuarios e clientes
-    
     return data;
   } catch (error) {
     console.error('[aprovacoes-helpers] Erro ao criar notificação:', error);
@@ -168,7 +137,6 @@ async function validarAprovacaoValida(aprovacao_id) {
       return { valida: false, aprovacao, motivo: `Aprovação já está ${aprovacao.status}` };
     }
 
-    // Verificar se está dentro do prazo
     const dataLimite = new Date(aprovacao.data_limite);
     const agora = new Date();
 
@@ -213,11 +181,11 @@ async function buscarFuncionario(funcionario_id) {
 function calcularHorasTrabalhadas(entrada, saida) {
   const diffMs = new Date(saida) - new Date(entrada);
   const diffHoras = diffMs / (1000 * 60 * 60);
-  return Math.round(diffHoras * 100) / 100; // Arredondar para 2 casas decimais
+  return Math.round(diffHoras * 100) / 100;
 }
 
 /**
- * Verifica se um usuário tem permissão para aprovar (é supervisor)
+ * Verifica se um usuário tem permissão para aprovar (é supervisor designado)
  * @param {number} usuario_id - ID do usuário
  * @param {number} supervisor_id - ID do supervisor esperado
  * @returns {boolean} - true se o usuário pode aprovar
@@ -266,4 +234,3 @@ export {
   formatarDataNotificacao,
   calcularDiasRestantes
 };
-

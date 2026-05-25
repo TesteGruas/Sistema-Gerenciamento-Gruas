@@ -144,7 +144,7 @@ function PWAPerfilPageContent() {
   const searchParams = useSearchParams()
   const { toast } = useToast()
   const { user, pontoHoje, documentosPendentes, horasTrabalhadas, loading } = usePWAUser()
-  const { userRole, isSupervisor: isSupervisorHook, isClient: isClientRole } = usePWAPermissions()
+  const { userRole, pwaProfile, isSupervisor: isSupervisorHook, isClient: isClientRole, isTecnico: isTecnicoRole } = usePWAPermissions()
   const { empresa, getEnderecoCompleto, getContatoCompleto, getHorarioFuncionamento } = useEmpresa()
   
   // Verificar se é admin - verificar também no localStorage como fallback
@@ -241,15 +241,21 @@ function PWAPerfilPageContent() {
   // Estados para as tabs - verificar se há parâmetro na URL
   const [activeTab, setActiveTab] = useState('informacoes')
   
+  const TABS_OPERADOR = ['salarios', 'beneficios', 'certificados', 'documentos-admissionais', 'documentos-demissao', 'holerites']
+
   // Atualizar tab quando o parâmetro da URL mudar
   useEffect(() => {
     const tab = searchParams.get('tab')
+    if (tab && TABS_OPERADOR.includes(tab) && pwaProfile !== 'tecnico') {
+      setActiveTab('informacoes')
+      return
+    }
     if (tab) {
       setActiveTab(tab)
     } else {
       setActiveTab('informacoes')
     }
-  }, [searchParams])
+  }, [searchParams, pwaProfile])
   const [salarios, setSalarios] = useState<FolhaPagamento[]>([])
   const {
     sortedItems: sortedSalarios,
@@ -1101,6 +1107,10 @@ function PWAPerfilPageContent() {
       setFuncionarioId(funcionarioIdDisponivel)
     }
     
+    if (pwaProfile !== 'tecnico' && TABS_OPERADOR.includes(activeTab)) {
+      return
+    }
+
     if (activeTab === 'salarios') {
       if (funcionarioIdDisponivel) {
         carregarSalarios()
@@ -1122,7 +1132,7 @@ function PWAPerfilPageContent() {
     } else if (activeTab === 'documentos-demissao') {
       carregarDocumentosDemissao()
     }
-  }, [activeTab, funcionarioId])
+  }, [activeTab, funcionarioId, pwaProfile])
 
   // Função para visualizar documento
   const handleVisualizarDocumento = async (tipo: 'certificado' | 'admissional' | 'demissao', documento: any) => {
@@ -1301,23 +1311,30 @@ function PWAPerfilPageContent() {
                     {funcionarioCompleto?.nome || user?.nome || "Usuário"}
                   </h2>
                   <p className="mt-1 text-muted-foreground">
-                    {funcionarioCompleto?.cargo || user?.cargo || "Sem cargo definido"}
+                    {isClientRole()
+                      ? 'Cliente'
+                      : funcionarioCompleto?.cargo || user?.cargo || 'Sem cargo definido'}
                   </p>
                   <div className="mt-3 flex flex-wrap justify-center gap-2 sm:justify-start">
                     <Badge
                       variant="outline"
                       className={
-                        String(funcionarioCompleto?.status || "")
+                        String(funcionarioCompleto?.status || '')
                           .toLowerCase()
-                          .includes("inativ")
-                          ? "border-red-200 bg-red-50 text-red-800"
-                          : "border-emerald-200 bg-emerald-50 text-emerald-800"
+                          .includes('inativ')
+                          ? 'border-red-200 bg-red-50 text-red-800'
+                          : 'border-emerald-200 bg-emerald-50 text-emerald-800'
                       }
                     >
                       <CheckCircle className="mr-1 h-3 w-3" />
-                      {String(funcionarioCompleto?.status || "Ativo")}
+                      {String(funcionarioCompleto?.status || 'Ativo')}
                     </Badge>
-                    {funcionarioId != null && funcionarioId > 0 ? (
+                    {isClientRole() ? (
+                      <Badge variant="secondary" className="text-xs font-normal">
+                        Perfil Cliente
+                      </Badge>
+                    ) : null}
+                    {!isClientRole() && funcionarioId != null && funcionarioId > 0 ? (
                       <Badge variant="outline" className="font-mono text-xs" title="Cadastro de funcionário">
                         Matr. {funcionarioId}
                       </Badge>
@@ -1400,6 +1417,7 @@ function PWAPerfilPageContent() {
               </div>
             </section>
 
+            {!isClientRole() && (
             <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
               <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
                 <Briefcase className="h-4 w-4 shrink-0 text-primary" />
@@ -1450,6 +1468,7 @@ function PWAPerfilPageContent() {
                 </div>
               </div>
             </section>
+            )}
 
             <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
               <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
@@ -1764,8 +1783,8 @@ function PWAPerfilPageContent() {
       </Card>
       )}
 
-      {/* Menu de Seções - Mobile First (esconder para responsável de obra) */}
-      {!isResponsavelObra && (
+      {/* Menu de Seções - apenas operador (técnico) */}
+      {!isResponsavelObra && isTecnicoRole() && (
       <div className="space-y-3">
         <div>
           <h2 className="text-lg font-bold text-gray-900 mb-1">Minhas Informações</h2>
@@ -1799,6 +1818,7 @@ function PWAPerfilPageContent() {
             <p className="text-xs text-gray-500">Dados pessoais</p>
           </button>
 
+          {isTecnicoRole() && (
           <button
             onClick={() => setActiveTab('salarios')}
             className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1823,8 +1843,9 @@ function PWAPerfilPageContent() {
             </div>
             <p className="text-xs text-gray-500">Folhas de pagamento</p>
           </button>
+          )}
 
-          {!isClientRole() && (
+          {isTecnicoRole() && (
             <button
               onClick={() => setActiveTab('beneficios')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1851,7 +1872,7 @@ function PWAPerfilPageContent() {
             </button>
           )}
 
-          {!isClientRole() && (
+          {isTecnicoRole() && (
             <button
               onClick={() => setActiveTab('certificados')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1878,6 +1899,7 @@ function PWAPerfilPageContent() {
             </button>
           )}
 
+          {isTecnicoRole() && (
           <button
             onClick={() => setActiveTab('documentos-admissionais')}
             className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1902,8 +1924,9 @@ function PWAPerfilPageContent() {
             </div>
             <p className="text-xs text-gray-500">Documentos admissionais</p>
           </button>
+          )}
 
-          {!isClientRole() && (
+          {isTecnicoRole() && (
             <button
               onClick={() => setActiveTab('documentos-demissao')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1930,7 +1953,7 @@ function PWAPerfilPageContent() {
             </button>
           )}
 
-          {!isClientRole() && (
+          {isTecnicoRole() && (
             <button
               onClick={() => setActiveTab('holerites')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
@@ -1960,15 +1983,15 @@ function PWAPerfilPageContent() {
       </div>
       )}
 
-      {/* Conteúdo da Seção Selecionada */}
-      {!isResponsavelObra && (
+      {/* Conteúdo da Seção Selecionada - apenas operador (técnico) */}
+      {!isResponsavelObra && isTecnicoRole() && (
       <div className="w-full">
 
             {/* Seção Informações */}
             {activeTab === 'informacoes' && (
             <div className="space-y-4">
               {/* Ponto Hoje */}
-              {pontoHoje && (
+              {pontoHoje && isTecnicoRole() && (
                 <div className="mt-6 pt-6 border-t">
                   <h3 className="font-semibold mb-4">Registro de Ponto Hoje</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
@@ -2012,7 +2035,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Salários */}
-            {activeTab === 'salarios' && (
+            {activeTab === 'salarios' && isTecnicoRole() && (
             <div className="mt-0">
               {loadingSalarios ? (
                 <div className="flex items-center justify-center py-8">
@@ -2067,7 +2090,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Benefícios */}
-            {activeTab === 'beneficios' && !isClientRole() && (
+            {activeTab === 'beneficios' && isTecnicoRole() && (
             <div className="mt-0">
               {loadingBeneficios ? (
                 <div className="flex items-center justify-center py-8">
@@ -2125,7 +2148,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Certificados */}
-            {activeTab === 'certificados' && !isClientRole() && (
+            {activeTab === 'certificados' && isTecnicoRole() && (
             <div className="mt-0">
               <div className="flex justify-end mb-4">
                 <Button 
@@ -2256,7 +2279,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Documentos Admissionais */}
-            {activeTab === 'documentos-admissionais' && (
+            {activeTab === 'documentos-admissionais' && isTecnicoRole() && (
             <div className="mt-0">
               <div className="flex justify-end mb-4">
                 <Button 
@@ -2401,7 +2424,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Documentos de demissão */}
-            {activeTab === 'documentos-demissao' && !isClientRole() && (
+            {activeTab === 'documentos-demissao' && isTecnicoRole() && (
             <div className="mt-0">
               {loadingDocumentosDemissao ? (
                 <div className="flex items-center justify-center py-8">
@@ -2533,7 +2556,7 @@ function PWAPerfilPageContent() {
             )}
 
             {/* Seção Holerites */}
-            {activeTab === 'holerites' && !isClientRole() && (
+            {activeTab === 'holerites' && isTecnicoRole() && (
             <div className="mt-0">
               <div className="text-center py-8">
                 <Receipt className="w-12 h-12 mx-auto text-gray-300 mb-4" />
