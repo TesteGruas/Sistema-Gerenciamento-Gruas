@@ -489,41 +489,11 @@ router.get('/', authenticateToken, async (req, res) => {
     console.log(`[FUNCIONARIOS] - Funcionários da tabela funcionarios: ${funcionariosData?.length || 0}`)
     console.log(`[FUNCIONARIOS] - Usuários sem funcionario_id: ${usuariosSemFuncionario.length}`)
 
-    // Buscar registros de ponto eletrônico para verificar quais funcionários têm registros
-    const funcionarioIds = todosFuncionarios.map(f => f.id).filter(id => id != null)
-    let funcionariosComRegistrosPonto = new Set() // Set de funcionario_ids que têm registros de ponto
-    
-    if (funcionarioIds.length > 0) {
-      try {
-        const { data: registrosPonto, error: pontoError } = await supabaseAdmin
-          .from('registros_ponto')
-          .select('funcionario_id')
-          .in('funcionario_id', funcionarioIds)
-        
-        if (!pontoError && registrosPonto) {
-          // Criar Set de funcionários que têm pelo menos um registro de ponto
-          registrosPonto.forEach(registro => {
-            funcionariosComRegistrosPonto.add(registro.funcionario_id)
-          })
-        }
-      } catch (error) {
-        console.error('[FUNCIONARIOS] Erro ao buscar registros de ponto:', error)
-      }
-    }
-
     // Adicionar informações sobre usuário existente e obra atual para cada funcionário
     const funcionariosComUsuario = todosFuncionarios.map(funcionario => {
       const alocacoesAtivas = funcionario.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
-      
-      // obra_atual só aparece se o funcionário tiver pelo menos um registro de ponto eletrônico
-      // e tiver uma alocação ativa
-      const temRegistrosPonto = funcionariosComRegistrosPonto.has(funcionario.id)
-      const obraAtual = (temRegistrosPonto && alocacoesAtivas.length > 0) 
-        ? alocacoesAtivas[0].obras 
-        : null
-      
-      // obras_vinculadas só inclui obras se houver registros de ponto
-      const obrasVinculadas = temRegistrosPonto ? alocacoesAtivas : []
+      const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
+      const obrasVinculadas = alocacoesAtivas
       
       // Cargo pode estar em funcionarios.cargo, cargos.nome (FK) ou só em usuarios.cargo
       if (!normalizarTexto(funcionario.cargo) && funcionario.cargo_info?.nome) {
@@ -539,7 +509,7 @@ router.get('/', authenticateToken, async (req, res) => {
         usuario_existe: funcionario.usuario_existe ?? possuiUsuarioVinculado(funcionario.usuario),
         usuario_criado: funcionario.usuario_criado ?? possuiUsuarioVinculado(funcionario.usuario),
         obra_atual: obraAtual,
-        obras_vinculadas: obrasVinculadas // Apenas se houver registros de ponto
+        obras_vinculadas: obrasVinculadas
       }
     })
 
@@ -1227,22 +1197,9 @@ router.get('/:id', async (req, res) => {
       })
     }
 
-    // Filtrar apenas alocações ativas
+    // Filtrar apenas alocações ativas (vínculo em funcionarios_obras)
     const alocacoesAtivas = data.funcionarios_obras?.filter(fo => fo.status === 'ativo') || []
-    
-    // Verificar se o funcionário tem registros de ponto eletrônico
-    const { data: registrosPonto, error: pontoError } = await supabaseAdmin
-      .from('registros_ponto')
-      .select('id')
-      .eq('funcionario_id', funcionarioId)
-      .limit(1)
-    
-    const temRegistrosPonto = !pontoError && registrosPonto && registrosPonto.length > 0
-    
-    // obra_atual só aparece se houver pelo menos um registro de ponto eletrônico
-    const obraAtual = (temRegistrosPonto && alocacoesAtivas.length > 0) 
-      ? alocacoesAtivas[0].obras 
-      : null
+    const obraAtual = alocacoesAtivas.length > 0 ? alocacoesAtivas[0].obras : null
 
     // Adicionar todas as obras (incluindo finalizadas) para histórico completo
     const todasObras = data.funcionarios_obras || []
@@ -1258,7 +1215,7 @@ router.get('/:id', async (req, res) => {
       usuario_existe: possuiUsuarioVinculado(data.usuario),
       usuario_criado: possuiUsuarioVinculado(data.usuario),
       obra_atual: obraAtual,
-      obras_vinculadas: temRegistrosPonto ? alocacoesAtivas : [], // Apenas se houver registros de ponto
+      obras_vinculadas: alocacoesAtivas,
       historico_obras: todasObras // Todas as obras, incluindo finalizadas
     }
 

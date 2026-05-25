@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
+import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -47,7 +48,8 @@ import {
   PieChart,
   KeyRound,
   Bell,
-  Clock
+  Clock,
+  ExternalLink
 } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -63,6 +65,8 @@ import { DocumentoUpload } from "@/components/documento-upload"
 import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 import { getApiOrigin } from "@/lib/runtime-config"
+import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
+import { getHistoricoAlocacoesFuncionario } from "@/lib/api-funcionarios-obras"
 
 interface FuncionarioRH {
   id: number
@@ -277,61 +281,43 @@ export default function FuncionarioDetalhesPage() {
       const token = localStorage.getItem('access_token') || localStorage.getItem('token')
       
       try {
-        const holeritesResponse = await fetch(
-          `${apiUrl}/colaboradores/${funcionarioId}/holerites`,
-          {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
+        const holeritesResponse = await colaboradoresDocumentosApi.holerites.listar(funcionarioId)
+        const holeritesLista = holeritesResponse.data || []
+        setHolerites(holeritesLista)
+
+        // Associar holerites às folhas de pagamento
+        salariosData = salariosData.map((salario: SalarioDetalhado) => {
+          let mesReferencia = ''
+
+          if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
+            mesReferencia = salario.mes
+          } else {
+            let mesNum: number
+            if (typeof salario.mes === 'number') {
+              mesNum = salario.mes
+            } else {
+              const mesStr = String(salario.mes)
+              if (mesStr.includes('-')) {
+                mesNum = parseInt(mesStr.split('-')[1])
+              } else {
+                mesNum = parseInt(mesStr) || 1
+              }
+            }
+            mesReferencia = `${salario.ano}-${String(mesNum).padStart(2, '0')}`
+          }
+
+          const holerite = holeritesLista.find((h: any) => h.mes_referencia === mesReferencia)
+
+          if (holerite) {
+            return {
+              ...salario,
+              arquivo_holerite: holerite.arquivo,
+              holerite_url: holerite.arquivo,
             }
           }
-        )
-        
-        if (holeritesResponse.ok) {
-          const holeritesData = await holeritesResponse.json()
-          setHolerites(holeritesData.data || [])
-          
-          // Associar holerites às folhas de pagamento
-          salariosData = salariosData.map((salario: SalarioDetalhado) => {
-            // Formatar mes_referencia para comparar (formato YYYY-MM)
-            let mesReferencia = ''
-            
-            // Se mes já está no formato YYYY-MM (string com hífen)
-            if (typeof salario.mes === 'string' && salario.mes.includes('-')) {
-              mesReferencia = salario.mes
-            } 
-            // Se mes é apenas o número do mês (1-12) ou string sem hífen
-            else {
-              let mesNum: number
-              if (typeof salario.mes === 'number') {
-                mesNum = salario.mes
-              } else {
-                // Se for string, tentar extrair o número do mês
-                const mesStr = String(salario.mes)
-                // Se for algo como "11" ou "2025-11", extrair o mês
-                if (mesStr.includes('-')) {
-                  mesNum = parseInt(mesStr.split('-')[1])
-                } else {
-                  mesNum = parseInt(mesStr) || 1
-                }
-              }
-              mesReferencia = `${salario.ano}-${String(mesNum).padStart(2, '0')}`
-            }
-            
-            // Buscar holerite correspondente
-            const holerite = (holeritesData.data || []).find((h: any) => h.mes_referencia === mesReferencia)
-            
-            if (holerite) {
-              return {
-                ...salario,
-                arquivo_holerite: holerite.arquivo,
-                holerite_url: holerite.arquivo
-              }
-            }
-            
-            return salario
-          })
-        }
+
+          return salario
+        })
       } catch (holeritesError) {
         console.warn('Erro ao carregar holerites:', holeritesError)
         // Continuar sem holerites
@@ -378,25 +364,31 @@ export default function FuncionarioDetalhesPage() {
         setDocumentos(docsFormatados)
       }
 
-      // Carregar histórico de obras
-      if (token) {
-        try {
-          const obrasResponse = await fetch(
-            `${apiUrl}/api/funcionarios/${funcionarioId}/historico-obras`,
-            {
-              headers: {
-                'Authorization': `Bearer ${token}`,
-                'Content-Type': 'application/json'
-              }
-            }
+      // Carregar histórico de obras e obra atual (alocação ativa)
+      try {
+        const obrasResponse = await getHistoricoAlocacoesFuncionario(funcionarioId)
+        const obrasLista = obrasResponse.data || []
+        setObrasFuncionario(obrasLista)
+
+        const alocacaoAtiva = obrasLista.find((a) => a.status === 'ativo')
+        if (alocacaoAtiva?.obras) {
+          const obra = alocacaoAtiva.obras
+          setFuncionario((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  obra_atual: {
+                    id: obra.id,
+                    nome: obra.nome,
+                    status: obra.status || '',
+                    cliente: { nome: (obra as { cliente?: { nome?: string } }).cliente?.nome || '' },
+                  },
+                }
+              : prev
           )
-          if (obrasResponse.ok) {
-            const obrasData = await obrasResponse.json()
-            setObrasFuncionario(obrasData.data || [])
-          }
-        } catch (obrasError) {
-          // Silenciar erro, apenas não carregar obras
         }
+      } catch (obrasError) {
+        // Silenciar erro, apenas não carregar obras
       }
 
       // Carregar certificados para verificar vencimentos
@@ -473,7 +465,14 @@ export default function FuncionarioDetalhesPage() {
           created_at: func.created_at,
           updated_at: func.updated_at,
           usuario: funcAny.usuario && Array.isArray(funcAny.usuario) && funcAny.usuario.length > 0 ? funcAny.usuario[0] : undefined,
-          obra_atual: funcAny.obra_atual || undefined
+          obra_atual: funcAny.obra_atual
+            ? {
+                id: funcAny.obra_atual.id,
+                nome: funcAny.obra_atual.nome,
+                status: funcAny.obra_atual.status || '',
+                cliente: funcAny.obra_atual.cliente || { nome: '' },
+              }
+            : undefined,
         }
         
         setFuncionario(funcionarioMapeado)
@@ -504,6 +503,20 @@ export default function FuncionarioDetalhesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.id])
+
+  const {
+    sortedItems: sortedSalarios,
+    sortColumn: salariosSortColumn,
+    sortDirection: salariosSortDirection,
+    toggleSort: salariosToggleSort,
+  } = useClientSortedList(salarios as unknown as Record<string, unknown>[])
+
+  const {
+    sortedItems: sortedDocumentos,
+    sortColumn: documentosSortColumn,
+    sortDirection: documentosSortDirection,
+    toggleSort: documentosToggleSort,
+  } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -1587,25 +1600,10 @@ export default function FuncionarioDetalhesPage() {
       }
       
       // Salvar holerite usando a API de colaboradores-documentos
-      const holeriteResponse = await fetch(
-        `${apiUrl}/colaboradores/${funcionario.id}/holerites`,
-        {
-          method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            mes_referencia: mesReferencia,
-            arquivo: arquivoUrl
-          })
-        }
-      )
-      
-      if (!holeriteResponse.ok) {
-        const errorData = await holeriteResponse.json().catch(() => ({}))
-        throw new Error(errorData.message || 'Erro ao salvar holerite')
-      }
+      await colaboradoresDocumentosApi.holerites.criar(funcionario.id, {
+        mes_referencia: mesReferencia,
+        arquivo: arquivoUrl,
+      })
       
       toast({
         title: "Sucesso",
@@ -2035,20 +2033,6 @@ export default function FuncionarioDetalhesPage() {
     )
   }
 
-  const {
-    sortedItems: sortedSalarios,
-    sortColumn: salariosSortColumn,
-    sortDirection: salariosSortDirection,
-    toggleSort: salariosToggleSort,
-  } = useClientSortedList(salarios as unknown as Record<string, unknown>[])
-
-  const {
-    sortedItems: sortedDocumentos,
-    sortColumn: documentosSortColumn,
-    sortDirection: documentosSortDirection,
-    toggleSort: documentosToggleSort,
-  } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
-
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -2156,8 +2140,32 @@ export default function FuncionarioDetalhesPage() {
                     <p className="text-sm font-semibold">R$ {(funcionario.salario || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
                   </div>
                   <div>
-                    <Label className="text-sm font-medium text-gray-500">Obra Atual</Label>
-                    <p className="text-sm">{funcionario.obra_atual?.nome || 'Sem obra'}</p>
+                    <Label className="text-sm font-medium text-gray-500">Obra Atual: </Label>
+                    {(() => {
+                      const alocacaoAtiva = obrasFuncionario.find((a) => a.status === 'ativo')
+                      const obraId =
+                        funcionario.obra_atual?.id ??
+                        alocacaoAtiva?.obra_id ??
+                        alocacaoAtiva?.obras?.id
+                      const obraNome =
+                        funcionario.obra_atual?.nome ?? alocacaoAtiva?.obras?.nome
+
+                      if (!obraNome) {
+                        return <p className="text-sm">Sem obra</p>
+                      }
+                      if (!obraId) {
+                        return <p className="text-sm">{obraNome}</p>
+                      }
+                      return (
+                        <Link
+                          href={`/dashboard/obras/${obraId}`}
+                          className="inline-flex items-center gap-1 text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline mt-0.5"
+                        >
+                          {obraNome}
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0" />
+                        </Link>
+                      )
+                    })()}
                   </div>
                   <div>
                     <Label className="text-sm font-medium text-gray-500">Usuário do Sistema</Label>
