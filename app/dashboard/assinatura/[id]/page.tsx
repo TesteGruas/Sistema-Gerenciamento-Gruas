@@ -25,8 +25,6 @@ import {
   ArrowLeft,
   Send,
   Eye,
-  ChevronDown,
-  ChevronRight,
   FileText,
   Edit,
   Save,
@@ -39,6 +37,8 @@ import { obrasDocumentosApi, DocumentoObra, AssinaturaDocumento } from '@/lib/ap
 import { obrasApi } from '@/lib/api-obras'
 import { isAdmin as checkIsAdmin } from '@/lib/user-utils'
 import { getApiOrigin } from "@/lib/runtime-config"
+import { SignatureFlowCard } from '@/components/signature-flow/signature-flow-card'
+import { SignedFileBox } from '@/components/signature-flow/signed-file-box'
 
 export default function AssinaturaDocumentoPage() {
   const { toast } = useToast()
@@ -327,26 +327,6 @@ export default function AssinaturaDocumentoPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  // Extrair nome legível do arquivo da URL
-  const getArquivoNome = (arquivoUrl: string | undefined): string => {
-    if (!arquivoUrl) return 'Arquivo não disponível'
-    
-    // Se for uma URL do Supabase Storage, extrair o nome do arquivo
-    if (arquivoUrl.includes('supabase.co/storage')) {
-      const parts = arquivoUrl.split('/')
-      const filename = parts[parts.length - 1]
-      // Remover o hash único e manter apenas a extensão
-      const match = filename.match(/assinado_\d+_([^.]+)\.(.+)$/)
-      if (match) {
-        return `documento_assinado.${match[2]}`
-      }
-      return filename
-    }
-    
-    // Se for apenas um nome de arquivo
-    return arquivoUrl
   }
 
   const handleDownloadArquivoAssinado = async (arquivoUrl: string, nomeArquivo?: string) => {
@@ -770,29 +750,11 @@ export default function AssinaturaDocumentoPage() {
 
             {assinaturaAtual.arquivo_assinado && (
               <div className="border-t pt-4">
-                <Label className="text-sm font-medium text-gray-600 mb-3 block">Arquivo Assinado</Label>
-                <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg border border-green-200">
-                  <div className="flex items-center gap-3">
-                    <FileSignature className="w-5 h-5 text-green-600" />
-                    <div>
-                      <p className="text-sm font-medium text-gray-900">
-                        {getArquivoNome(assinaturaAtual.arquivo_assinado)}
-                      </p>
-                      <p className="text-xs text-gray-500">
-                        Documento assinado por você
-                      </p>
-                    </div>
-                  </div>
-                  <Button 
-                    variant="outline" 
-                    size="sm"
-                    className="flex items-center gap-2 text-green-600 border-green-300 hover:bg-green-100"
-                    onClick={() => handleDownloadArquivoAssinado(assinaturaAtual.arquivo_assinado || '')}
-                  >
-                    <Download className="w-4 h-4" />
-                    Baixar
-                  </Button>
-                </div>
+                <SignedFileBox
+                  arquivoUrl={assinaturaAtual.arquivo_assinado}
+                  onDownload={handleDownloadArquivoAssinado}
+                  disabled={isLoading}
+                />
               </div>
             )}
 
@@ -951,350 +913,18 @@ export default function AssinaturaDocumentoPage() {
         </Card>
       )}
 
-      {/* Ordem de Assinaturas */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="w-5 h-5" />
-            Ordem de Assinaturas
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-3">
-            {documento.assinaturas
-              ?.sort((a, b) => a.ordem - b.ordem)
-              .map((assinatura, index) => {
-                const isCurrentUser = assinatura.user_id === parseInt(currentUser.id?.toString() || '0')
-                const isExpanded = expandedAssinatura === assinatura.user_id.toString()
-                
-                return (
-                  <div 
-                    key={assinatura.user_id}
-                    className={`rounded-lg border ${
-                      isCurrentUser ? 'bg-blue-50 border-blue-200' : 'bg-gray-50'
-                    }`}
-                  >
-                    {/* Cabeçalho da assinatura */}
-                    <div 
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 transition-colors"
-                      onClick={() => setExpandedAssinatura(isExpanded ? null : assinatura.user_id.toString())}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                          <span className="text-sm font-medium text-gray-600">
-                            {assinatura.ordem}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">
-                            {assinatura.user_nome || 'Usuário não encontrado'}
-                          </p>
-                          <p className="text-sm text-gray-600">{assinatura.user_cargo}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={getStatusVariant(assinatura.status)}
-                          className={assinatura.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
-                        >
-                          {assinatura.status}
-                        </Badge>
-                        {isCurrentUser && (
-                          <Badge variant="outline" className="bg-blue-100 text-blue-800">
-                            Você
-                          </Badge>
-                        )}
-                        <Button variant="ghost" size="sm" className="p-1">
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* Detalhes expandidos */}
-                    {isExpanded && (
-                      <div className="px-3 pb-3 border-t bg-white">
-                        <div className="pt-3 space-y-4">
-                          {/* Informações do usuário */}
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Nome Completo</Label>
-                              <p className="text-sm text-gray-900">{assinatura.user_nome || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Cargo</Label>
-                              <p className="text-sm text-gray-900">{assinatura.user_cargo || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Email</Label>
-                              <p className="text-sm text-gray-900">{assinatura.user_email || 'N/A'}</p>
-                            </div>
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Tipo</Label>
-                              <Badge variant="outline" className="capitalize">
-                                {assinatura.tipo}
-                              </Badge>
-                            </div>
-                          </div>
-
-                          {/* Status da assinatura */}
-                          <div>
-                            <Label className="text-sm font-medium text-gray-700">Status da Assinatura</Label>
-                            <div className="mt-1 flex items-center gap-2">
-                              <Badge 
-                                variant={getStatusVariant(assinatura.status)}
-                                className={assinatura.status === 'assinado' ? 'bg-green-500 text-white hover:bg-green-600 border-green-600' : ''}
-                              >
-                                {assinatura.status}
-                              </Badge>
-                              {assinatura.data_envio && (
-                                <span className="text-xs text-gray-500">
-                                  Enviado em: {format(new Date(assinatura.data_envio), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                                </span>
-                              )}
-                              {assinatura.data_assinatura && (
-                                <span className="text-xs text-gray-500">
-                                  Assinado em: {format(new Date(assinatura.data_assinatura), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-
-                          {/* Link DocuSign */}
-                          {assinatura.docu_sign_link && (
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Link DocuSign</Label>
-                              <div className="mt-1 flex items-center gap-2">
-                                <Input
-                                  value={assinatura.docu_sign_link}
-                                  readOnly
-                                  className="text-xs font-mono"
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
-                                >
-                                  <ExternalLink className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Upload de Arquivo Assinado */}
-                          <div className="border-t pt-4">
-                            <Label className="text-sm font-medium text-gray-700 mb-3 block">
-                              Upload de Arquivo Assinado
-                            </Label>
-                            
-                            {assinatura.arquivo_assinado ? (
-                              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                                <div className="flex items-center justify-between">
-                                  <div className="flex items-center gap-3">
-                                    <FileSignature className="w-5 h-5 text-green-600" />
-                                    <div>
-                                      <p className="text-sm font-medium text-gray-900">
-                                        {getArquivoNome(assinatura.arquivo_assinado)}
-                                      </p>
-                                      <p className="text-xs text-gray-500">
-                                        Arquivo assinado enviado
-                                      </p>
-                                    </div>
-                                  </div>
-                                  <Button 
-                                    variant="outline" 
-                                    size="sm"
-                                    className="text-green-600 border-green-300 hover:bg-green-100"
-                                    onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
-                                  >
-                                    <Download className="w-4 h-4 mr-1" />
-                                    Baixar
-                                  </Button>
-                                </div>
-                              </div>
-                            ) : (
-                              <div className="space-y-3">
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                  <p className="text-sm text-blue-700 mb-2">
-                                    Faça o upload do documento assinado por este responsável
-                                  </p>
-                                  <Button
-                                    size="sm"
-                                    onClick={() => setUploadDialogOpen(assinatura.id.toString())}
-                                    className="bg-blue-600 hover:bg-blue-700"
-                                  >
-                                    <Upload className="w-4 h-4 mr-2" />
-                                    Enviar Arquivo Assinado
-                                  </Button>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Ações de Assinatura */}
-                          {isCurrentUser && assinatura.status === 'aguardando' && (
-                            <div className="border-t pt-4">
-                              <Label className="text-sm font-medium text-gray-700">Ações de Assinatura</Label>
-                              <div className="mt-2 space-y-3">
-                                <div className="p-3 bg-blue-50 rounded-lg border border-blue-200">
-                                  <p className="text-sm text-blue-800 font-medium mb-2">
-                                    É sua vez de assinar este documento!
-                                  </p>
-                                  <p className="text-xs text-blue-600 mb-3">
-                                    Acesse o link DocuSign acima, assine o documento e faça o upload do arquivo assinado.
-                                  </p>
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
-                                      className="flex-1"
-                                    >
-                                      <ExternalLink className="w-4 h-4 mr-2" />
-                                      Abrir DocuSign
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => setIsUploadDialogOpen(true)}
-                                    >
-                                      <Upload className="w-4 h-4 mr-2" />
-                                      Upload Assinado
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Status de Aguardando */}
-                          {isCurrentUser && assinatura.status === 'pendente' && (
-                            <div className="border-t pt-4">
-                              <div className="p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                                <p className="text-sm text-yellow-800 font-medium mb-1">
-                                  Aguardando sua vez
-                                </p>
-                                <p className="text-xs text-yellow-600">
-                                  Você será notificado quando for sua vez de assinar.
-                                </p>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Status de Rejeitado */}
-                          {isCurrentUser && assinatura.status === 'rejeitado' && (
-                            <div className="border-t pt-4">
-                              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
-                                <p className="text-sm text-red-800 font-medium mb-1">
-                                  ❌ Documento rejeitado
-                                </p>
-                                <p className="text-xs text-red-600 mb-3">
-                                  Este documento foi rejeitado. Entre em contato com o administrador para mais informações.
-                                </p>
-                                <div className="flex gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
-                                  >
-                                    <ExternalLink className="w-4 h-4 mr-2" />
-                                    Ver no DocuSign
-                                  </Button>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Arquivo assinado */}
-                          {assinatura.arquivo_assinado && (
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Arquivo Assinado</Label>
-                              <div className="mt-1 flex items-center gap-2">
-                                <FileText className="w-4 h-4 text-gray-500" />
-                                <span className="text-sm text-gray-900">{getArquivoNome(assinatura.arquivo_assinado)}</span>
-                                <Button 
-                                  size="sm" 
-                                  variant="outline"
-                                  onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
-                                >
-                                  <Download className="w-4 h-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Ações para usuários que já assinaram */}
-                          {isCurrentUser && assinatura.status === 'assinado' && (
-                            <div className="border-t pt-4">
-                              <Label className="text-sm font-medium text-gray-700">Ações Disponíveis</Label>
-                              <div className="mt-2 space-y-2">
-                                <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-                                  <p className="text-sm text-green-800 font-medium mb-2">
-                                    ✅ Documento assinado com sucesso!
-                                  </p>
-                                  <p className="text-xs text-green-600 mb-3">
-                                    Você já assinou este documento. Pode baixar o arquivo assinado.
-                                  </p>
-                                  <div className="flex gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      className="flex-1"
-                                      onClick={() => handleDownloadArquivoAssinado(assinatura.arquivo_assinado || '')}
-                                    >
-                                      <Download className="w-4 h-4 mr-2" />
-                                      Baixar Assinado
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => window.open(assinatura.docu_sign_link, '_blank')}
-                                    >
-                                      <ExternalLink className="w-4 h-4 mr-2" />
-                                      Ver no DocuSign
-                                    </Button>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Observações */}
-                          {assinatura.observacoes && (
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Observações</Label>
-                              <p className="text-sm text-gray-900 mt-1 p-2 bg-gray-50 rounded">
-                                {assinatura.observacoes}
-                              </p>
-                            </div>
-                          )}
-
-                          {/* Histórico de emails */}
-                          {assinatura.email_enviado && (
-                            <div>
-                              <Label className="text-sm font-medium text-gray-700">Notificação por Email</Label>
-                              <div className="mt-1 flex items-center gap-2">
-                                <CheckCircle className="w-4 h-4 text-green-500" />
-                                <span className="text-sm text-gray-900">Email enviado</span>
-                                {assinatura.data_email_enviado && (
-                                  <span className="text-xs text-gray-500">
-                                    em {format(new Date(assinatura.data_email_enviado), 'dd/MM/yyyy HH:mm', { locale: ptBR })}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-          </div>
-        </CardContent>
-      </Card>
+      <SignatureFlowCard
+        assinaturas={documento.assinaturas ?? []}
+        currentUserId={parseInt(currentUser.id?.toString() || '0')}
+        expandedAssinatura={expandedAssinatura}
+        onToggleExpand={(userId) =>
+          setExpandedAssinatura(expandedAssinatura === userId ? null : userId)
+        }
+        onDownloadArquivo={handleDownloadArquivoAssinado}
+        onOpenUploadDialog={setUploadDialogOpen}
+        onOpenMainUploadDialog={() => setIsUploadDialogOpen(true)}
+        isLoading={isLoading}
+      />
 
       {/* Diálogo de Edição de Documento */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
@@ -1425,7 +1055,7 @@ export default function AssinaturaDocumentoPage() {
                   <div className="flex-1">
                     <h4 className="font-medium text-blue-900 mb-2">Responsável</h4>
                     <p className="text-sm text-blue-700">
-                      {documento.assinaturas?.find(a => a.user_id.toString() === uploadDialogOpen)?.user_nome || 'Usuário'}
+                      {documento.assinaturas?.find(a => a.id.toString() === uploadDialogOpen)?.user_nome || 'Usuário'}
                     </p>
                     <p className="text-xs text-blue-600">
                       Faça o upload do documento assinado por este responsável

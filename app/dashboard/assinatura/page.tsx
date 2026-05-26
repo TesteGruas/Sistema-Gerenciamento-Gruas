@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { useUser } from "@/lib/user-context"
@@ -38,7 +38,11 @@ import {
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  ChevronDown
+  ChevronDown,
+  X,
+  Info,
+  UserPlus,
+  FileUp
 } from "lucide-react"
 import { obrasDocumentosApi, DocumentoObra } from "@/lib/api-obras-documentos"
 import { obrasApi } from "@/lib/api-obras"
@@ -47,11 +51,12 @@ import { isAdmin } from "@/lib/user-utils"
 import { getResumoMensalAssinaturas } from "@/lib/api-assinaturas"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { cn } from "@/lib/utils"
+import { Loader } from "@/components/ui/loader"
 
 export default function AssinaturaPage() {
   const { toast } = useToast()
   const router = useRouter()
-  const { currentUser } = useUser()
+  const { currentUser, userLoading } = useUser()
   const [searchTerm, setSearchTerm] = useState("")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [selectedObra, setSelectedObra] = useState("all")
@@ -261,12 +266,15 @@ export default function AssinaturaPage() {
     return userAssinatura.status === 'aguardando'
   }
 
-  // Carregar dados na inicialização quando o usuário estiver disponível
+  // Carregar dados quando a sessão estiver resolvida
   useEffect(() => {
+    if (userLoading) return
     if (currentUser) {
       carregarDocumentos()
+    } else {
+      setLoading(false)
     }
-  }, [currentUser])
+  }, [currentUser, userLoading])
 
   console.log('[Assinaturas] Estado atual:', {
     totalDocumentos: documentos.length,
@@ -445,6 +453,20 @@ export default function AssinaturaPage() {
       color: "bg-orange-500" 
     },
   ]
+
+  const isPageLoading = userLoading || (Boolean(currentUser) && loading)
+
+  if (isPageLoading) {
+    return (
+      <div
+        className="flex min-h-[calc(100dvh-10rem)] w-full items-center justify-center"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <Loader size="lg" text="Carregando assinaturas..." />
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-6">
@@ -1604,6 +1626,12 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
   const [funcionarios, setFuncionarios] = useState<any[]>([])
   const [clientes, setClientes] = useState<any[]>([])
   const [assinanteFilter, setAssinanteFilter] = useState('')
+  const arquivoInputRef = useRef<HTMLInputElement>(null)
+
+  const inputClassName =
+    "h-10 border-slate-200 bg-white focus-visible:ring-blue-500/30 focus-visible:border-blue-500"
+  const labelClassName = "text-sm font-medium text-slate-700"
+  const helperClassName = "text-xs text-slate-500 mt-1.5"
 
   // Carregar funcionários e clientes
   useEffect(() => {
@@ -1890,174 +1918,263 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
 
   return (
     <div className="fixed inset-0 z-50">
-      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      <div className="fixed inset-0 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-semibold">Criar Novo Documento</h2>
-              <Button variant="outline" size="sm" onClick={onClose}>
-                ✕
-              </Button>
-            </div>
-            
-            <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-              <div className="flex items-start gap-3">
-                <div className="p-2 bg-blue-100 rounded-full">
-                  <FileSignature className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h3 className="font-medium text-blue-900">Configuração Manual de Links DocuSign</h3>
-                  <p className="text-sm text-blue-700 mt-1">
-                    Para cada assinante, você deve preencher:
-                  </p>
-                  <ul className="text-sm text-blue-700 mt-2 space-y-1">
-                    <li>• <strong>Ordem:</strong> Sequência de assinatura (1, 2, 3...)</li>
-                    <li>• <strong>Assinante:</strong> Selecionar usuário da lista</li>
-                    <li>• <strong>Link DocuSign:</strong> URL do envelope no DocuSign</li>
-                    <li>• <strong>Status:</strong> Pendente, Aguardando, Assinado ou Rejeitado</li>
-                  </ul>
-                </div>
+      <div
+        className="fixed inset-0 bg-slate-900/50 backdrop-blur-[2px]"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div className="fixed inset-0 flex items-center justify-center p-3 sm:p-4">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="create-document-title"
+          className="relative flex w-full max-w-5xl max-h-[90vh] flex-col overflow-hidden rounded-2xl border border-slate-200/80 bg-white shadow-2xl shadow-slate-900/10"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header fixo */}
+          <div className="flex shrink-0 items-start justify-between gap-4 border-b border-slate-100 px-5 py-4 sm:px-6 sm:py-5">
+            <div className="flex min-w-0 items-start gap-3 sm:gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+                <FileSignature className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <h2
+                  id="create-document-title"
+                  className="text-lg font-semibold tracking-tight text-slate-900 sm:text-xl"
+                >
+                  Criar novo documento
+                </h2>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  Cadastre o arquivo, vincule uma obra e configure os responsáveis pela assinatura.
+                </p>
               </div>
             </div>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+              aria-label="Fechar modal"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <Label htmlFor="titulo">Título do Documento *</Label>
-                  <Input
-                    id="titulo"
-                    value={formData.titulo}
-                    onChange={(e) => setFormData({...formData, titulo: e.target.value})}
-                    placeholder="Ex: Contrato de Prestação de Serviços"
-                    required
-                  />
+          <form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+            {/* Corpo com scroll */}
+            <div className="flex-1 overflow-y-auto px-5 py-4 sm:px-6 sm:py-5">
+              <div className="space-y-5">
+                {/* Aviso compacto */}
+                <div className="flex items-start gap-2.5 rounded-lg border border-blue-100 bg-slate-50 px-3.5 py-2.5">
+                  <Info className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+                  <p className="text-sm text-slate-600">
+                    Configure a ordem dos assinantes e informe os links DocuSign quando necessário.
+                  </p>
                 </div>
-                
-                <div>
-                  <Label htmlFor="obra">Obra (Opcional)</Label>
-                  <div className="space-y-2">
-                    <Input
-                      placeholder="Buscar obra por nome, endereço ou cidade..."
-                      value={obraFilter}
-                      onChange={(e) => setObraFilter(e.target.value)}
-                      className="text-sm"
-                    />
-                    <Select value={formData.obraId || 'none'} onValueChange={(value) => setFormData({...formData, obraId: value === 'none' ? '' : value})}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Selecione a obra (opcional)" />
-                      </SelectTrigger>
-                      <SelectContent className="max-h-60">
-                        <SelectItem value="none">Nenhuma obra (documento geral)</SelectItem>
-                        {!obras || obras.length === 0 ? (
-                          <div className="p-2 text-sm text-gray-500 text-center">
-                            Carregando obras...
-                          </div>
-                        ) : obrasFiltradas.length > 0 ? (
-                          obrasFiltradas.map(obra => (
-                            <SelectItem key={obra.id} value={obra.id.toString()}>
-                              <div className="flex flex-col">
-                                <span className="font-medium">{obra.nome || 'Obra sem nome'}</span>
-                                <span className="text-xs text-gray-500">
-                                  {obra.endereco && obra.cidade ? `${obra.endereco}, ${obra.cidade}` : obra.endereco || obra.cidade || 'Sem localização'}
-                                </span>
+
+                {/* Seção 1: Dados do documento */}
+                <section className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Dados do documento</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Informações básicas para identificação do documento no sistema.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="titulo" className={labelClassName}>
+                        Título do documento <span className="text-blue-600">*</span>
+                      </Label>
+                      <Input
+                        id="titulo"
+                        value={formData.titulo}
+                        onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
+                        placeholder="Ex: Contrato de Prestação de Serviços"
+                        required
+                        className={inputClassName}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="obra" className={labelClassName}>
+                        Obra <span className="font-normal text-slate-400">(opcional)</span>
+                      </Label>
+                      <div className="space-y-2">
+                        <Input
+                          id="obra-busca"
+                          placeholder="Buscar obra por nome, endereço ou cidade..."
+                          value={obraFilter}
+                          onChange={(e) => setObraFilter(e.target.value)}
+                          className={cn(inputClassName, "text-sm")}
+                        />
+                        <Select
+                          value={formData.obraId || "none"}
+                          onValueChange={(value) =>
+                            setFormData({ ...formData, obraId: value === "none" ? "" : value })
+                          }
+                        >
+                          <SelectTrigger className={inputClassName}>
+                            <SelectValue placeholder="Selecione a obra (opcional)" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            <SelectItem value="none">Nenhuma obra (documento geral)</SelectItem>
+                            {!obras || obras.length === 0 ? (
+                              <div className="p-2 text-center text-sm text-slate-500">
+                                Carregando obras...
                               </div>
-                            </SelectItem>
-                          ))
-                        ) : (
-                          <div className="p-2 text-sm text-gray-500 text-center">
-                            Nenhuma obra encontrada
-                          </div>
-                        )}
-                      </SelectContent>
-                    </Select>
-                    <div className="text-xs text-gray-500">
-                      {obraFilter.trim() 
-                        ? `${obrasFiltradas.length} obra(s) encontrada(s)` 
-                        : `${obras?.length || 0} obra(s) disponível(is)`} • Deixe em branco para documento sem obra
+                            ) : obrasFiltradas.length > 0 ? (
+                              obrasFiltradas.map((obra) => (
+                                <SelectItem key={obra.id} value={obra.id.toString()}>
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{obra.nome || "Obra sem nome"}</span>
+                                    <span className="text-xs text-slate-500">
+                                      {obra.endereco && obra.cidade
+                                        ? `${obra.endereco}, ${obra.cidade}`
+                                        : obra.endereco || obra.cidade || "Sem localização"}
+                                    </span>
+                                  </div>
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <div className="p-2 text-center text-sm text-slate-500">
+                                Nenhuma obra encontrada
+                              </div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                        <p className={helperClassName}>
+                          {obraFilter.trim()
+                            ? `${obrasFiltradas.length} obra(s) encontrada(s)`
+                            : `${obras?.length || 0} obra(s) disponível(is)`}{" "}
+                          · Deixe em branco para documento sem obra
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              </div>
 
-              <div>
-                <Label htmlFor="descricao">Descrição</Label>
-                <Textarea
-                  id="descricao"
-                  value={formData.descricao}
-                  onChange={(e) => setFormData({...formData, descricao: e.target.value})}
-                  placeholder="Descreva o conteúdo e propósito do documento..."
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <Label htmlFor="arquivo">Arquivo Original *</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    id="arquivo"
-                    type="file"
-                    accept=".pdf,.doc,.docx"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0] || null
-                      console.log('=== DEBUG UPLOAD ===')
-                      console.log('Arquivo selecionado:', file)
-                      console.log('Nome:', file?.name)
-                      console.log('Tamanho:', file?.size)
-                      console.log('Tipo:', file?.type)
-                      console.log('Última modificação:', file?.lastModified)
-                      setFormData({...formData, arquivo: file})
-                    }}
-                    required
-                  />
-                  <Button type="button" variant="outline">
-                    <Upload className="w-4 h-4 mr-2" />
-                    Upload
-                  </Button>
-                </div>
-                <p className="text-xs text-gray-500 mt-1">
-                  Formatos aceitos: PDF, DOC, DOCX
-                </p>
-                {formData.arquivo && (
-                  <div className="mt-2 p-2 bg-green-50 border border-green-200 rounded text-sm text-green-700">
-                    ✅ Arquivo selecionado: {formData.arquivo.name} ({(formData.arquivo.size / 1024 / 1024).toFixed(2)} MB)
+                  <div className="mt-4 space-y-1.5">
+                    <Label htmlFor="descricao" className={labelClassName}>
+                      Descrição
+                    </Label>
+                    <Textarea
+                      id="descricao"
+                      value={formData.descricao}
+                      onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
+                      placeholder="Descreva o conteúdo e propósito do documento..."
+                      rows={3}
+                      className="min-h-[88px] resize-y border-slate-200 bg-white focus-visible:ring-blue-500/30 focus-visible:border-blue-500"
+                    />
                   </div>
-                )}
-              </div>
+                </section>
 
-              <div>
-                <Label htmlFor="link-assinatura">Link para Assinatura (Opcional)</Label>
-                <Input
-                  id="link-assinatura"
-                  type="url"
-                  value={formData.linkAssinatura || ''}
-                  onChange={(e) => setFormData({...formData, linkAssinatura: e.target.value})}
-                  placeholder="https://exemplo.com/assinatura"
-                  className="font-mono text-sm"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Link externo onde o usuário pode acessar e assinar o documento (opcional)
-                </p>
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <Label>Ordem de Assinatura</Label>
-                  <div className="text-sm text-gray-500">
-                    Use os filtros abaixo para adicionar assinantes
+                {/* Seção 2: Arquivo e assinatura */}
+                <section className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Arquivo e assinatura</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Envie o documento original e, se houver, o link externo de assinatura.
+                    </p>
                   </div>
-                </div>
 
-                {/* Pré-filtros para seleção de assinantes */}
-                <div className="mb-6 p-4 bg-gray-50 rounded-lg">
-                  <h4 className="font-medium text-gray-900 mb-3">Filtros para Seleção de Assinantes</h4>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    {/* Tipo de Assinante */}
-                    <div>
-                      <Label htmlFor="tipo-assinante">Tipo de Assinante *</Label>
-                      <Select value={tipoAssinante} onValueChange={(value) => setTipoAssinante(value as 'interno' | 'cliente' | '')}>
-                        <SelectTrigger>
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 md:gap-5">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="arquivo" className={labelClassName}>
+                        Arquivo original <span className="text-blue-600">*</span>
+                      </Label>
+                      <input
+                        ref={arquivoInputRef}
+                        id="arquivo"
+                        type="file"
+                        accept=".pdf,.doc,.docx"
+                        className="sr-only"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null
+                          console.log("=== DEBUG UPLOAD ===")
+                          console.log("Arquivo selecionado:", file)
+                          console.log("Nome:", file?.name)
+                          console.log("Tamanho:", file?.size)
+                          console.log("Tipo:", file?.type)
+                          console.log("Última modificação:", file?.lastModified)
+                          setFormData({ ...formData, arquivo: file })
+                        }}
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => arquivoInputRef.current?.click()}
+                        className={cn(
+                          "flex w-full flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-6 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2",
+                          formData.arquivo
+                            ? "border-emerald-200 bg-emerald-50/50 hover:border-emerald-300"
+                            : "border-slate-200 bg-slate-50/50 hover:border-blue-300 hover:bg-blue-50/30"
+                        )}
+                      >
+                        {formData.arquivo ? (
+                          <>
+                            <FileUp className="mb-2 h-8 w-8 text-emerald-600" />
+                            <span className="text-sm font-medium text-slate-800">
+                              {formData.arquivo.name}
+                            </span>
+                            <span className="mt-1 text-xs text-slate-500">
+                              {(formData.arquivo.size / 1024 / 1024).toFixed(2)} MB · Clique para trocar
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <Upload className="mb-2 h-8 w-8 text-slate-400" />
+                            <span className="text-sm font-medium text-slate-700">
+                              Clique para selecionar um arquivo
+                            </span>
+                            <span className="mt-1 text-xs text-slate-500">PDF, DOC ou DOCX</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="link-assinatura" className={labelClassName}>
+                        Link para assinatura{" "}
+                        <span className="font-normal text-slate-400">(opcional)</span>
+                      </Label>
+                      <Input
+                        id="link-assinatura"
+                        type="url"
+                        value={formData.linkAssinatura || ""}
+                        onChange={(e) =>
+                          setFormData({ ...formData, linkAssinatura: e.target.value })
+                        }
+                        placeholder="https://exemplo.com/assinatura"
+                        className={cn(inputClassName, "text-sm tracking-tight")}
+                      />
+                      <p className={helperClassName}>
+                        Link externo onde o usuário pode acessar e assinar o documento.
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Seção 3: Assinantes */}
+                <section className="rounded-xl border border-slate-200 p-4 sm:p-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-slate-900">Ordem de assinatura</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      Adicione os usuários na sequência em que devem assinar.
+                    </p>
+                  </div>
+
+                  {/* Barra de filtros compacta */}
+                  <div className="mb-4 flex flex-col gap-3 rounded-lg border border-slate-100 bg-slate-50/80 p-3 sm:flex-row sm:flex-wrap sm:items-end">
+                    <div className="min-w-0 flex-1 sm:max-w-[200px]">
+                      <Label htmlFor="tipo-assinante" className={cn(labelClassName, "text-xs")}>
+                        Tipo de assinante
+                      </Label>
+                      <Select
+                        value={tipoAssinante}
+                        onValueChange={(value) =>
+                          setTipoAssinante(value as "interno" | "cliente" | "")
+                        }
+                      >
+                        <SelectTrigger id="tipo-assinante" className={cn(inputClassName, "mt-1")}>
                           <SelectValue placeholder="Selecione o tipo" />
                         </SelectTrigger>
                         <SelectContent>
@@ -2067,223 +2184,269 @@ function CreateDocumentDialog({ onClose, obras, onDocumentCreated }: {
                       </Select>
                     </div>
 
-                    {/* Filtro de Busca */}
                     {tipoAssinante && (
-                      <div>
-                        <Label htmlFor="filtro-assinante">
-                          Buscar {tipoAssinante === 'interno' ? 'Funcionário' : 'Cliente'}
+                      <div className="min-w-0 flex-[2]">
+                        <Label htmlFor="filtro-assinante" className={cn(labelClassName, "text-xs")}>
+                          Buscar {tipoAssinante === "interno" ? "funcionário" : "cliente"}
                         </Label>
-                        <Input
-                          id="filtro-assinante"
-                          placeholder={`Buscar por nome, email ou função...`}
-                          value={assinanteFilter}
-                          onChange={(e) => setAssinanteFilter(e.target.value)}
-                        />
+                        <div className="relative mt-1">
+                          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                          <Input
+                            id="filtro-assinante"
+                            placeholder="Nome, e-mail ou função..."
+                            value={assinanteFilter}
+                            onChange={(e) => setAssinanteFilter(e.target.value)}
+                            className={cn(inputClassName, "pl-9")}
+                          />
+                        </div>
                       </div>
                     )}
 
-           {/* Contador */}
-           {tipoAssinante && assinanteFilter && (
-             <div className="flex items-end">
-               <div className="text-sm text-gray-600">
-                 {assinantesFiltrados.length} {tipoAssinante === 'interno' ? 'funcionário(s)' : 'cliente(s)'} encontrado(s)
-               </div>
-             </div>
-           )}
+                    {tipoAssinante && assinanteFilter && (
+                      <p className="text-xs text-slate-500 sm:pb-2.5">
+                        {assinantesFiltrados.length}{" "}
+                        {tipoAssinante === "interno" ? "funcionário(s)" : "cliente(s)"} encontrado(s)
+                      </p>
+                    )}
                   </div>
 
-         {/* Lista de Assinantes Disponíveis */}
-         {tipoAssinante && assinanteFilter && (
-           <div className="mt-4">
-             <Label className="text-sm font-medium text-gray-700">
-               {tipoAssinante === 'interno' ? 'Funcionários' : 'Clientes'} Encontrados:
-             </Label>
-             {assinantesFiltrados.length > 0 ? (
-               <div className="mt-2 max-h-40 overflow-y-auto border rounded-lg">
-                 {assinantesFiltrados.map((item) => (
-                   <div key={item.id} className="p-3 border-b last:border-b-0 hover:bg-gray-50">
-                     <div className="flex items-center justify-between">
-                       <div>
-                         <div className="font-medium text-sm">{item.nome || item.name}</div>
-                         <div className="text-xs text-gray-500">{item.email}</div>
-                         <div className="text-xs text-gray-400">{item.cargo || item.role}</div>
-                       </div>
-                       <Button
-                         type="button"
-                         size="sm"
-                         variant="outline"
-                         onClick={() => {
-                           console.log('Adicionando assinante:', item)
-                           console.log('Assinantes atuais:', assinantes)
-                           
-                           const novoAssinante = {
-                             userId: item.id.toString(),
-                             ordem: assinantes.length + 1,
-                             status: 'pendente' as const,
-                             tipo: tipoAssinante as 'interno' | 'cliente',
-                             userInfo: {
-                               id: item.id,
-                               nome: item.nome || item.name,
-                               email: item.email,
-                               cargo: item.cargo,
-                               role: item.role
-                             }
-                           }
-                           
-                           console.log('Novo assinante:', novoAssinante)
-                           setAssinantes([...assinantes, novoAssinante])
-                           console.log('Assinantes após adição:', [...assinantes, novoAssinante])
-                         }}
-                         disabled={(() => {
-                           const jaAdicionado = assinantes.some(a => a.userId === item.id.toString())
-                           console.log(`Verificando se ${item.id} já foi adicionado:`, jaAdicionado, 'Assinantes:', assinantes.map(a => a.userId))
-                           return jaAdicionado
-                         })()}
-                       >
-                         {assinantes.some(a => a.userId === item.id.toString()) ? 'Adicionado' : 'Adicionar'}
-                       </Button>
-                     </div>
-                   </div>
-                 ))}
-               </div>
-             ) : (
-               <div className="mt-2 p-3 text-center text-gray-500 text-sm border rounded-lg">
-                 Nenhum {tipoAssinante === 'interno' ? 'funcionário' : 'cliente'} encontrado para "{assinanteFilter}"
-               </div>
-             )}
-           </div>
-         )}
+                  {/* Lista de assinantes disponíveis */}
+                  {tipoAssinante && assinanteFilter && (
+                    <div className="mb-4">
+                      <Label className="text-xs font-medium text-slate-600">
+                        {tipoAssinante === "interno" ? "Funcionários" : "Clientes"} encontrados
+                      </Label>
+                      {assinantesFiltrados.length > 0 ? (
+                        <div className="mt-2 max-h-40 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                          {assinantesFiltrados.map((item) => (
+                            <div
+                              key={item.id}
+                              className="flex items-center justify-between gap-3 bg-white p-3 transition-colors hover:bg-slate-50"
+                            >
+                              <div className="min-w-0">
+                                <div className="truncate text-sm font-medium text-slate-800">
+                                  {item.nome || item.name}
+                                </div>
+                                <div className="truncate text-xs text-slate-500">{item.email}</div>
+                                {(item.cargo || item.role) && (
+                                  <div className="truncate text-xs text-slate-400">
+                                    {item.cargo || item.role}
+                                  </div>
+                                )}
+                              </div>
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="shrink-0 border-slate-200"
+                                onClick={() => {
+                                  console.log("Adicionando assinante:", item)
+                                  console.log("Assinantes atuais:", assinantes)
 
-         {tipoAssinante && !assinanteFilter && (
-           <div className="mt-4 p-3 text-center text-gray-500 text-sm border rounded-lg">
-             Digite um termo de busca para encontrar {tipoAssinante === 'interno' ? 'funcionários' : 'clientes'}
-           </div>
-         )}
+                                  const novoAssinante = {
+                                    userId: item.id.toString(),
+                                    ordem: assinantes.length + 1,
+                                    status: "pendente" as const,
+                                    tipo: tipoAssinante as "interno" | "cliente",
+                                    userInfo: {
+                                      id: item.id,
+                                      nome: item.nome || item.name,
+                                      email: item.email,
+                                      cargo: item.cargo,
+                                      role: item.role,
+                                    },
+                                  }
 
-         {/* Lista de Assinantes Adicionados */}
-         {assinantes.length > 0 && (
-           <div className="mt-4">
-             <Label className="text-sm font-medium text-gray-700 mb-3 block">
-               Assinantes Adicionados ({assinantes.length}):
-             </Label>
-             <div className="space-y-3">
-               {assinantes.map((assinante, index) => {
-                 return (
-                   <div key={index} className="p-4 border rounded-lg bg-white">
-                     <div className="flex items-center justify-between mb-3">
-                       <div className="flex items-center gap-2">
-                         <Badge variant="outline">{assinante.ordem}</Badge>
-                         <span className="text-sm font-medium text-gray-700">
-                           {assinante.userInfo?.nome || `Usuário ${assinante.userId}`}
-                         </span>
-                         <Badge variant="secondary" className="text-xs">
-                           {assinante.tipo === 'interno' ? 'Interno' : 'Cliente'}
-                         </Badge>
-                       </div>
-                       <div className="flex items-center gap-1">
-                         <Button
-                           type="button"
-                           variant="outline"
-                           size="sm"
-                           onClick={() => moveAssinante(index, 'up')}
-                           disabled={index === 0}
-                           title="Mover para cima"
-                         >
-                           ↑
-                         </Button>
-                         <Button
-                           type="button"
-                           variant="outline"
-                           size="sm"
-                           onClick={() => moveAssinante(index, 'down')}
-                           disabled={index === assinantes.length - 1}
-                           title="Mover para baixo"
-                         >
-                           ↓
-                         </Button>
-                         <Button
-                           type="button"
-                           variant="outline"
-                           size="sm"
-                           onClick={() => removeAssinante(index)}
-                           className="text-red-600 hover:text-red-700"
-                           title="Remover assinante"
-                         >
-                           ✕
-                         </Button>
-                       </div>
-                     </div>
-                     
-                     <div className="text-xs text-gray-500 mb-3">
-                       {assinante.userInfo?.email || 'Email não disponível'}
-                     </div>
-
-
-                     {/* Status */}
-                     <div>
-                       <Label htmlFor={`status-${index}`} className="text-sm font-medium">
-                         Status *
-                       </Label>
-                       <Select 
-                         value={assinante.status} 
-                         onValueChange={(value) => {
-                           const novosAssinantes = [...assinantes]
-                           novosAssinantes[index].status = value as any
-                           setAssinantes(novosAssinantes)
-                         }}
-                       >
-                         <SelectTrigger className="mt-1">
-                           <SelectValue placeholder="Selecione o status" />
-                         </SelectTrigger>
-                         <SelectContent>
-                           <SelectItem value="pendente">Pendente</SelectItem>
-                           <SelectItem value="aguardando">Aguardando</SelectItem>
-                           <SelectItem value="assinado">Assinado</SelectItem>
-                           <SelectItem value="rejeitado">Rejeitado</SelectItem>
-                         </SelectContent>
-                       </Select>
-                     </div>
-                   </div>
-                 )
-               })}
-             </div>
-           </div>
-         )}
-                </div>
-                
-                {assinantes.length === 0 && (
-                  <div className="text-center py-8 text-gray-500 border-2 border-dashed border-gray-300 rounded-lg">
-                    <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
-                    <p>Nenhum assinante adicionado</p>
-                    <p className="text-sm">Use os filtros acima para encontrar e adicionar assinantes</p>
-                  </div>
-                )}
-              </div>
-
-              <div className="flex justify-end gap-3 pt-6 border-t">
-                <Button type="button" variant="outline" onClick={onClose}>
-                  Cancelar
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isSubmitting || assinantes.length === 0 || assinantes.some(a => !a.userId)}
-                  className="bg-blue-600 hover:bg-blue-700"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                      Criando Documento...
-                    </>
-                  ) : (
-                    <>
-                      <FileSignature className="w-4 h-4 mr-2" />
-                      Criar Documento
-                    </>
+                                  console.log("Novo assinante:", novoAssinante)
+                                  setAssinantes([...assinantes, novoAssinante])
+                                  console.log("Assinantes após adição:", [
+                                    ...assinantes,
+                                    novoAssinante,
+                                  ])
+                                }}
+                                disabled={assinantes.some(
+                                  (a) => a.userId === item.id.toString()
+                                )}
+                              >
+                                <UserPlus className="mr-1.5 h-3.5 w-3.5" />
+                                {assinantes.some((a) => a.userId === item.id.toString())
+                                  ? "Adicionado"
+                                  : "Adicionar"}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div className="mt-2 rounded-lg border border-slate-200 bg-slate-50 p-3 text-center text-sm text-slate-500">
+                          Nenhum {tipoAssinante === "interno" ? "funcionário" : "cliente"}{" "}
+                          encontrado para &quot;{assinanteFilter}&quot;
+                        </div>
+                      )}
+                    </div>
                   )}
-                </Button>
+
+                  {tipoAssinante && !assinanteFilter && (
+                    <div className="mb-4 rounded-lg border border-dashed border-slate-200 bg-slate-50/50 p-3 text-center text-sm text-slate-500">
+                      Digite um termo de busca para encontrar{" "}
+                      {tipoAssinante === "interno" ? "funcionários" : "clientes"}
+                    </div>
+                  )}
+
+                  {/* Lista de assinantes adicionados */}
+                  {assinantes.length > 0 && (
+                    <div className="mb-4">
+                      <Label className="mb-2 block text-xs font-medium text-slate-600">
+                        Assinantes adicionados ({assinantes.length})
+                      </Label>
+                      <div className="space-y-2">
+                        {assinantes.map((assinante, index) => (
+                          <div
+                            key={index}
+                            className="rounded-lg border border-slate-200 bg-white p-3 sm:p-4"
+                          >
+                            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                <Badge
+                                  variant="outline"
+                                  className="h-6 min-w-[1.75rem] justify-center border-slate-200 font-semibold"
+                                >
+                                  {assinante.ordem}
+                                </Badge>
+                                <span className="text-sm font-medium text-slate-800">
+                                  {assinante.userInfo?.nome || `Usuário ${assinante.userId}`}
+                                </span>
+                                <Badge variant="secondary" className="text-xs font-normal">
+                                  {assinante.tipo === "interno" ? "Interno" : "Cliente"}
+                                </Badge>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => moveAssinante(index, "up")}
+                                  disabled={index === 0}
+                                  title="Mover para cima"
+                                >
+                                  ↑
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                  onClick={() => moveAssinante(index, "down")}
+                                  disabled={index === assinantes.length - 1}
+                                  title="Mover para baixo"
+                                >
+                                  ↓
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-8 w-8 p-0 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                  onClick={() => removeAssinante(index)}
+                                  title="Remover assinante"
+                                >
+                                  <X className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </div>
+
+                            <p className="mb-3 text-xs text-slate-500">
+                              {assinante.userInfo?.email || "E-mail não disponível"}
+                            </p>
+
+                            <div className="max-w-xs">
+                              <Label
+                                htmlFor={`status-${index}`}
+                                className={cn(labelClassName, "text-xs")}
+                              >
+                                Status <span className="text-blue-600">*</span>
+                              </Label>
+                              <Select
+                                value={assinante.status}
+                                onValueChange={(value) => {
+                                  const novosAssinantes = [...assinantes]
+                                  novosAssinantes[index].status = value as
+                                    | "pendente"
+                                    | "aguardando"
+                                    | "assinado"
+                                    | "rejeitado"
+                                  setAssinantes(novosAssinantes)
+                                }}
+                              >
+                                <SelectTrigger
+                                  id={`status-${index}`}
+                                  className={cn(inputClassName, "mt-1")}
+                                >
+                                  <SelectValue placeholder="Selecione o status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="pendente">Pendente</SelectItem>
+                                  <SelectItem value="aguardando">Aguardando</SelectItem>
+                                  <SelectItem value="assinado">Assinado</SelectItem>
+                                  <SelectItem value="rejeitado">Rejeitado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Estado vazio */}
+                  {assinantes.length === 0 && (
+                    <div className="flex flex-col items-center rounded-lg border border-dashed border-slate-200 bg-slate-50/30 px-4 py-6 text-center">
+                      <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-full bg-slate-100">
+                        <Users className="h-5 w-5 text-slate-400" />
+                      </div>
+                      <p className="text-sm font-medium text-slate-700">
+                        Nenhum assinante adicionado
+                      </p>
+                      <p className="mt-1 max-w-sm text-xs text-slate-500">
+                        Selecione um tipo de assinante para buscar e adicionar responsáveis.
+                      </p>
+                    </div>
+                  )}
+                </section>
               </div>
-            </form>
-          </div>
+            </div>
+
+            {/* Footer fixo */}
+            <div className="flex shrink-0 flex-col-reverse gap-2 border-t border-slate-100 bg-white/95 px-5 py-4 backdrop-blur-sm sm:flex-row sm:justify-end sm:gap-3 sm:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={onClose}
+                className="w-full border-slate-200 sm:w-auto"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={
+                  isSubmitting || assinantes.length === 0 || assinantes.some((a) => !a.userId)
+                }
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 sm:w-auto"
+              >
+                {isSubmitting ? (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                    Criando documento...
+                  </>
+                ) : (
+                  <>
+                    <FileSignature className="mr-2 h-4 w-4" />
+                    Criar documento
+                  </>
+                )}
+              </Button>
+            </div>
+          </form>
         </div>
       </div>
     </div>

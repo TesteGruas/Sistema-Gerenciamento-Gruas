@@ -18,6 +18,7 @@ interface User {
 
 interface UserContextType {
   currentUser: User | null
+  userLoading: boolean
   setCurrentUser: (user: User | null) => void
   login: (email: string, password: string) => Promise<boolean>
   logout: () => void
@@ -198,7 +199,7 @@ export function UserProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <UserContext.Provider value={{ currentUser, setCurrentUser, login, logout }}>
+    <UserContext.Provider value={{ currentUser, userLoading: loading, setCurrentUser, login, logout }}>
       {children}
     </UserContext.Provider>
   )
