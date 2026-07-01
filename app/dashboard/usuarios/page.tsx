@@ -724,7 +724,7 @@ export default function UsuariosPage() {
         dadosBackend.senha = userFormData.senha
       }
       
-      await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
+      const usuarioAtualizado = await apiUsuarios.atualizar(parseInt(editingUser.id), dadosBackend)
       
       // Fazer upload dos arquivos se houver
       if (selectedFiles.length > 0) {
@@ -740,7 +740,11 @@ export default function UsuariosPage() {
       
       toast({
         title: "Sucesso",
-        description: userFormData.senha ? "Usuário e senha atualizados com sucesso!" : "Usuário atualizado com sucesso!"
+        description: userFormData.senha
+          ? (usuarioAtualizado?.whatsapp_enviado
+            ? "Usuário e senha atualizados! A senha foi enviada por WhatsApp."
+            : "Usuário e senha atualizados! WhatsApp não enviado — verifique o telefone cadastrado.")
+          : "Usuário atualizado com sucesso!"
       })
       
     } catch (error: any) {
@@ -755,31 +759,13 @@ export default function UsuariosPage() {
     }
   }
 
-  const handleSendCredentialsEmail = async () => {
+  const handleReenviarSenha = async () => {
     if (!editingUser) return
 
     if (!userFormData.email?.trim()) {
       toast({
         title: "Erro",
-        description: "Informe um email válido para envio das credenciais",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (!userFormData.senha || userFormData.senha.length < 6) {
-      toast({
-        title: "Erro",
-        description: "Informe uma senha com no mínimo 6 caracteres para enviar as credenciais",
-        variant: "destructive"
-      })
-      return
-    }
-
-    if (userFormData.senha !== userFormData.confirmarSenha) {
-      toast({
-        title: "Erro",
-        description: "As senhas não coincidem",
+        description: "Informe um email válido para reenviar a senha",
         variant: "destructive"
       })
       return
@@ -788,21 +774,23 @@ export default function UsuariosPage() {
     try {
       setSendingCredentials(true)
 
-      await apiUsuarios.enviarCredenciais(parseInt(editingUser.id), {
+      const resultado = await apiUsuarios.enviarCredenciais(parseInt(editingUser.id), {
         nome: userFormData.name,
         email: userFormData.email,
-        senha: userFormData.senha
+        telefone: userFormData.phone,
       })
 
       toast({
         title: "Sucesso",
-        description: "Credenciais reenviadas por email com sucesso!"
+        description: resultado?.data?.whatsapp_enviado
+          ? "Senha temporária reenviada por email e WhatsApp com sucesso!"
+          : (resultado?.message || "Senha temporária reenviada por email com sucesso!")
       })
     } catch (error: any) {
-      console.error('Erro ao enviar credenciais por email:', error)
+      console.error('Erro ao reenviar senha:', error)
       toast({
         title: "Erro",
-        description: error.message || "Erro ao enviar email com as credenciais",
+        description: error.message || "Erro ao reenviar senha temporária",
         variant: "destructive"
       })
     } finally {
@@ -1524,6 +1512,7 @@ export default function UsuariosPage() {
                 <div className="bg-amber-50 p-4 rounded-lg border border-amber-200 mb-4">
                   <p className="text-sm text-amber-800">
                     <strong>Alterar Senha:</strong> Deixe em branco se não quiser alterar a senha do usuário.
+                    Use <strong>Reenviar Senha</strong> para gerar uma senha temporária e enviar por email e WhatsApp.
                   </p>
                 </div>
 
@@ -1672,15 +1661,15 @@ export default function UsuariosPage() {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={handleSendCredentialsEmail}
+                onClick={handleReenviarSenha}
                 disabled={updating || uploadingFiles || sendingCredentials}
               >
                 {sendingCredentials ? (
-                  <ButtonLoader text="Reenviando credenciais..." />
+                  <ButtonLoader text="Reenviando senha..." />
                 ) : (
                   <>
-                    <Mail className="w-4 h-4 mr-2" />
-                    Reenviar Credenciais por Email
+                    <Key className="w-4 h-4 mr-2" />
+                    Reenviar Senha
                   </>
                 )}
               </Button>

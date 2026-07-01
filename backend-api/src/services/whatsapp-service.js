@@ -1371,6 +1371,98 @@ export async function enviarMensagemResetSenhaFuncionario(funcionario, email, se
 }
 
 /**
+ * Formata mensagem de reset de senha para usuário genérico
+ * @param {Object} usuario - Dados do usuário
+ * @param {string} email - Email do usuário
+ * @param {string} senhaTemporaria - Nova senha temporária
+ * @returns {string} - Mensagem formatada
+ */
+function formatarMensagemResetSenhaUsuario(usuario, email, senhaTemporaria) {
+  const nomeUsuario = usuario?.nome || 'Usuário';
+
+  return `🔐 *Redefinição de Senha - Sistema de Gestão de Gruas*
+
+Olá ${nomeUsuario},
+
+Sua senha foi redefinida com sucesso!
+
+📧 *Email:* ${email}
+🔑 *Nova Senha Temporária:* ${senhaTemporaria}
+
+⚠️ *Importante:* Altere sua senha no próximo acesso.
+
+🔗 *Link de Acesso:*
+${getPublicFrontendUrl()}/login
+
+---
+_Sistema de Gestão de Gruas_`;
+}
+
+/**
+ * Envia mensagem de reset de senha para usuário do sistema
+ * @param {Object} usuario - Dados do usuário (id, nome, telefone opcional)
+ * @param {string} email - Email do usuário
+ * @param {string} senhaTemporaria - Nova senha temporária
+ * @returns {Promise<Object>} - { sucesso: boolean, erro: string|null }
+ */
+export async function enviarMensagemResetSenhaUsuario(usuario, email, senhaTemporaria) {
+  try {
+    console.log(`[whatsapp-service] Iniciando envio de mensagem de reset de senha para usuário ${usuario.id}`);
+
+    let telefone = await buscarTelefoneWhatsAppUsuario(usuario.id);
+
+    if (!telefone && usuario.telefone) {
+      telefone = formatarTelefone(usuario.telefone);
+    }
+
+    if (!telefone) {
+      console.warn(`[whatsapp-service] Telefone WhatsApp não disponível para usuário ${usuario.id}`);
+      return {
+        sucesso: false,
+        erro: 'Telefone WhatsApp do usuário não cadastrado'
+      };
+    }
+
+    const linkLogin = `${getPublicFrontendUrl()}/login`;
+    const mensagemPadrao = formatarMensagemResetSenhaUsuario(usuario, email, senhaTemporaria);
+    const mensagem = await renderWhatsAppMessage({
+      tipo: 'reset_senha_funcionario',
+      fallbackText: mensagemPadrao,
+      vars: {
+        nome: usuario?.nome || 'Usuário',
+        email,
+        senha_temporaria: senhaTemporaria,
+        link_login: linkLogin
+      }
+    });
+
+    const resultado = await enviarMensagemWebhook(
+      telefone,
+      mensagem,
+      linkLogin,
+      {
+        tipo: 'reset_senha',
+        destinatario_nome: usuario.nome
+      }
+    );
+
+    if (resultado.sucesso) {
+      console.log(`[whatsapp-service] Mensagem de reset de senha enviada com sucesso para usuário ${usuario.id} (${telefone})`);
+    } else {
+      console.error(`[whatsapp-service] Erro ao enviar mensagem de reset de senha para usuário: ${resultado.erro}`);
+    }
+
+    return resultado;
+  } catch (error) {
+    console.error('[whatsapp-service] Erro ao enviar mensagem de reset de senha para usuário:', error);
+    return {
+      sucesso: false,
+      erro: error.message || 'Erro desconhecido'
+    };
+  }
+}
+
+/**
  * Formata mensagem de aprovação para WhatsApp
  * @param {Object} aprovacao - Dados da aprovação
  * @param {Object} funcionario - Dados do funcionário

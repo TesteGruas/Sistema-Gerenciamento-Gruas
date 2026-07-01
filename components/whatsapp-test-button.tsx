@@ -16,6 +16,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { fetchWithAuth } from "@/lib/api"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 interface WhatsAppTestButtonProps {
   variant?: "default" | "outline" | "ghost"

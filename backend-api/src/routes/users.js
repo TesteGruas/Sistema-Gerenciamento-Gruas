@@ -2,7 +2,7 @@ import express from 'express'
 import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
-import { sendWelcomeEmail } from '../services/email.service.js'
+import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/email.service.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sortRecordsInMemory } from '../utils/apply-list-sort.js'
 
@@ -131,11 +131,12 @@ const userUpdateSchema = Joi.object({
   perfil_id: Joi.number().integer().positive().optional()
 })
 
-// Schema de validação para envio de credenciais por email
+// Schema de validação para reenvio de senha temporária
 const sendCredentialsSchema = Joi.object({
-  senha: Joi.string().min(6).required(),
+  senha: Joi.string().min(6).optional(),
   email: Joi.string().email().optional(),
-  nome: Joi.string().min(2).optional()
+  nome: Joi.string().min(2).optional(),
+  telefone: Joi.string().optional()
 })
 
 /**
@@ -804,6 +805,24 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
       })
     }
 
+    // Enviar WhatsApp com nova senha (não bloqueia a resposta se falhar)
+    let whatsappEnviado = false
+    if (senha && data) {
+      try {
+        const { enviarMensagemResetSenhaUsuario } = await import('../services/whatsapp-service.js')
+        const emailDestino = data.email || value.email
+        const resultadoWhatsapp = await enviarMensagemResetSenhaUsuario(data, emailDestino, senha)
+        whatsappEnviado = !!resultadoWhatsapp?.sucesso
+        if (whatsappEnviado) {
+          console.log(`✅ WhatsApp de senha enviado com sucesso para ${data.nome}`)
+        } else {
+          console.warn(`⚠️ WhatsApp de senha não enviado para ${data.nome}:`, resultadoWhatsapp?.erro)
+        }
+      } catch (whatsappError) {
+        console.error('❌ Erro ao enviar WhatsApp de senha:', whatsappError)
+      }
+    }
+
     // Se perfil_id foi fornecido, atualizar a associação do usuário ao perfil
     if (perfil_id && data) {
       // Primeiro, desativar o perfil atual
@@ -851,8 +870,14 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
 
     res.json({
       success: true,
-      data,
-      message: 'Usuário atualizado com sucesso'
+      data: senha
+        ? { ...data, whatsapp_enviado: whatsappEnviado }
+        : data,
+      message: senha
+        ? (whatsappEnviado
+          ? 'Usuário atualizado com sucesso. Senha enviada por WhatsApp.'
+          : 'Usuário atualizado com sucesso. WhatsApp não enviado (telefone não cadastrado ou erro no envio).')
+        : 'Usuário atualizado com sucesso'
     })
   } catch (error) {
     console.error('Erro ao atualizar usuário:', error)
@@ -915,7 +940,7 @@ router.post('/:id/send-credentials', authenticateToken, requirePermission('usuar
     // Buscar usuário para obter nome/email atuais
     const { data: usuarioData, error: usuarioError } = await supabaseAdmin
       .from('usuarios')
-      .select('id, nome, email')
+      .select('id, nome, email, telefone')
       .eq('id', id)
       .single()
 
@@ -928,6 +953,7 @@ router.post('/:id/send-credentials', authenticateToken, requirePermission('usuar
 
     const emailDestino = value.email || usuarioData.email
     const nomeDestino = value.nome || usuarioData.nome
+    const senhaTemporaria = value.senha || generateSecurePassword()
 
     // Atualizar senha no Auth para garantir que a senha enviada é válida
     const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
@@ -948,7 +974,7 @@ router.post('/:id/send-credentials', authenticateToken, requirePermission('usuar
 
     const { error: authUpdateError } = await supabaseAdmin.auth.admin.updateUserById(
       authUser.id,
-      { password: value.senha }
+      { password: senhaTemporaria }
     )
 
     if (authUpdateError) {
@@ -958,16 +984,32 @@ router.post('/:id/send-credentials', authenticateToken, requirePermission('usuar
       })
     }
 
-    // Enviar email com as credenciais
-    await sendWelcomeEmail({
+    // Enviar email com a senha temporária
+    await sendPasswordResetEmail({
       nome: nomeDestino,
       email: emailDestino,
-      senha_temporaria: value.senha
+      senha_temporaria: senhaTemporaria
     })
+
+    let whatsappEnviado = false
+    try {
+      const { enviarMensagemResetSenhaUsuario } = await import('../services/whatsapp-service.js')
+      const resultadoWhatsapp = await enviarMensagemResetSenhaUsuario(
+        { id: usuarioData.id, nome: nomeDestino, telefone: value.telefone || usuarioData.telefone },
+        emailDestino,
+        senhaTemporaria
+      )
+      whatsappEnviado = !!resultadoWhatsapp?.sucesso
+    } catch (whatsappError) {
+      console.error('❌ Erro ao enviar WhatsApp de reenvio de senha:', whatsappError)
+    }
 
     res.json({
       success: true,
-      message: 'Credenciais enviadas por email com sucesso'
+      message: whatsappEnviado
+        ? 'Senha temporária enviada por email e WhatsApp com sucesso'
+        : 'Senha temporária enviada por email com sucesso',
+      data: { whatsapp_enviado: whatsappEnviado, email_enviado: true }
     })
   } catch (error) {
     console.error('Erro ao enviar credenciais por email:', error)

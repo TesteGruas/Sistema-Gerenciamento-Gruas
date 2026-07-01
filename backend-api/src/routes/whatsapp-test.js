@@ -297,23 +297,43 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
       registroPonto = registroExistente;
       console.log('[whatsapp-test] Usando registro de ponto existente:', registroPonto.id);
     } else {
-      // Não criar mais registros de teste automaticamente
-      // O registro deve ser criado manualmente ou através do sistema de ponto eletrônico
-      return res.status(400).json({
-        success: false,
-        message: 'Não é possível criar registro de teste automaticamente. Crie o registro de ponto manualmente primeiro.'
-      });
+      const registroId = gerarIdRegistro('TEST');
+      const { data: novoRegistro, error: registroError } = await supabaseAdmin
+        .from('registros_ponto')
+        .insert({
+          id: registroId,
+          funcionario_id: funcionarioId,
+          data: hoje,
+          entrada: '07:00',
+          saida: '18:00',
+          horas_trabalhadas: 11,
+          horas_extras: 3,
+          status: 'Pendente Aprovação',
+          observacoes: 'Registro de teste criado automaticamente para validação do sistema WhatsApp'
+        })
+        .select()
+        .single();
+
+      if (registroError) {
+        console.error('[whatsapp-test] Erro ao criar registro de ponto:', registroError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao criar registro de ponto de teste'
+        });
+      }
+
+      registroPonto = novoRegistro;
+      console.log('[whatsapp-test] Registro de ponto de teste criado:', registroPonto.id);
     }
 
     // Criar aprovação de teste
-    // Nota: registro_ponto_id precisa ser UUID, mas registros_ponto.id é VARCHAR
-    // Gerar UUID e armazenar o ID real do registro nas observações
-    const uuidRegistroPonto = crypto.randomUUID();
     const dataLimite = calcularDataLimite();
+    // registro_ponto_id é UUID no banco; registros_ponto.id é VARCHAR — gerar UUID e referenciar o registro real nas observações
+    const uuidRegistroPonto = crypto.randomUUID();
     const { data: aprovacao, error: aprovacaoError } = await supabaseAdmin
       .from('aprovacoes_horas_extras')
       .insert({
-        registro_ponto_id: uuidRegistroPonto, // Usar UUID gerado
+        registro_ponto_id: uuidRegistroPonto,
         funcionario_id: funcionarioId,
         supervisor_id: supervisorId,
         horas_extras: 3,
@@ -329,7 +349,7 @@ router.post('/test-completo', authenticateToken, async (req, res) => {
       console.error('[whatsapp-test] Erro ao criar aprovação:', aprovacaoError);
       return res.status(500).json({
         success: false,
-        message: 'Erro ao criar aprovação de teste'
+        message: `Erro ao criar aprovação de teste: ${aprovacaoError.message || 'erro desconhecido'}`
       });
     }
 
@@ -597,14 +617,14 @@ router.post('/seed-horas-extras', authenticateToken, async (req, res) => {
         const { data: aprovacao, error: aprovacaoError } = await supabaseAdmin
           .from('aprovacoes_horas_extras')
           .insert({
-            registro_ponto_id: registro.id,
+            registro_ponto_id: crypto.randomUUID(),
             funcionario_id: funcionario.id,
             supervisor_id: supervisor.id,
             horas_extras: horario.horas_extras,
             data_trabalho: data,
             data_limite: dataLimite.toISOString(),
             status: 'pendente',
-            observacoes: 'Seed - Teste: Aprovação gerada automaticamente para testes do sistema WhatsApp'
+            observacoes: `Seed - Teste: Aprovação gerada automaticamente para testes do sistema WhatsApp. Registro original: ${registro.id}`
           })
           .select()
           .single();

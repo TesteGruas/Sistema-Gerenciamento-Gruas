@@ -35,6 +35,7 @@ export interface Usuario {
   data_admissao?: string;
   salario?: number;
   funcionario_id?: number;
+  whatsapp_enviado?: boolean;
   usuario_perfis?: Array<{
     id: number;
     perfil_id: number;
@@ -115,9 +116,10 @@ export interface UsuarioUpdateData {
 }
 
 export interface UsuarioSendCredentialsData {
-  senha: string;
+  senha?: string;
   email?: string;
   nome?: string;
+  telefone?: string;
 }
 
 // Helper function to get auth token
@@ -193,7 +195,7 @@ export const apiUsuarios = {
   },
 
   // Enviar email com credenciais (email + senha)
-  enviarCredenciais: async (id: number, dados: UsuarioSendCredentialsData): Promise<{ success: boolean; message: string }> => {
+  enviarCredenciais: async (id: number, dados: UsuarioSendCredentialsData): Promise<{ success: boolean; message: string; data?: { whatsapp_enviado?: boolean } }> => {
     const response = await apiRequest(`/api/users/${id}/send-credentials`, {
       method: 'POST',
       body: JSON.stringify(dados),
