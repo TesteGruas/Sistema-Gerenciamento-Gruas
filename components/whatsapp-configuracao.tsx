@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { fetchWithAuth } from "@/lib/api"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 export function WhatsAppConfiguracao() {
   const { toast } = useToast()
