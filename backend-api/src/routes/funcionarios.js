@@ -32,6 +32,155 @@ function possuiUsuarioVinculado(usuario) {
   return Boolean(usuario)
 }
 
+function limparCpf(cpf) {
+  return String(cpf || '').replace(/\D/g, '')
+}
+
+/** Padrões de CPF para busca no banco (com e sem máscara parcial). */
+function padroesBuscaCpf(cpfOuTermo) {
+  const digitos = limparCpf(cpfOuTermo)
+  if (!digitos) return []
+
+  const padroes = [digitos]
+  if (digitos.length > 3) {
+    padroes.push(`${digitos.slice(0, 3)}.${digitos.slice(3)}`)
+  }
+  if (digitos.length > 6) {
+    padroes.push(`${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6)}`)
+  }
+  if (digitos.length > 9) {
+    padroes.push(
+      `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`
+    )
+  }
+  return [...new Set(padroes)]
+}
+
+/**
+ * Confirma se o registro realmente bate com o termo após remover pontuação do CPF.
+ * CPF: match só no início dos dígitos (evita falso positivo no meio, ex. 0394 em 48103943878).
+ */
+function registroCorrespondeBusca(registro, termo) {
+  if (!termo) return true
+
+  const termoLower = String(termo).toLowerCase().trim()
+  const digitosBusca = limparCpf(termo)
+
+  const nome = String(registro?.nome || '').toLowerCase()
+  const email = String(registro?.email || '').toLowerCase()
+  const cargo = String(registro?.cargo || registro?.cargo_info?.nome || '').toLowerCase()
+
+  if (nome.includes(termoLower) || email.includes(termoLower) || cargo.includes(termoLower)) {
+    return true
+  }
+
+  if (digitosBusca.length >= 3) {
+    const cpfDigits = limparCpf(registro?.cpf)
+    if (cpfDigits && cpfDigits.startsWith(digitosBusca)) {
+      return true
+    }
+    const telefoneDigits = limparCpf(registro?.telefone || registro?.telefone_whatsapp)
+    if (telefoneDigits && telefoneDigits.includes(digitosBusca)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+function condicoesBuscaTextoEDocumento(termo) {
+  const digitos = limparCpf(termo)
+  const condicoes = [
+    `nome.ilike.%${termo}%`,
+    `email.ilike.%${termo}%`,
+    `cargo.ilike.%${termo}%`
+  ]
+
+  if (digitos.length >= 3) {
+    condicoes.push(`telefone.ilike.%${digitos}%`)
+    for (const padrao of padroesBuscaCpf(digitos)) {
+      condicoes.push(`cpf.ilike.%${padrao}%`)
+    }
+  }
+
+  return condicoes
+}
+
+function formatarCpf(cpf) {
+  const digitos = limparCpf(cpf)
+  if (digitos.length !== 11) return digitos || null
+  return `${digitos.slice(0, 3)}.${digitos.slice(3, 6)}.${digitos.slice(6, 9)}-${digitos.slice(9)}`
+}
+
+/** Variantes aceitas no banco (com e sem máscara). */
+function variantesCpf(cpf) {
+  const digitos = limparCpf(cpf)
+  if (!digitos) return []
+  const formatado = digitos.length === 11 ? formatarCpf(digitos) : null
+  return [...new Set([digitos, formatado].filter(Boolean))]
+}
+
+/** CPF único curto (VARCHAR 14) para liberar constraint após soft delete. */
+function cpfArquivadoParaExclusao(funcionarioId) {
+  return `D${String(funcionarioId).padStart(13, '0')}`.slice(0, 14)
+}
+
+async function buscarFuncionarioAtivoPorCpf(cpf, excludeId = null) {
+  const variantes = variantesCpf(cpf)
+  if (variantes.length === 0) return null
+
+  let query = supabaseAdmin
+    .from('funcionarios')
+    .select('id, nome, cpf, status, deleted_at')
+    .is('deleted_at', null)
+    .or(variantes.map((v) => `cpf.eq.${v}`).join(','))
+    .limit(1)
+
+  if (excludeId != null) {
+    query = query.neq('id', excludeId)
+  }
+
+  const { data, error } = await query
+  if (error) {
+    console.error('[funcionarios] Erro ao buscar CPF ativo:', error)
+    throw error
+  }
+  return data?.[0] || null
+}
+
+/** Libera CPF de registros já soft-deleted para permitir novo cadastro (UNIQUE no banco). */
+async function liberarCpfDeFuncionariosExcluidos(cpf) {
+  const variantes = variantesCpf(cpf)
+  if (variantes.length === 0) return
+
+  const { data: excluidos, error } = await supabaseAdmin
+    .from('funcionarios')
+    .select('id, cpf')
+    .not('deleted_at', 'is', null)
+    .or(variantes.map((v) => `cpf.eq.${v}`).join(','))
+
+  if (error) {
+    console.error('[funcionarios] Erro ao buscar CPF em excluídos:', error)
+    throw error
+  }
+
+  for (const registro of excluidos || []) {
+    const { error: updateError } = await supabaseAdmin
+      .from('funcionarios')
+      .update({
+        cpf: cpfArquivadoParaExclusao(registro.id),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', registro.id)
+
+    if (updateError) {
+      console.error(`[funcionarios] Erro ao liberar CPF do excluído ${registro.id}:`, updateError)
+      throw updateError
+    }
+    console.log(`[funcionarios] CPF liberado do funcionário excluído id=${registro.id}`)
+  }
+}
+
 // Aplicar middleware de autenticação em todas as rotas
 router.use(authenticateToken)
 
@@ -256,21 +405,7 @@ router.get('/', authenticateToken, async (req, res) => {
       }
 
       if (searchTermParam) {
-        const numerosLimpos = searchTermParam.replace(/\D/g, '')
-        const telefoneLimpo = numerosLimpos
-        const cpfLimpo = numerosLimpos
-        const condicoes = [
-          `nome.ilike.%${searchTermParam}%`,
-          `email.ilike.%${searchTermParam}%`,
-          `cargo.ilike.%${searchTermParam}%`
-        ]
-        if (telefoneLimpo.length >= 3) {
-          condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
-        }
-        if (cpfLimpo.length >= 3) {
-          condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
-        }
-        q = q.or(condicoes.join(','))
+        q = q.or(condicoesBuscaTextoEDocumento(searchTermParam).join(','))
       }
 
       return applyListSort(q, {
@@ -367,12 +502,14 @@ router.get('/', authenticateToken, async (req, res) => {
           q = q.eq('status', req.query.status)
         }
         if (searchTermClean) {
-          const numerosLimpos = searchTermClean.replace(/\D/g, '')
-          const telefoneLimpo = numerosLimpos
-          const cpfLimpo = numerosLimpos
+          const digitos = limparCpf(searchTermClean)
           const condicoes = [`nome.ilike.%${searchTermClean}%`, `email.ilike.%${searchTermClean}%`]
-          if (telefoneLimpo.length >= 3) condicoes.push(`telefone.ilike.%${telefoneLimpo}%`)
-          if (cpfLimpo.length >= 3) condicoes.push(`cpf.ilike.%${cpfLimpo}%`)
+          if (digitos.length >= 3) {
+            condicoes.push(`telefone.ilike.%${digitos}%`)
+            for (const padrao of padroesBuscaCpf(digitos)) {
+              condicoes.push(`cpf.ilike.%${padrao}%`)
+            }
+          }
           q = q.or(condicoes.join(','))
         }
         return q.order('created_at', { ascending: false })
@@ -526,6 +663,17 @@ router.get('/', authenticateToken, async (req, res) => {
         return cargoFuncionario === cargoFiltro
       })
       console.log(`[FUNCIONARIOS] Filtro cargo="${req.query.cargo}" -> ${funcionariosFiltrados.length} item(ns)`)
+    }
+
+    // Refinar busca por CPF/telefone sem pontuação (evita match no meio do CPF)
+    if (searchTermParam) {
+      const antes = funcionariosFiltrados.length
+      funcionariosFiltrados = funcionariosFiltrados.filter((f) =>
+        registroCorrespondeBusca(f, searchTermParam)
+      )
+      console.log(
+        `[FUNCIONARIOS] Pós-filtro busca "${searchTermParam}": ${antes} -> ${funcionariosFiltrados.length}`
+      )
     }
 
     // Calcular total correto
@@ -1337,20 +1485,22 @@ router.post('/', async (req, res) => {
       delete funcionarioData.cargo
     }
 
-    // Verificar se CPF já existe (se fornecido)
+    // Normalizar e validar CPF apenas entre ativos (excluídos soft-delete não bloqueiam)
     if (value.cpf) {
-      const { data: existingFuncionario } = await supabaseAdmin
-        .from('funcionarios')
-        .select('id')
-        .eq('cpf', value.cpf)
-        .single()
+      const cpfNormalizado = formatarCpf(value.cpf) || limparCpf(value.cpf)
+      funcionarioData.cpf = cpfNormalizado
+      value.cpf = cpfNormalizado
 
+      const existingFuncionario = await buscarFuncionarioAtivoPorCpf(cpfNormalizado)
       if (existingFuncionario) {
         return res.status(400).json({
           error: 'CPF já cadastrado',
           message: 'Já existe um funcionário cadastrado com este CPF'
         })
       }
+
+      // Soft-deleted ainda pode ocupar UNIQUE(cpf) no banco — liberar antes de criar
+      await liberarCpfDeFuncionariosExcluidos(cpfNormalizado)
     }
 
     // Iniciar transação
@@ -1367,18 +1517,34 @@ router.post('/', async (req, res) => {
           })
         }
 
-        // Verificar se já existe um usuário com este email
+        // Verificar se já existe um usuário ativo com este email (ignora soft-delete)
         const { data: existingUser } = await supabaseAdmin
           .from('usuarios')
           .select('id')
           .eq('email', value.email)
-          .single()
+          .is('deleted_at', null)
+          .maybeSingle()
 
         if (existingUser) {
           return res.status(400).json({
             error: 'Email já cadastrado',
             message: 'Já existe um usuário cadastrado com este email'
           })
+        }
+
+        // Soft-deleted ainda pode ocupar o email — liberar para reutilização
+        const { data: usuariosExcluidos } = await supabaseAdmin
+          .from('usuarios')
+          .select('id, email')
+          .ilike('email', value.email)
+          .not('deleted_at', 'is', null)
+
+        for (const u of usuariosExcluidos || []) {
+          const emailArquivado = `deleted+${u.id}.${Date.now()}@excluido.local`
+          await supabaseAdmin
+            .from('usuarios')
+            .update({ email: emailArquivado, updated_at: new Date().toISOString() })
+            .eq('id', u.id)
         }
 
         // Criar funcionário primeiro
@@ -1775,21 +1941,21 @@ router.put('/:id', async (req, res) => {
       delete funcionarioData.cargo
     }
 
-    // Verificar se CPF já existe em outro funcionário (se fornecido)
+    // Verificar CPF apenas entre ativos (excluídos soft-delete não bloqueiam)
     if (value.cpf) {
-      const { data: existingFuncionario } = await supabaseAdmin
-        .from('funcionarios')
-        .select('id')
-        .eq('cpf', value.cpf)
-        .neq('id', funcionarioId)
-        .single()
+      const cpfNormalizado = formatarCpf(value.cpf) || limparCpf(value.cpf)
+      funcionarioData.cpf = cpfNormalizado
+      value.cpf = cpfNormalizado
 
+      const existingFuncionario = await buscarFuncionarioAtivoPorCpf(cpfNormalizado, funcionarioId)
       if (existingFuncionario) {
         return res.status(400).json({
           error: 'CPF já cadastrado',
           message: 'Já existe outro funcionário cadastrado com este CPF'
         })
       }
+
+      await liberarCpfDeFuncionariosExcluidos(cpfNormalizado)
     }
 
     // Atualizar funcionário
@@ -2110,15 +2276,18 @@ router.delete('/:id', async (req, res) => {
     if (usuarioAssociado) {
       console.log(`🔧 Funcionário ${funcionario.nome} possui usuário associado (${usuarioAssociado.email}). Fazendo deleção lógica do usuário...`)
       
-      // Fazer deleção lógica do usuário (soft delete)
+      // Soft delete do usuário + liberar email para reutilização
+      const emailArquivado = `deleted+${usuarioAssociado.id}.${Date.now()}@excluido.local`
       const { error: deleteUsuarioError } = await supabaseAdmin
         .from('usuarios')
-        .update({ 
+        .update({
           deleted_at: new Date().toISOString(),
-          status: 'Inativo' // Também marcar como inativo
+          status: 'Inativo',
+          email: emailArquivado,
+          updated_at: new Date().toISOString()
         })
         .eq('funcionario_id', id)
-        .is('deleted_at', null) // Apenas se ainda não foi deletado
+        .is('deleted_at', null)
 
       if (deleteUsuarioError) {
         console.error('❌ Erro ao fazer deleção lógica do usuário do funcionário:', deleteUsuarioError)
@@ -2127,6 +2296,25 @@ router.delete('/:id', async (req, res) => {
           message: 'Erro ao excluir usuário associado ao funcionário',
           details: deleteUsuarioError.message
         })
+      }
+
+      // Liberar email também no Supabase Auth (senão createUser falha no re-cadastro)
+      try {
+        const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
+        if (!authListError && users) {
+          const authUser = users.find(
+            (u) => u.email?.toLowerCase() === String(usuarioAssociado.email || '').toLowerCase()
+          )
+          if (authUser) {
+            await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+              email: emailArquivado,
+              email_confirm: true
+            })
+            console.log(`✅ Auth user ${authUser.id} arquivado com email ${emailArquivado}`)
+          }
+        }
+      } catch (authArchiveError) {
+        console.warn('⚠️ Não foi possível arquivar usuário no Auth (seguindo soft delete):', authArchiveError?.message || authArchiveError)
       }
 
       console.log(`✅ Usuário ${usuarioAssociado.email} do funcionário ${funcionario.nome} marcado como deletado (soft delete)`)
@@ -2154,15 +2342,17 @@ router.delete('/:id', async (req, res) => {
       console.log(`✅ ${associacoes.length} associação(ões) do funcionário ${funcionario.nome} excluída(s) com sucesso`)
     }
 
-    // Fazer deleção lógica do funcionário (soft delete)
+    // Soft delete: marca Inativo + liberar CPF da UNIQUE para permitir reutilização
     const { error: deleteError } = await supabaseAdmin
       .from('funcionarios')
-      .update({ 
+      .update({
         deleted_at: new Date().toISOString(),
-        status: 'Inativo' // Também marcar como inativo
+        status: 'Inativo',
+        cpf: cpfArquivadoParaExclusao(funcionarioId),
+        updated_at: new Date().toISOString()
       })
       .eq('id', funcionarioId)
-      .is('deleted_at', null) // Apenas se ainda não foi deletado
+      .is('deleted_at', null)
 
     if (deleteError) {
       return res.status(500).json({

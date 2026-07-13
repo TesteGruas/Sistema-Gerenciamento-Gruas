@@ -35,8 +35,9 @@ async function getUsuarioByEmail(email) {
   if (!emailNorm) return null
   const { data } = await supabaseAdmin
     .from('usuarios')
-    .select('id, email, nome, funcionario_id, eh_funcionario')
+    .select('id, email, nome, funcionario_id, eh_funcionario, deleted_at, status')
     .ilike('email', emailNorm)
+    .is('deleted_at', null)
     .maybeSingle()
   return data
 }
@@ -65,8 +66,9 @@ async function hasFuncionarioAtivo(usuario) {
   if (!usuario?.funcionario_id) return false
   const { data } = await supabaseAdmin
     .from('funcionarios')
-    .select('id, status')
+    .select('id, status, deleted_at')
     .eq('id', usuario.funcionario_id)
+    .is('deleted_at', null)
     .maybeSingle()
   if (!data) return false
   const status = String(data.status || '').toLowerCase()
