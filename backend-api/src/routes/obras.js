@@ -64,13 +64,71 @@ function nomeEstadoBrasilPorSiglaOuTexto(estadoRaw) {
   return s
 }
 
+const PREFIXO_LOGRADOURO_RE =
+  /^(rua|r\.|av\.?|avenida|alameda|al\.|travessa|tv\.|estrada|rodovia|rod\.|praça|praca|largo|viela|beco|caminho|passagem|vila|jardim)\b/i
+
+function normalizarTextoBusca(valor) {
+  return String(valor || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** Nominatim costuma indexar com "Rua …"; cadastros ViaCEP às vezes vêm sem o tipo. */
+function comPrefixoRuaSeFaltar(logradouro) {
+  const rua = String(logradouro || '').trim()
+  if (!rua) return ''
+  if (PREFIXO_LOGRADOURO_RE.test(rua)) return rua
+  return `Rua ${rua}`
+}
+
+function hitNominatimInutil(hit) {
+  if (!hit) return true
+  const nome = String(hit.name || '').trim().toLowerCase()
+  const cls = String(hit.class || '')
+  const type = String(hit.type || '')
+  // Ex.: loja "Brasil" em Santa Ifigênia — falso positivo clássico de q=…, Brasil
+  if (nome === 'brasil' && (cls === 'shop' || cls === 'amenity')) return true
+  if (cls === 'boundary' && type === 'administrative' && !hit.address?.road) return true
+  if (cls === 'place' && ['state', 'country'].includes(type)) return true
+  return false
+}
+
+function hitEhNivelRuaOuPredio(hit) {
+  const cls = String(hit?.class || '')
+  const type = String(hit?.type || '')
+  if (hit?.address?.road || hit?.address?.house_number) return true
+  if (cls === 'highway') return true
+  if (cls === 'building' || type === 'house' || type === 'yes') return true
+  if (['residential', 'house', 'apartments'].includes(type)) return true
+  return false
+}
+
 /**
  * Nominatim pode devolver rua homônima em outro estado (ex.: mesmo nome em SP vs PE).
- * Escolhe o hit que bate com UF/cidade ou caixa geográfica aproximada.
+ * Escolhe o hit que bate com UF/cidade/bairro e prefere nível de rua.
  */
-function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade, logCtx = '') {
+function escolherMelhorResultadoNominatim(
+  hits,
+  estadoSiglaOuNome,
+  cidade,
+  bairro = '',
+  logCtx = '',
+  exigirNivelRua = false,
+  cep = ''
+) {
   const LOG = '[obras][geocoding][pick]'
   if (!Array.isArray(hits) || hits.length === 0) return null
+
+  const candidatos = hits.filter((h) => !hitNominatimInutil(h))
+  if (candidatos.length === 0) {
+    console.warn(LOG, logCtx, 'todos os hits foram descartados (falsos positivos / só cidade)')
+    return null
+  }
+
   const sigla =
     String(estadoSiglaOuNome || '')
       .trim()
@@ -78,90 +136,92 @@ function escolherMelhorResultadoNominatim(hits, estadoSiglaOuNome, cidade, logCt
       ? String(estadoSiglaOuNome).trim().toUpperCase()
       : ''
   const nomeEstado = sigla ? SIGLA_ESTADO_BR_NOME[sigla] : nomeEstadoBrasilPorSiglaOuTexto(estadoSiglaOuNome)
-  const cidadeNorm = (cidade || '')
-    .toString()
-    .trim()
-    .toLowerCase()
+  const cidadeNorm = normalizarTextoBusca(cidade)
+  const bairroNorm = normalizarTextoBusca(bairro)
+  const cepLimpo = String(cep || '').replace(/\D/g, '')
+  const cepPrefixo5 = cepLimpo.length >= 5 ? cepLimpo.slice(0, 5) : ''
 
-  if (nomeEstado) {
-    const needle = nomeEstado.toLowerCase()
-    const porEstado = hits.find((h) => {
-      const st = (h.address?.state || '').toLowerCase()
-      return st && (st.includes(needle) || needle.includes(st))
-    })
-    if (porEstado) {
-      console.log(LOG, logCtx, 'critério: address.state bate com', nomeEstado, {
-        lat: porEstado.lat,
-        lon: porEstado.lon
-      })
-      return porEstado
-    }
-  }
-
-  // Caixas aproximadas (graus) — evita aceitar rua homônima em outro estado (ex.: SP vs PE)
   const dentroCaixa = (lat, lng, minLat, maxLat, minLng, maxLng) =>
     lat >= minLat && lat <= maxLat && lng >= minLng && lng <= maxLng
 
-  const isPE =
-    sigla === 'PE' ||
-    (nomeEstado && String(nomeEstado).toLowerCase().includes('pernambuco'))
-  if (isPE) {
-    const pe = hits.find((h) => {
-      const lat = parseFloat(h.lat)
-      const lng = parseFloat(h.lon)
-      return (
-        Number.isFinite(lat) &&
-        Number.isFinite(lng) &&
-        dentroCaixa(lat, lng, -10.4, -6.8, -41.5, -33.7)
-      )
-    })
-    if (pe) {
-      console.log(LOG, logCtx, 'critério: caixa geográfica Pernambuco', { lat: pe.lat, lon: pe.lon })
-      return pe
-    }
-  }
-  if (sigla === 'SP') {
-    const sp = hits.find((h) => {
-      const lat = parseFloat(h.lat)
-      const lng = parseFloat(h.lon)
-      return (
-        Number.isFinite(lat) &&
-        Number.isFinite(lng) &&
-        dentroCaixa(lat, lng, -25.4, -19.6, -53.4, -44.0)
-      )
-    })
-    if (sp) {
-      console.log(LOG, logCtx, 'critério: caixa geográfica SP', { lat: sp.lat, lon: sp.lon })
-      return sp
-    }
+  const noEstadoEsperado = (h) => {
+    if (!nomeEstado) return true
+    const st = normalizarTextoBusca(h.address?.state)
+    const needle = normalizarTextoBusca(nomeEstado)
+    if (st && (st.includes(needle) || needle.includes(st))) return true
+    const lat = parseFloat(h.lat)
+    const lng = parseFloat(h.lon)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false
+    const isPE =
+      sigla === 'PE' || (nomeEstado && String(nomeEstado).toLowerCase().includes('pernambuco'))
+    if (isPE) return dentroCaixa(lat, lng, -10.4, -6.8, -41.5, -33.7)
+    if (sigla === 'SP') return dentroCaixa(lat, lng, -25.4, -19.6, -53.4, -44.0)
+    return true
   }
 
-  if (cidadeNorm.length > 3) {
+  const naCidade = (h) => {
+    if (cidadeNorm.length < 3) return true
+    const acity = normalizarTextoBusca(
+      h.address?.city || h.address?.town || h.address?.municipality || ''
+    )
+    const disp = normalizarTextoBusca(h.display_name)
     const token = cidadeNorm.split(/\s+/)[0]
-    const porCidade = hits.find((h) => {
-      const disp = (h.display_name || '').toLowerCase()
-      if (disp.includes(cidadeNorm)) return true
-      const acity = (
-        h.address?.city ||
-        h.address?.town ||
-        h.address?.municipality ||
-        ''
-      ).toLowerCase()
-      return acity && (acity.includes(token) || cidadeNorm.includes(acity.slice(0, 4)))
-    })
-    if (porCidade) {
-      console.log(LOG, logCtx, 'critério: cidade / display_name', { lat: porCidade.lat, lon: porCidade.lon })
-      return porCidade
+    if (acity && (acity.includes(cidadeNorm) || cidadeNorm.includes(acity) || acity.includes(token))) {
+      return true
     }
+    return disp.includes(cidadeNorm) || disp.includes(token)
   }
 
-  console.warn(
-    LOG,
-    logCtx,
-    'critério: FALLBACK = primeiro hit (pode ser rua homônima em outro estado!)',
-    { lat: hits[0]?.lat, lon: hits[0]?.lon }
-  )
-  return hits[0]
+  const noBairro = (h) => {
+    if (bairroNorm.length < 3) return false
+    const suburb = normalizarTextoBusca(
+      h.address?.suburb ||
+        h.address?.neighbourhood ||
+        h.address?.quarter ||
+        h.address?.city_district ||
+        ''
+    )
+    const disp = normalizarTextoBusca(h.display_name)
+    const token = bairroNorm.replace(/^(vila|jardim|jd|parque|pq)\s+/i, '').trim()
+    if (suburb && (suburb.includes(bairroNorm) || bairroNorm.includes(suburb))) return true
+    if (token.length >= 4 && (suburb.includes(token) || disp.includes(token))) return true
+    return false
+  }
+
+  let pool = candidatos.filter(noEstadoEsperado)
+  if (pool.length === 0) pool = candidatos
+
+  const porCidade = pool.filter(naCidade)
+  if (porCidade.length > 0) pool = porCidade
+
+  const porBairro = pool.filter(noBairro)
+  if (porBairro.length > 0) pool = porBairro
+
+  const porRua = pool.filter(hitEhNivelRuaOuPredio)
+  if (porRua.length > 0) {
+    pool = porRua
+  } else if (exigirNivelRua) {
+    console.warn(LOG, logCtx, 'exigia nível de rua/prédio e nenhum hit qualificou — descartando')
+    return null
+  }
+
+  if (cepPrefixo5) {
+    const porCep = pool.filter((h) => {
+      const pc = String(h.address?.postcode || '').replace(/\D/g, '')
+      return pc && (pc === cepLimpo || pc.startsWith(cepPrefixo5) || cepLimpo.startsWith(pc.slice(0, 5)))
+    })
+    if (porCep.length > 0) pool = porCep
+  }
+
+  const escolhido = pool[0]
+  console.log(LOG, logCtx, 'hit escolhido', {
+    lat: escolhido?.lat,
+    lon: escolhido?.lon,
+    class: escolhido?.class,
+    type: escolhido?.type,
+    nome: (escolhido?.display_name || '').slice(0, 140)
+  })
+  return escolhido
 }
 
 function normalizarCepComparacao(cep) {
@@ -175,19 +235,22 @@ function textoEnderecoDiferente(a, b) {
 
 /**
  * Detecta se o PUT alterou dados de endereço em relação ao registro atual.
- * Nesse caso precisamos ignorar lat/lng antigas e geocodificar de novo (senão o mapa/PWA ficam com ponto errado).
+ * Compara conteúdo (não basta o campo vir no body) — senão todo save de obra legada re-geocodifica.
  */
-function enderecoObraMudouNoPut({ value, obraAtual, algumCampoEnderecoDetalhadoAtualizado }) {
-  if (algumCampoEnderecoDetalhadoAtualizado) return true
-
-  if (value.endereco !== undefined && textoEnderecoDiferente(value.endereco, obraAtual.endereco)) {
-    return true
-  }
-  if (value.cidade !== undefined && textoEnderecoDiferente(value.cidade, obraAtual.cidade)) {
-    return true
-  }
-  if (value.estado !== undefined && textoEnderecoDiferente(value.estado, obraAtual.estado)) {
-    return true
+function enderecoObraMudouNoPut({ value, obraAtual }) {
+  const camposTexto = [
+    'endereco',
+    'cidade',
+    'estado',
+    'endereco_rua',
+    'endereco_numero',
+    'endereco_bairro',
+    'endereco_complemento'
+  ]
+  for (const campo of camposTexto) {
+    if (value[campo] !== undefined && textoEnderecoDiferente(value[campo], obraAtual[campo])) {
+      return true
+    }
   }
   if (value.cep !== undefined) {
     const c1 = normalizarCepComparacao(value.cep)
@@ -197,52 +260,52 @@ function enderecoObraMudouNoPut({ value, obraAtual, algumCampoEnderecoDetalhadoA
   return false
 }
 
-function montarConsultasEndereco({ endereco, cidade, estado, cep }) {
+function montarConsultasEndereco({ endereco, cidade, estado, cep, endereco_rua, endereco_numero, endereco_bairro }) {
   const end = (endereco || '').toString().trim()
   const cid = (cidade || '').toString().trim()
   const est = (estado || '').toString().trim()
   const sigla = est.length === 2 ? est.toUpperCase() : ''
   const estadoNome = sigla ? SIGLA_ESTADO_BR_NOME[sigla] || est : nomeEstadoBrasilPorSiglaOuTexto(est)
-
+  const rua = (endereco_rua || '').toString().trim()
+  const numero = (endereco_numero || '').toString().trim()
+  const bairro = (endereco_bairro || '').toString().trim()
   const cepLimpo = cep ? String(cep).replace(/\D/g, '') : ''
 
   const consultas = []
+  const variantesLinha = new Set()
 
-  /**
-   * IMPORTANTE: não priorizar CEP+cidade antes da linha com logradouro e número.
-   * Consultas só por CEP tendem a cair no centro da área postal (longe do número).
-   */
-  const temEnderecoTexto = end.length >= 5
-
-  // 1) Linha completa (rua, nº, bairro…) + cidade + UF — melhor chance de ponto na rua
-  if (temEnderecoTexto && cid && estadoNome) {
-    consultas.push(`${end}, ${cid}, ${estadoNome}, Brasil`)
-  }
-  if (temEnderecoTexto && cid) {
-    consultas.push(`${end}, ${cid}, Brasil`)
-  }
-  if (temEnderecoTexto && estadoNome) {
-    consultas.push(`${end}, ${estadoNome}, Brasil`)
-  }
-  if (temEnderecoTexto) {
-    consultas.push(`${end}, Brasil`)
+  if (rua) {
+    const ruaNorm = comPrefixoRuaSeFaltar(rua)
+    const base = [ruaNorm, numero].filter(Boolean).join(', ')
+    variantesLinha.add(base)
+    if (bairro) variantesLinha.add([base, bairro].filter(Boolean).join(' - '))
+    if (rua !== ruaNorm) {
+      const baseSem = [rua, numero].filter(Boolean).join(', ')
+      variantesLinha.add(baseSem)
+      if (bairro) variantesLinha.add([baseSem, bairro].filter(Boolean).join(' - '))
+    }
   }
 
-  // 2) Fallback: CEP + cidade + estado (área postal; pode ficar longe do número)
+  if (end.length >= 5) {
+    variantesLinha.add(end)
+    const talvezRua = end.split(/[,-]/)[0]?.trim()
+    if (talvezRua && !PREFIXO_LOGRADOURO_RE.test(talvezRua)) {
+      variantesLinha.add(`Rua ${end}`)
+    }
+  }
+
+  for (const linha of variantesLinha) {
+    if (linha.length < 5) continue
+    if (cid && estadoNome) consultas.push(`${linha}, ${cid}, ${estadoNome}, Brasil`)
+    if (cid) consultas.push(`${linha}, ${cid}, Brasil`)
+    if (estadoNome) consultas.push(`${linha}, ${estadoNome}, Brasil`)
+    consultas.push(`${linha}, Brasil`)
+  }
+
+  // Fallback CEP textual (área postal) — depois das linhas com logradouro
   if (cepLimpo.length >= 8 && cid && estadoNome) {
     const cepFmt = `${cepLimpo.slice(0, 5)}-${cepLimpo.slice(5)}`
     consultas.push(`${cepFmt}, ${cid}, ${estadoNome}, Brasil`)
-    consultas.push(`${cepLimpo}, ${cid}, ${estadoNome}, Brasil`)
-  }
-
-  // 3) Cidade + estado (âncora regional)
-  if (cid && estadoNome) {
-    consultas.push(`${cid}, ${estadoNome}, Brasil`)
-  }
-
-  // 4) Só CEP
-  if (cepLimpo.length >= 8) {
-    consultas.push(`CEP ${cepLimpo}, Brasil`)
   }
 
   return [...new Set(consultas.filter((q) => q && q.length > 5))]
@@ -264,84 +327,223 @@ function montarEnderecoCompleto({ endereco, endereco_rua, endereco_numero, ender
   return (endereco || '').toString().trim()
 }
 
-async function buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep }) {
+async function sleepNominatim() {
+  await new Promise((r) => setTimeout(r, 1100))
+}
+
+async function fetchNominatimSearch(params, tag) {
+  const qs = new URLSearchParams({ format: 'json', limit: '5', addressdetails: '1', ...params })
+  const url = `https://nominatim.openstreetmap.org/search?${qs.toString()}`
+  console.log(tag, 'requisição', { modo: params.street ? 'structured' : 'q', preview: (params.q || params.street || '').toString().slice(0, 160) })
+  const response = await fetch(url, {
+    headers: {
+      'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
+      'Accept-Language': 'pt-BR,pt,en'
+    }
+  })
+  if (!response.ok) {
+    console.warn(tag, `HTTP ${response.status}`)
+    return null
+  }
+  const data = await response.json()
+  return Array.isArray(data) ? data : null
+}
+
+/** BrasilAPI CEP v2 costuma trazer lat/lng do logradouro — ótimo fallback BR. */
+async function buscarCoordenadasBrasilApiCep(cep) {
+  const TAG = '[obras][geocoding][brasilapi]'
+  const cepLimpo = String(cep || '').replace(/\D/g, '')
+  if (cepLimpo.length !== 8) return null
+  try {
+    const response = await fetch(`https://brasilapi.com.br/api/cep/v2/${cepLimpo}`, {
+      headers: { Accept: 'application/json' }
+    })
+    if (!response.ok) {
+      console.warn(TAG, `HTTP ${response.status} para CEP`, cepLimpo)
+      return null
+    }
+    const data = await response.json()
+    const lat = parseFloat(data?.location?.coordinates?.latitude)
+    const lng = parseFloat(data?.location?.coordinates?.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+      console.log(TAG, 'CEP sem coordenadas', cepLimpo)
+      return null
+    }
+    console.log(TAG, 'OK', { latitude: lat, longitude: lng, street: data.street, neighborhood: data.neighborhood })
+    return {
+      latitude: lat,
+      longitude: lng,
+      endereco_usado_geocoding: `BrasilAPI CEP ${cepLimpo}`,
+      endereco_encontrado: [data.street, data.neighborhood, data.city, data.state].filter(Boolean).join(', ')
+    }
+  } catch (error) {
+    console.warn(TAG, 'erro', error?.message || error)
+    return null
+  }
+}
+
+function coordsFromHit(hit, consultaLabel) {
+  if (!hit) return null
+  const lat = parseFloat(hit.lat)
+  const lng = parseFloat(hit.lon)
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null
+  return {
+    latitude: lat,
+    longitude: lng,
+    endereco_usado_geocoding: consultaLabel,
+    endereco_encontrado: hit.display_name || null
+  }
+}
+
+async function buscarCoordenadasPorEndereco({
+  endereco,
+  cidade,
+  estado,
+  cep,
+  endereco_rua,
+  endereco_numero,
+  endereco_bairro
+}) {
   const TAG = '[obras][geocoding][nominatim]'
-  const consultas = montarConsultasEndereco({ endereco, cidade, estado, cep })
+  const rua = (endereco_rua || '').toString().trim()
+  const numero = (endereco_numero || '').toString().trim()
+  const bairro = (endereco_bairro || '').toString().trim()
+  const cid = (cidade || '').toString().trim()
+  const est = (estado || '').toString().trim()
+  const sigla = est.length === 2 ? est.toUpperCase() : ''
+  const estadoNome = sigla ? SIGLA_ESTADO_BR_NOME[sigla] || est : nomeEstadoBrasilPorSiglaOuTexto(est)
+  const temLogradouroEspecifico = Boolean(rua || (endereco && String(endereco).trim().length >= 5))
+
   console.log(TAG, 'entrada', {
     endereco: (endereco || '').toString().slice(0, 120),
+    endereco_rua: rua.slice(0, 80),
+    endereco_numero: numero,
+    endereco_bairro: bairro.slice(0, 60),
+    cidade: cid,
+    estado: est,
+    cep
+  })
+
+  // 1) Busca estruturada (street/city/state) — tolera falta de acento melhor que q=
+  if (rua && cid) {
+    const streetVariants = [
+      [numero, comPrefixoRuaSeFaltar(rua)].filter(Boolean).join(' '),
+      [comPrefixoRuaSeFaltar(rua), numero].filter(Boolean).join(' '),
+      [numero, rua].filter(Boolean).join(' '),
+      [rua, numero].filter(Boolean).join(' ')
+    ].filter((s, i, arr) => s && arr.indexOf(s) === i)
+
+    for (const street of streetVariants) {
+      try {
+        const data = await fetchNominatimSearch(
+          {
+            street,
+            city: cid,
+            state: estadoNome || est,
+            country: 'Brasil',
+            ...(cep ? { postalcode: String(cep).replace(/\D/g, '') } : {})
+          },
+          TAG
+        )
+        if (data?.length) {
+          console.log(
+            TAG,
+            `structured: ${data.length} hit(s)`,
+            data.map((h) => ({ lat: h.lat, lon: h.lon, nome: (h.display_name || '').slice(0, 100) }))
+          )
+          const hit = escolherMelhorResultadoNominatim(
+            data,
+            estado,
+            cidade,
+            bairro,
+            `structured street="${street.slice(0, 60)}"`,
+            true,
+            cep
+          )
+          const coords = coordsFromHit(hit, `structured: ${street}, ${cid}`)
+          if (coords) {
+            console.log(TAG, 'RESULTADO FINAL (structured)', coords)
+            return coords
+          }
+        } else {
+          console.log(TAG, 'structured: sem resultados', street.slice(0, 80))
+        }
+        await sleepNominatim()
+      } catch (error) {
+        console.warn(TAG, 'erro structured', error?.message || error)
+      }
+    }
+  }
+
+  // 2) Texto livre com variantes (inclui "Rua …")
+  const consultas = montarConsultasEndereco({
+    endereco,
     cidade,
     estado,
     cep,
-    totalConsultas: consultas.length,
-    consultasPreview: consultas.map((q, i) => ({ i: i + 1, q: q.slice(0, 140) }))
+    endereco_rua: rua,
+    endereco_numero: numero,
+    endereco_bairro: bairro
   })
-  if (consultas.length === 0) {
-    console.warn(TAG, 'nenhuma string de busca montada — abortando')
-    return null
-  }
+  console.log(TAG, 'consultas q=', consultas.map((q, i) => ({ i: i + 1, q: q.slice(0, 140) })))
 
   for (let idx = 0; idx < consultas.length; idx++) {
     const consulta = consultas[idx]
     try {
-      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(consulta)}&limit=5&addressdetails=1`
-      console.log(TAG, `requisição ${idx + 1}/${consultas.length}`, { consulta: consulta.slice(0, 200), urlLength: url.length })
-
-      const response = await fetch(url, {
-        headers: {
-          'User-Agent': 'Sistema-Gerenciamento-Gruas/1.0',
-          'Accept-Language': 'pt-BR,pt,en'
-        }
-      })
-
-      if (!response.ok) {
-        console.warn(TAG, `HTTP ${response.status} para consulta`, consulta.slice(0, 100))
-        await new Promise((r) => setTimeout(r, 1100))
-        continue
-      }
-      const data = await response.json()
-      if (Array.isArray(data) && data.length > 0) {
-        const resumoHits = data.map((h, i) => ({
-          i: i + 1,
-          lat: h.lat,
-          lon: h.lon,
-          state: h.address?.state || null,
-          city: h.address?.city || h.address?.town || h.address?.municipality || null,
-          nome: (h.display_name || '').slice(0, 140)
-        }))
-        console.log(TAG, `resposta: ${data.length} hit(s)`, resumoHits)
-
-        const hit = escolherMelhorResultadoNominatim(data, estado, cidade, `consulta #${idx + 1}`)
-        const lat = parseFloat(hit.lat)
-        const lng = parseFloat(hit.lon)
-        if (Number.isFinite(lat) && Number.isFinite(lng)) {
-          console.log(TAG, 'RESULTADO FINAL (esta consulta)', {
-            latitude: lat,
-            longitude: lng,
+      const data = await fetchNominatimSearch({ q: consulta }, TAG)
+      if (data?.length) {
+        console.log(
+          TAG,
+          `q ${idx + 1}: ${data.length} hit(s)`,
+          data.map((h) => ({ lat: h.lat, lon: h.lon, nome: (h.display_name || '').slice(0, 100) }))
+        )
+        const hit = escolherMelhorResultadoNominatim(
+          data,
+          estado,
+          cidade,
+          bairro,
+          `consulta #${idx + 1}`,
+          temLogradouroEspecifico,
+          cep
+        )
+        const coords = coordsFromHit(hit, consulta)
+        if (coords) {
+          console.log(TAG, 'RESULTADO FINAL (q)', {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
             consulta_usada: consulta.slice(0, 200),
-            display_name: (hit.display_name || '').slice(0, 200)
+            display_name: (coords.endereco_encontrado || '').slice(0, 200)
           })
-          return {
-            latitude: lat,
-            longitude: lng,
-            endereco_usado_geocoding: consulta,
-            endereco_encontrado: hit.display_name || null
-          }
+          return coords
         }
       } else {
         console.log(TAG, `consulta ${idx + 1}: sem resultados`)
       }
-      // política de uso do Nominatim: ~1 req/s
-      await new Promise((r) => setTimeout(r, 1100))
+      await sleepNominatim()
     } catch (error) {
       console.warn(TAG, 'erro na consulta:', consulta.slice(0, 80), error?.message || error)
     }
   }
 
+  // 3) Fallback BrasilAPI por CEP (coordenadas do logradouro no Brasil)
+  const viaBrasilApi = await buscarCoordenadasBrasilApiCep(cep)
+  if (viaBrasilApi) return viaBrasilApi
+
   console.warn(TAG, 'nenhuma consulta retornou coordenadas válidas')
   return null
 }
 
-async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitude, longitude }) {
+async function resolverCoordenadasDaObra({
+  endereco,
+  cidade,
+  estado,
+  cep,
+  latitude,
+  longitude,
+  endereco_rua,
+  endereco_numero,
+  endereco_bairro
+}) {
   const TAG = '[obras][geocoding][resolver]'
   const jaTemCoordenadas = coordenadaValida(latitude) && coordenadaValida(longitude)
   if (jaTemCoordenadas) {
@@ -359,16 +561,27 @@ async function resolverCoordenadasDaObra({ endereco, cidade, estado, cep, latitu
     }
   }
 
-  console.log(TAG, 'Buscando coordenadas no Nominatim (lat/lng atuais inválidos ou nulos)', {
+  console.log(TAG, 'Buscando coordenadas (lat/lng atuais inválidos ou nulos)', {
     endereco: (endereco || '').toString().slice(0, 100),
+    endereco_rua,
+    endereco_numero,
+    endereco_bairro,
     cidade,
     estado,
     cep
   })
 
-  const coords = await buscarCoordenadasPorEndereco({ endereco, cidade, estado, cep })
+  const coords = await buscarCoordenadasPorEndereco({
+    endereco,
+    cidade,
+    estado,
+    cep,
+    endereco_rua,
+    endereco_numero,
+    endereco_bairro
+  })
   if (!coords) {
-    console.warn(TAG, 'Nominatim não retornou coordenadas — devolvendo lat/lng anteriores se existirem', {
+    console.warn(TAG, 'Geocoding não retornou coordenadas — devolvendo lat/lng anteriores se existirem', {
       latitude,
       longitude
     })
@@ -1490,6 +1703,9 @@ router.post('/:id/resolver-coordenadas', authenticateToken, async (req, res) => 
       cidade: obra.cidade,
       estado: obra.estado,
       cep: obra.cep,
+      endereco_rua: obra.endereco_rua,
+      endereco_numero: obra.endereco_numero,
+      endereco_bairro: obra.endereco_bairro,
       latitude: null,
       longitude: null
     })
@@ -1860,6 +2076,9 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       cidade: value.cidade,
       estado: value.estado,
       cep: value.cep,
+      endereco_rua: value.endereco_rua,
+      endereco_numero: value.endereco_numero,
+      endereco_bairro: value.endereco_bairro,
       latitude: value.latitude,
       longitude: value.longitude
     })
@@ -2763,8 +2982,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
 
     const enderecoMudou = enderecoObraMudouNoPut({
       value,
-      obraAtual: obraAtualExistente,
-      algumCampoEnderecoDetalhadoAtualizado
+      obraAtual: obraAtualExistente
     })
     const usuarioEnviouCoordenadasExplicitas =
       value.latitude !== undefined && value.longitude !== undefined
@@ -2780,6 +2998,13 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       )
     }
 
+    const ruaParaGeocoding =
+      value.endereco_rua !== undefined ? value.endereco_rua : obraAtualExistente.endereco_rua
+    const numeroParaGeocoding =
+      value.endereco_numero !== undefined ? value.endereco_numero : obraAtualExistente.endereco_numero
+    const bairroParaGeocoding =
+      value.endereco_bairro !== undefined ? value.endereco_bairro : obraAtualExistente.endereco_bairro
+
     console.log('[obras][geocoding][put]', {
       obraId: id,
       enderecoMudou,
@@ -2793,6 +3018,9 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       },
       camposParaGeocoding: {
         endereco: (enderecoParaGeocoding || '').toString().slice(0, 80),
+        endereco_rua: (ruaParaGeocoding || '').toString().slice(0, 60),
+        endereco_numero: numeroParaGeocoding,
+        endereco_bairro: (bairroParaGeocoding || '').toString().slice(0, 40),
         cidade: cidadeParaGeocoding,
         estado: estadoParaGeocoding,
         cep: cepParaGeocoding
@@ -2816,6 +3044,9 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       cidade: cidadeParaGeocoding,
       estado: estadoParaGeocoding,
       cep: cepParaGeocoding,
+      endereco_rua: ruaParaGeocoding,
+      endereco_numero: numeroParaGeocoding,
+      endereco_bairro: bairroParaGeocoding,
       latitude: latitudeParaResolver,
       longitude: longitudeParaResolver
     })
