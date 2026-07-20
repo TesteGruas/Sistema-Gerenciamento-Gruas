@@ -38,6 +38,7 @@ import { CardLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { Upload } from "lucide-react"
 import { contagemChecklistLivroGrua } from "@/lib/checklist-livro-grua-shared"
+import { desenharChecklistsLivroGruaNoPdf } from "@/lib/utils/pdf-checklists-livro-grua"
 import {
   adicionarPaginaCapaSecaoNr12,
   desenharCapaInicialLivroGrua,
@@ -2123,47 +2124,39 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       doc.setFont('helvetica', 'normal')
 
       if (checklistsLivroGrua.length > 0) {
-        const linhasChecklists = checklistsLivroGrua.map((checklist: any) => {
-          const { marcados, total } = contagemChecklistLivroGrua(checklist || {})
+        const blocosChecklists = checklistsLivroGrua.map((checklist: any) => {
           const dataChecklist = checklist?.data_entrada || checklist?.created_at
-          const responsavel = checklist?.funcionario_nome || checklist?.funcionarioName || checklist?.realizado_por_nome || 'Não informado'
+          const responsavel =
+            checklist?.funcionario_nome ||
+            checklist?.funcionarioName ||
+            checklist?.realizado_por_nome ||
+            'Não informado'
+          const { marcados, total } = contagemChecklistLivroGrua(checklist || {})
+          const completo = total > 0 && marcados === total
+          const statusEntrada = checklist?.status_resolucao || checklist?.status_entrada
+          const statusLabel = `${marcados}/${total} ${completo ? 'Completo' : 'Incompleto'}${
+            statusEntrada ? ` · ${statusEntrada}` : ''
+          }`
 
-          return [
-            dataChecklist ? formatarData(dataChecklist) : 'Não informado',
-            responsavel,
-            `${marcados}/${total}`,
-            checklist?.status_resolucao || checklist?.status_entrada || 'N/A'
-          ]
-        })
-
-        autoTable(doc, {
-          head: [['Data', 'Funcionário', 'Itens Verificados', 'Status']],
-          body: linhasChecklists,
-          startY: yPos,
-          margin: { left: 14, right: 14 },
-          styles: {
-            fontSize: 8,
-            cellPadding: 2.2,
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
-            overflow: 'linebreak'
-          },
-          headStyles: {
-            fillColor: COR_BASE,
-            textColor: [255, 255, 255],
-            fontStyle: 'bold'
-          },
-          alternateRowStyles: { fillColor: [250, 250, 250] },
-          columnStyles: {
-            0: { cellWidth: 30 },
-            1: { cellWidth: 72 },
-            2: { cellWidth: 40, halign: 'center' },
-            3: { cellWidth: 40, halign: 'center' }
+          return {
+            dataLabel: dataChecklist ? formatarData(dataChecklist) : 'Não informado',
+            funcionario: responsavel,
+            observacoes: checklist?.observacoes || '',
+            statusLabel,
+            entrada: (checklist || {}) as Record<string, unknown>
           }
         })
 
-        const lastAutoTable = (doc as any).lastAutoTable
-        yPos = (lastAutoTable?.finalY || yPos) + 10
+        yPos = await desenharChecklistsLivroGruaNoPdf({
+          doc,
+          checklists: blocosChecklists,
+          startY: yPos,
+          corBase: COR_BASE,
+          maxY: MAX_Y,
+          onNovaPagina: () => adicionarNovaPaginaComLogos(),
+          autoTable: autoTable as unknown as (d: typeof doc, o: Record<string, unknown>) => void
+        })
+        yPos += 4
       } else {
         doc.text('Nenhum checklist diário encontrado para esta grua.', 18, yPos)
         yPos += 8

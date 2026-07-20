@@ -71,6 +71,41 @@ export function contagemChecklistLivroGrua(entrada: Record<string, unknown>): {
   return { marcados, total }
 }
 
+export type ChecklistItemStatusLinha = {
+  label: string
+  ok: boolean
+}
+
+/** Lista todos os itens do checklist (fixos + extras) com status ok. */
+export function listarItensChecklistLivroGrua(
+  entrada: Record<string, unknown>
+): ChecklistItemStatusLinha[] {
+  const fixos = CHECKLIST_LIVRO_GRUA_ITENS_FIXOS.map(({ key, label }) => ({
+    label,
+    ok: itemFixoMarcado(entrada, key)
+  }))
+  const extras = normalizeChecklistItensExtras(entrada.checklist_itens_extras).map((e) => ({
+    label: e.label,
+    ok: e.ok
+  }))
+  return [...fixos, ...extras]
+}
+
+/**
+ * Texto para PDF/export: contagem + cada item com Sim/Não.
+ * Ex.: "8/8 — Cabos: Sim; Polias: Sim; …"
+ */
+export function formatarItensVerificadosChecklistLivroGrua(
+  entrada: Record<string, unknown>
+): string {
+  const { marcados, total } = contagemChecklistLivroGrua(entrada)
+  const detalhe = listarItensChecklistLivroGrua(entrada)
+    .map((item) => `${item.label}: ${item.ok ? "Sim" : "Não"}`)
+    .join("; ")
+  if (!detalhe) return `${marcados}/${total}`
+  return `${marcados}/${total} — ${detalhe}`
+}
+
 export function novoIdItemExtra(): string {
   if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
     return `extra_${crypto.randomUUID()}`

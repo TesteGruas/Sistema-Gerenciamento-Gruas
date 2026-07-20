@@ -31,6 +31,11 @@ import {
   contagemChecklistLivroGrua,
   normalizeChecklistItensExtras
 } from "@/lib/checklist-livro-grua-shared"
+import {
+  desenharChecklistsLivroGruaNoPdf,
+  formatarChecklistsParaExportacaoLonga
+} from "@/lib/utils/pdf-checklists-livro-grua"
+import { useToast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
 import { entradaNoMesReferencia } from "@/lib/livro-grua-entradas-filtro"
 import {
@@ -110,6 +115,7 @@ export function LivroGruaChecklistList({
   const [filtroMes, setFiltroMes] = useState("")
   const [filtroFuncionario, setFiltroFuncionario] = useState<string>("todos")
   const { sortColumn, sortDirection, toggleSort, sortClientData } = useTableSort()
+  const { toast } = useToast()
 
   // Carregar checklists
   const carregarChecklists = async () => {
@@ -197,36 +203,151 @@ export function LivroGruaChecklistList({
     return contagemChecklistLivroGrua(checklist as unknown as Record<string, unknown>).total
   }, [])
 
-  // Função para formatar dados para exportação
+  /** Excel/CSV: uma linha por item (itens na coluna). */
   const formatarDadosParaExportacao = useCallback(() => {
-    return checklistsOrdenados.map((checklist) => {
-      const itensMarcados = contarItensMarcados(checklist)
-      const totalItens = totalItensChecklist(checklist)
-      const status = itensMarcados === totalItens ? 'Completo' : 'Incompleto'
-      const extras = normalizeChecklistItensExtras(checklist.checklist_itens_extras)
-      const extrasStr =
-        extras.length === 0
-          ? ''
-          : extras.map((e) => `${e.label}: ${e.ok ? 'Sim' : 'Não'}`).join('; ')
+    return formatarChecklistsParaExportacaoLonga(
+      checklistsOrdenados.map((checklist) => ({
+        dataLabel: new Date(checklist.data).toLocaleDateString("pt-BR"),
+        funcionario: checklist.funcionario_nome || "N/A",
+        observacoes: checklist.observacoes || "",
+        entrada: checklist as unknown as Record<string, unknown>
+      }))
+    )
+  }, [checklistsOrdenados])
 
-      return {
-        'Data': new Date(checklist.data).toLocaleDateString('pt-BR'),
-        'Funcionário': checklist.funcionario_nome || 'N/A',
-        'Cabos': checklist.cabos ? 'Sim' : 'Não',
-        'Polias': checklist.polias ? 'Sim' : 'Não',
-        'Estrutura': checklist.estrutura ? 'Sim' : 'Não',
-        'Movimentos': checklist.movimentos ? 'Sim' : 'Não',
-        'Freios': checklist.freios ? 'Sim' : 'Não',
-        'Limitadores': checklist.limitadores ? 'Sim' : 'Não',
-        'Indicadores': checklist.indicadores ? 'Sim' : 'Não',
-        'Aterramento': checklist.aterramento ? 'Sim' : 'Não',
-        'Itens adicionais': extrasStr,
-        'Itens Verificados': `${itensMarcados}/${totalItens}`,
-        'Status': status,
-        'Observações': checklist.observacoes || ''
-      }
+  const exportarChecklistsPdf = useCallback(async () => {
+    if (checklistsOrdenados.length === 0) {
+      toast({
+        title: "Nenhum dado para exportar",
+        description: "Não há checklists disponíveis para exportação.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    const { jsPDF } = await import("jspdf")
+    const autoTable = (await import("jspdf-autotable")).default
+    const { adicionarLogosNoCabecalhoFrontend } = await import(
+      "@/lib/utils/pdf-logos-frontend"
+    )
+    const { adicionarRodapeEmpresaFrontend } = await import(
+      "@/lib/utils/pdf-rodape-frontend"
+    )
+
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" })
+    const corBase: [number, number, number] = [135, 27, 11]
+    let yPos = await adicionarLogosNoCabecalhoFrontend(doc, 10)
+
+    doc.setFontSize(16)
+    doc.setFont("helvetica", "bold")
+    doc.setTextColor(0, 0, 0)
+    doc.text("Checklists Diários", 14, yPos)
+    yPos += 7
+    doc.setFontSize(10)
+    doc.setFont("helvetica", "normal")
+    doc.text(`Grua: ${gruaId}`, 14, yPos)
+    yPos += 5
+    const dataHora = new Date().toLocaleString("pt-BR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
     })
-  }, [checklistsOrdenados, contarItensMarcados, totalItensChecklist])
+    doc.text(`Gerado em: ${dataHora}`, 14, yPos)
+    yPos += 8
+
+    const blocos = checklistsOrdenados.map((checklist) => ({
+      dataLabel: new Date(checklist.data).toLocaleDateString("pt-BR"),
+      funcionario: checklist.funcionario_nome || "N/A",
+      observacoes: checklist.observacoes || "",
+      entrada: checklist as unknown as Record<string, unknown>
+    }))
+
+    await desenharChecklistsLivroGruaNoPdf({
+      doc,
+      checklists: blocos,
+      startY: yPos,
+      corBase,
+      autoTable: autoTable as unknown as (
+        d: typeof doc,
+        o: Record<string, unknown>
+      ) => void
+    })
+
+    adicionarRodapeEmpresaFrontend(doc)
+    doc.save(`checklists-grua-${gruaId}-${new Date().toISOString().split("T")[0]}.pdf`)
+
+    toast({
+      title: "Exportação concluída!",
+      description: "Arquivo PDF baixado com sucesso."
+    })
+  }, [checklistsOrdenados, gruaId, toast])
+
+  const handleExportChecklist = useCallback(
+    async (formato: "pdf" | "excel" | "csv") => {
+      if (formato === "pdf") {
+        await exportarChecklistsPdf()
+        return
+      }
+
+      // Excel/CSV: usa o ExportButton padrão via dados longos
+      const dados = formatarDadosParaExportacao()
+      if (dados.length === 0) {
+        toast({
+          title: "Nenhum dado para exportar",
+          description: "Não há checklists disponíveis para exportação.",
+          variant: "destructive"
+        })
+        return
+      }
+
+      if (formato === "csv") {
+        const headers = Object.keys(dados[0])
+        const escape = (raw: string) => {
+          const s = raw.replace(/"/g, '""')
+          return /[",\r\n]/.test(s) ? `"${s}"` : s
+        }
+        const csv = [
+          headers.map((h) => escape(h)).join(","),
+          ...dados.map((row) =>
+            headers.map((h) => escape(String(row[h] ?? ""))).join(",")
+          )
+        ].join("\n")
+        const blob = new Blob(["\ufeff" + csv], {
+          type: "text/csv;charset=utf-8;"
+        })
+        const url = window.URL.createObjectURL(blob)
+        const a = document.createElement("a")
+        a.href = url
+        a.download = `checklists-grua-${gruaId}-${new Date().toISOString().split("T")[0]}.csv`
+        document.body.appendChild(a)
+        a.click()
+        window.URL.revokeObjectURL(url)
+        document.body.removeChild(a)
+        toast({
+          title: "Exportação concluída!",
+          description: "Arquivo CSV baixado com sucesso."
+        })
+        return
+      }
+
+      const XLSX = await import("xlsx")
+      const worksheet = XLSX.utils.json_to_sheet(dados)
+      const workbook = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Checklists")
+      XLSX.writeFile(
+        workbook,
+        `checklists-grua-${gruaId}-${new Date().toISOString().split("T")[0]}.xlsx`
+      )
+      toast({
+        title: "Exportação concluída!",
+        description: "Arquivo Excel baixado com sucesso."
+      })
+    },
+    [exportarChecklistsPdf, formatarDadosParaExportacao, gruaId, toast]
+  )
 
   const listaVaziaPorFiltro = checklists.length > 0 && checklistsFiltrados.length === 0
 
@@ -269,6 +390,7 @@ export function LivroGruaChecklistList({
                 variant="outline"
                 size="sm"
                 className="w-full sm:w-auto"
+                onExport={handleExportChecklist}
               />
             )}
             {onNovoChecklist && (
