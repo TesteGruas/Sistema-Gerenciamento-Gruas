@@ -23,7 +23,7 @@ try {
  * @property {number} [gapAbaixoTextoPoints] — espaço entre a base do texto e o topo da imagem da assinatura
  * @property {number} [signatureHeight] — altura desejada da assinatura (pontos PDF)
  * @property {number} [pageIndex] — forçar página (0-based). Com `rodape_coluna_esquerda`, usa só essa página (ex.: ficha de registro na 2.ª folha).
- * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'} [metodoAncora] — caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi: p.1 ANDERSON (fallback ALUNO); demais canto. certificado_multipagina_aluno: p.1 ALUNO; demais canto (demais certificados NR).
+ * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'} [metodoAncora] — caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi / certificado_multipagina_aluno: só 1.ª página (ALUNO → ANDERSON → nome participante Vetor → canto inf. esquerdo).
  * @property {number} [caixaPrimeirasPaginas] — com `caixa_fixa_a4_trabalhador_151`: quantas páginas a partir da 1.ª (default 3).
  * @property {number} [caixaX] — canto inferior esquerdo da caixa (pt).
  * @property {number} [caixaY] — base da caixa (pt, origem inferior esquerda).
@@ -176,7 +176,7 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       offsetYPoints: 44,
       gapAbaixoTextoPoints: 5,
       signatureHeight: 52,
-      marginRightCanto: 44,
+      marginLeftCanto: 80,
       marginBottomCanto: 40
     }
   },
@@ -192,7 +192,7 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       offsetYPoints: 42,
       gapAbaixoTextoPoints: 6,
       signatureHeight: 52,
-      marginRightCanto: 44,
+      marginLeftCanto: 80,
       marginBottomCanto: 40
     }
   }
@@ -363,6 +363,130 @@ function encontrarItemAlunoQuadranteInferiorEsquerdo(pagina) {
 
   const pool = noQuadrante.length ? noQuadrante : soEsquerda.length ? soEsquerda : alunoItems;
   return pool.reduce((a, b) => (a.y <= b.y ? a : b));
+}
+
+const RE_RESPONSAVEL_TECNICO = /\(?\s*RESPONS[AÁ]VEL\s+T[EÉ]CNICO\s*\)?/i;
+const RE_RODAPE_EMPRESA_VETOR =
+  /vetor\s+sa[uú]de|cnpj|www\.|@|\.com\.br|telefone|endere[cç]o|mostardeiro/i;
+
+/**
+ * Layout Vetor / CERTIFICADO DE CONCLUSÃO: nome do participante sob a linha de assinatura
+ * (coluna esquerda), perto do bloco «(RESPONSÁVEL TÉCNICO)» à direita.
+ * @param {{ pageWidth: number, pageHeight: number, items: Array<{ str?: string, x: number, y: number, width?: number, fontSize?: number }> }} pagina
+ * @returns {{ str?: string, x: number, y: number, width?: number, fontSize?: number } | null}
+ */
+function encontrarNomeParticipanteInferiorEsquerdo(pagina) {
+  const w = pagina.pageWidth;
+  const h = pagina.pageHeight;
+  const limiteX = w * 0.45;
+  const items = (pagina.items || []).filter((it) => {
+    const s = String(it.str || '').trim();
+    return s.length >= 3 && /\S/.test(s);
+  });
+
+  const resp = items.find((it) => RE_RESPONSAVEL_TECNICO.test(String(it.str || '')));
+  if (resp) {
+    const banda = items.filter((it) => {
+      const s = String(it.str || '').trim();
+      if (Math.abs(it.y - resp.y) > 10) return false;
+      if (it.x >= limiteX) return false;
+      if (RE_RESPONSAVEL_TECNICO.test(s)) return false;
+      if (RE_RODAPE_EMPRESA_VETOR.test(s)) return false;
+      // Nome tipicamente em caixa alta com 2+ palavras (ex.: JONAS SANTANA DA SILVA)
+      const palavras = s.split(/\s+/).filter(Boolean);
+      return palavras.length >= 2 && /[A-Za-zÀ-ÿ]/.test(s);
+    });
+    if (banda.length) {
+      return banda.reduce((a, b) => (a.x <= b.x ? a : b));
+    }
+  }
+
+  const limiteY = h * 0.25;
+  const candidatos = items.filter((it) => {
+    const s = String(it.str || '').trim();
+    if (it.x >= limiteX || it.y >= limiteY) return false;
+    if (RE_RESPONSAVEL_TECNICO.test(s) || RE_RODAPE_EMPRESA_VETOR.test(s)) return false;
+    const palavras = s.split(/\s+/).filter(Boolean);
+    if (palavras.length < 2) return false;
+    // Preferir caixa alta (rótulo sob a linha de assinatura)
+    const letras = s.replace(/[^A-Za-zÀ-ÿ]/g, '');
+    if (!letras) return false;
+    const maiusculas = (s.match(/[A-ZÀ-Ý]/g) || []).length;
+    return maiusculas / letras.length >= 0.7;
+  });
+  if (!candidatos.length) return null;
+  return candidatos.reduce((a, b) => (a.y <= b.y ? a : b));
+}
+
+/**
+ * Escolhe a âncora de assinatura na 1.ª página do certificado N-*.
+ * Ordem: ALUNO (quadrante) → ANDERSON (opcional) → nome participante Vetor → null.
+ * @param {{ pageWidth: number, pageHeight: number, items: Array<{ str?: string, x: number, y: number, width?: number, fontSize?: number }> }} pagina
+ * @param {{ incluirAnderson?: boolean }} [opts]
+ * @returns {{ item: { str?: string, x: number, y: number, width?: number, fontSize?: number }, fonte: 'aluno'|'anderson'|'vetor_nome' } | null}
+ */
+function escolherAncoraCertificadoPagina1(pagina, opts = {}) {
+  const aluno = encontrarItemAlunoQuadranteInferiorEsquerdo(pagina);
+  if (aluno) return { item: aluno, fonte: 'aluno' };
+
+  if (opts.incluirAnderson) {
+    const andersonItems = pagina.items.filter((it) => /ANDERSON/i.test(String(it.str || '').trim()));
+    if (andersonItems.length) {
+      return {
+        item: andersonItems.reduce((a, b) => (a.y <= b.y ? a : b)),
+        fonte: 'anderson'
+      };
+    }
+    const alunoItems = pagina.items.filter((it) =>
+      /^\s*ALUNO\s*:?\s*$/i.test(String(it.str || '').trim())
+    );
+    if (alunoItems.length) {
+      return {
+        item: alunoItems.reduce((a, b) => (a.y <= b.y ? a : b)),
+        fonte: 'aluno'
+      };
+    }
+  }
+
+  const vetor = encontrarNomeParticipanteInferiorEsquerdo(pagina);
+  if (vetor) return { item: vetor, fonte: 'vetor_nome' };
+  return null;
+}
+
+/** Extra de offsetY no layout Vetor: nome fica sob a linha — sobe a imagem para ficar um pouco acima dela. */
+const OFFSET_Y_EXTRA_VETOR_NOME = 36;
+
+/**
+ * @param {{ item: object, fonte: string }} ancora
+ * @param {object} pagina
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ */
+function retanguloAssinaturaCertificadoPagina1(ancora, pagina, regra) {
+  const regraLinha = {
+    ...regra,
+    metodoAncora: undefined,
+    offsetYPoints:
+      (regra.offsetYPoints ?? 0) +
+      (ancora.fonte === 'vetor_nome' ? OFFSET_Y_EXTRA_VETOR_NOME : 0)
+  };
+  return calcularRetanguloAssinatura(ancora.item, pagina, regraLinha);
+}
+
+/**
+ * Posição fixa no canto inferior esquerdo da página (fallback de certificado).
+ * @param {{ pageIndex: number }} pagina
+ * @param {Partial<RegraPosicaoAssinatura> & { marginLeftCanto?: number, marginBottomCanto?: number }} regra
+ */
+function posicaoCantoInferiorEsquerdoPagina(pagina, regra = {}) {
+  const sigH = regra.signatureHeight ?? 56;
+  return {
+    pageIndex: pagina.pageIndex,
+    x: regra.marginLeftCanto ?? 80,
+    y: regra.marginBottomCanto ?? 40,
+    height: sigH,
+    metodo: 'canto_inferior_esquerdo_fixo',
+    anchor: 'Canto inferior esquerdo'
+  };
 }
 
 /**
@@ -605,7 +729,7 @@ export async function encontrarTodasPosicoesRodapeColunaEsquerda(pdfBuffer, regr
 }
 
 /**
- * Certificado NR-12 multipágina: p.1 no «ALUNO» do quadrante inferior esquerdo (se existir); senão ANDERSON; senão «ALUNO» na página; páginas 2+ canto inferior direito.
+ * Certificado NR-12: só 1.ª página — ALUNO (quadrante) → ANDERSON → ALUNO na página → nome participante (Vetor) → canto inferior esquerdo.
  * @param {Buffer|Uint8Array} pdfBuffer
  * @param {Partial<RegraPosicaoAssinatura>} regra
  * @returns {Promise<Array<Record<string, unknown>>>}
@@ -613,55 +737,14 @@ export async function encontrarTodasPosicoesRodapeColunaEsquerda(pdfBuffer, regr
 export async function encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
   const { paginas } = await extrairItensTextoPdf(pdfBuffer);
-  const out = [];
-  const sigH = r.signatureHeight ?? 56;
-
   const p0 = paginas[0];
-  if (p0) {
-    let pick = encontrarItemAlunoQuadranteInferiorEsquerdo(p0);
-    if (!pick) {
-      const andersonItems = p0.items.filter((it) => /ANDERSON/i.test(String(it.str || '').trim()));
-      if (andersonItems.length) {
-        pick = andersonItems.reduce((a, b) => (a.y <= b.y ? a : b));
-      }
-    }
-    if (!pick) {
-      const alunoItems = p0.items.filter((it) => /^\s*ALUNO\s*:?\s*$/i.test(String(it.str || '').trim()));
-      if (alunoItems.length) {
-        pick = alunoItems.reduce((a, b) => (a.y <= b.y ? a : b));
-      }
-    }
-    if (pick) {
-      const regraLinha = { ...r, metodoAncora: undefined };
-      out.push(calcularRetanguloAssinatura(pick, p0, regraLinha));
-    }
-  }
+  if (!p0) return [];
 
-  const mr = r.marginRightCanto ?? 44;
-  const mb = r.marginBottomCanto ?? 40;
-  for (let i = 1; i < paginas.length; i++) {
-    const pag = paginas[i];
-    out.push({
-      pageIndex: pag.pageIndex,
-      metodo: 'canto_inferior_direito_fixo',
-      pageWidth: pag.pageWidth,
-      marginRight: mr,
-      marginBottom: mb,
-      height: sigH,
-      anchor: 'Canto inferior direito'
-    });
-  }
-
-  return out;
+  const ancora = escolherAncoraCertificadoPagina1(p0, { incluirAnderson: true });
+  if (ancora) return [retanguloAssinaturaCertificadoPagina1(ancora, p0, r)];
+  return [posicaoCantoInferiorEsquerdoPagina(p0, r)];
 }
 
-/**
- * Certificados NR (exceto NR-12) multipágina: 1.ª página no rótulo «ALUNO» no quadrante inferior esquerdo;
- * páginas seguintes — canto inferior direito. Se não houver «ALUNO» na 1.ª página, usa uma única posição (última «ALUNO» no PDF), como antes.
- * @param {Buffer|Uint8Array} pdfBuffer
- * @param {Partial<RegraPosicaoAssinatura>} regra
- * @returns {Promise<Array<Record<string, unknown>>>}
- */
 /**
  * Comunicação de Desligamento (e formulários equivalentes): sem campo AcroForm — área fixa do
  * campo 151 «Assinatura do Trabalhador» em A4 (595×841 pt). Páginas 1–3 com o mesmo layout.
@@ -713,45 +796,21 @@ export async function encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regr
   return out;
 }
 
+/**
+ * Certificados NR (exceto NR-12): só 1.ª página — ALUNO (quadrante) → nome participante (Vetor) → canto inferior esquerdo.
+ * @param {Buffer|Uint8Array} pdfBuffer
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ * @returns {Promise<Array<Record<string, unknown>>>}
+ */
 export async function encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
   const { paginas } = await extrairItensTextoPdf(pdfBuffer);
-  const out = [];
-  const sigH = r.signatureHeight ?? 56;
-  const mr = r.marginRightCanto ?? 44;
-  const mb = r.marginBottomCanto ?? 40;
-
   const p0 = paginas[0];
-  const pickP0 = p0 ? encontrarItemAlunoQuadranteInferiorEsquerdo(p0) : null;
+  if (!p0) return [];
 
-  if (pickP0 && p0) {
-    const regraLinha = { ...r, metodoAncora: undefined };
-    out.push(calcularRetanguloAssinatura(pickP0, p0, regraLinha));
-    for (let i = 1; i < paginas.length; i++) {
-      const pag = paginas[i];
-      out.push({
-        pageIndex: pag.pageIndex,
-        metodo: 'canto_inferior_direito_fixo',
-        pageWidth: pag.pageWidth,
-        marginRight: mr,
-        marginBottom: mb,
-        height: sigH,
-        anchor: 'Canto inferior direito'
-      });
-    }
-    return out;
-  }
-
-  const legacy = await encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, {
-    ...r,
-    metodoAncora: undefined,
-    anchors: r.anchors?.length ? r.anchors : [/^\s*ALUNO\s*:?\s*$/i],
-    match: 'last'
-  });
-  if (legacy) {
-    out.push(legacy);
-  }
-  return out;
+  const ancora = escolherAncoraCertificadoPagina1(p0, { incluirAnderson: false });
+  if (ancora) return [retanguloAssinaturaCertificadoPagina1(ancora, p0, r)];
+  return [posicaoCantoInferiorEsquerdoPagina(p0, r)];
 }
 
 /**

@@ -48,7 +48,8 @@ import {
   Lock,
   EyeOff,
   PenTool,
-  FileSignature
+  FileSignature,
+  ChevronDown,
 } from "lucide-react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useToast } from "@/hooks/use-toast"
@@ -242,6 +243,32 @@ function PWAPerfilPageContent() {
   const [activeTab, setActiveTab] = useState('informacoes')
   
   const TABS_OPERADOR = ['salarios', 'beneficios', 'certificados', 'documentos-admissionais', 'documentos-demissao', 'holerites']
+  const tabNaUrl = searchParams.get('tab')
+  const temTabSelecionada = Boolean(
+    (tabNaUrl && tabNaUrl !== 'informacoes') ||
+    (activeTab && activeTab !== 'informacoes')
+  )
+
+  type SecaoDadosKey = 'contato' | 'vinculo' | 'documentacao' | 'localizacao'
+  const [secoesAbertas, setSecoesAbertas] = useState<Record<SecaoDadosKey, boolean>>({
+    contato: true,
+    vinculo: true,
+    documentacao: true,
+    localizacao: true,
+  })
+
+  const toggleSecaoDados = (secao: SecaoDadosKey) => {
+    setSecoesAbertas((prev) => ({ ...prev, [secao]: !prev[secao] }))
+  }
+
+  const selecionarTab = (tab: string) => {
+    setActiveTab(tab)
+    if (tab === 'informacoes') {
+      router.replace('/pwa/perfil')
+    } else {
+      router.replace(`/pwa/perfil?tab=${tab}`)
+    }
+  }
 
   // Atualizar tab quando o parâmetro da URL mudar
   useEffect(() => {
@@ -256,6 +283,17 @@ function PWAPerfilPageContent() {
       setActiveTab('informacoes')
     }
   }, [searchParams, pwaProfile])
+
+  // Com aba selecionada, retrai seções (só título); em Informações, expande
+  useEffect(() => {
+    const aberta = !temTabSelecionada
+    setSecoesAbertas({
+      contato: aberta,
+      vinculo: aberta,
+      documentacao: aberta,
+      localizacao: aberta,
+    })
+  }, [temTabSelecionada])
   const [salarios, setSalarios] = useState<FolhaPagamento[]>([])
   const {
     sortedItems: sortedSalarios,
@@ -1369,13 +1407,28 @@ function PWAPerfilPageContent() {
             </div>
           </div>
 
-          <div className="space-y-4 p-4 sm:p-6">
-            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
-              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
-                <Mail className="h-4 w-4 shrink-0 text-primary" />
-                Contato
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-3 p-4 sm:p-6">
+            <section className="rounded-xl border border-border/60 bg-muted/10 shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleSecaoDados('contato')}
+                className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-muted/30 ${
+                  secoesAbertas.contato ? 'border-b border-border/50' : ''
+                }`}
+                aria-expanded={secoesAbertas.contato}
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Mail className="h-4 w-4 shrink-0 text-primary" />
+                  Contato
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                    secoesAbertas.contato ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {secoesAbertas.contato && (
+              <div className="grid gap-4 p-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor="email" className="text-xs font-medium text-muted-foreground">
                     E-mail
@@ -1415,15 +1468,31 @@ function PWAPerfilPageContent() {
                   )}
                 </div>
               </div>
+              )}
             </section>
 
             {!isClientRole() && (
-            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
-              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
-                <Briefcase className="h-4 w-4 shrink-0 text-primary" />
-                Vínculo e trabalho
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <section className="rounded-xl border border-border/60 bg-muted/10 shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleSecaoDados('vinculo')}
+                className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-muted/30 ${
+                  secoesAbertas.vinculo ? 'border-b border-border/50' : ''
+                }`}
+                aria-expanded={secoesAbertas.vinculo}
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <Briefcase className="h-4 w-4 shrink-0 text-primary" />
+                  Vínculo e trabalho
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                    secoesAbertas.vinculo ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {secoesAbertas.vinculo && (
+              <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Cargo</p>
                   <p className="text-sm font-medium text-foreground">
@@ -1467,15 +1536,31 @@ function PWAPerfilPageContent() {
                   </p>
                 </div>
               </div>
+              )}
             </section>
             )}
 
-            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
-              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
-                <User className="h-4 w-4 shrink-0 text-primary" />
-                Documentação
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
+            <section className="rounded-xl border border-border/60 bg-muted/10 shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleSecaoDados('documentacao')}
+                className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-muted/30 ${
+                  secoesAbertas.documentacao ? 'border-b border-border/50' : ''
+                }`}
+                aria-expanded={secoesAbertas.documentacao}
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <User className="h-4 w-4 shrink-0 text-primary" />
+                  Documentação
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                    secoesAbertas.documentacao ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {secoesAbertas.documentacao && (
+              <div className="grid gap-4 p-4 sm:grid-cols-2">
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">CPF</p>
                   <p className="font-mono text-sm font-medium tracking-wide text-foreground">
@@ -1493,14 +1578,30 @@ function PWAPerfilPageContent() {
                   </p>
                 </div>
               </div>
+              )}
             </section>
 
-            <section className="rounded-xl border border-border/60 bg-muted/10 p-4 shadow-sm">
-              <h3 className="mb-4 flex items-center gap-2 border-b border-border/50 pb-2 text-sm font-semibold text-foreground">
-                <MapPin className="h-4 w-4 shrink-0 text-primary" />
-                Localização
-              </h3>
-              <div className="grid gap-4 sm:grid-cols-2">
+            <section className="rounded-xl border border-border/60 bg-muted/10 shadow-sm overflow-hidden">
+              <button
+                type="button"
+                onClick={() => toggleSecaoDados('localizacao')}
+                className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition hover:bg-muted/30 ${
+                  secoesAbertas.localizacao ? 'border-b border-border/50' : ''
+                }`}
+                aria-expanded={secoesAbertas.localizacao}
+              >
+                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                  <MapPin className="h-4 w-4 shrink-0 text-primary" />
+                  Localização
+                </span>
+                <ChevronDown
+                  className={`h-4 w-4 shrink-0 text-muted-foreground transition-transform ${
+                    secoesAbertas.localizacao ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+              {secoesAbertas.localizacao && (
+              <div className="grid gap-4 p-4 sm:grid-cols-2">
                 <div className="space-y-1 sm:col-span-2">
                   <p className="text-xs font-medium text-muted-foreground">Endereço</p>
                   <p className="text-sm leading-relaxed text-foreground">
@@ -1528,6 +1629,7 @@ function PWAPerfilPageContent() {
                   </p>
                 </div>
               </div>
+              )}
             </section>
           </div>
         </CardContent>
@@ -1794,7 +1896,7 @@ function PWAPerfilPageContent() {
         {/* Cards de Navegação */}
         <div className="grid grid-cols-2 gap-3">
           <button
-            onClick={() => setActiveTab('informacoes')}
+            onClick={() => selecionarTab('informacoes')}
             className={`p-4 rounded-xl border-2 transition-all text-left ${
               activeTab === 'informacoes'
                 ? 'border-[#871b0b] bg-red-50'
@@ -1820,7 +1922,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
           <button
-            onClick={() => setActiveTab('salarios')}
+            onClick={() => selecionarTab('salarios')}
             className={`p-4 rounded-xl border-2 transition-all text-left ${
               activeTab === 'salarios'
                 ? 'border-emerald-600 bg-emerald-50'
@@ -1847,7 +1949,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
             <button
-              onClick={() => setActiveTab('beneficios')}
+              onClick={() => selecionarTab('beneficios')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
                 activeTab === 'beneficios'
                   ? 'border-pink-600 bg-pink-50'
@@ -1874,7 +1976,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
             <button
-              onClick={() => setActiveTab('certificados')}
+              onClick={() => selecionarTab('certificados')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
                 activeTab === 'certificados'
                   ? 'border-amber-600 bg-amber-50'
@@ -1901,7 +2003,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
           <button
-            onClick={() => setActiveTab('documentos-admissionais')}
+            onClick={() => selecionarTab('documentos-admissionais')}
             className={`p-4 rounded-xl border-2 transition-all text-left ${
               activeTab === 'documentos-admissionais'
                 ? 'border-cyan-600 bg-cyan-50'
@@ -1928,7 +2030,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
             <button
-              onClick={() => setActiveTab('documentos-demissao')}
+              onClick={() => selecionarTab('documentos-demissao')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
                 activeTab === 'documentos-demissao'
                   ? 'border-rose-600 bg-rose-50'
@@ -1955,7 +2057,7 @@ function PWAPerfilPageContent() {
 
           {isTecnicoRole() && (
             <button
-              onClick={() => setActiveTab('holerites')}
+              onClick={() => selecionarTab('holerites')}
               className={`p-4 rounded-xl border-2 transition-all text-left ${
                 activeTab === 'holerites'
                   ? 'border-green-600 bg-green-50'

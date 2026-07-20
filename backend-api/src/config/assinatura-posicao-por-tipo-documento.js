@@ -88,7 +88,7 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
   },
   certificado_padrao: {
     descricao:
-      'Certificados NR / sinaleiro (layout padrão): 1.ª página no rótulo «ALUNO» no quadrante inferior esquerdo da folha; páginas seguintes — canto inferior direito. Se não houver «ALUNO» na 1.ª página, uma assinatura na última ocorrência no PDF.',
+      'Certificados NR / sinaleiro: só 1.ª página — «ALUNO» no quadrante inferior esquerdo; senão nome do participante (layout Vetor); senão canto inferior esquerdo.',
     metodoAncora: 'certificado_multipagina_aluno',
     anchors: [/^\s*ALUNO\s*:?\s*$/i],
     match: 'last',
@@ -96,19 +96,19 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     offsetYPoints: 42,
     gapAbaixoTextoPoints: 6,
     signatureHeight: 52,
-    marginRightCanto: 44,
+    marginLeftCanto: 80,
     marginBottomCanto: 40
   },
   certificado_nr12: {
     descricao:
-      'Certificado NR-12 (modelo IRBANA): 1.ª página junto ao nome do instrutor (âncora «ANDERSON»/instrutor); páginas seguintes — canto inferior direito.',
+      'Certificado NR-12: só 1.ª página — «ALUNO» / «ANDERSON» / nome do participante (Vetor); senão canto inferior esquerdo.',
     metodoAncora: 'certificado_nr12_multi',
     /** Linha de assinatura fica acima do texto do nome — sobe a imagem e puxa para a esquerda. */
     offsetXPoints: -52,
     offsetYPoints: 44,
     gapAbaixoTextoPoints: 5,
     signatureHeight: 52,
-    marginRightCanto: 44,
+    marginLeftCanto: 80,
     marginBottomCanto: 40
   },
   /** Documentos de demissão / rescisão: formulário eSocial A4 sem AcroForm — campo 151 (trabalhador). */

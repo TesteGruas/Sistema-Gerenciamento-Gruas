@@ -355,6 +355,25 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
     return buf;
   }
 
+  const metodo = regra.metodoAncora || '';
+  const tipoDoc = String(
+    contexto.documento?.tipo_documento || contexto.documento?.tipo_funcionario_documento || ''
+  );
+  const isCertificado =
+    metodo === 'certificado_nr12_multi' ||
+    metodo === 'certificado_multipagina_aluno' ||
+    /^certificado_/i.test(tipoDoc);
+
+  if (isCertificado) {
+    console.warn('[PDF Signature] Nenhuma âncora encontrada em certificado; usando 1.ª página e y=50');
+    return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
+      pageIndex: 0,
+      x: regra.marginLeftCanto ?? 80,
+      y: 50,
+      opacity: contexto.opacity ?? 1.0
+    });
+  }
+
   console.warn('[PDF Signature] Nenhuma âncora encontrada; usando última página e y=50');
   return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
     pageIndex: -1,

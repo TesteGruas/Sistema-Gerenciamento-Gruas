@@ -1,6 +1,7 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
+import { flushSync } from "react-dom"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -12,7 +13,8 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { DocumentoUpload } from "./documento-upload"
-import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature } from "lucide-react"
+import { Plus, Edit, Trash2, Download, AlertTriangle, CheckCircle2, Clock, FileSignature, Loader2 } from "lucide-react"
+import { ButtonLoader } from "@/components/ui/loader"
 import { useToast } from "@/hooks/use-toast"
 import { getApiOrigin } from "@/lib/runtime-config"
 import { colaboradoresDocumentosApi, type CertificadoBackend } from "@/lib/api-colaboradores-documentos"
@@ -42,6 +44,8 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
   const { toast } = useToast()
   const [certificados, setCertificados] = useState<CertificadoColaborador[]>([])
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const savingRef = useRef(false)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingCertificado, setEditingCertificado] = useState<CertificadoColaborador | null>(null)
   const [formData, setFormData] = useState({
@@ -107,8 +111,7 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
     setIsDialogOpen(true)
   }
 
-  const handleCloseDialog = () => {
-    setIsDialogOpen(false)
+  const resetForm = () => {
     setEditingCertificado(null)
     setFormData({
       tipo: "",
@@ -116,6 +119,12 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
       data_validade: "",
       arquivo: null,
     })
+  }
+
+  const handleCloseDialog = () => {
+    if (savingRef.current) return
+    setIsDialogOpen(false)
+    resetForm()
   }
 
   const handleDownload = async (certificado: CertificadoColaborador, comAssinatura: boolean) => {
@@ -150,6 +159,8 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
   }
 
   const handleSave = async () => {
+    if (savingRef.current) return
+
     if (!formData.tipo || !formData.nome || !formData.data_validade) {
       toast({
         title: "Erro",
@@ -178,44 +189,40 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
       return
     }
 
+    savingRef.current = true
+    flushSync(() => {
+      setSaving(true)
+    })
+
     try {
       let arquivoUrl = editingCertificado?.arquivo_url || ""
 
       if (formData.arquivo) {
-        try {
-          const formDataUpload = new FormData()
-          formDataUpload.append("arquivo", formData.arquivo)
-          formDataUpload.append("categoria", "certificados")
+        const formDataUpload = new FormData()
+        formDataUpload.append("arquivo", formData.arquivo)
+        formDataUpload.append("categoria", "certificados")
 
-          const apiUrl = getApiOrigin()
-          const token = localStorage.getItem("access_token") || localStorage.getItem("token")
+        const apiUrl = getApiOrigin()
+        const token = localStorage.getItem("access_token") || localStorage.getItem("token")
 
-          const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-            body: formDataUpload,
-          })
+        const uploadResponse = await fetch(`${apiUrl}/api/arquivos/upload`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+          body: formDataUpload,
+        })
 
-          if (!uploadResponse.ok) {
-            const errorData = await uploadResponse.json().catch(() => ({}))
-            throw new Error(errorData.message || errorData.error || "Erro ao fazer upload do arquivo")
-          }
+        if (!uploadResponse.ok) {
+          const errorData = await uploadResponse.json().catch(() => ({}))
+          throw new Error(errorData.message || errorData.error || "Erro ao fazer upload do arquivo")
+        }
 
-          const uploadResult = await uploadResponse.json()
-          arquivoUrl = uploadResult.data?.arquivo || uploadResult.data?.caminho || uploadResult.arquivo || uploadResult.caminho
+        const uploadResult = await uploadResponse.json()
+        arquivoUrl = uploadResult.data?.arquivo || uploadResult.data?.caminho || uploadResult.arquivo || uploadResult.caminho
 
-          if (!arquivoUrl) {
-            throw new Error("URL do arquivo não retornada após upload")
-          }
-        } catch (uploadError: any) {
-          toast({
-            title: "Erro",
-            description: uploadError.message || "Erro ao fazer upload do arquivo",
-            variant: "destructive",
-          })
-          return
+        if (!arquivoUrl) {
+          throw new Error("URL do arquivo não retornada após upload")
         }
       }
 
@@ -240,7 +247,8 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
         })
       }
 
-      handleCloseDialog()
+      setIsDialogOpen(false)
+      resetForm()
       await loadCertificados()
     } catch (error: any) {
       console.error("Erro ao salvar certificado:", error)
@@ -249,6 +257,9 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
         description: error.message || "Erro ao salvar certificado",
         variant: "destructive",
       })
+    } finally {
+      savingRef.current = false
+      setSaving(false)
     }
   }
 
@@ -438,70 +449,103 @@ export function ColaboradorCertificados({ colaboradorId, readOnly = false }: Col
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{editingCertificado ? "Editar Certificado" : "Novo Certificado"}</DialogTitle>
-            <DialogDescription>Preencha os dados do certificado. Alerta será enviado 30 dias antes do vencimento.</DialogDescription>
-          </DialogHeader>
+        <DialogContent
+          className="max-w-2xl"
+          onPointerDownOutside={(e) => {
+            if (savingRef.current) e.preventDefault()
+          }}
+          onEscapeKeyDown={(e) => {
+            if (savingRef.current) e.preventDefault()
+          }}
+        >
+          <div className="relative">
+            {saving && (
+              <div className="absolute inset-0 z-[60] flex flex-col items-center justify-center gap-3 rounded-lg bg-background/85 backdrop-blur-[1px]">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                <p className="text-sm font-medium">
+                  {editingCertificado ? "Atualizando certificado..." : "Criando certificado..."}
+                </p>
+                <p className="text-xs text-muted-foreground">Aguarde o upload e o cadastro</p>
+              </div>
+            )}
 
-          <div className="space-y-4">
-            <div>
-              <Label>
-                Tipo de Certificado <span className="text-red-500">*</span>
-              </Label>
-              <Select value={formData.tipo} onValueChange={(value) => setFormData({ ...formData, tipo: value })}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione o tipo" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tiposCertificados.map((tipo) => (
-                    <SelectItem key={tipo} value={tipo}>
-                      {tipo}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            <DialogHeader>
+              <DialogTitle>{editingCertificado ? "Editar Certificado" : "Novo Certificado"}</DialogTitle>
+              <DialogDescription>Preencha os dados do certificado. Alerta será enviado 30 dias antes do vencimento.</DialogDescription>
+            </DialogHeader>
 
-            <div>
-              <Label>
-                Nome do Certificado <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                value={formData.nome}
-                onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                placeholder="Ex: NR18 - Trabalho em Altura"
-              />
-            </div>
+            <div className="space-y-4 mt-4">
+              <div>
+                <Label>
+                  Tipo de Certificado <span className="text-red-500">*</span>
+                </Label>
+                <Select
+                  value={formData.tipo}
+                  onValueChange={(value) => setFormData({ ...formData, tipo: value })}
+                  disabled={saving}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione o tipo" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {tiposCertificados.map((tipo) => (
+                      <SelectItem key={tipo} value={tipo}>
+                        {tipo}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-            <div>
-              <Label>
-                Data de Validade <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                type="date"
-                value={formData.data_validade}
-                onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
-              />
-            </div>
+              <div>
+                <Label>
+                  Nome do Certificado <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                  placeholder="Ex: NR18 - Trabalho em Altura"
+                  disabled={saving}
+                />
+              </div>
 
-            <div>
-              <DocumentoUpload
-                accept="application/pdf,image/*"
-                maxSize={10 * 1024 * 1024}
-                onUpload={(file) => setFormData({ ...formData, arquivo: file })}
-                onRemove={() => setFormData({ ...formData, arquivo: null })}
-                label="Upload do Certificado"
-                required={!editingCertificado}
-                currentFile={formData.arquivo}
-              />
-            </div>
+              <div>
+                <Label>
+                  Data de Validade <span className="text-red-500">*</span>
+                </Label>
+                <Input
+                  type="date"
+                  value={formData.data_validade}
+                  onChange={(e) => setFormData({ ...formData, data_validade: e.target.value })}
+                  disabled={saving}
+                />
+              </div>
 
-            <div className="flex justify-end gap-2 pt-4">
-              <Button variant="outline" onClick={handleCloseDialog}>
-                Cancelar
-              </Button>
-              <Button onClick={handleSave}>{editingCertificado ? "Atualizar" : "Criar"} Certificado</Button>
+              <div>
+                <DocumentoUpload
+                  accept="application/pdf,image/*"
+                  maxSize={10 * 1024 * 1024}
+                  onUpload={(file) => setFormData({ ...formData, arquivo: file })}
+                  onRemove={() => setFormData({ ...formData, arquivo: null })}
+                  label="Upload do Certificado"
+                  required={!editingCertificado}
+                  currentFile={formData.arquivo}
+                  disabled={saving}
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-4">
+                <Button type="button" variant="outline" onClick={handleCloseDialog} disabled={saving}>
+                  Cancelar
+                </Button>
+                <Button type="button" onClick={() => void handleSave()} disabled={saving}>
+                  {saving ? (
+                    <ButtonLoader text={editingCertificado ? "Atualizando..." : "Criando..."} />
+                  ) : (
+                    <>{editingCertificado ? "Atualizar" : "Criar"} Certificado</>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
