@@ -353,14 +353,6 @@ router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) =
       })
     }
 
-    if (certificado.assinatura_digital && certificado.assinado_em) {
-      return res.status(400).json({
-        success: false,
-        message: 'Este certificado já foi assinado.',
-        data: { assinado_em: certificado.assinado_em }
-      })
-    }
-
     const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
     const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
     const certFuncionarioId = Number(certificado.funcionario_id)
@@ -377,6 +369,8 @@ router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) =
       })
     }
 
+    const jaAssinado = Boolean(certificado.assinatura_digital && certificado.assinado_em)
+
     const { data: updatedCertificado, error: updateError } = await supabaseAdmin
       .from('certificados_colaboradores')
       .update({
@@ -392,8 +386,9 @@ router.put('/certificados/:id/assinatura', authenticateToken, async (req, res) =
 
     res.json({
       success: true,
-      message: 'Certificado assinado com sucesso',
-      data: updatedCertificado
+      message: jaAssinado ? 'Certificado reassinado com sucesso' : 'Certificado assinado com sucesso',
+      data: updatedCertificado,
+      reassinado: jaAssinado
     })
   } catch (error) {
     console.error('Erro ao assinar certificado:', error)
@@ -500,7 +495,10 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
 
     let pdfBuffer = Buffer.from(await fileResponse.arrayBuffer())
 
-    if ((comAssinatura === 'true' || comAssinatura === '1') && certificado.assinatura_digital) {
+    const solicitarComAssinatura = comAssinatura === 'true' || comAssinatura === '1'
+    let assinaturaAplicada = false
+
+    if (solicitarComAssinatura && certificado.assinatura_digital) {
       try {
         const arquivoNome =
           String(certificado.arquivo || '')
@@ -509,6 +507,7 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
             .split('?')[0] || 'certificado.pdf'
         const tituloCert = [certificado.tipo, certificado.nome].filter(Boolean).join(' — ')
         const tipoDocCert = certificadoTipoParaTipoDocumentoAssinatura(certificado.tipo)
+        const bufferAntes = pdfBuffer
         pdfBuffer = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, certificado.assinatura_digital, {
           documento: {
             arquivo_original: arquivoNome,
@@ -518,13 +517,39 @@ router.get('/certificados/:id/download', authenticateToken, async (req, res) => 
           },
           opacity: 1.0
         })
+        // Evita entregar PDF sem carimbo com nome "_assinado" quando a composição falha silenciosamente
+        assinaturaAplicada = Buffer.isBuffer(pdfBuffer) && pdfBuffer.length > 0 && !pdfBuffer.equals(bufferAntes)
+        if (!assinaturaAplicada) {
+          console.error('[CERTIFICADO] Composição de assinatura não alterou o PDF', {
+            certificadoId: id,
+            tipo: certificado.tipo,
+            nome: certificado.nome
+          })
+          return res.status(422).json({
+            success: false,
+            message: 'Não foi possível aplicar a assinatura no PDF. Reassine o certificado e tente novamente.',
+            code: 'ASSINATURA_NAO_APLICADA'
+          })
+        }
       } catch (signatureError) {
         console.error('[CERTIFICADO] Erro ao compor assinatura no PDF:', signatureError)
+        return res.status(422).json({
+          success: false,
+          message: 'Não foi possível aplicar a assinatura no PDF. Reassine o certificado e tente novamente.',
+          code: 'ASSINATURA_COMPOSICAO_FALHOU',
+          error: signatureError.message
+        })
       }
+    } else if (solicitarComAssinatura && !certificado.assinatura_digital) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este certificado ainda não possui assinatura digital registrada.',
+        code: 'SEM_ASSINATURA'
+      })
     }
 
     // Gerar nome do arquivo
-    const nomeArquivo = `certificado_${certificado.tipo}_${certificado.nome}${certificado.assinatura_digital ? '_assinado' : ''}.pdf`
+    const nomeArquivo = `certificado_${certificado.tipo}_${certificado.nome}${assinaturaAplicada ? '_assinado' : ''}.pdf`
       .replace(/[^a-zA-Z0-9._-]/g, '_') // Sanitizar nome do arquivo
 
     res.setHeader('Content-Type', 'application/pdf')

@@ -899,14 +899,17 @@ function PWAPerfilPageContent() {
 
   const handleAssinaturaCertificadoSalva = async (dataUrl: string) => {
     if (!certificadoAssinando || enviandoAssinaturaCertificado) return
+    const eraReassinatura = certificadoJaAssinado(certificadoAssinando)
     setEnviandoAssinaturaCertificado(true)
     try {
       await colaboradoresDocumentosApi.certificados.assinar(certificadoAssinando.id, {
         assinatura_digital: dataUrl,
       })
       toast({
-        title: 'Certificado assinado',
-        description: 'Sua assinatura foi registrada com sucesso.',
+        title: eraReassinatura ? 'Certificado reassinado' : 'Certificado assinado',
+        description: eraReassinatura
+          ? 'A nova assinatura foi registrada. Baixe o PDF assinado novamente.'
+          : 'Sua assinatura foi registrada com sucesso.',
       })
       setModalAssinaturaCertificadoOpen(false)
       setCertificadoAssinando(null)
@@ -914,7 +917,7 @@ function PWAPerfilPageContent() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Não foi possível concluir a assinatura.'
       toast({
-        title: 'Erro ao assinar',
+        title: eraReassinatura ? 'Erro ao reassinar' : 'Erro ao assinar',
         description: msg,
         variant: 'destructive',
       })
@@ -2348,7 +2351,7 @@ function PWAPerfilPageContent() {
                             >
                               <Download className="w-4 h-4" />
                             </Button>
-                            {!certificadoJaAssinado(certificado) && (
+                            {!certificadoJaAssinado(certificado) ? (
                               <Button
                                 variant="default"
                                 size="sm"
@@ -2358,16 +2361,26 @@ function PWAPerfilPageContent() {
                                 <PenTool className="w-4 h-4 mr-1" />
                                 Assinar
                               </Button>
-                            )}
-                            {certificadoJaAssinado(certificado) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDownloadCertificadoComAssinatura(certificado)}
-                              >
-                                <FileSignature className="w-4 h-4 mr-1" />
-                                PDF assinado
-                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadCertificadoComAssinatura(certificado)}
+                                >
+                                  <FileSignature className="w-4 h-4 mr-1" />
+                                  PDF assinado
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-700"
+                                  onClick={() => abrirAssinaturaCertificado(certificado)}
+                                >
+                                  <PenTool className="w-4 h-4 mr-1" />
+                                  Reassinar
+                                </Button>
+                              </>
                             )}
                           </div>
                         )}
@@ -2924,11 +2937,15 @@ function PWAPerfilPageContent() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="w-5 h-5" />
-              Assinar certificado
+              {certificadoAssinando && certificadoJaAssinado(certificadoAssinando)
+                ? 'Reassinar certificado'
+                : 'Assinar certificado'}
             </DialogTitle>
             <DialogDescription>
               {certificadoAssinando
-                ? `Desenhe sua assinatura para confirmar leitura e concordância: ${certificadoAssinando.tipo} — ${certificadoAssinando.nome}`
+                ? certificadoJaAssinado(certificadoAssinando)
+                  ? `Desenhe uma nova assinatura para substituir a anterior: ${certificadoAssinando.tipo} — ${certificadoAssinando.nome}`
+                  : `Desenhe sua assinatura para confirmar leitura e concordância: ${certificadoAssinando.tipo} — ${certificadoAssinando.nome}`
                 : 'Selecione um certificado na lista.'}
             </DialogDescription>
           </DialogHeader>
@@ -2944,7 +2961,11 @@ function PWAPerfilPageContent() {
                 compact
                 compactDense
                 showCancelButton
-                applyLabel="Enviar assinatura"
+                applyLabel={
+                  certificadoJaAssinado(certificadoAssinando)
+                    ? 'Enviar nova assinatura'
+                    : 'Enviar assinatura'
+                }
                 title=""
                 description=""
                 className="pt-2"
