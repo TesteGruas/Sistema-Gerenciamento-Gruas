@@ -11,6 +11,7 @@ import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
 import { assertEmailAvailableForRole, TARGET_OPERARIO } from '../utils/email-role-guard.js'
+import { resolverFuncionarioId } from '../utils/resolver-funcionario-id.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -464,24 +465,26 @@ router.get('/', authenticateToken, async (req, res) => {
       console.log(`[FUNCIONARIOS] ⚠️ Nenhum funcionário encontrado na query`)
     }
 
-    // Buscar também usuários sem funcionario_id vinculado (como operadores)
-    // que podem não estar na tabela funcionarios
+    // Usuários sem funcionario_id NÃO entram na listagem de RH/funcionários.
+    // Com apenas_funcionarios=true isso é obrigatório: certificados e demais FKs
+    // apontam para funcionarios(id), não para usuarios(id).
+    // (Antes esses órfãos apareciam como "funcionário" e geravam duplicata + erro de FK.)
     let usuariosSemFuncionario = []
-    try {
-      // Decodificar o termo de busca se ainda não foi decodificado
-      let searchTermClean = searchTermParam
-      if (searchTermClean) {
-        if (searchTermClean.includes('+') || searchTermClean.includes('%')) {
-          searchTermClean = decodeURIComponent(searchTermClean.replace(/\+/g, ' '))
+    if (!apenasFuncionarios) {
+      try {
+        let searchTermClean = searchTermParam
+        if (searchTermClean) {
+          if (searchTermClean.includes('+') || searchTermClean.includes('%')) {
+            searchTermClean = decodeURIComponent(searchTermClean.replace(/\+/g, ' '))
+          }
         }
-      }
-      
-      console.log(`[DEBUG] Buscando usuários sem funcionario_id com termo: "${searchTermClean || 'nenhum'}"`)
 
-      const montarQueryUsuariosSemFuncionario = () => {
-        let q = supabaseAdmin
-          .from('usuarios')
-          .select(`
+        console.log(`[DEBUG] Buscando usuários sem funcionario_id com termo: "${searchTermClean || 'nenhum'}"`)
+
+        const montarQueryUsuariosSemFuncionario = () => {
+          let q = supabaseAdmin
+            .from('usuarios')
+            .select(`
           *,
           usuario_perfis!usuario_perfis_usuario_id_fkey(
             id,
@@ -496,111 +499,106 @@ router.get('/', authenticateToken, async (req, res) => {
             )
           )
         `)
-          .is('funcionario_id', null)
-          .is('deleted_at', null)
-        if (req.query.status) {
-          q = q.eq('status', req.query.status)
-        }
-        if (searchTermClean) {
-          const digitos = limparCpf(searchTermClean)
-          const condicoes = [`nome.ilike.%${searchTermClean}%`, `email.ilike.%${searchTermClean}%`]
-          if (digitos.length >= 3) {
-            condicoes.push(`telefone.ilike.%${digitos}%`)
-            for (const padrao of padroesBuscaCpf(digitos)) {
-              condicoes.push(`cpf.ilike.%${padrao}%`)
+            .is('funcionario_id', null)
+            .is('deleted_at', null)
+          if (req.query.status) {
+            q = q.eq('status', req.query.status)
+          }
+          if (searchTermClean) {
+            const digitos = limparCpf(searchTermClean)
+            const condicoes = [`nome.ilike.%${searchTermClean}%`, `email.ilike.%${searchTermClean}%`]
+            if (digitos.length >= 3) {
+              condicoes.push(`telefone.ilike.%${digitos}%`)
+              for (const padrao of padroesBuscaCpf(digitos)) {
+                condicoes.push(`cpf.ilike.%${padrao}%`)
+              }
             }
+            q = q.or(condicoes.join(','))
           }
-          q = q.or(condicoes.join(','))
+          return q.order('created_at', { ascending: false })
         }
-        return q.order('created_at', { ascending: false })
-      }
 
-      console.log(`[DEBUG] Query de usuários em lotes de ${TAMANHO_LOTE_SUPABASE}:`, {
-        termo: searchTermClean || 'nenhum',
-        status: req.query.status || 'nenhum',
-        funcionario_id: 'null'
-      })
-
-      let usuariosData = []
-      let usuariosError = null
-      for (let uStart = 0; ; uStart += TAMANHO_LOTE_SUPABASE) {
-        const { data: loteU, error: errU } = await montarQueryUsuariosSemFuncionario().range(
-          uStart,
-          uStart + TAMANHO_LOTE_SUPABASE - 1
-        )
-        if (errU) {
-          usuariosError = errU
-          break
-        }
-        if (!loteU?.length) break
-        usuariosData = usuariosData.concat(loteU)
-        if (loteU.length < TAMANHO_LOTE_SUPABASE) break
-      }
-
-      if (usuariosError) {
-        console.error('[DEBUG] Erro ao buscar usuários sem funcionario_id:', usuariosError)
-        console.error('[DEBUG] Detalhes do erro:', JSON.stringify(usuariosError, null, 2))
-        console.error('[DEBUG] Código do erro:', usuariosError.code)
-        console.error('[DEBUG] Mensagem do erro:', usuariosError.message)
-        console.error('[DEBUG] Detalhes completos:', usuariosError.details)
-      } else {
-        console.log(`[DEBUG] Query de usuários executada com sucesso. Resultados: ${usuariosData?.length || 0}`)
-        if (usuariosData && usuariosData.length > 0) {
-          console.log(`[DEBUG] ✅ Encontrados ${usuariosData.length} usuários sem funcionario_id`)
-          if (usuariosData.length > 0) {
-            console.log(`[DEBUG] Primeiro usuário encontrado:`, {
-              id: usuariosData[0].id,
-              nome: usuariosData[0].nome,
-              email: usuariosData[0].email,
-              telefone: usuariosData[0].telefone,
-              status: usuariosData[0].status,
-              funcionario_id: usuariosData[0].funcionario_id
-            })
+        let usuariosData = []
+        let usuariosError = null
+        for (let uStart = 0; ; uStart += TAMANHO_LOTE_SUPABASE) {
+          const { data: loteU, error: errU } = await montarQueryUsuariosSemFuncionario().range(
+            uStart,
+            uStart + TAMANHO_LOTE_SUPABASE - 1
+          )
+          if (errU) {
+            usuariosError = errU
+            break
           }
-        
-          // Converter usuários para formato de funcionário.
-          // Sempre excluir perfil Cliente (responsáveis de obra). Com apenas_funcionarios, exige cargo no usuário.
-          const usuariosElegiveis = apenasFuncionarios
-            ? usuariosData.filter(isUsuarioElegivelComoFuncionario)
-            : usuariosData.filter((u) => !usuarioTemPerfilCliente(u))
+          if (!loteU?.length) break
+          usuariosData = usuariosData.concat(loteU)
+          if (loteU.length < TAMANHO_LOTE_SUPABASE) break
+        }
 
-          console.log(
-            `[DEBUG] Usuários elegíveis para lista de funcionários: ${usuariosElegiveis.length}/${usuariosData.length} (apenas_funcionarios=${apenasFuncionarios}, exclui_cliente=sempre)`
+        if (usuariosError) {
+          console.error('[DEBUG] Erro ao buscar usuários sem funcionario_id:', usuariosError)
+        } else if (usuariosData?.length) {
+          const emailsFuncionarios = new Set(
+            (funcionariosData || [])
+              .map((f) => normalizarTexto(f.email))
+              .filter(Boolean)
+          )
+          const cpfsFuncionarios = new Set(
+            (funcionariosData || [])
+              .map((f) => limparCpf(f.cpf))
+              .filter((c) => c.length >= 11)
           )
 
-          usuariosSemFuncionario = usuariosElegiveis
-            .map(usuario => {
-              const perfil = usuario.usuario_perfis?.[0]?.perfis
-              return {
-                id: usuario.id,
-                nome: usuario.nome,
-                email: usuario.email,
-                telefone: usuario.telefone,
-                cpf: usuario.cpf,
-                status: usuario.status,
-                cargo: usuario.cargo || null, // Usar cargo do usuário se existir
-                turno: usuario.turno || null,
-                data_admissao: usuario.data_admissao || null,
-                salario: usuario.salario || null,
-                funcionario_id: null,
-                usuario_existe: true,
-                usuario_criado: true,
-                perfil_usuario: perfil ? {
-                  id: perfil.id,
-                  nome: perfil.nome,
-                  nivel_acesso: perfil.nivel_acesso
-                } : null,
-                funcionarios_obras: [],
-                obra_atual: null,
-                obras_vinculadas: []
-              }
-            })
+          // Exclui Cliente e órfãos que já têm funcionário equivalente (e-mail/CPF)
+          const usuariosElegiveis = usuariosData.filter((u) => {
+            if (usuarioTemPerfilCliente(u)) return false
+            if (!isUsuarioElegivelComoFuncionario(u)) return false
+            const email = normalizarTexto(u.email)
+            const cpf = limparCpf(u.cpf)
+            if (email && emailsFuncionarios.has(email)) return false
+            if (cpf.length >= 11 && cpfsFuncionarios.has(cpf)) return false
+            return true
+          })
+
+          console.log(
+            `[DEBUG] Usuários elegíveis para lista (órfãos sem duplicata): ${usuariosElegiveis.length}/${usuariosData.length}`
+          )
+
+          usuariosSemFuncionario = usuariosElegiveis.map((usuario) => {
+            const perfil = usuario.usuario_perfis?.[0]?.perfis
+            return {
+              id: usuario.id,
+              nome: usuario.nome,
+              email: usuario.email,
+              telefone: usuario.telefone,
+              cpf: usuario.cpf,
+              status: usuario.status,
+              cargo: usuario.cargo || null,
+              turno: usuario.turno || null,
+              data_admissao: usuario.data_admissao || null,
+              salario: usuario.salario || null,
+              funcionario_id: null,
+              usuario_existe: true,
+              usuario_criado: true,
+              perfil_usuario: perfil
+                ? {
+                    id: perfil.id,
+                    nome: perfil.nome,
+                    nivel_acesso: perfil.nivel_acesso
+                  }
+                : null,
+              funcionarios_obras: [],
+              obra_atual: null,
+              obras_vinculadas: []
+            }
+          })
         } else {
           console.log('[DEBUG] Nenhum usuário sem funcionario_id encontrado')
         }
+      } catch (error) {
+        console.error('Erro ao processar busca de usuários sem funcionario_id:', error)
       }
-    } catch (error) {
-      console.error('Erro ao processar busca de usuários sem funcionario_id:', error)
+    } else {
+      console.log('[FUNCIONARIOS] apenas_funcionarios=true → ignorando usuários sem vínculo em funcionarios')
     }
 
     // Combinar funcionários e usuários sem funcionario_id
@@ -1277,71 +1275,90 @@ router.get('/:id', async (req, res) => {
     }
 
     if (!data) {
-      // Fallback: alguns itens da listagem de funcionários são usuários sem funcionario_id.
-      // Nesses casos, o "id" exibido na lista é o id da tabela usuarios.
-      const { data: usuarioSemFuncionario, error: usuarioError } = await supabaseAdmin
-        .from('usuarios')
+      // ID pode ser de um usuário órfão (usuarios.id sem vínculo). Tenta achar o funcionário real.
+      const resolvido = await resolverFuncionarioId(funcionarioId)
+
+      if (!resolvido.funcionarioId) {
+        return res.status(404).json({
+          success: false,
+          error: 'Funcionário não encontrado',
+          message:
+            resolvido.motivo ||
+            'O ID informado não corresponde a um registro em funcionarios. Se for um usuário do sistema, religue-o a um colaborador.'
+        })
+      }
+
+      const { data: funcionarioResolvido, error: erroResolvido } = await supabaseAdmin
+        .from('funcionarios')
         .select(`
-          *,
-          usuario_perfis!usuario_perfis_usuario_id_fkey(
+        *,
+        cargo_info:cargos!cargo_id(
+          id,
+          nome,
+          nivel,
+          descricao
+        ),
+        usuario:usuarios!funcionario_id(
+          id,
+          nome,
+          email,
+          status
+        ),
+        funcionarios_obras(
+          id,
+          obra_id,
+          data_inicio,
+          data_fim,
+          status,
+          horas_trabalhadas,
+          valor_hora,
+          total_receber,
+          obras(
             id,
-            perfil_id,
+            nome,
+            cidade,
+            estado,
             status,
-            data_atribuicao,
-            perfis(
+            cliente:clientes(
               id,
               nome,
-              descricao,
-              nivel_acesso
+              cnpj
             )
           )
-        `)
-        .eq('id', funcionarioId)
-        .is('funcionario_id', null)
+        )
+      `)
+        .eq('id', resolvido.funcionarioId)
         .is('deleted_at', null)
         .maybeSingle()
 
-      if (usuarioError) {
-        return res.status(500).json({
-          error: 'Erro ao buscar funcionário',
-          message: usuarioError.message
-        })
-      }
-
-      if (!usuarioSemFuncionario) {
+      if (erroResolvido || !funcionarioResolvido) {
         return res.status(404).json({
+          success: false,
           error: 'Funcionário não encontrado',
-          message: 'O funcionário com o ID especificado não existe'
+          message: 'Não foi possível carregar o colaborador vinculado a este usuário.'
         })
       }
 
-      const perfil = usuarioSemFuncionario.usuario_perfis?.[0]?.perfis || null
+      if (funcionarioResolvido.cargo_info) {
+        funcionarioResolvido.cargo = funcionarioResolvido.cargo_info.nome
+      }
+
+      const alocacoesAtivasResolvido =
+        funcionarioResolvido.funcionarios_obras?.filter((fo) => fo.status === 'ativo') || []
+      const obraAtualResolvido =
+        alocacoesAtivasResolvido.length > 0 ? alocacoesAtivasResolvido[0].obras : null
 
       return res.json({
         success: true,
         data: {
-          id: usuarioSemFuncionario.id,
-          nome: usuarioSemFuncionario.nome,
-          email: usuarioSemFuncionario.email,
-          telefone: usuarioSemFuncionario.telefone,
-          cpf: usuarioSemFuncionario.cpf,
-          status: usuarioSemFuncionario.status,
-          cargo: usuarioSemFuncionario.cargo || null,
-          turno: usuarioSemFuncionario.turno || null,
-          data_admissao: usuarioSemFuncionario.data_admissao || null,
-          salario: usuarioSemFuncionario.salario || null,
-          funcionario_id: null,
-          usuario_existe: true,
-          usuario_criado: true,
-          perfil_usuario: perfil ? {
-            id: perfil.id,
-            nome: perfil.nome,
-            nivel_acesso: perfil.nivel_acesso
-          } : null,
-          funcionarios_obras: [],
-          obra_atual: null,
-          obras_vinculadas: [],
-          historico_obras: []
+          ...funcionarioResolvido,
+          usuario_existe: possuiUsuarioVinculado(funcionarioResolvido.usuario),
+          usuario_criado: possuiUsuarioVinculado(funcionarioResolvido.usuario),
+          obra_atual: obraAtualResolvido,
+          obras_vinculadas: alocacoesAtivasResolvido,
+          historico_obras: funcionarioResolvido.funcionarios_obras || [],
+          resolvido_de_usuario_id: resolvido.usuarioId,
+          id_solicitado: funcionarioId
         }
       })
     }

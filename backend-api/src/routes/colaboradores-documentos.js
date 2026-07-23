@@ -16,6 +16,7 @@ import {
 import { tipoAdmissionalParaTipoDocumentoAssinatura } from '../utils/tipo-admissional-assinatura.js'
 import { tipoDemissaoParaTipoDocumentoAssinatura } from '../utils/tipo-demissao-assinatura.js'
 import { certificadoTipoParaTipoDocumentoAssinatura } from '../utils/certificado-tipo-assinatura.js'
+import { resolverFuncionarioId } from '../utils/resolver-funcionario-id.js'
 
 const router = express.Router()
 
@@ -116,13 +117,26 @@ router.post('/:id/certificados', async (req, res) => {
 
     // Verificar permissões: rh:editar OU criar para si mesmo
     const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
-    const funcionarioId = parseInt(id, 10)
+    const idInformado = parseInt(id, 10)
+
+    const resolvido = await resolverFuncionarioId(idInformado)
+    if (!resolvido.funcionarioId) {
+      return res.status(400).json({
+        error: 'Funcionário inválido',
+        message:
+          resolvido.motivo ||
+          'Não foi possível vincular este ID a um colaborador em funcionarios. Abra a ficha correta do RH ou religue o usuário ao funcionário.',
+        id_informado: idInformado
+      })
+    }
+
+    const funcionarioId = resolvido.funcionarioId
     
     // Garantir que ambos sejam números para comparação correta
     const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
     const isCreatingForSelf = userFuncionarioIdNum !== null && 
                               !isNaN(funcionarioId) && 
-                              funcionarioId === userFuncionarioIdNum
+                              (funcionarioId === userFuncionarioIdNum || idInformado === userFuncionarioIdNum)
 
     if (!hasRHEditPermission && !isCreatingForSelf) {
       return res.status(403).json({
@@ -133,6 +147,7 @@ router.post('/:id/certificados', async (req, res) => {
         debug: process.env.NODE_ENV === 'development' ? {
           userFuncionarioId: userFuncionarioIdNum,
           targetFuncionarioId: funcionarioId,
+          idInformado,
           isCreatingForSelf
         } : undefined
       })
@@ -164,7 +179,16 @@ router.post('/:id/certificados', async (req, res) => {
 
     if (error) throw error
 
-    res.json({ success: true, data })
+    res.json({
+      success: true,
+      data,
+      ...(resolvido.resolvidoDeUsuarioOrfao
+        ? {
+            resolvido_de_usuario_id: resolvido.usuarioId,
+            funcionario_id_real: funcionarioId
+          }
+        : {})
+    })
   } catch (error) {
     console.error('Erro ao criar certificado:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
@@ -178,16 +202,24 @@ router.post('/:id/certificados', async (req, res) => {
 router.get('/:id/certificados', async (req, res) => {
   try {
     const { id } = req.params
+    const resolvido = await resolverFuncionarioId(id)
+    const funcionarioId = resolvido.funcionarioId || parseInt(id, 10)
 
     const { data, error } = await supabaseAdmin
       .from('certificados_colaboradores')
       .select('*')
-      .eq('funcionario_id', id)
+      .eq('funcionario_id', funcionarioId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
 
-    res.json({ success: true, data: data || [] })
+    res.json({
+      success: true,
+      data: data || [],
+      ...(resolvido.resolvidoDeUsuarioOrfao && resolvido.funcionarioId
+        ? { funcionario_id_real: resolvido.funcionarioId }
+        : {})
+    })
   } catch (error) {
     console.error('Erro ao listar certificados:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
@@ -584,13 +616,24 @@ router.post('/:id/documentos-admissionais', async (req, res) => {
 
     // Verificar permissões: rh:editar OU criar para si mesmo
     const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
-    const funcionarioId = parseInt(id, 10)
+    const idInformado = parseInt(id, 10)
+    const resolvido = await resolverFuncionarioId(idInformado)
+    if (!resolvido.funcionarioId) {
+      return res.status(400).json({
+        error: 'Funcionário inválido',
+        message:
+          resolvido.motivo ||
+          'Não foi possível vincular este ID a um colaborador em funcionarios.',
+        id_informado: idInformado
+      })
+    }
+    const funcionarioId = resolvido.funcionarioId
     
     // Garantir que ambos sejam números para comparação correta
     const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
     const isCreatingForSelf = userFuncionarioIdNum !== null && 
                               !isNaN(funcionarioId) && 
-                              funcionarioId === userFuncionarioIdNum
+                              (funcionarioId === userFuncionarioIdNum || idInformado === userFuncionarioIdNum)
 
     if (!hasRHEditPermission && !isCreatingForSelf) {
       return res.status(403).json({
@@ -644,11 +687,13 @@ router.post('/:id/documentos-admissionais', async (req, res) => {
 router.get('/:id/documentos-admissionais', async (req, res) => {
   try {
     const { id } = req.params
+    const resolvido = await resolverFuncionarioId(id)
+    const funcionarioId = resolvido.funcionarioId || parseInt(id, 10)
 
     const { data, error } = await supabaseAdmin
       .from('documentos_admissionais')
       .select('*')
-      .eq('funcionario_id', id)
+      .eq('funcionario_id', funcionarioId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
@@ -946,12 +991,23 @@ router.post('/:id/documentos-demissao', async (req, res) => {
     const userFuncionarioId = req.user?.funcionario_id
 
     const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
-    const funcionarioId = parseInt(id, 10)
+    const idInformado = parseInt(id, 10)
+    const resolvido = await resolverFuncionarioId(idInformado)
+    if (!resolvido.funcionarioId) {
+      return res.status(400).json({
+        error: 'Funcionário inválido',
+        message:
+          resolvido.motivo ||
+          'Não foi possível vincular este ID a um colaborador em funcionarios.',
+        id_informado: idInformado
+      })
+    }
+    const funcionarioId = resolvido.funcionarioId
     const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
     const isCreatingForSelf =
       userFuncionarioIdNum !== null &&
       !isNaN(funcionarioId) &&
-      funcionarioId === userFuncionarioIdNum
+      (funcionarioId === userFuncionarioIdNum || idInformado === userFuncionarioIdNum)
 
     if (!hasRHEditPermission && !isCreatingForSelf) {
       return res.status(403).json({
@@ -999,11 +1055,13 @@ router.post('/:id/documentos-demissao', async (req, res) => {
 router.get('/:id/documentos-demissao', async (req, res) => {
   try {
     const { id } = req.params
+    const resolvido = await resolverFuncionarioId(id)
+    const funcionarioId = resolvido.funcionarioId || parseInt(id, 10)
 
     const { data, error } = await supabaseAdmin
       .from('documentos_demissao')
       .select('*')
-      .eq('funcionario_id', id)
+      .eq('funcionario_id', funcionarioId)
       .order('created_at', { ascending: false })
 
     if (error) throw error
