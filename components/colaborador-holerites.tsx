@@ -8,11 +8,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SortableTableHead } from "@/components/ui/sortable-table-head"
 import { useClientSortedList } from "@/hooks/use-client-sorted-list"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { SignaturePad } from "./signature-pad"
-import { Download, Eye, FileText, FileSignature, CheckCircle2, Clock, AlertCircle, Upload, Plus } from "lucide-react"
+import { Download, Eye, FileText, FileSignature, CheckCircle2, Clock, AlertCircle, Upload, Plus, Trash2, Loader2 } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { DocumentoUpload } from "./documento-upload"
 import { getApiOrigin } from "@/lib/runtime-config"
@@ -63,6 +73,9 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   const [mesUpload, setMesUpload] = useState<string>('')
   const [anoUpload, setAnoUpload] = useState<string>('')
   const [uploading, setUploading] = useState(false)
+  const [excluindoId, setExcluindoId] = useState<number | string | null>(null)
+  const [holeriteParaExcluir, setHoleriteParaExcluir] = useState<Holerite | null>(null)
+  const [modalExcluirOpen, setModalExcluirOpen] = useState(false)
   
   // Estado para filtro de mês - inicializar com "Todos os meses"
   const [filtroMes, setFiltroMes] = useState<string>('all')
@@ -363,6 +376,45 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   // Verificar se o usuário pode assinar (apenas funcionário pode assinar seu próprio holerite)
   const podeAssinar = isFuncionario && !readOnly
 
+  const abrirModalExcluir = (holerite: Holerite) => {
+    setHoleriteParaExcluir(holerite)
+    setModalExcluirOpen(true)
+  }
+
+  const fecharModalExcluir = () => {
+    if (excluindoId != null) return
+    setModalExcluirOpen(false)
+    setHoleriteParaExcluir(null)
+  }
+
+  const confirmarExcluirHolerite = async () => {
+    const holerite = holeriteParaExcluir
+    if (!holerite?.id) return
+
+    const periodo = `${holerite.mes} / ${holerite.ano}`
+    setExcluindoId(holerite.id)
+    try {
+      const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
+      await colaboradoresDocumentosApi.holerites.excluir(String(holerite.id))
+      toast({
+        title: "Holerite excluído",
+        description: `O holerite de ${periodo} foi removido.`,
+      })
+      setModalExcluirOpen(false)
+      setHoleriteParaExcluir(null)
+      await loadHolerites()
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : "Erro ao excluir holerite"
+      toast({
+        title: "Erro",
+        description: msg,
+        variant: "destructive",
+      })
+    } finally {
+      setExcluindoId(null)
+    }
+  }
+
   const handleUploadHolerite = async () => {
     if (!arquivoHolerite) {
       toast({
@@ -603,6 +655,22 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                             Assinar
                           </Button>
                         )}
+                        {!readOnly && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            disabled={excluindoId === holerite.id}
+                            onClick={() => abrirModalExcluir(holerite)}
+                            title="Excluir holerite"
+                          >
+                            {excluindoId === holerite.id ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-4 h-4" />
+                            )}
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -612,6 +680,47 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           )}
         </CardContent>
       </Card>
+
+      <AlertDialog
+        open={modalExcluirOpen}
+        onOpenChange={(open) => {
+          if (!open) fecharModalExcluir()
+          else setModalExcluirOpen(true)
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir holerite?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {holeriteParaExcluir
+                ? `O holerite de ${holeriteParaExcluir.mes} / ${holeriteParaExcluir.ano} será removido permanentemente. Esta ação não pode ser desfeita.`
+                : "O holerite será removido permanentemente. Esta ação não pode ser desfeita."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={excluindoId != null} onClick={fecharModalExcluir}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={excluindoId != null}
+              onClick={(e) => {
+                e.preventDefault()
+                void confirmarExcluirHolerite()
+              }}
+              className="bg-red-600 text-white hover:bg-red-700 focus:ring-red-600"
+            >
+              {excluindoId != null ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Excluindo…
+                </>
+              ) : (
+                "Excluir"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Dialog de Assinatura */}
       <Dialog open={isAssinaturaDialogOpen} onOpenChange={setIsAssinaturaDialogOpen}>
