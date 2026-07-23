@@ -40,6 +40,42 @@ export interface Holerite {
   mes_referencia?: string // Formato YYYY-MM para filtro
 }
 
+const MESES_PT = [
+  'janeiro',
+  'fevereiro',
+  'março',
+  'abril',
+  'maio',
+  'junho',
+  'julho',
+  'agosto',
+  'setembro',
+  'outubro',
+  'novembro',
+  'dezembro',
+] as const
+
+/** Extrai mês/ano de YYYY-MM ou YYYY-MM-DD(T...) sem usar Date (evita bug de fuso). */
+function parseMesReferencia(mesReferencia: string | null | undefined): { mes: string; ano: number; mesNum: string } | null {
+  const match = String(mesReferencia || '').match(/^(\d{4})-(\d{2})/)
+  if (!match) return null
+  const ano = parseInt(match[1], 10)
+  const mesNum = parseInt(match[2], 10)
+  if (!Number.isInteger(ano) || mesNum < 1 || mesNum > 12) return null
+  return {
+    ano,
+    mes: MESES_PT[mesNum - 1],
+    mesNum: match[2],
+  }
+}
+
+function formatarMesAnoHolerite(holerite: Pick<Holerite, 'mes' | 'ano' | 'mes_referencia'>): string {
+  const parsed = parseMesReferencia(holerite.mes_referencia)
+  if (parsed) return `${parsed.mes} / ${parsed.ano}`
+  if (holerite.mes && holerite.ano) return `${holerite.mes} / ${holerite.ano}`
+  return '—'
+}
+
 interface ColaboradorHoleritesProps {
   colaboradorId: number
   readOnly?: boolean
@@ -82,24 +118,19 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
   // Estado para filtro de ano - inicializar com "Todos os anos"
   const [filtroAno, setFiltroAno] = useState<string>('all')
   
-  // Gerar opções de meses
+  // Gerar opções de meses (mapa fixo — sem Date/fuso)
   const gerarOpcoesMes = () => {
     const opcoes: { value: string; label: string }[] = [
       { value: 'all', label: 'Todos os meses' }
     ]
-    
-    // Adicionar todos os meses do ano
-    for (let mes = 1; mes <= 12; mes++) {
-      const data = new Date(2024, mes - 1, 1) // Usar 2024 como base, apenas para obter o nome do mês
-      const mesNome = data.toLocaleString('pt-BR', { month: 'long' })
-      const mesNomeCapitalizado = mesNome.charAt(0).toUpperCase() + mesNome.slice(1)
-      
+
+    MESES_PT.forEach((mesNome, index) => {
       opcoes.push({
-        value: String(mes).padStart(2, '0'),
-        label: mesNomeCapitalizado
+        value: String(index + 1).padStart(2, '0'),
+        label: mesNome.charAt(0).toUpperCase() + mesNome.slice(1),
       })
-    }
-    
+    })
+
     return opcoes
   }
   
@@ -199,17 +230,21 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
       const response = await colaboradoresDocumentosApi.holerites.listar(colaboradorId)
       if (response.success) {
-        const holeritesConvertidos: Holerite[] = (response.data || []).map((h: any) => ({
-          id: h.id,
-          colaborador_id: h.funcionario_id,
-          mes: h.mes_referencia ? new Date(h.mes_referencia + '-01').toLocaleString('pt-BR', { month: 'long' }) : '',
-          ano: h.mes_referencia ? parseInt(h.mes_referencia.split('-')[0]) : new Date().getFullYear(),
-          arquivo_url: h.arquivo,
-          assinado: !!h.assinatura_digital && !!h.assinado_em,
-          data_assinatura: h.assinado_em,
-          assinatura_digital: h.assinatura_digital,
-          mes_referencia: h.mes_referencia // Guardar o formato original para filtro
-        }))
+        const holeritesConvertidos: Holerite[] = (response.data || []).map((h: any) => {
+          const parsed = parseMesReferencia(h.mes_referencia)
+          return {
+            id: h.id,
+            colaborador_id: h.funcionario_id,
+            mes: parsed?.mes || '',
+            ano: parsed?.ano || new Date().getFullYear(),
+            arquivo_url: h.arquivo,
+            assinado: !!h.assinatura_digital && !!h.assinado_em,
+            data_assinatura: h.assinado_em,
+            assinatura_digital: h.assinatura_digital,
+            // Normaliza para YYYY-MM (Postgres às vezes devolve date completa)
+            mes_referencia: parsed ? `${parsed.ano}-${parsed.mesNum}` : h.mes_referencia
+          }
+        })
         setHolerites(holeritesConvertidos)
         aplicarFiltro(holeritesConvertidos, filtroMes, filtroAno)
       }
@@ -391,7 +426,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
     const holerite = holeriteParaExcluir
     if (!holerite?.id) return
 
-    const periodo = `${holerite.mes} / ${holerite.ano}`
+    const periodo = formatarMesAnoHolerite(holerite)
     setExcluindoId(holerite.id)
     try {
       const { colaboradoresDocumentosApi } = await import("@/lib/api-colaboradores-documentos")
@@ -531,6 +566,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
               <CardTitle>Holerites Mensais</CardTitle>
               <CardDescription>
                 {holeritesFiltrados.length} holerite(s) disponível(is) para o período selecionado
+                {/* marcador de build: se não aparecer a lixeira na linha, o browser ainda está com JS antigo */}
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -598,8 +634,12 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
               <TableBody>
                 {(sortedHolerites as unknown as Holerite[]).map((holerite) => (
                   <TableRow key={holerite.id}>
-                    <TableCell className="font-medium capitalize">
-                      {holerite.mes} / {holerite.ano}
+                    <TableCell
+                      className="font-medium capitalize"
+                      title={holerite.mes_referencia || undefined}
+                      data-mes-referencia={holerite.mes_referencia || undefined}
+                    >
+                      {formatarMesAnoHolerite(holerite)}
                     </TableCell>
                     <TableCell>
                       {holerite.assinado ? (
@@ -693,7 +733,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
             <AlertDialogTitle>Excluir holerite?</AlertDialogTitle>
             <AlertDialogDescription>
               {holeriteParaExcluir
-                ? `O holerite de ${holeriteParaExcluir.mes} / ${holeriteParaExcluir.ano} será removido permanentemente. Esta ação não pode ser desfeita.`
+                ? `O holerite de ${formatarMesAnoHolerite(holeriteParaExcluir)} será removido permanentemente. Esta ação não pode ser desfeita.`
                 : "O holerite será removido permanentemente. Esta ação não pode ser desfeita."}
             </AlertDialogDescription>
           </AlertDialogHeader>
@@ -728,7 +768,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
           <DialogHeader>
             <DialogTitle>Assinar Holerite</DialogTitle>
             <DialogDescription>
-              Assine digitalmente o holerite de {holeriteSelecionado?.mes} / {holeriteSelecionado?.ano}
+              Assine digitalmente o holerite de {holeriteSelecionado ? formatarMesAnoHolerite(holeriteSelecionado) : ''}
             </DialogDescription>
           </DialogHeader>
 
@@ -745,7 +785,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
                 setAssinaturaDataUrl('')
               }}
               title="Assinar Holerite"
-              description={`Assine digitalmente o holerite de ${holeriteSelecionado?.mes} / ${holeriteSelecionado?.ano}`}
+              description={`Assine digitalmente o holerite de ${holeriteSelecionado ? formatarMesAnoHolerite(holeriteSelecionado) : ''}`}
             />
           </div>
         </DialogContent>
@@ -808,7 +848,7 @@ export function ColaboradorHolerites({ colaboradorId, readOnly = false, isClient
               <div className="flex items-center gap-2 p-3 bg-yellow-50 border border-yellow-200 rounded-md">
                 <AlertCircle className="w-4 h-4 text-yellow-600" />
                 <p className="text-sm text-yellow-800">
-                  Já existe um holerite para {holeriteDuplicado.mes} / {holeriteDuplicado.ano}. 
+                  Já existe um holerite para {formatarMesAnoHolerite(holeriteDuplicado)}. 
                   Por favor, selecione outro mês/ano ou atualize o holerite existente.
                 </p>
               </div>
