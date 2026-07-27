@@ -62,11 +62,25 @@ import {
   DocumentoAdmissionalBackend,
   DocumentoDemissaoBackend,
 } from "@/lib/api-colaboradores-documentos"
-import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio } from "@/lib/api-remuneracao"
+import { getFolhasPagamento, getFolhaPagamento, getFuncionarioBeneficios, FolhaPagamento, FuncionarioBeneficio, assinarBeneficioFuncionario, downloadBeneficioFuncionario } from "@/lib/api-remuneracao"
 import { getApiBasePath, getApiOrigin } from "@/lib/runtime-config"
 import { caminhoStorageAPartirDoUpload } from "@/lib/caminho-storage-arquivos"
 import { sessionPersistence } from "@/lib/session-persistence"
 import { SignaturePad } from "@/components/signature-pad"
+
+const MESES_PT_PWA = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+function formatarMesBeneficioPwa(mesRef?: string | null, dataInicio?: string | null): string {
+  const raw = (mesRef || (dataInicio ? String(dataInicio).slice(0, 7) : '') || '').trim()
+  const m = raw.match(/^(\d{4})-(\d{2})/)
+  if (!m) return '—'
+  const mesNum = parseInt(m[2], 10)
+  if (mesNum < 1 || mesNum > 12) return raw
+  return `${MESES_PT_PWA[mesNum - 1]} / ${m[1]}`
+}
 
 function formatarCpfExibicao(cpf: string | null | undefined): string {
   if (!cpf || typeof cpf !== "string") return "Não informado"
@@ -322,6 +336,10 @@ function PWAPerfilPageContent() {
   const [modalAssinaturaDemissaoOpen, setModalAssinaturaDemissaoOpen] = useState(false)
   const [docDemissaoAssinando, setDocDemissaoAssinando] = useState<DocumentoDemissaoBackend | null>(null)
   const [enviandoAssinaturaDemissao, setEnviandoAssinaturaDemissao] = useState(false)
+  const [filtroMesBeneficiosPwa, setFiltroMesBeneficiosPwa] = useState('')
+  const [modalAssinaturaBeneficioOpen, setModalAssinaturaBeneficioOpen] = useState(false)
+  const [beneficioAssinando, setBeneficioAssinando] = useState<FuncionarioBeneficio | null>(null)
+  const [enviandoAssinaturaBeneficio, setEnviandoAssinaturaBeneficio] = useState(false)
 
   // Estados para modais e visualização
   const [documentoSelecionado, setDocumentoSelecionado] = useState<{
@@ -941,6 +959,64 @@ function PWAPerfilPageContent() {
       const msg = e instanceof Error ? e.message : 'Tente novamente.'
       toast({
         title: 'Erro ao baixar PDF assinado',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
+
+  const beneficioJaAssinado = (b: FuncionarioBeneficio) =>
+    Boolean(b.assinatura_digital && b.assinado_em)
+
+  const abrirAssinaturaBeneficio = (b: FuncionarioBeneficio) => {
+    setBeneficioAssinando(b)
+    setModalAssinaturaBeneficioOpen(true)
+  }
+
+  const handleAssinaturaBeneficioSalva = async (dataUrl: string) => {
+    if (!beneficioAssinando || enviandoAssinaturaBeneficio) return
+    const eraReassinatura = beneficioJaAssinado(beneficioAssinando)
+    setEnviandoAssinaturaBeneficio(true)
+    try {
+      await assinarBeneficioFuncionario(beneficioAssinando.id, dataUrl)
+      toast({
+        title: eraReassinatura ? 'Benefício reassinado' : 'Benefício assinado',
+        description: eraReassinatura
+          ? 'A nova assinatura foi registrada. Baixe o PDF assinado novamente.'
+          : 'Sua assinatura foi registrada com sucesso.',
+      })
+      setModalAssinaturaBeneficioOpen(false)
+      setBeneficioAssinando(null)
+      await carregarBeneficios()
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Não foi possível concluir a assinatura.'
+      toast({
+        title: eraReassinatura ? 'Erro ao reassinar' : 'Erro ao assinar',
+        description: msg,
+        variant: 'destructive',
+      })
+    } finally {
+      setEnviandoAssinaturaBeneficio(false)
+    }
+  }
+
+  const handleDownloadBeneficio = async (b: FuncionarioBeneficio, comAssinatura = false) => {
+    try {
+      const blob = await downloadBeneficioFuncionario(b.id, comAssinatura)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const tipo = String(b.beneficios_tipo?.tipo || 'beneficio').replace(/[^\w.-]+/g, '_')
+      const mes = b.mes_referencia || 'mes'
+      a.download = `${tipo}_${mes}${comAssinatura ? '_assinado' : ''}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Tente novamente.'
+      toast({
+        title: 'Erro ao baixar PDF',
         description: msg,
         variant: 'destructive',
       })
@@ -2197,58 +2273,131 @@ function PWAPerfilPageContent() {
             {/* Seção Benefícios */}
             {activeTab === 'beneficios' && isTecnicoRole() && (
             <div className="mt-0">
+              <div className="flex flex-wrap items-center gap-2 mb-4">
+                <Label htmlFor="filtro-mes-beneficios-pwa" className="text-sm">Filtrar mês</Label>
+                <Input
+                  id="filtro-mes-beneficios-pwa"
+                  type="month"
+                  className="w-[160px]"
+                  value={filtroMesBeneficiosPwa}
+                  onChange={(e) => setFiltroMesBeneficiosPwa(e.target.value)}
+                />
+                {filtroMesBeneficiosPwa && (
+                  <Button variant="ghost" size="sm" onClick={() => setFiltroMesBeneficiosPwa('')}>
+                    Limpar
+                  </Button>
+                )}
+              </div>
               {loadingBeneficios ? (
                 <div className="flex items-center justify-center py-8">
                   <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
                   <span className="ml-2 text-gray-600">Carregando benefícios...</span>
                 </div>
-              ) : beneficios.length === 0 ? (
+              ) : (() => {
+                const lista = filtroMesBeneficiosPwa
+                  ? beneficios.filter((b) => {
+                      const mes = b.mes_referencia || (b.data_inicio ? String(b.data_inicio).slice(0, 7) : '')
+                      return mes === filtroMesBeneficiosPwa
+                    })
+                  : beneficios
+                if (lista.length === 0) {
+                  return (
                 <Card className="w-full">
                   <CardContent className="py-12">
                     <div className="text-center text-gray-500">
                       <Gift className="w-16 h-16 mx-auto mb-4 text-gray-400" />
-                      <p className="text-xl font-semibold mb-2 text-gray-700">Nenhum benefício cadastrado</p>
+                      <p className="text-xl font-semibold mb-2 text-gray-700">
+                        {filtroMesBeneficiosPwa ? 'Nenhum benefício neste mês' : 'Nenhum benefício cadastrado'}
+                      </p>
                       <p className="text-sm text-gray-500 max-w-md mx-auto">
-                        Você ainda não possui benefícios cadastrados. Seus benefícios aparecerão aqui quando estiverem disponíveis.
+                        {filtroMesBeneficiosPwa
+                          ? 'Altere o filtro de mês ou aguarde o RH disponibilizar o documento.'
+                          : 'Seus benefícios aparecerão aqui quando o RH enviar os documentos do mês.'}
                       </p>
                     </div>
                   </CardContent>
                 </Card>
-              ) : (
+                  )
+                }
+                return (
                 <div className="space-y-3">
-                  {beneficios.map((beneficio) => (
+                  {lista.map((beneficio) => {
+                    const temPdf = Boolean(beneficio.arquivo)
+                    const assinado = beneficioJaAssinado(beneficio)
+                    return (
                     <div 
                       key={beneficio.id} 
                       className="bg-white rounded-xl p-4 hover:shadow-md transition-shadow border border-gray-100"
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <h4 className="font-semibold text-lg mb-3">
-                            {beneficio.beneficios_tipo?.tipo || 'Benefício'}
-                          </h4>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Valor</p>
-                              <p className="font-bold text-lg text-pink-600">
-                                {beneficio.beneficios_tipo?.valor 
-                                  ? `R$ ${beneficio.beneficios_tipo.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`
-                                  : 'N/A'}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Período</p>
-                              <p className="font-medium text-xs">
-                                {new Date(beneficio.data_inicio).toLocaleDateString('pt-BR')}
-                                {beneficio.data_fim && ` - ${new Date(beneficio.data_fim).toLocaleDateString('pt-BR')}`}
-                              </p>
-                            </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-lg mb-1">
+                              {beneficio.beneficios_tipo?.tipo || 'Benefício'}
+                            </h4>
+                            <p className="text-sm text-gray-600">
+                              {formatarMesBeneficioPwa(beneficio.mes_referencia, beneficio.data_inicio)}
+                            </p>
                           </div>
+                          <Badge className={assinado ? 'bg-green-100 text-green-800' : temPdf ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-800'}>
+                            {assinado ? 'Assinado' : temPdf ? 'Pendente' : 'Sem PDF'}
+                          </Badge>
                         </div>
+                        {(beneficio.valor ?? beneficio.beneficios_tipo?.valor) ? (
+                          <p className="font-bold text-lg text-pink-600">
+                            R$ {(beneficio.valor ?? beneficio.beneficios_tipo?.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          </p>
+                        ) : null}
+                        {temPdf && (
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleDownloadBeneficio(beneficio, false)}
+                            >
+                              <Download className="w-4 h-4 mr-1" />
+                              PDF
+                            </Button>
+                            {!assinado ? (
+                              <Button
+                                variant="default"
+                                size="sm"
+                                className="bg-amber-600 hover:bg-amber-700"
+                                onClick={() => abrirAssinaturaBeneficio(beneficio)}
+                              >
+                                <PenTool className="w-4 h-4 mr-1" />
+                                Assinar
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadBeneficio(beneficio, true)}
+                                >
+                                  <FileSignature className="w-4 h-4 mr-1" />
+                                  PDF assinado
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-700"
+                                  onClick={() => abrirAssinaturaBeneficio(beneficio)}
+                                >
+                                  <PenTool className="w-4 h-4 mr-1" />
+                                  Reassinar
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
-              )}
+                )
+              })()}
             </div>
             )}
 
@@ -2974,6 +3123,60 @@ function PWAPerfilPageContent() {
                   if (enviandoAssinaturaCertificado) return
                   setModalAssinaturaCertificadoOpen(false)
                   setCertificadoAssinando(null)
+                }}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Assinatura digital — benefício */}
+      <Dialog
+        open={modalAssinaturaBeneficioOpen}
+        onOpenChange={(open) => {
+          setModalAssinaturaBeneficioOpen(open)
+          if (!open) setBeneficioAssinando(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileSignature className="w-5 h-5" />
+              {beneficioAssinando && beneficioJaAssinado(beneficioAssinando)
+                ? 'Reassinar benefício'
+                : 'Assinar benefício'}
+            </DialogTitle>
+            <DialogDescription>
+              {beneficioAssinando
+                ? `${beneficioAssinando.beneficios_tipo?.tipo || 'Benefício'} — ${formatarMesBeneficioPwa(beneficioAssinando.mes_referencia, beneficioAssinando.data_inicio)}`
+                : 'Selecione um benefício na lista.'}
+            </DialogDescription>
+          </DialogHeader>
+          {enviandoAssinaturaBeneficio && (
+            <div className="flex items-center gap-2 text-sm text-gray-600 py-2">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Enviando assinatura…
+            </div>
+          )}
+          {beneficioAssinando && (
+            <div className={enviandoAssinaturaBeneficio ? 'pointer-events-none opacity-60' : ''}>
+              <SignaturePad
+                compact
+                compactDense
+                showCancelButton
+                applyLabel={
+                  beneficioJaAssinado(beneficioAssinando)
+                    ? 'Enviar nova assinatura'
+                    : 'Enviar assinatura'
+                }
+                title=""
+                description=""
+                className="pt-2"
+                onSave={handleAssinaturaBeneficioSalva}
+                onCancel={() => {
+                  if (enviandoAssinaturaBeneficio) return
+                  setModalAssinaturaBeneficioOpen(false)
+                  setBeneficioAssinando(null)
                 }}
               />
             </div>

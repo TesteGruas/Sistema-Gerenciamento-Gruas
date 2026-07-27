@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef } from "react"
+import { useState, useEffect, useRef, useMemo } from "react"
 import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -42,6 +42,8 @@ import {
   Plus,
   Trash2,
   CheckCircle,
+  CheckCircle2,
+  FileSignature,
   TrendingUp,
   TrendingDown,
   BarChart3,
@@ -67,6 +69,21 @@ import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
 import { getApiOrigin } from "@/lib/runtime-config"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { getHistoricoAlocacoesFuncionario } from "@/lib/api-funcionarios-obras"
+import { isBeneficioDocumental } from "@/lib/beneficio-documental"
+
+const MESES_PT_BENEFICIO = [
+  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+]
+
+function formatarMesReferenciaBeneficio(mesRef?: string | null, dataInicio?: string | null): string {
+  const raw = (mesRef || (dataInicio ? String(dataInicio).slice(0, 7) : '') || '').trim()
+  const m = raw.match(/^(\d{4})-(\d{2})/)
+  if (!m) return '—'
+  const mesNum = parseInt(m[2], 10)
+  if (mesNum < 1 || mesNum > 12) return raw
+  return `${MESES_PT_BENEFICIO[mesNum - 1]} / ${m[1]}`
+}
 
 interface FuncionarioRH {
   id: number
@@ -136,6 +153,11 @@ interface BeneficioFuncionario {
   status: string
   valor?: number
   observacoes?: string
+  mes_referencia?: string
+  arquivo?: string
+  assinatura_digital?: string
+  assinado_em?: string
+  assinado_por?: number
   funcionario?: {
     nome: string
     cargo?: string
@@ -207,10 +229,14 @@ export default function FuncionarioDetalhesPage() {
   // Estados para formulários
   const [beneficioForm, setBeneficioForm] = useState({
     tipo: '',
-    dataInicio: '',
+    mesReferencia: '',
     valor: '',
-    observacoes: ''
+    observacoes: '',
+    arquivo: null as File | null
   })
+  const [filtroMesBeneficio, setFiltroMesBeneficio] = useState('all')
+  const [filtroAnoBeneficio, setFiltroAnoBeneficio] = useState('all')
+  const [criandoBeneficio, setCriandoBeneficio] = useState(false)
   
   const [documentoForm, setDocumentoForm] = useState({
     tipo: '',
@@ -518,6 +544,68 @@ export default function FuncionarioDetalhesPage() {
     toggleSort: documentosToggleSort,
   } = useClientSortedList(documentos as unknown as Record<string, unknown>[])
 
+  const beneficiosParaTabela = useMemo(() => {
+    return beneficios.map((b) => {
+      const mesRef = b.mes_referencia || (b.data_inicio ? String(b.data_inicio).slice(0, 7) : '')
+      return {
+        ...b,
+        tipo_nome: b.beneficios_tipo?.tipo || b.beneficios_tipo?.descricao || 'Benefício',
+        mes_ref: mesRef,
+        mes_label: formatarMesReferenciaBeneficio(b.mes_referencia, b.data_inicio),
+        valor_exibicao: b.valor ?? b.beneficios_tipo?.valor ?? null,
+        assinado: Boolean(b.assinatura_digital && b.assinado_em),
+        tem_pdf: Boolean(b.arquivo),
+      }
+    })
+  }, [beneficios])
+
+  const beneficiosFiltrados = useMemo(() => {
+    return beneficiosParaTabela.filter((b) => {
+      const [ano, mesNum] = (b.mes_ref || '').split('-')
+      if (filtroMesBeneficio !== 'all' && mesNum !== filtroMesBeneficio) return false
+      if (filtroAnoBeneficio !== 'all' && ano !== filtroAnoBeneficio) return false
+      return true
+    })
+  }, [beneficiosParaTabela, filtroMesBeneficio, filtroAnoBeneficio])
+
+  const opcoesMesBeneficio = useMemo(() => {
+    const opcoes = [{ value: 'all', label: 'Todos os meses' }]
+    MESES_PT_BENEFICIO.forEach((nome, index) => {
+      opcoes.push({
+        value: String(index + 1).padStart(2, '0'),
+        label: nome,
+      })
+    })
+    return opcoes
+  }, [])
+
+  const opcoesAnoBeneficio = useMemo(() => {
+    const anos = new Set<string>()
+    beneficiosParaTabela.forEach((b) => {
+      const ano = (b.mes_ref || '').split('-')[0]
+      if (ano && /^\d{4}$/.test(ano)) anos.add(ano)
+    })
+    if (anos.size === 0) {
+      const atual = new Date().getFullYear()
+      for (let i = 0; i < 5; i++) anos.add(String(atual - i))
+    }
+    const opcoes = [{ value: 'all', label: 'Todos os anos' }]
+    Array.from(anos)
+      .sort((a, b) => Number(b) - Number(a))
+      .forEach((ano) => opcoes.push({ value: ano, label: ano }))
+    return opcoes
+  }, [beneficiosParaTabela])
+
+  const {
+    sortedItems: sortedBeneficios,
+    sortColumn: beneficiosSortColumn,
+    sortDirection: beneficiosSortDirection,
+    toggleSort: beneficiosToggleSort,
+  } = useClientSortedList(beneficiosFiltrados as unknown as Record<string, unknown>[], {
+    defaultColumn: 'mes_ref',
+    defaultDirection: 'desc',
+  })
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'Ativo': return 'bg-green-100 text-green-800'
@@ -818,9 +906,10 @@ export default function FuncionarioDetalhesPage() {
   const resetBeneficioForm = () => {
     setBeneficioForm({
       tipo: '',
-      dataInicio: '',
+      mesReferencia: '',
       valor: '',
-      observacoes: ''
+      observacoes: '',
+      arquivo: null
     })
   }
   
@@ -1141,16 +1230,24 @@ export default function FuncionarioDetalhesPage() {
     }
   }
   
+  const tipoBeneficioSelecionado = tiposBeneficios.find(
+    (t: any) => String(t.id) === String(beneficioForm.tipo)
+  )
+  const beneficioFormEhDocumental = isBeneficioDocumental(tipoBeneficioSelecionado?.tipo)
+
   const handleCriarBeneficio = async () => {
-    // Validação de campos obrigatórios
     const camposFaltando: string[] = []
 
     if (!beneficioForm.tipo || !beneficioForm.tipo.trim()) {
       camposFaltando.push('Tipo de Benefício')
     }
 
-    if (!beneficioForm.dataInicio || !beneficioForm.dataInicio.trim()) {
-      camposFaltando.push('Data de Início')
+    if (!beneficioForm.mesReferencia || !beneficioForm.mesReferencia.trim()) {
+      camposFaltando.push('Mês / Ano')
+    }
+
+    if (beneficioFormEhDocumental && !beneficioForm.arquivo) {
+      camposFaltando.push('Arquivo PDF')
     }
 
     if (camposFaltando.length > 0) {
@@ -1167,10 +1264,9 @@ export default function FuncionarioDetalhesPage() {
     }
 
     try {
-      
+      setCriandoBeneficio(true)
       const funcionarioId = parseInt(params.id as string)
       
-      // Converter valor para número se fornecido
       let valorNumerico: number | undefined = undefined
       if (beneficioForm.valor && beneficioForm.valor.trim() !== '') {
         const valorLimpo = beneficioForm.valor.replace(/\./g, '').replace(',', '.')
@@ -1185,24 +1281,43 @@ export default function FuncionarioDetalhesPage() {
         }
       }
 
-      // Chamar API para adicionar benefício
+      let arquivoPath: string | undefined
+      if (beneficioForm.arquivo) {
+        const apiUrl = getApiOrigin()
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        const formData = new FormData()
+        formData.append('arquivo', beneficioForm.arquivo)
+        formData.append('categoria', 'geral')
+        const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData
+        })
+        if (!uploadResponse.ok) {
+          const err = await uploadResponse.json().catch(() => ({}))
+          throw new Error(err.message || 'Falha no upload do PDF')
+        }
+        const uploadJson = await uploadResponse.json()
+        arquivoPath = uploadJson?.data?.arquivo || uploadJson?.arquivo || uploadJson?.data?.path || uploadJson?.data?.url
+        if (!arquivoPath) throw new Error('Upload não retornou caminho do arquivo')
+      }
+
       const response = await rhApi.adicionarBeneficioFuncionario({
         funcionario_id: funcionarioId,
         beneficio_tipo_id: parseInt(beneficioForm.tipo),
-        data_inicio: beneficioForm.dataInicio,
+        mes_referencia: beneficioForm.mesReferencia,
+        data_inicio: `${beneficioForm.mesReferencia}-01`,
         valor: valorNumerico,
-        observacoes: beneficioForm.observacoes || undefined
-      } as any)
+        observacoes: beneficioForm.observacoes || undefined,
+        arquivo: arquivoPath
+      })
       
       if (response.success) {
         toast({
           title: "Sucesso",
           description: "Benefício adicionado com sucesso!",
         })
-        
-        // Recarregar benefícios
         await carregarDadosTabs(funcionarioId)
-        
         setIsBeneficioDialogOpen(false)
         resetBeneficioForm()
       } else {
@@ -1215,18 +1330,24 @@ export default function FuncionarioDetalhesPage() {
         description: error instanceof Error ? error.message : "Erro ao adicionar benefício",
         variant: "destructive"
       })
+    } finally {
+      setCriandoBeneficio(false)
     }
   }
 
   const handleEditarBeneficio = (beneficio: BeneficioFuncionario) => {
     setBeneficioSelecionado(beneficio)
+    const mes =
+      beneficio.mes_referencia ||
+      (beneficio.data_inicio ? String(beneficio.data_inicio).slice(0, 7) : '')
     setBeneficioForm({
       tipo: beneficio.beneficio_tipo_id.toString(),
-      dataInicio: beneficio.data_inicio.split('T')[0],
+      mesReferencia: mes,
       valor: beneficio.valor 
         ? beneficio.valor.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
         : '',
-      observacoes: beneficio.observacoes || ''
+      observacoes: beneficio.observacoes || '',
+      arquivo: null
     })
     setIsEditBeneficioDialogOpen(true)
   }
@@ -1234,15 +1355,14 @@ export default function FuncionarioDetalhesPage() {
   const handleSalvarEdicaoBeneficio = async () => {
     if (!beneficioSelecionado) return
     
-    // Validação de campos obrigatórios
     const camposFaltando: string[] = []
 
     if (!beneficioForm.tipo || !beneficioForm.tipo.trim()) {
       camposFaltando.push('Tipo de Benefício')
     }
 
-    if (!beneficioForm.dataInicio || !beneficioForm.dataInicio.trim()) {
-      camposFaltando.push('Data de Início')
+    if (!beneficioForm.mesReferencia || !beneficioForm.mesReferencia.trim()) {
+      camposFaltando.push('Mês / Ano')
     }
 
     if (camposFaltando.length > 0) {
@@ -1259,29 +1379,44 @@ export default function FuncionarioDetalhesPage() {
     }
 
     try {
-      
-      const funcionarioId = parseInt(params.id as string)
-      
-      // Chamar API para atualizar benefício
+      setCriandoBeneficio(true)
+      let arquivoPath: string | undefined
+      if (beneficioForm.arquivo) {
+        const apiUrl = getApiOrigin()
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        const formData = new FormData()
+        formData.append('arquivo', beneficioForm.arquivo)
+        formData.append('categoria', 'geral')
+        const uploadResponse = await fetch(buildUploadEndpoint(apiUrl), {
+          method: 'POST',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+          body: formData
+        })
+        if (!uploadResponse.ok) {
+          const err = await uploadResponse.json().catch(() => ({}))
+          throw new Error(err.message || 'Falha no upload do PDF')
+        }
+        const uploadJson = await uploadResponse.json()
+        arquivoPath = uploadJson?.data?.arquivo || uploadJson?.arquivo || uploadJson?.data?.path || uploadJson?.data?.url
+      }
+
       const response = await rhApi.atualizarBeneficioFuncionario(beneficioSelecionado.id, {
-        funcionario_id: funcionarioId,
         beneficio_tipo_id: parseInt(beneficioForm.tipo),
-        data_inicio: beneficioForm.dataInicio,
-        valor: beneficioForm.valor && beneficioForm.valor.trim() !== '' 
-          ? parseFloat(beneficioForm.valor.replace(/\./g, '').replace(',', '.')) 
+        mes_referencia: beneficioForm.mesReferencia,
+        data_inicio: `${beneficioForm.mesReferencia}-01`,
+        valor: beneficioForm.valor && beneficioForm.valor.trim() !== ''
+          ? parseFloat(beneficioForm.valor.replace(/\./g, '').replace(',', '.'))
           : undefined,
-        observacoes: beneficioForm.observacoes || undefined
-      } as any)
-      
+        observacoes: beneficioForm.observacoes || undefined,
+        ...(arquivoPath ? { arquivo: arquivoPath } : {})
+      })
+
       if (response.success) {
         toast({
           title: "Sucesso",
           description: "Benefício atualizado com sucesso!",
         })
-        
-        // Recarregar benefícios
-        await carregarDadosTabs(funcionarioId)
-        
+        await carregarDadosTabs(parseInt(params.id as string))
         setIsEditBeneficioDialogOpen(false)
         setBeneficioSelecionado(null)
         resetBeneficioForm()
@@ -1294,6 +1429,30 @@ export default function FuncionarioDetalhesPage() {
         title: "Erro",
         description: error instanceof Error ? error.message : "Erro ao atualizar benefício",
         variant: "destructive"
+      })
+    } finally {
+      setCriandoBeneficio(false)
+    }
+  }
+
+  const handleBaixarBeneficio = async (beneficio: BeneficioFuncionario, comAssinatura = false) => {
+    try {
+      const blob = await rhApi.baixarBeneficioFuncionario(beneficio.id, comAssinatura)
+      const url = window.URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const tipo = String(beneficio.beneficios_tipo?.tipo || 'beneficio').replace(/[^\w.-]+/g, '_')
+      const mes = beneficio.mes_referencia || 'mes'
+      a.download = `${tipo}_${mes}${comAssinatura ? '_assinado' : ''}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      toast({
+        title: 'Erro ao baixar',
+        description: error instanceof Error ? error.message : 'Não foi possível baixar o PDF',
+        variant: 'destructive'
       })
     }
   }
@@ -2695,23 +2854,57 @@ export default function FuncionarioDetalhesPage() {
         <TabsContent value="beneficios" className="space-y-6">
           <Card>
             <CardHeader>
-              <div className="flex justify-between items-center">
+              <div className="flex items-center justify-between flex-wrap gap-4">
                 <div>
-                  <CardTitle>Benefícios do Funcionário</CardTitle>
-                  <CardDescription>Benefícios oferecidos ao funcionário</CardDescription>
+                  <CardTitle>Benefícios</CardTitle>
+                  <CardDescription>
+                    {beneficiosFiltrados.length} benefício(s) cadastrado(s). A assinatura do colaborador é feita no Perfil do aplicativo; o status aparece na coluna «Assinatura colaborador».
+                  </CardDescription>
                 </div>
-                <Dialog open={isBeneficioDialogOpen} onOpenChange={setIsBeneficioDialogOpen}>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <Select value={filtroMesBeneficio} onValueChange={setFiltroMesBeneficio}>
+                    <SelectTrigger className="w-40">
+                      <SelectValue placeholder="Mês" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcoesMesBeneficio.map((opcao) => (
+                        <SelectItem key={opcao.value} value={opcao.value}>
+                          {opcao.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Select value={filtroAnoBeneficio} onValueChange={setFiltroAnoBeneficio}>
+                    <SelectTrigger className="w-32">
+                      <SelectValue placeholder="Ano" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {opcoesAnoBeneficio.map((opcao) => (
+                        <SelectItem key={opcao.value} value={opcao.value}>
+                          {opcao.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                <Dialog
+                  open={isBeneficioDialogOpen}
+                  onOpenChange={(open) => {
+                    if (!open && criandoBeneficio) return
+                    setIsBeneficioDialogOpen(open)
+                    if (!open) resetBeneficioForm()
+                  }}
+                >
                   <DialogTrigger asChild>
                     <Button>
                       <Plus className="w-4 h-4 mr-2" />
                       Novo Benefício
                     </Button>
                   </DialogTrigger>
-                  <DialogContent className="max-w-2xl">
+                  <DialogContent className="max-w-2xl" aria-busy={criandoBeneficio}>
                     <DialogHeader>
                       <DialogTitle>Adicionar Benefício</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <fieldset disabled={criandoBeneficio} className="space-y-4">
                       <div>
                         <Label htmlFor="tipo-beneficio">Tipo de Benefício *</Label>
                         <Select
@@ -2728,7 +2921,6 @@ export default function FuncionarioDetalhesPage() {
                               tiposBeneficios.map((tipo) => (
                                 <SelectItem key={tipo.id} value={tipo.id.toString()}>
                                   {tipo.tipo}
-                                  {tipo.descricao && ` (${tipo.descricao})`}
                                 </SelectItem>
                               ))
                             )}
@@ -2736,14 +2928,29 @@ export default function FuncionarioDetalhesPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label htmlFor="data-inicio-beneficio">Data de Início *</Label>
+                        <Label htmlFor="mes-beneficio">Mês / Ano *</Label>
                         <Input
-                          id="data-inicio-beneficio"
-                          type="date"
-                          value={beneficioForm.dataInicio}
-                          onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
+                          id="mes-beneficio"
+                          type="month"
+                          value={beneficioForm.mesReferencia}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, mesReferencia: e.target.value })}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Competência do documento (pode haver um arquivo por mês)
+                        </p>
+                      </div>
+                      <div>
+                        <DocumentoUpload
+                          accept="application/pdf"
+                          maxSize={10 * 1024 * 1024}
+                          onUpload={(file) => setBeneficioForm({ ...beneficioForm, arquivo: file })}
+                          onRemove={() => setBeneficioForm({ ...beneficioForm, arquivo: null })}
+                          label={beneficioFormEhDocumental ? 'Arquivo PDF' : 'Arquivo PDF (opcional)'}
+                          required={beneficioFormEhDocumental}
+                          currentFile={beneficioForm.arquivo}
                         />
                       </div>
+                      {!beneficioFormEhDocumental && (
                       <div>
                         <Label htmlFor="valor-beneficio">Valor (R$)</Label>
                         <Input
@@ -2752,12 +2959,10 @@ export default function FuncionarioDetalhesPage() {
                           placeholder="0,00"
                           value={beneficioForm.valor}
                           onChange={(e) => {
-                            // Permitir apenas números, vírgula e ponto
                             const value = e.target.value.replace(/[^\d,.-]/g, '')
                             setBeneficioForm({ ...beneficioForm, valor: value })
                           }}
                           onBlur={(e) => {
-                            // Formatar como moeda brasileira
                             const value = e.target.value.replace(',', '.')
                             const numValue = parseFloat(value)
                             if (!isNaN(numValue)) {
@@ -2772,6 +2977,7 @@ export default function FuncionarioDetalhesPage() {
                           Valor do benefício em reais (opcional)
                         </p>
                       </div>
+                      )}
                       <div>
                         <Label htmlFor="observacoes-beneficio">Observações</Label>
                         <Textarea
@@ -2784,6 +2990,7 @@ export default function FuncionarioDetalhesPage() {
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
+                          type="button"
                           onClick={() => {
                             setIsBeneficioDialogOpen(false)
                             resetBeneficioForm()
@@ -2791,11 +2998,18 @@ export default function FuncionarioDetalhesPage() {
                         >
                           Cancelar
                         </Button>
-                        <Button onClick={handleCriarBeneficio}>
-                          Adicionar Benefício
+                        <Button type="button" onClick={handleCriarBeneficio} disabled={criandoBeneficio}>
+                          {criandoBeneficio ? (
+                            <>
+                              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                              Salvando…
+                            </>
+                          ) : (
+                            'Adicionar Benefício'
+                          )}
                         </Button>
                       </div>
-                    </div>
+                    </fieldset>
                   </DialogContent>
                 </Dialog>
 
@@ -2805,7 +3019,7 @@ export default function FuncionarioDetalhesPage() {
                     <DialogHeader>
                       <DialogTitle>Editar Benefício</DialogTitle>
                     </DialogHeader>
-                    <div className="space-y-4">
+                    <fieldset disabled={criandoBeneficio} className="space-y-4">
                       <div>
                         <Label htmlFor="tipo-beneficio-edit">Tipo de Benefício *</Label>
                         <Select
@@ -2822,7 +3036,6 @@ export default function FuncionarioDetalhesPage() {
                               tiposBeneficios.map((tipo) => (
                                 <SelectItem key={tipo.id} value={tipo.id.toString()}>
                                   {tipo.tipo}
-                                  {tipo.descricao && ` (${tipo.descricao})`}
                                 </SelectItem>
                               ))
                             )}
@@ -2830,13 +3043,27 @@ export default function FuncionarioDetalhesPage() {
                         </Select>
                       </div>
                       <div>
-                        <Label htmlFor="data-inicio-beneficio-edit">Data de Início *</Label>
+                        <Label htmlFor="mes-beneficio-edit">Mês / Ano *</Label>
                         <Input
-                          id="data-inicio-beneficio-edit"
-                          type="date"
-                          value={beneficioForm.dataInicio}
-                          onChange={(e) => setBeneficioForm({ ...beneficioForm, dataInicio: e.target.value })}
+                          id="mes-beneficio-edit"
+                          type="month"
+                          value={beneficioForm.mesReferencia}
+                          onChange={(e) => setBeneficioForm({ ...beneficioForm, mesReferencia: e.target.value })}
                         />
+                      </div>
+                      <div>
+                        <DocumentoUpload
+                          accept="application/pdf"
+                          maxSize={10 * 1024 * 1024}
+                          onUpload={(file) => setBeneficioForm({ ...beneficioForm, arquivo: file })}
+                          onRemove={() => setBeneficioForm({ ...beneficioForm, arquivo: null })}
+                          label="Substituir PDF (opcional)"
+                          required={false}
+                          currentFile={beneficioForm.arquivo}
+                        />
+                        {beneficioSelecionado?.arquivo && !beneficioForm.arquivo && (
+                          <p className="text-xs text-gray-500 mt-1">Já existe um PDF anexado</p>
+                        )}
                       </div>
                       <div>
                         <Label htmlFor="valor-beneficio-edit">Valor (R$)</Label>
@@ -2846,12 +3073,10 @@ export default function FuncionarioDetalhesPage() {
                           placeholder="0,00"
                           value={beneficioForm.valor}
                           onChange={(e) => {
-                            // Permitir apenas números, vírgula e ponto
                             const value = e.target.value.replace(/[^\d,.-]/g, '')
                             setBeneficioForm({ ...beneficioForm, valor: value })
                           }}
                           onBlur={(e) => {
-                            // Formatar como moeda brasileira
                             const value = e.target.value.replace(',', '.')
                             const numValue = parseFloat(value)
                             if (!isNaN(numValue)) {
@@ -2862,9 +3087,6 @@ export default function FuncionarioDetalhesPage() {
                             }
                           }}
                         />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Valor do benefício em reais (opcional)
-                        </p>
                       </div>
                       <div>
                         <Label htmlFor="observacoes-beneficio-edit">Observações</Label>
@@ -2878,6 +3100,7 @@ export default function FuncionarioDetalhesPage() {
                       <div className="flex justify-end gap-2">
                         <Button
                           variant="outline"
+                          type="button"
                           onClick={() => {
                             setIsEditBeneficioDialogOpen(false)
                             setBeneficioSelecionado(null)
@@ -2886,32 +3109,113 @@ export default function FuncionarioDetalhesPage() {
                         >
                           Cancelar
                         </Button>
-                        <Button onClick={handleSalvarEdicaoBeneficio}>
+                        <Button type="button" onClick={handleSalvarEdicaoBeneficio} disabled={criandoBeneficio}>
                           Salvar Alterações
                         </Button>
                       </div>
-                    </div>
+                    </fieldset>
                   </DialogContent>
                 </Dialog>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
-              {beneficios.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {beneficios.map((beneficio) => (
-                    <Card key={beneficio.id}>
-                      <CardHeader>
-                        <div className="flex items-center justify-between">
-                          <CardTitle className="flex items-center gap-2">
-                            <Gift className="w-5 h-5" />
-                            {beneficio.beneficios_tipo?.descricao || 'Benefício'}
-                          </CardTitle>
-                          <div className="flex gap-2">
+              {beneficiosFiltrados.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <Gift className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                  <p>
+                    {filtroMesBeneficio !== 'all' || filtroAnoBeneficio !== 'all'
+                      ? 'Nenhum benefício encontrado para o período selecionado'
+                      : 'Nenhum benefício cadastrado'}
+                  </p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <SortableTableHead
+                        column="tipo_nome"
+                        label="Tipo"
+                        activeColumn={beneficiosSortColumn}
+                        direction={beneficiosSortDirection}
+                        onSort={beneficiosToggleSort}
+                      />
+                      <SortableTableHead
+                        column="mes_ref"
+                        label="Mês / Ano"
+                        activeColumn={beneficiosSortColumn}
+                        direction={beneficiosSortDirection}
+                        onSort={beneficiosToggleSort}
+                      />
+                      <SortableTableHead
+                        column="valor_exibicao"
+                        label="Valor"
+                        activeColumn={beneficiosSortColumn}
+                        direction={beneficiosSortDirection}
+                        onSort={beneficiosToggleSort}
+                      />
+                      <TableHead>Assinatura colaborador</TableHead>
+                      <TableHead className="text-right">Ações</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {(sortedBeneficios as unknown as typeof beneficiosFiltrados).map((beneficio) => (
+                      <TableRow key={beneficio.id}>
+                        <TableCell className="font-medium">{beneficio.tipo_nome}</TableCell>
+                        <TableCell>{beneficio.mes_label}</TableCell>
+                        <TableCell>
+                          {beneficio.valor_exibicao != null && Number(beneficio.valor_exibicao) > 0
+                            ? `R$ ${Number(beneficio.valor_exibicao).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : '—'}
+                        </TableCell>
+                        <TableCell>
+                          {!beneficio.tem_pdf ? (
+                            <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+                              Sem PDF
+                            </Badge>
+                          ) : beneficio.assinado ? (
+                            <Badge className="bg-emerald-600">
+                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              Assinado
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="bg-amber-50 text-amber-900 border-amber-200">
+                              <Clock className="w-3 h-3 mr-1" />
+                              Pendente
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            {beneficio.tem_pdf && (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  type="button"
+                                  title="Baixar PDF original"
+                                  onClick={() => handleBaixarBeneficio(beneficio, false)}
+                                >
+                                  <Download className="w-4 h-4" />
+                                </Button>
+                                {beneficio.assinado && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    type="button"
+                                    title="Baixar PDF com assinatura"
+                                    className="text-emerald-700"
+                                    onClick={() => handleBaixarBeneficio(beneficio, true)}
+                                  >
+                                    <FileSignature className="w-4 h-4" />
+                                  </Button>
+                                )}
+                              </>
+                            )}
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => handleEditarBeneficio(beneficio)}
-                              className="h-8 w-8 p-0"
                             >
                               <Edit className="w-4 h-4" />
                             </Button>
@@ -2919,59 +3223,16 @@ export default function FuncionarioDetalhesPage() {
                               variant="ghost"
                               size="sm"
                               onClick={() => handleRemoverBeneficio(beneficio.id)}
-                              className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+                              className="text-red-600"
                             >
                               <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Tipo:</span>
-                            <Badge className="bg-blue-100 text-blue-800">
-                              {beneficio.beneficios_tipo?.tipo || 'N/A'}
-                            </Badge>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Valor:</span>
-                            <span className="font-semibold">
-                              R$ {(beneficio.valor ?? beneficio.beneficios_tipo?.valor ?? 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Data Início:</span>
-                            <span className="text-sm">{format(new Date(beneficio.data_inicio), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                          </div>
-                          {beneficio.data_fim && (
-                            <div className="flex justify-between">
-                              <span className="text-sm text-gray-600">Data Fim:</span>
-                              <span className="text-sm">{format(new Date(beneficio.data_fim), 'dd/MM/yyyy', { locale: ptBR })}</span>
-                            </div>
-                          )}
-                          <div className="flex justify-between">
-                            <span className="text-sm text-gray-600">Status:</span>
-                            <Badge className={beneficio.status === 'ativo' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                              {beneficio.status}
-                            </Badge>
-                          </div>
-                          {beneficio.observacoes && (
-                            <div>
-                              <span className="text-sm text-gray-600">Observações:</span>
-                              <p className="text-sm">{beneficio.observacoes}</p>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <Gift className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                  <p>Nenhum benefício cadastrado</p>
-                </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
               )}
             </CardContent>
           </Card>

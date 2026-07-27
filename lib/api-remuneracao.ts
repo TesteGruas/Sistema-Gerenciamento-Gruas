@@ -65,7 +65,13 @@ export interface FuncionarioBeneficio {
   data_inicio: string
   data_fim?: string
   status: 'ativo' | 'inativo'
+  valor?: number
   observacoes?: string
+  mes_referencia?: string
+  arquivo?: string
+  assinatura_digital?: string
+  assinado_em?: string
+  assinado_por?: number
   created_at: string
   updated_at: string
   funcionarios?: {
@@ -112,8 +118,12 @@ export interface FuncionarioDescontoCreateData {
 export interface FuncionarioBeneficioCreateData {
   funcionario_id: number
   beneficio_tipo_id: number
-  data_inicio: string
+  data_inicio?: string
+  mes_referencia?: string
+  valor?: number
   observacoes?: string
+  arquivo?: string
+  status?: string
 }
 
 // ============== Respostas da API ==============
@@ -378,11 +388,13 @@ export async function addDescontoFolha(data: FuncionarioDescontoCreateData): Pro
 export async function getFuncionarioBeneficios(params?: {
   funcionario_id?: number
   status?: string
+  mes_referencia?: string
 }): Promise<FuncionarioBeneficioResponse> {
   const queryParams = new URLSearchParams()
   
   if (params?.funcionario_id) queryParams.append('funcionario_id', params.funcionario_id.toString())
   if (params?.status) queryParams.append('status', params.status)
+  if (params?.mes_referencia) queryParams.append('mes_referencia', params.mes_referencia)
 
   const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios?${queryParams.toString()}`)
   
@@ -443,5 +455,52 @@ export async function updateBeneficioFuncionario(id: number, data: Partial<Funci
   }
 
   return response.json()
+}
+
+/**
+ * Excluir benefício
+ */
+export async function deleteBeneficioFuncionario(id: number): Promise<{ success: boolean; message: string }> {
+  const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios/${id}`)
+  const response = await fetchWithAuth(url, { method: 'DELETE' })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro ao excluir benefício' }))
+    throw new Error(error.message || 'Erro ao excluir benefício')
+  }
+  return response.json()
+}
+
+/**
+ * Assinar benefício (PDF documental)
+ */
+export async function assinarBeneficioFuncionario(
+  id: number,
+  assinatura_digital: string
+): Promise<{ success: boolean; data: FuncionarioBeneficio; message: string }> {
+  const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios/${id}/assinatura`)
+  const response = await fetchWithAuth(url, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ assinatura_digital })
+  })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro ao assinar benefício' }))
+    throw new Error(error.message || 'Erro ao assinar benefício')
+  }
+  return response.json()
+}
+
+/**
+ * Baixar PDF do benefício
+ */
+export async function downloadBeneficioFuncionario(id: number, comAssinatura = false): Promise<Blob> {
+  const qs = comAssinatura ? '?comAssinatura=true' : ''
+  const url = buildApiUrl(`${BASE_URL}/funcionario-beneficios/${id}/download${qs}`)
+  const response = await fetchWithAuth(url, { method: 'GET' })
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: 'Erro ao baixar benefício' }))
+    throw new Error(error.message || 'Erro ao baixar benefício')
+  }
+  return response.blob()
 }
 

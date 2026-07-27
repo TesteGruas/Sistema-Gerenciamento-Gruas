@@ -23,7 +23,8 @@ try {
  * @property {number} [gapAbaixoTextoPoints] — espaço entre a base do texto e o topo da imagem da assinatura
  * @property {number} [signatureHeight] — altura desejada da assinatura (pontos PDF)
  * @property {number} [pageIndex] — forçar página (0-based). Com `rodape_coluna_esquerda`, usa só essa página (ex.: ficha de registro na 2.ª folha).
- * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'} [metodoAncora] — caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi / certificado_multipagina_aluno: só 1.ª página (ALUNO → ANDERSON → nome participante Vetor → canto inf. esquerdo).
+ * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'|'assinatura_centralizada'} [metodoAncora] — assinatura_centralizada: Y pela âncora, X no centro da página. caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi / certificado_multipagina_aluno: só 1.ª página (ALUNO → ANDERSON → nome participante Vetor → canto inf. esquerdo).
+ * @property {boolean} [centralizarHorizontal] — se true, ignora X da âncora e centraliza a imagem na largura da página
  * @property {number} [caixaPrimeirasPaginas] — com `caixa_fixa_a4_trabalhador_151`: quantas páginas a partir da 1.ª (default 3).
  * @property {number} [caixaX] — canto inferior esquerdo da caixa (pt).
  * @property {number} [caixaY] — base da caixa (pt, origem inferior esquerda).
@@ -128,7 +129,8 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
   {
     id: 'termo_responsabilidade',
     match: (nome) =>
-      /termo\s*responsabil|termoresponsab|responsabilidade.*termo/i.test(nome || ''),
+      /termo\s*responsabil|termoresponsab|responsabilidade.*termo/i.test(nome || '') &&
+      !/reconhecimento|ci[eê]ncia/i.test(nome || ''),
     regra: {
       metodoAncora: 'rodape_coluna_esquerda',
       anchors: [/assinatura/i],
@@ -137,6 +139,40 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       offsetYPoints: 50,
       gapAbaixoTextoPoints: 6,
       signatureHeight: 58
+    }
+  },
+  {
+    id: 'termo_reconhecimento_ciencia',
+    match: (nome) =>
+      /reconhecimento\s*e\s*ci[eê]ncia|termo.*reconhecimento|reconhecimento.*ci[eê]ncia/i.test(
+        nome || ''
+      ),
+    regra: {
+      metodoAncora: 'assinatura_centralizada',
+      anchors: [/assinatura do funcion[aá]rio/i, /assinatura\s*:/i, /assinatura/i],
+      match: 'last',
+      offsetXPoints: -52,
+      offsetYPoints: 42,
+      gapAbaixoTextoPoints: 8,
+      signatureHeight: 56,
+      centralizarHorizontal: true
+    }
+  },
+  {
+    id: 'recibo_vale_refeicao',
+    match: (nome) =>
+      /recibo.*vale\s*refei[cç]|vale\s*refei[cç].*recibo|ajuda\s*de\s*custo|recibo_vale/i.test(
+        nome || ''
+      ),
+    regra: {
+      metodoAncora: 'assinatura_centralizada',
+      anchors: [/assinatura do funcion[aá]rio/i, /assinatura/i],
+      match: 'last',
+      offsetXPoints: 0,
+      offsetYPoints: 58,
+      gapAbaixoTextoPoints: 8,
+      signatureHeight: 52,
+      centralizarHorizontal: true
     }
   },
   {
@@ -510,6 +546,9 @@ function calcularRetanguloAssinatura(anchorItem, pageInfo, regra) {
   let metodo = 'ancora_texto';
   if (regra.metodoAncora === 'rodape_mais_a_direita') metodo = 'rodape_mais_a_direita';
   else if (regra.metodoAncora === 'rodape_coluna_esquerda') metodo = 'rodape_coluna_esquerda';
+  else if (regra.metodoAncora === 'assinatura_centralizada' || regra.centralizarHorizontal) {
+    metodo = 'assinatura_centralizada';
+  }
 
   return {
     pageIndex: pageInfo.pageIndex,
@@ -517,7 +556,8 @@ function calcularRetanguloAssinatura(anchorItem, pageInfo, regra) {
     y,
     height: sigH,
     anchor: anchorItem.str?.slice(0, 80),
-    metodo
+    metodo,
+    pageWidth: pageInfo.pageWidth
   };
 }
 

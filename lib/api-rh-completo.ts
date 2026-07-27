@@ -955,18 +955,22 @@ export const rhApi = {
     limit?: number
     funcionario_id?: number
     ativo?: boolean
+    status?: string
+    mes_referencia?: string
   }) {
     const searchParams = new URLSearchParams()
     if (params?.page) searchParams.append('page', params.page.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
     if (params?.funcionario_id) searchParams.append('funcionario_id', params.funcionario_id.toString())
-    if (params?.ativo !== undefined) searchParams.append('ativo', params.ativo.toString())
+    if (params?.status) searchParams.append('status', params.status)
+    else if (params?.ativo !== undefined) searchParams.append('status', params.ativo ? 'ativo' : 'inativo')
+    if (params?.mes_referencia) searchParams.append('mes_referencia', params.mes_referencia)
 
     const url = buildApiUrl(`remuneracao/funcionario-beneficios?${searchParams.toString()}`)
     return apiRequest(url)
   },
 
-  async adicionarBeneficioFuncionario(data: Partial<FuncionarioBeneficio>) {
+  async adicionarBeneficioFuncionario(data: Record<string, unknown>) {
     const url = buildApiUrl('remuneracao/funcionario-beneficios')
     return apiRequest(url, {
       method: 'POST',
@@ -974,7 +978,7 @@ export const rhApi = {
     })
   },
 
-  async atualizarBeneficioFuncionario(id: number, data: Partial<FuncionarioBeneficio>) {
+  async atualizarBeneficioFuncionario(id: number, data: Record<string, unknown>) {
     const url = buildApiUrl(`remuneracao/funcionario-beneficios/${id}`)
     return apiRequest(url, {
       method: 'PUT',
@@ -987,6 +991,25 @@ export const rhApi = {
     return apiRequest(url, {
       method: 'DELETE',
     })
+  },
+
+  async assinarBeneficioFuncionario(id: number, assinatura_digital: string) {
+    const url = buildApiUrl(`remuneracao/funcionario-beneficios/${id}/assinatura`)
+    return apiRequest(url, {
+      method: 'PUT',
+      body: JSON.stringify({ assinatura_digital }),
+    })
+  },
+
+  async baixarBeneficioFuncionario(id: number, comAssinatura = false): Promise<Blob> {
+    const qs = comAssinatura ? '?comAssinatura=true' : ''
+    const url = buildApiUrl(`remuneracao/funcionario-beneficios/${id}/download${qs}`)
+    const response = await fetchWithAuth(url, { method: 'GET' })
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: 'Erro ao baixar benefício' }))
+      throw new Error(error.message || 'Erro ao baixar benefício')
+    }
+    return response.blob()
   },
 
   // ========================================

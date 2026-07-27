@@ -14,8 +14,10 @@ export const TIPOS_DOCUMENTOS_ADMISSIONAIS = [
   'Solicitação de vale transporte',
   'Acordo de compensação de horas',
   'Termo de responsabilidade',
+  'Termo de Reconhecimento e Ciência',
   'Ficha de entrega de EPIs (IRBANA)',
   'Recibo Ajuda de Custo',
+  'Recibo / Ajuda de Custo – Vale Refeição',
   'Outros',
 ] as const
 

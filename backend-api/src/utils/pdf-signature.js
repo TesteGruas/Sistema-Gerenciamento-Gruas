@@ -339,9 +339,22 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
           drawX = pos.pageWidth - drawW - (pos.marginRight ?? 44);
           drawY = pos.marginBottom ?? 40;
         }
+        if (
+          (pos.metodo === 'assinatura_centralizada' || regra.centralizarHorizontal) &&
+          typeof pos.pageWidth === 'number'
+        ) {
+          const offX = Number(regra.offsetXPoints) || 0
+          drawX = (pos.pageWidth - drawW) / 2 + offX
+        } else if (
+          (pos.metodo === 'assinatura_centralizada' || regra.centralizarHorizontal) &&
+          typeof pos.x === 'number'
+        ) {
+          // Sem pageWidth na posição: centralizar via null em adicionarAssinaturaNoPDF
+          drawX = null;
+        }
       }
       console.log(
-        `[PDF Signature] Assinatura (${pos.metodo || 'âncora'}) página ${pos.pageIndex + 1} [${i + 1}/${posicoes.length}], anchor="${pos.anchor}" x=${Number(drawX).toFixed(1)} y=${Number(drawY).toFixed(1)}`
+        `[PDF Signature] Assinatura (${pos.metodo || 'âncora'}) página ${pos.pageIndex + 1} [${i + 1}/${posicoes.length}], anchor="${pos.anchor}" x=${drawX == null ? 'center' : Number(drawX).toFixed(1)} y=${Number(drawY).toFixed(1)}`
       );
       buf = await adicionarAssinaturaNoPDF(buf, signatureBase64, {
         pageIndex: pos.pageIndex,

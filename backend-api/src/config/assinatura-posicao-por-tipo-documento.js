@@ -48,6 +48,32 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     gapAbaixoTextoPoints: 6,
     signatureHeight: 58
   },
+  termo_reconhecimento_ciencia: {
+    descricao:
+      'Termo de Reconhecimento e Ciência: linha «Assinatura» alinhada um pouco à esquerda do centro.',
+    metodoAncora: 'assinatura_centralizada',
+    anchors: [/assinatura do funcion[aá]rio/i, /assinatura\s*:/i, /assinatura/i],
+    match: 'last',
+    /** Negativo = esquerda (centro da página + offset). */
+    offsetXPoints: -52,
+    offsetYPoints: 42,
+    gapAbaixoTextoPoints: 8,
+    signatureHeight: 56,
+    centralizarHorizontal: true
+  },
+  recibo_vale_refeicao: {
+    descricao:
+      'Recibo / Ajuda de Custo – Vale Refeição: assinatura centralizada acima do rótulo do funcionário.',
+    metodoAncora: 'assinatura_centralizada',
+    anchors: [/assinatura do funcion[aá]rio/i, /assinatura/i],
+    match: 'last',
+    offsetXPoints: 0,
+    /** Sobe a imagem para ficar sobre a linha, sem cobrir «Assinatura do Funcionário». */
+    offsetYPoints: 58,
+    gapAbaixoTextoPoints: 8,
+    signatureHeight: 52,
+    centralizarHorizontal: true
+  },
   ficha_entrega_epis: {
     descricao:
       'Ficha de entrega de EPIs IRBANA: em geral 2 páginas (termo + tabela); assina no rodapé da coluna esquerda em cada página que tiver esse bloco.',

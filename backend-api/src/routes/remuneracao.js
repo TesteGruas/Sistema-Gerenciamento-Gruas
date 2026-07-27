@@ -8,11 +8,58 @@ import express from 'express'
 import Joi from 'joi'
 import { supabaseAdmin } from '../config/supabase.js'
 import { authenticateToken } from '../middleware/auth.js'
+import { checkPermission } from '../middleware/permissions.js'
+import { adicionarAssinaturaPorAncorasOuFallback } from '../utils/pdf-signature.js'
+import {
+  isBeneficioDocumental,
+  beneficioTipoParaTipoDocumentoAssinatura
+} from '../utils/beneficio-documental.js'
 
 const router = express.Router()
 
 // Aplicar middleware de autenticação
 router.use(authenticateToken)
+
+function mesReferenciaParaDataInicio(mesReferencia) {
+  const m = String(mesReferencia || '').trim()
+  if (!/^\d{4}-\d{2}$/.test(m)) return null
+  return `${m}-01`
+}
+
+async function baixarArquivoBeneficioBuffer(urlOrPath) {
+  const raw = String(urlOrPath || '').trim()
+  if (!raw) throw new Error('Caminho do arquivo vazio')
+  if (/^blob:/i.test(raw)) {
+    throw new Error('URL temporária (blob) inválida. Envie o PDF novamente no RH.')
+  }
+
+  let storagePath = null
+  if (!/^https?:\/\//i.test(raw)) {
+    storagePath = raw.replace(/^\/+/, '')
+  } else {
+    try {
+      const u = new URL(raw)
+      const needle = '/arquivos-obras/'
+      const idx = u.pathname.indexOf(needle)
+      if (idx !== -1) storagePath = decodeURIComponent(u.pathname.slice(idx + needle.length))
+    } catch {
+      /* ignore */
+    }
+  }
+
+  if (storagePath) {
+    const { data, error } = await supabaseAdmin.storage.from('arquivos-obras').download(storagePath)
+    if (!error && data) return Buffer.from(await data.arrayBuffer())
+  }
+
+  if (/^https?:\/\//i.test(raw)) {
+    const resp = await fetch(raw)
+    if (!resp.ok) throw new Error(`Falha ao baixar arquivo (${resp.status})`)
+    return Buffer.from(await resp.arrayBuffer())
+  }
+
+  throw new Error('Arquivo não encontrado no storage')
+}
 
 // ============== FOLHA DE PAGAMENTO ==============
 
@@ -464,21 +511,28 @@ router.post('/funcionario-descontos', async (req, res) => {
 /**
  * GET /api/remuneracao/funcionario-beneficios
  * Listar benefícios de funcionários
+ * Query: funcionario_id, status, mes_referencia (YYYY-MM)
  */
 router.get('/funcionario-beneficios', async (req, res) => {
   try {
-    const { funcionario_id, status = 'ativo' } = req.query
+    const { funcionario_id, status, mes_referencia } = req.query
 
     let query = supabaseAdmin
       .from('funcionario_beneficios')
       .select('*, funcionarios(nome, cargo), beneficios_tipo(tipo, descricao, valor)')
+      .order('id', { ascending: false })
 
     if (funcionario_id) {
       query = query.eq('funcionario_id', funcionario_id)
     }
 
-    if (status) {
+    // status omitido ou 'todos' → sem filtro (PWA/RH precisam ver pendentes e inativos)
+    if (status && status !== 'todos' && status !== 'all') {
       query = query.eq('status', status)
+    }
+
+    if (mes_referencia && /^\d{4}-\d{2}$/.test(String(mes_referencia))) {
+      query = query.eq('mes_referencia', mes_referencia)
     }
 
     const { data, error } = await query
@@ -502,6 +556,7 @@ router.get('/funcionario-beneficios', async (req, res) => {
 /**
  * POST /api/remuneracao/funcionario-beneficios
  * Adicionar benefício ao funcionário
+ * Aceita mes_referencia (YYYY-MM) e/ou data_inicio; arquivo (PDF) opcional/obrigatório conforme tipo.
  */
 router.post('/funcionario-beneficios', async (req, res) => {
   try {
@@ -509,25 +564,81 @@ router.post('/funcionario-beneficios', async (req, res) => {
       funcionario_id,
       beneficio_tipo_id,
       data_inicio,
+      mes_referencia,
       valor,
-      observacoes
+      observacoes,
+      arquivo,
+      status
     } = req.body
 
-    if (!funcionario_id || !beneficio_tipo_id || !data_inicio) {
+    if (!funcionario_id || !beneficio_tipo_id) {
       return res.status(400).json({
         success: false,
-        message: 'Campos obrigatórios: funcionario_id, beneficio_tipo_id, data_inicio'
+        message: 'Campos obrigatórios: funcionario_id, beneficio_tipo_id'
+      })
+    }
+
+    let mesRef = mes_referencia ? String(mes_referencia).trim() : null
+    if (mesRef && !/^\d{4}-\d{2}$/.test(mesRef)) {
+      return res.status(400).json({
+        success: false,
+        message: 'mes_referencia deve estar no formato YYYY-MM'
+      })
+    }
+
+    let dataInicio = data_inicio ? String(data_inicio).trim() : null
+    if (!dataInicio && mesRef) {
+      dataInicio = mesReferenciaParaDataInicio(mesRef)
+    }
+    if (!mesRef && dataInicio && /^\d{4}-\d{2}/.test(dataInicio)) {
+      mesRef = dataInicio.slice(0, 7)
+    }
+
+    if (!dataInicio && !mesRef) {
+      return res.status(400).json({
+        success: false,
+        message: 'Informe mes_referencia (YYYY-MM) ou data_inicio'
+      })
+    }
+
+    const { data: tipoRow, error: tipoErr } = await supabaseAdmin
+      .from('beneficios_tipo')
+      .select('id, tipo')
+      .eq('id', beneficio_tipo_id)
+      .single()
+
+    if (tipoErr || !tipoRow) {
+      return res.status(400).json({
+        success: false,
+        message: 'Tipo de benefício inválido'
+      })
+    }
+
+    if (isBeneficioDocumental(tipoRow.tipo) && !arquivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'PDF obrigatório para este tipo de benefício'
+      })
+    }
+
+    if (isBeneficioDocumental(tipoRow.tipo) && !mesRef) {
+      return res.status(400).json({
+        success: false,
+        message: 'Mês/ano (mes_referencia) obrigatório para este tipo de benefício'
       })
     }
 
     const insertData = {
       funcionario_id,
       beneficio_tipo_id,
-      data_inicio,
-      observacoes
+      data_inicio: dataInicio || mesReferenciaParaDataInicio(mesRef),
+      observacoes: observacoes || null,
+      status: status || 'ativo'
     }
 
-    // Adicionar valor se fornecido
+    if (mesRef) insertData.mes_referencia = mesRef
+    if (arquivo) insertData.arquivo = arquivo
+
     if (valor !== undefined && valor !== null && valor !== '') {
       insertData.valor = parseFloat(valor)
     }
@@ -535,16 +646,26 @@ router.post('/funcionario-beneficios', async (req, res) => {
     let { data, error } = await supabaseAdmin
       .from('funcionario_beneficios')
       .insert(insertData)
-      .select()
+      .select('*, beneficios_tipo(tipo, descricao, valor)')
       .single()
 
-    // Compatibilidade: alguns bancos ainda não possuem a coluna "valor".
-    if (error && String(error.message || '').includes("Could not find the 'valor' column")) {
-      const { valor: _valorRemovido, ...insertSemValor } = insertData
+    // Compatibilidade: bancos sem colunas novas ou sem "valor"
+    if (error && /Could not find the '(valor|mes_referencia|arquivo|assinatura_digital|assinado_em|assinado_por)' column/i.test(String(error.message || ''))) {
+      const msg = String(error.message || '')
+      const retryData = { ...insertData }
+      if (/valor/i.test(msg)) delete retryData.valor
+      if (/mes_referencia/i.test(msg)) {
+        delete retryData.mes_referencia
+        console.warn('[beneficios] Coluna mes_referencia ausente — rode a migration 20260727_funcionario_beneficios_pdf_assinatura.sql')
+      }
+      if (/arquivo/i.test(msg)) {
+        delete retryData.arquivo
+        console.warn('[beneficios] Coluna arquivo ausente — rode a migration 20260727_funcionario_beneficios_pdf_assinatura.sql')
+      }
       const retry = await supabaseAdmin
         .from('funcionario_beneficios')
-        .insert(insertSemValor)
-        .select()
+        .insert(retryData)
+        .select('*, beneficios_tipo(tipo, descricao, valor)')
         .single()
       data = retry.data
       error = retry.error
@@ -575,22 +696,39 @@ router.put('/funcionario-beneficios/:id', async (req, res) => {
   try {
     const { id } = req.params
     const updateData = { ...req.body }
+    delete updateData.id
+    delete updateData.assinatura_digital
+    delete updateData.assinado_em
+    delete updateData.assinado_por
+
+    if (updateData.mes_referencia) {
+      const mesRef = String(updateData.mes_referencia).trim()
+      if (!/^\d{4}-\d{2}$/.test(mesRef)) {
+        return res.status(400).json({
+          success: false,
+          message: 'mes_referencia deve estar no formato YYYY-MM'
+        })
+      }
+      updateData.mes_referencia = mesRef
+      if (!updateData.data_inicio) {
+        updateData.data_inicio = mesReferenciaParaDataInicio(mesRef)
+      }
+    }
 
     let { data, error } = await supabaseAdmin
       .from('funcionario_beneficios')
       .update(updateData)
       .eq('id', id)
-      .select()
+      .select('*, beneficios_tipo(tipo, descricao, valor)')
       .single()
 
-    // Compatibilidade: alguns bancos ainda não possuem a coluna "valor".
     if (error && String(error.message || '').includes("Could not find the 'valor' column")) {
       delete updateData.valor
       const retry = await supabaseAdmin
         .from('funcionario_beneficios')
         .update(updateData)
         .eq('id', id)
-        .select()
+        .select('*, beneficios_tipo(tipo, descricao, valor)')
         .single()
       data = retry.data
       error = retry.error
@@ -608,6 +746,211 @@ router.put('/funcionario-beneficios/:id', async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erro ao atualizar benefício',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * DELETE /api/remuneracao/funcionario-beneficios/:id
+ */
+router.delete('/funcionario-beneficios/:id', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { error } = await supabaseAdmin
+      .from('funcionario_beneficios')
+      .delete()
+      .eq('id', id)
+
+    if (error) throw error
+
+    res.json({ success: true, message: 'Benefício excluído com sucesso' })
+  } catch (error) {
+    console.error('Erro ao excluir benefício:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao excluir benefício',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * PUT /api/remuneracao/funcionario-beneficios/:id/assinatura
+ * Assinar benefício documental (PWA / RH)
+ */
+router.put('/funcionario-beneficios/:id/assinatura', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { assinatura_digital } = req.body
+    const userId = req.user.id
+    const userRole = req.user?.role
+    const userFuncionarioId = req.user?.funcionario_id
+
+    const schema = Joi.object({
+      assinatura_digital: Joi.string().required()
+    })
+    const { error: validationError } = schema.validate({ assinatura_digital })
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: validationError.details[0].message
+      })
+    }
+
+    const { data: beneficio, error: findErr } = await supabaseAdmin
+      .from('funcionario_beneficios')
+      .select('*, beneficios_tipo(tipo)')
+      .eq('id', id)
+      .single()
+
+    if (findErr || !beneficio) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benefício não encontrado'
+      })
+    }
+
+    if (!beneficio.arquivo) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este benefício não possui PDF para assinar'
+      })
+    }
+
+    const hasRHEditPermission = checkPermission(userRole, 'rh:editar')
+    const userFuncionarioIdNum = userFuncionarioId ? Number(userFuncionarioId) : null
+    const beneficioFuncionarioId = Number(beneficio.funcionario_id)
+    const isOwn =
+      userFuncionarioIdNum !== null &&
+      !isNaN(beneficioFuncionarioId) &&
+      userFuncionarioIdNum === beneficioFuncionarioId
+
+    if (!hasRHEditPermission && !isOwn) {
+      return res.status(403).json({
+        success: false,
+        message: 'Você só pode assinar seus próprios benefícios'
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('funcionario_beneficios')
+      .update({
+        assinatura_digital,
+        assinado_em: new Date().toISOString(),
+        assinado_por: userId
+      })
+      .eq('id', id)
+      .select('*, beneficios_tipo(tipo, descricao, valor)')
+      .single()
+
+    if (error) throw error
+
+    res.json({ success: true, data, message: 'Benefício assinado com sucesso' })
+  } catch (error) {
+    console.error('Erro ao assinar benefício:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao assinar benefício',
+      error: error.message
+    })
+  }
+})
+
+/**
+ * GET /api/remuneracao/funcionario-beneficios/:id/download
+ * Download do PDF do benefício (?comAssinatura=true)
+ */
+router.get('/funcionario-beneficios/:id/download', async (req, res) => {
+  try {
+    const { id } = req.params
+    const { comAssinatura } = req.query
+
+    const { data: beneficio, error: findErr } = await supabaseAdmin
+      .from('funcionario_beneficios')
+      .select('*, beneficios_tipo(tipo, descricao)')
+      .eq('id', id)
+      .single()
+
+    if (findErr || !beneficio) {
+      return res.status(404).json({
+        success: false,
+        message: 'Benefício não encontrado'
+      })
+    }
+
+    if (!beneficio.arquivo) {
+      return res.status(404).json({
+        success: false,
+        message: 'Arquivo do benefício não encontrado'
+      })
+    }
+
+    let pdfBuffer
+    try {
+      pdfBuffer = await baixarArquivoBeneficioBuffer(beneficio.arquivo)
+    } catch (dlErr) {
+      console.error('[beneficios/download] Falha ao obter bytes:', dlErr)
+      return res.status(502).json({
+        success: false,
+        message: 'Arquivo não pôde ser baixado',
+        details: process.env.NODE_ENV === 'development' ? String(dlErr?.message || dlErr) : undefined
+      })
+    }
+
+    const tipoNome = beneficio.beneficios_tipo?.tipo || ''
+    const wantSigned = comAssinatura === 'true' || comAssinatura === '1'
+
+    if (wantSigned && beneficio.assinatura_digital) {
+      try {
+        const tipoDoc = beneficioTipoParaTipoDocumentoAssinatura(tipoNome)
+        const arquivoNome =
+          String(beneficio.arquivo || '')
+            .split('/')
+            .pop()
+            .split('?')[0] || 'beneficio.pdf'
+        const beforeLen = pdfBuffer.length
+        pdfBuffer = await adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, beneficio.assinatura_digital, {
+          documento: {
+            arquivo_original: arquivoNome,
+            titulo: tipoNome,
+            ...(tipoDoc ? { tipo_documento: tipoDoc } : {})
+          },
+          opacity: 1.0
+        })
+        if (pdfBuffer.length === beforeLen) {
+          return res.status(422).json({
+            success: false,
+            message: 'Não foi possível aplicar a assinatura no PDF. Tente reassinar.'
+          })
+        }
+      } catch (signatureError) {
+        console.error('Erro ao compor assinatura no PDF (benefício):', signatureError)
+        return res.status(422).json({
+          success: false,
+          message: 'Erro ao aplicar assinatura no PDF',
+          error: signatureError.message
+        })
+      }
+    } else if (wantSigned && !beneficio.assinatura_digital) {
+      return res.status(400).json({
+        success: false,
+        message: 'Benefício ainda não foi assinado'
+      })
+    }
+
+    const mes = beneficio.mes_referencia || 'sem-mes'
+    const tipoSlug = String(tipoNome || 'beneficio').replace(/[^a-zA-Z0-9._-]/g, '_')
+    const nomeArquivo = `${tipoSlug}_${mes}${wantSigned && beneficio.assinatura_digital ? '_assinado' : ''}.pdf`
+
+    res.setHeader('Content-Type', 'application/pdf')
+    res.setHeader('Content-Disposition', `attachment; filename="${nomeArquivo}"`)
+    res.send(pdfBuffer)
+  } catch (error) {
+    console.error('Erro ao baixar benefício:', error)
+    res.status(500).json({
+      success: false,
+      message: 'Erro ao baixar benefício',
       error: error.message
     })
   }
