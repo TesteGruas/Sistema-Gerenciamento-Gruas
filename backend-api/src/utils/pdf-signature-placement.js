@@ -159,9 +159,26 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     }
   },
   {
+    id: 'recibo_vale_transporte',
+    match: (nome) =>
+      /recibo.*vale[\s_-]*transporte|vale[\s_-]*transporte.*recibo|ajuda\s*de\s*custo.*transporte|transporte.*ajuda\s*de\s*custo/i.test(
+        nome || ''
+      ),
+    regra: {
+      metodoAncora: 'assinatura_centralizada',
+      anchors: [/assinatura do funcion[aá]rio/i, /assinatura/i],
+      match: 'last',
+      offsetXPoints: 0,
+      offsetYPoints: 58,
+      gapAbaixoTextoPoints: 8,
+      signatureHeight: 52,
+      centralizarHorizontal: true
+    }
+  },
+  {
     id: 'recibo_vale_refeicao',
     match: (nome) =>
-      /recibo.*vale\s*refei[cç]|vale\s*refei[cç].*recibo|ajuda\s*de\s*custo|recibo_vale/i.test(
+      /recibo.*vale\s*refei[cç]|vale\s*refei[cç].*recibo|ajuda\s*de\s*custo.*refei[cç]|recibo_vale_refei/i.test(
         nome || ''
       ),
     regra: {

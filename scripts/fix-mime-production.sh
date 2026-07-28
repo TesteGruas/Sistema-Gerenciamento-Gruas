@@ -69,30 +69,26 @@ fi
 
 # 8. Iniciar com PM2
 echo -e "${YELLOW}6. Iniciando com PM2...${NC}"
-cd /home/Sistema-Gerenciamento-Gruas
+# Usa o diretório atual do projeto (ex.: /home/app/Sistema-Gerenciamento-Gruas)
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$PROJECT_ROOT"
 
-# Criar arquivo de configuração PM2 temporário
-cat > /tmp/pm2-front.json << EOF
-{
-  "name": "front",
-  "script": "npm",
-  "args": "start",
-  "cwd": "/home/Sistema-Gerenciamento-Gruas",
-  "env": {
-    "NODE_ENV": "production",
-    "PORT": "3000"
-  },
-  "error_file": "/root/.pm2/logs/front-error.log",
-  "out_file": "/root/.pm2/logs/front-out.log",
-  "log_date_format": "YYYY-MM-DD HH:mm:ss Z",
-  "merge_logs": true,
-  "autorestart": true,
-  "max_restarts": 10,
-  "min_uptime": "10s"
-}
-EOF
+if [ -f "ecosystem.config.js" ]; then
+  pm2 start ecosystem.config.js
+else
+  pm2 start node --name front -- .next/standalone/server.js
+fi
 
-pm2 start /tmp/pm2-front.json
+# Backend, se existir processo/config habitual
+if [ -f "backend-api/package.json" ]; then
+  if [ -f "backend-api/ecosystem.config.js" ]; then
+    (cd backend-api && pm2 start ecosystem.config.js) || true
+  else
+    pm2 describe backend-api >/dev/null 2>&1 || \
+      pm2 start backend-api/src/server.js --name backend-api --cwd "$PROJECT_ROOT/backend-api" || true
+  fi
+fi
+
 pm2 save
 
 # 9. Aguardar e verificar
@@ -120,5 +116,5 @@ pm2 logs front --lines 10 --nostream
 echo ""
 echo "Próximos passos:"
 echo "1. Verifique os logs: pm2 logs front"
-echo "2. Teste no navegador: http://72.60.60.118:3000"
+echo "2. Teste no navegador: https://sistemairbana.com.br"
 echo "3. Limpe o cache do navegador (Ctrl+Shift+R)"

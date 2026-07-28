@@ -34,6 +34,13 @@ const tipos = [
     valor: 0,
     percentual: 0,
     ativo: true
+  },
+  {
+    tipo: 'Recibo / Ajuda de Custo – Vale Transporte',
+    descricao: 'Recibo / ajuda de custo – vale transporte',
+    valor: 0,
+    percentual: 0,
+    ativo: true
   }
 ]
 
