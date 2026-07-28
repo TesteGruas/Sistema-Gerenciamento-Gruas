@@ -159,6 +159,23 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     }
   },
   {
+    id: 'recibo_horas_extras',
+    match: (nome) =>
+      /recibo.*horas?\s*extras?|horas?\s*extras?.*recibo|pagamento.*horas?\s*extras?|recibo_horas_extras/i.test(
+        nome || ''
+      ),
+    regra: {
+      metodoAncora: 'assinatura_centralizada',
+      anchors: [/assinatura do funcion[aá]rio/i, /assinatura/i],
+      match: 'last',
+      offsetXPoints: 0,
+      offsetYPoints: 58,
+      gapAbaixoTextoPoints: 8,
+      signatureHeight: 52,
+      centralizarHorizontal: true
+    }
+  },
+  {
     id: 'recibo_vale_transporte',
     match: (nome) =>
       /recibo.*vale[\s_-]*transporte|vale[\s_-]*transporte.*recibo|ajuda\s*de\s*custo.*transporte|transporte.*ajuda\s*de\s*custo/i.test(

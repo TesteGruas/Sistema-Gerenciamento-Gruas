@@ -7,6 +7,8 @@ export const TIPOS_BENEFICIO_DOCUMENTAL = [
   'Recibo Ajuda de Custo',
   'Recibo / Ajuda de Custo – Vale Transporte',
   'Vale Transporte',
+  'Recibo / Pagamento de Horas Extras',
+  'Horas Extras',
 ]
 
 export function isBeneficioDocumental(tipoNome) {
@@ -27,6 +29,8 @@ export function beneficioTipoParaTipoDocumentoAssinatura(tipoNome) {
     'Recibo Ajuda de Custo': 'recibo_vale_refeicao',
     'Recibo / Ajuda de Custo – Vale Transporte': 'recibo_vale_transporte',
     'Vale Transporte': 'recibo_vale_transporte',
+    'Recibo / Pagamento de Horas Extras': 'recibo_horas_extras',
+    'Horas Extras': 'recibo_horas_extras',
   }
   return map[t] || undefined
 }

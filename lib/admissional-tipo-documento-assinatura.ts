@@ -16,6 +16,7 @@ export function tipoAdmissionalParaTipoDocumentoAssinatura(tipo: string): string
     'Recibo Ajuda de Custo': 'recibo_vale_refeicao',
     'Recibo / Ajuda de Custo – Vale Refeição': 'recibo_vale_refeicao',
     'Recibo / Ajuda de Custo – Vale Transporte': 'recibo_vale_transporte',
+    'Recibo / Pagamento de Horas Extras': 'recibo_horas_extras',
   }
   return map[t] || ''
 }

@@ -41,6 +41,13 @@ const tipos = [
     valor: 0,
     percentual: 0,
     ativo: true
+  },
+  {
+    tipo: 'Recibo / Pagamento de Horas Extras',
+    descricao: 'Recibo / pagamento de horas extras',
+    valor: 0,
+    percentual: 0,
+    ativo: true
   }
 ]
 

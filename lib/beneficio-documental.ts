@@ -7,6 +7,8 @@ export const TIPOS_BENEFICIO_DOCUMENTAL = [
   'Recibo Ajuda de Custo',
   'Recibo / Ajuda de Custo – Vale Transporte',
   'Vale Transporte',
+  'Recibo / Pagamento de Horas Extras',
+  'Horas Extras',
 ] as const
 
 export function isBeneficioDocumental(tipoNome: string | null | undefined): boolean {

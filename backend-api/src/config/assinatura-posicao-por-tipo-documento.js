@@ -86,6 +86,18 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     signatureHeight: 52,
     centralizarHorizontal: true
   },
+  recibo_horas_extras: {
+    descricao:
+      'Recibo / Pagamento de Horas Extras: assinatura centralizada acima de «Assinatura do Funcionário».',
+    metodoAncora: 'assinatura_centralizada',
+    anchors: [/assinatura do funcion[aá]rio/i, /assinatura/i],
+    match: 'last',
+    offsetXPoints: 0,
+    offsetYPoints: 58,
+    gapAbaixoTextoPoints: 8,
+    signatureHeight: 52,
+    centralizarHorizontal: true
+  },
   ficha_entrega_epis: {
     descricao:
       'Ficha de entrega de EPIs IRBANA: em geral 2 páginas (termo + tabela); assina no rodapé da coluna esquerda em cada página que tiver esse bloco.',

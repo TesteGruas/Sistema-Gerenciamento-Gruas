@@ -42,3 +42,17 @@ WHERE NOT EXISTS (
   SELECT 1 FROM beneficios_tipo
   WHERE tipo = 'Recibo / Ajuda de Custo – Vale Transporte'
 );
+
+INSERT INTO beneficios_tipo (tipo, descricao, valor, percentual, ativo, created_at, updated_at)
+SELECT
+  'Recibo / Pagamento de Horas Extras',
+  'Recibo / pagamento de horas extras',
+  0,
+  0,
+  true,
+  NOW(),
+  NOW()
+WHERE NOT EXISTS (
+  SELECT 1 FROM beneficios_tipo
+  WHERE tipo = 'Recibo / Pagamento de Horas Extras'
+);
