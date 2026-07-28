@@ -1,11 +1,15 @@
 /**
- * NR12 em qualquer formato legível (alinhado ao admin e a `PERFIS_ASSINATURA_DOCUMENTO` em pdf-signature-placement).
- * @param {string} tipo — valor de `certificados_colaboradores.tipo` (ex.: NR12, «Certificado NR12», NR 12)
- * @returns {'certificado_nr12'|'certificado_padrao'}
+ * Mapeia `certificados_colaboradores.tipo` → chave em `REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO`
+ * (alinhado ao admin e a `PERFIS_ASSINATURA_DOCUMENTO` em pdf-signature-placement).
+ * @param {string} tipo — ex.: NR12, «Certificado NR12», «Ordem de Serviço»
+ * @returns {'certificado_nr12'|'certificado_ordem_servico'|'certificado_padrao'}
  */
 export function certificadoTipoParaTipoDocumentoAssinatura(tipo) {
   const s = String(tipo || '').trim()
   if (!s) return 'certificado_padrao'
+  if (/ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) || /^os$/i.test(s)) {
+    return 'certificado_ordem_servico'
+  }
   if (/\bNR\s*-?\s*0*12\b/i.test(s)) return 'certificado_nr12'
   const compact = s.replace(/\s+/g, '')
   if (/NR0*12(?![0-9])/i.test(compact)) return 'certificado_nr12'

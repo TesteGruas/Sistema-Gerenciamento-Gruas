@@ -372,12 +372,12 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
   const tipoDoc = String(
     contexto.documento?.tipo_documento || contexto.documento?.tipo_funcionario_documento || ''
   );
-  const isCertificado =
+  const isCertificadoNr =
     metodo === 'certificado_nr12_multi' ||
     metodo === 'certificado_multipagina_aluno' ||
-    /^certificado_/i.test(tipoDoc);
+    (/^certificado_/i.test(tipoDoc) && !/ordem_servico/i.test(tipoDoc));
 
-  if (isCertificado) {
+  if (isCertificadoNr) {
     console.warn('[PDF Signature] Nenhuma âncora encontrada em certificado; usando 1.ª página e y=50');
     return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
       pageIndex: 0,

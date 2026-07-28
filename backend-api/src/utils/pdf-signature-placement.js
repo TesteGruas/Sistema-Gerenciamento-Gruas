@@ -251,6 +251,22 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     }
   },
   {
+    /** Antes de certificado_padrao — «OS» no nome do arquivo não é certificado NR. */
+    id: 'certificado_ordem_servico',
+    match: (nome) =>
+      /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b|-\s*OS(\.pdf)?$/i.test(nome || ''),
+    regra: {
+      metodoAncora: 'assinatura_centralizada',
+      centralizarHorizontal: true,
+      anchors: [/Assinatura do Trabalhador/i],
+      match: 'last',
+      offsetXPoints: -40,
+      offsetYPoints: 80,
+      gapAbaixoTextoPoints: 4,
+      signatureHeight: 48
+    }
+  },
+  {
     id: 'certificado_padrao',
     match: (nome) =>
       /certificado|nr\s*0?\d+|sinaleiro|reciclagem|especifica[cç][aã]o/i.test(nome || ''),

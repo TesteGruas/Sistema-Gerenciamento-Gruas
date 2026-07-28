@@ -161,6 +161,24 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     marginLeftCanto: 80,
     marginBottomCanto: 40
   },
+  /**
+   * Ordem de Serviço (SST / certificados RH): última página — campo do trabalhador
+   * (não «Assinatura do Responsável pelo Treinamento», que já pode vir carimbada).
+   */
+  certificado_ordem_servico: {
+    descricao:
+      'Ordem de Serviço: última página, âncora «Assinatura do Trabalhador» (linha acima do rótulo); ignora a assinatura do responsável à direita.',
+    anchors: [/Assinatura do Trabalhador/i],
+    match: 'last',
+    /** Centraliza na faixa da linha (≈ centro da página no layout TCPDF). */
+    metodoAncora: 'assinatura_centralizada',
+    centralizarHorizontal: true,
+    offsetXPoints: -40,
+    /** Sobe a imagem até a linha tracejada acima do nome/CPF. */
+    offsetYPoints: 80,
+    gapAbaixoTextoPoints: 4,
+    signatureHeight: 48
+  },
   /** Documentos de demissão / rescisão: formulário eSocial A4 sem AcroForm — campo 151 (trabalhador). */
   demissao_termo_rescisao: {
     descricao:
