@@ -63,6 +63,23 @@ interface Categoria {
   status?: 'Ativa' | 'Inativa'
 }
 
+interface EstoqueClassificacao {
+  id: number
+  codigo: string
+  nome: string
+  descricao?: string | null
+  status?: 'Ativa' | 'Inativa'
+  exige_subcategoria?: boolean
+}
+
+interface EstoqueSubcategoriaAtivo {
+  id: number
+  codigo: string
+  nome: string
+  descricao?: string | null
+  status?: 'Ativa' | 'Inativa'
+}
+
 interface EstoqueResponse {
   success: boolean
   data: Produto[]
@@ -278,8 +295,11 @@ class EstoqueAPI {
   }
 
   // Listar categorias (assumindo que existe um endpoint para isso)
-  async listarCategorias(): Promise<{ success: boolean; data: Categoria[] }> {
-    return this.request<{ success: boolean; data: Categoria[] }>('/categorias')
+  async listarCategorias(params: { status?: string; limit?: number } = {}): Promise<{ success: boolean; data: Categoria[] }> {
+    const queryParams = new URLSearchParams()
+    queryParams.append('limit', String(params.limit ?? 500))
+    if (params.status) queryParams.append('status', params.status)
+    return this.request<{ success: boolean; data: Categoria[] }>(`/categorias?${queryParams.toString()}`)
   }
 
   // Criar categoria
@@ -292,7 +312,118 @@ class EstoqueAPI {
       body: JSON.stringify(dados),
     })
   }
+
+  async atualizarCategoria(
+    id: number,
+    dados: { nome: string; descricao?: string; status?: 'Ativa' | 'Inativa' }
+  ): Promise<{ success: boolean; data: Categoria }> {
+    return this.request<{ success: boolean; data: Categoria }>(`/categorias/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async excluirCategoria(id: number): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/categorias/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async listarClassificacoes(params: { status?: string } = {}): Promise<{ success: boolean; data: EstoqueClassificacao[] }> {
+    const queryParams = new URLSearchParams()
+    if (params.status) queryParams.append('status', params.status)
+    const qs = queryParams.toString()
+    return this.request<{ success: boolean; data: EstoqueClassificacao[] }>(
+      `/estoque-classificacoes${qs ? `?${qs}` : ''}`
+    )
+  }
+
+  async criarClassificacao(dados: {
+    nome: string
+    codigo?: string
+    descricao?: string
+    status?: 'Ativa' | 'Inativa'
+    exige_subcategoria?: boolean
+  }): Promise<{ success: boolean; data: EstoqueClassificacao }> {
+    return this.request<{ success: boolean; data: EstoqueClassificacao }>('/estoque-classificacoes', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async atualizarClassificacao(
+    id: number,
+    dados: {
+      nome: string
+      codigo?: string
+      descricao?: string
+      status?: 'Ativa' | 'Inativa'
+      exige_subcategoria?: boolean
+    }
+  ): Promise<{ success: boolean; data: EstoqueClassificacao }> {
+    return this.request<{ success: boolean; data: EstoqueClassificacao }>(`/estoque-classificacoes/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async excluirClassificacao(id: number): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/estoque-classificacoes/${id}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async listarSubcategoriasAtivo(params: { status?: string } = {}): Promise<{ success: boolean; data: EstoqueSubcategoriaAtivo[] }> {
+    const queryParams = new URLSearchParams()
+    if (params.status) queryParams.append('status', params.status)
+    const qs = queryParams.toString()
+    return this.request<{ success: boolean; data: EstoqueSubcategoriaAtivo[] }>(
+      `/estoque-subcategorias-ativo${qs ? `?${qs}` : ''}`
+    )
+  }
+
+  async criarSubcategoriaAtivo(dados: {
+    nome: string
+    codigo?: string
+    descricao?: string
+    status?: 'Ativa' | 'Inativa'
+  }): Promise<{ success: boolean; data: EstoqueSubcategoriaAtivo }> {
+    return this.request<{ success: boolean; data: EstoqueSubcategoriaAtivo }>('/estoque-subcategorias-ativo', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async atualizarSubcategoriaAtivo(
+    id: number,
+    dados: { nome: string; codigo?: string; descricao?: string; status?: 'Ativa' | 'Inativa' }
+  ): Promise<{ success: boolean; data: EstoqueSubcategoriaAtivo }> {
+    return this.request<{ success: boolean; data: EstoqueSubcategoriaAtivo }>(`/estoque-subcategorias-ativo/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(dados),
+    })
+  }
+
+  async excluirSubcategoriaAtivo(id: number): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/estoque-subcategorias-ativo/${id}`, {
+      method: 'DELETE',
+    })
+  }
 }
 
 export const estoqueAPI = new EstoqueAPI()
-export type { Produto, Movimentacao, Categoria, EstoqueResponse, MovimentacaoResponse, RelatorioResponse }
+export type {
+  Produto,
+  Movimentacao,
+  Categoria,
+  EstoqueClassificacao,
+  EstoqueSubcategoriaAtivo,
+  EstoqueResponse,
+  MovimentacaoResponse,
+  RelatorioResponse,
+}

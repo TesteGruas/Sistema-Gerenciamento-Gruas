@@ -6,6 +6,17 @@ import { applyListSort } from '../utils/apply-list-sort.js'
 
 const router = express.Router()
 
+async function classificacaoExigeSubcategoria(codigo) {
+  if (!codigo) return false
+  if (codigo === 'ativo') return true
+  const { data } = await supabaseAdmin
+    .from('estoque_classificacoes')
+    .select('exige_subcategoria')
+    .eq('codigo', codigo)
+    .maybeSingle()
+  return Boolean(data?.exige_subcategoria)
+}
+
 // Schema de validação para produtos
 const produtoSchema = Joi.object({
   nome: Joi.string().min(2).required(),
@@ -18,8 +29,8 @@ const produtoSchema = Joi.object({
   estoque_maximo: Joi.number().min(0).optional(),
   localizacao: Joi.string().allow('').optional(),
   status: Joi.string().valid('Ativo', 'Inativo').default('Ativo'),
-  classificacao_tipo: Joi.string().valid('componente', 'item', 'ativo', 'complemento').optional(),
-  subcategoria_ativo: Joi.string().valid('grua', 'equipamento_grua', 'ferramenta', 'ar_condicionado', 'camera', 'auto', 'pc').allow('').optional(),
+  classificacao_tipo: Joi.string().max(50).allow('').optional(),
+  subcategoria_ativo: Joi.string().max(50).allow('').optional(),
   quantidade_inicial: Joi.number().integer().min(0).optional().strip(), // Campo apenas para criação, não é salvo no produto
   quantidade_reservada_inicial: Joi.number().integer().min(0).optional().strip() // Campo apenas para criação, não é salvo no produto
 }).custom((value, helpers) => {
@@ -30,7 +41,7 @@ const produtoSchema = Joi.object({
     });
   }
   
-  // Validar que subcategoria_ativo é obrigatória quando classificacao_tipo é 'ativo'
+  // Compatível com classificação "ativo" e demais que exijam subcategoria no front
   if (value.classificacao_tipo === 'ativo' && !value.subcategoria_ativo) {
     return helpers.error('custom.subcategoriaAtivo', {
       message: 'A subcategoria do ativo é obrigatória quando a classificação é "ativo"'
@@ -225,6 +236,13 @@ router.post('/', authenticateToken, requirePermission('produtos:criar'), async (
       })
     }
 
+    if (await classificacaoExigeSubcategoria(value.classificacao_tipo) && !value.subcategoria_ativo) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: 'A subcategoria do ativo é obrigatória para esta classificação'
+      })
+    }
+
     // Preparar dados do produto
     const produtoData = {
       nome: value.nome,
@@ -249,7 +267,7 @@ router.post('/', authenticateToken, requirePermission('produtos:criar'), async (
     
     if (value.subcategoria_ativo) {
       produtoData.subcategoria_ativo = value.subcategoria_ativo
-    } else if (value.classificacao_tipo === 'ativo') {
+    } else if (await classificacaoExigeSubcategoria(value.classificacao_tipo)) {
       produtoData.subcategoria_ativo = null
     }
 
@@ -358,12 +376,29 @@ router.put('/:id', authenticateToken, requirePermission('produtos:editar'), asyn
       })
     }
 
+    if (
+      value.classificacao_tipo !== undefined &&
+      (await classificacaoExigeSubcategoria(value.classificacao_tipo)) &&
+      !value.subcategoria_ativo
+    ) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        details: 'A subcategoria do ativo é obrigatória para esta classificação'
+      })
+    }
+
+    const exigeSub = value.classificacao_tipo !== undefined
+      ? await classificacaoExigeSubcategoria(value.classificacao_tipo)
+      : false
+
     const updateData = {
       ...value,
-      // Converter string vazia em null para subcategoria_ativo quando não for ativo
-      subcategoria_ativo: value.classificacao_tipo === 'ativo' && value.subcategoria_ativo 
-        ? value.subcategoria_ativo 
-        : (value.subcategoria_ativo === '' ? null : value.subcategoria_ativo),
+      // Converter string vazia em null; limpar se a classificação não exige subcategoria
+      subcategoria_ativo: exigeSub
+        ? (value.subcategoria_ativo || null)
+        : (value.subcategoria_ativo === '' || (value.classificacao_tipo !== undefined && !exigeSub)
+          ? null
+          : value.subcategoria_ativo),
       updated_at: new Date().toISOString()
     }
     

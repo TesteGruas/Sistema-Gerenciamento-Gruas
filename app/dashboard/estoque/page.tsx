@@ -23,8 +23,8 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2, Zap, AlertCircle, X } from "lucide-react"
-import { estoqueAPI, type Produto, type Categoria, type Movimentacao } from "@/lib/api-estoque"
+import { Package, Plus, Search, Edit, TrendingDown, TrendingUp, AlertTriangle, Archive, BarChart3, CheckCircle, Loader2, Trash2, Zap, AlertCircle, X, Tags, Layers } from "lucide-react"
+import { estoqueAPI, type Produto, type Categoria, type Movimentacao, type EstoqueClassificacao, type EstoqueSubcategoriaAtivo } from "@/lib/api-estoque"
 import { useToast } from "@/hooks/use-toast"
 import { ExportButton } from "@/components/export-button"
 import { ProtectedRoute } from "@/components/protected-route"
@@ -34,6 +34,7 @@ import { DebugButton } from "@/components/debug-button"
 import { apiComponentes, type ComponenteAgrupadoPorGrua } from "@/lib/api-componentes"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"
 import { ConeIcon as Crane } from "lucide-react"
+import { EstoqueTaxonomiaManagerDialog } from "@/components/estoque-taxonomia-manager-dialog"
 
 function formatCurrencyBRL(value: number): string {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(value) || 0)
@@ -45,13 +46,16 @@ export default function EstoquePage() {
   // Estados principais
   const [estoque, setEstoque] = useState<Produto[]>([])
   const [categorias, setCategorias] = useState<Categoria[]>([])
+  const [classificacoes, setClassificacoes] = useState<EstoqueClassificacao[]>([])
+  const [subcategoriasAtivo, setSubcategoriasAtivo] = useState<EstoqueSubcategoriaAtivo[]>([])
   const [movimentacoes, setMovimentacoes] = useState<Movimentacao[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMovimentacoes, setLoadingMovimentacoes] = useState(false)
   const [searchTerm, setSearchTerm] = useState("")
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isMovDialogOpen, setIsMovDialogOpen] = useState(false)
-  const [isCategoryDialogOpen, setIsCategoryDialogOpen] = useState(false)
+  const [isCategoryManagerOpen, setIsCategoryManagerOpen] = useState(false)
+  const [isClassificacaoManagerOpen, setIsClassificacaoManagerOpen] = useState(false)
   const [editingItem, setEditingItem] = useState<Produto | null>(null)
   const [error, setError] = useState<string | null>(null)
   
@@ -95,8 +99,8 @@ export default function EstoquePage() {
     status: "Ativo" as "Ativo" | "Inativo",
     quantidade_inicial: 0,
     quantidade_reservada_inicial: 0,
-    classificacao_tipo: "" as "" | "componente" | "item" | "ativo" | "complemento",
-    subcategoria_ativo: "" as "" | "grua" | "equipamento_grua" | "ferramenta" | "ar_condicionado" | "camera" | "auto" | "pc",
+    classificacao_tipo: "" as string,
+    subcategoria_ativo: "" as string,
   })
 
   // Formulário para movimentação
@@ -106,13 +110,6 @@ export default function EstoquePage() {
     quantidade: 0,
     motivo: "",
     observacoes: "",
-  })
-
-  // Formulário para nova categoria
-  const [categoryFormData, setCategoryFormData] = useState({
-    nome: "",
-    descricao: "",
-    status: "Ativa" as "Ativa" | "Inativa",
   })
 
   // Flags para controlar carregamento e evitar chamadas duplicadas
@@ -231,9 +228,11 @@ export default function EstoquePage() {
       if (filtros.tipo_item && filtros.tipo_item !== "todos") {
         params.tipo_item = filtros.tipo_item
       }
-      const [produtosResponse, categoriasResponse] = await Promise.all([
+      const [produtosResponse, categoriasResponse, classificacoesResponse, subcategoriasResponse] = await Promise.all([
         estoqueAPI.listarProdutos(params),
-        estoqueAPI.listarCategorias()
+        estoqueAPI.listarCategorias({ limit: 500 }),
+        estoqueAPI.listarClassificacoes({ status: "Ativa" }).catch(() => ({ success: false, data: [] as EstoqueClassificacao[] })),
+        estoqueAPI.listarSubcategoriasAtivo({ status: "Ativa" }).catch(() => ({ success: false, data: [] as EstoqueSubcategoriaAtivo[] })),
       ])
       
       // Debug: verificar estrutura dos dados
@@ -244,6 +243,8 @@ export default function EstoquePage() {
       
       setEstoque(produtosResponse.data)
       setCategorias(categoriasResponse.data)
+      setClassificacoes(classificacoesResponse.data || [])
+      setSubcategoriasAtivo(subcategoriasResponse.data || [])
       
       // Atualizar informações de paginação se disponíveis
       if (produtosResponse.pagination) {
@@ -893,9 +894,13 @@ export default function EstoquePage() {
     if (!formData.classificacao_tipo || !formData.classificacao_tipo.trim()) {
       camposFaltando.push('Classificação')
     }
-    
-    // Se for ativo, validar subcategoria
-    if (formData.classificacao_tipo === "ativo" && (!formData.subcategoria_ativo || !formData.subcategoria_ativo.trim())) {
+
+    const classificacaoSelecionada = classificacoes.find((c) => c.codigo === formData.classificacao_tipo)
+    const exigeSubcategoria =
+      Boolean(classificacaoSelecionada?.exige_subcategoria) || formData.classificacao_tipo === "ativo"
+
+    // Se a classificação exige subcategoria, validar
+    if (exigeSubcategoria && (!formData.subcategoria_ativo || !formData.subcategoria_ativo.trim())) {
       camposFaltando.push('Subcategoria do Ativo')
     }
     
@@ -966,7 +971,11 @@ export default function EstoquePage() {
           localizacao: formData.localizacao,
           status: formData.status,
           classificacao_tipo: formData.classificacao_tipo || undefined,
-          subcategoria_ativo: formData.classificacao_tipo === "ativo" ? formData.subcategoria_ativo || undefined : undefined,
+          subcategoria_ativo: (() => {
+            const c = classificacoes.find((x) => x.codigo === formData.classificacao_tipo)
+            const exige = Boolean(c?.exige_subcategoria) || formData.classificacao_tipo === "ativo"
+            return exige ? formData.subcategoria_ativo || undefined : undefined
+          })(),
         } as any)
         
         // Se houver quantidade inicial, criar movimentação de entrada
@@ -1144,49 +1153,10 @@ export default function EstoquePage() {
     setIsDialogOpen(true)
   }
 
-  const handleCreateCategory = async (e: React.FormEvent) => {
-    e.preventDefault()
-    
-    // Validação de campos obrigatórios
-    const camposFaltando: string[] = []
-    
-    if (!categoryFormData.nome || !categoryFormData.nome.trim()) {
-      camposFaltando.push('Nome da Categoria')
-    }
-    
-    if (camposFaltando.length > 0) {
-      toast({
-        title: "Campos obrigatórios",
-        description: `Por favor, preencha os seguintes campos: ${camposFaltando.join(', ')}`,
-        variant: "destructive",
-      })
-      return
-    }
-    
-    try {
-      await estoqueAPI.criarCategoria(categoryFormData)
-      toast({
-        title: "Sucesso",
-        description: "Categoria criada com sucesso",
-      })
-      
-      await carregarDados()
-      setCategoryFormData({
-        nome: "",
-        descricao: "",
-        status: "Ativa",
-      })
-      setIsCategoryDialogOpen(false)
-    } catch (error) {
-      console.error('Erro ao criar categoria:', error)
-      toast({
-        title: "Erro",
-        description: error instanceof Error ? error.message : "Erro ao criar categoria",
-        variant: "destructive",
-      })
-    }
-  }
-
+  const classificacaoAtualExigeSubcategoria = (() => {
+    const c = classificacoes.find((x) => x.codigo === formData.classificacao_tipo)
+    return Boolean(c?.exige_subcategoria) || formData.classificacao_tipo === "ativo"
+  })()
 
   const stats = [
     { 
@@ -1359,66 +1329,42 @@ export default function EstoquePage() {
             </DialogContent>
           </Dialog>
 
-          <Dialog open={isCategoryDialogOpen} onOpenChange={setIsCategoryDialogOpen}>
-            <DialogTrigger asChild>
-              <Button variant="outline" className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent">
-                <Archive className="w-4 h-4 mr-2" />
-                Nova Categoria
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Nova Categoria</DialogTitle>
-                <DialogDescription>Adicione uma nova categoria para organizar os produtos</DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreateCategory} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="categoria-nome">Nome da Categoria</Label>
-                  <Input
-                    id="categoria-nome"
-                    value={categoryFormData.nome}
-                    onChange={(e) => setCategoryFormData({ ...categoryFormData, nome: e.target.value })}
-                    placeholder="Ex: Ferramentas, Materiais de Construção"
-                  />
-                </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-green-600 text-green-600 hover:bg-green-50 bg-transparent"
+            onClick={() => setIsCategoryManagerOpen(true)}
+          >
+            <Tags className="w-4 h-4 mr-2" />
+            Editar Categorias
+          </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="categoria-descricao">Descrição</Label>
-                  <Textarea
-                    id="categoria-descricao"
-                    value={categoryFormData.descricao}
-                    onChange={(e) => setCategoryFormData({ ...categoryFormData, descricao: e.target.value })}
-                    placeholder="Descrição da categoria..."
-                  />
-                </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-purple-600 text-purple-600 hover:bg-purple-50 bg-transparent"
+            onClick={() => setIsClassificacaoManagerOpen(true)}
+          >
+            <Layers className="w-4 h-4 mr-2" />
+            Editar Classificações
+          </Button>
 
-                <div className="space-y-2">
-                  <Label htmlFor="categoria-status">Status</Label>
-                  <Select
-                    value={categoryFormData.status}
-                    onValueChange={(value) => setCategoryFormData({ ...categoryFormData, status: value as "Ativa" | "Inativa" })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Ativa">Ativa</SelectItem>
-                      <SelectItem value="Inativa">Inativa</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="flex justify-end gap-3 pt-4">
-                  <Button type="button" variant="outline" onClick={() => setIsCategoryDialogOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" className="bg-green-600 hover:bg-green-700">
-                    Criar Categoria
-                  </Button>
-                </div>
-              </form>
-            </DialogContent>
-          </Dialog>
+          <EstoqueTaxonomiaManagerDialog
+            open={isCategoryManagerOpen}
+            onOpenChange={setIsCategoryManagerOpen}
+            modo="categoria"
+            onChanged={() => {
+              void carregarDados()
+            }}
+          />
+          <EstoqueTaxonomiaManagerDialog
+            open={isClassificacaoManagerOpen}
+            onOpenChange={setIsClassificacaoManagerOpen}
+            modo="classificacao"
+            onChanged={() => {
+              void carregarDados()
+            }}
+          />
 
           <Dialog open={isDialogOpen} onOpenChange={(open) => {
             setIsDialogOpen(open)
@@ -1499,41 +1445,70 @@ export default function EstoquePage() {
                     <Label htmlFor="classificacao_tipo">Classificação *</Label>
                     <Select
                       value={formData.classificacao_tipo}
-                      onValueChange={(value) => setFormData({ ...formData, classificacao_tipo: value as any, subcategoria_ativo: value !== "ativo" ? "" : formData.subcategoria_ativo })}
+                      onValueChange={(value) => {
+                        const cls = classificacoes.find((c) => c.codigo === value)
+                        const exige = Boolean(cls?.exige_subcategoria) || value === "ativo"
+                        setFormData({
+                          ...formData,
+                          classificacao_tipo: value,
+                          subcategoria_ativo: exige ? formData.subcategoria_ativo : "",
+                        })
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Selecione a classificação" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="componente">Componente (Partes do ativo)</SelectItem>
-                        <SelectItem value="item">Item (Consumíveis)</SelectItem>
-                        <SelectItem value="ativo">Ativo (Imobilizados)</SelectItem>
-                        <SelectItem value="complemento">Complemento (Peças que compõem ativos)</SelectItem>
+                        {classificacoes.length === 0 ? (
+                          <>
+                            <SelectItem value="componente">Componente (Partes do ativo)</SelectItem>
+                            <SelectItem value="item">Item (Consumíveis)</SelectItem>
+                            <SelectItem value="ativo">Ativo (Imobilizados)</SelectItem>
+                            <SelectItem value="complemento">Complemento (Peças que compõem ativos)</SelectItem>
+                          </>
+                        ) : (
+                          classificacoes.map((c) => (
+                            <SelectItem key={c.id} value={c.codigo}>
+                              {c.nome}
+                              {c.descricao ? ` — ${c.descricao}` : ""}
+                            </SelectItem>
+                          ))
+                        )}
                       </SelectContent>
                     </Select>
                     <p className="text-xs text-gray-500">
-                      Componentes: Partes do ativo | Itens: Consumíveis | Ativos: Imobilizados | Complementos: Peças dos ativos
+                      Gerencie as opções em «Editar Classificações».
                     </p>
                   </div>
 
-                  {formData.classificacao_tipo === "ativo" && (
+                  {classificacaoAtualExigeSubcategoria && (
                     <div className="space-y-2">
                       <Label htmlFor="subcategoria_ativo">Subcategoria do Ativo *</Label>
                       <Select
                         value={formData.subcategoria_ativo}
-                        onValueChange={(value) => setFormData({ ...formData, subcategoria_ativo: value as any })}
+                        onValueChange={(value) => setFormData({ ...formData, subcategoria_ativo: value })}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Selecione a subcategoria" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="grua">Grua</SelectItem>
-                          <SelectItem value="equipamento_grua">Equipamento (Complemento de Grua)</SelectItem>
-                          <SelectItem value="ferramenta">Ferramenta</SelectItem>
-                          <SelectItem value="ar_condicionado">Ar Condicionado</SelectItem>
-                          <SelectItem value="camera">Câmera</SelectItem>
-                          <SelectItem value="auto">Auto</SelectItem>
-                          <SelectItem value="pc">PC</SelectItem>
+                          {subcategoriasAtivo.length === 0 ? (
+                            <>
+                              <SelectItem value="grua">Grua</SelectItem>
+                              <SelectItem value="equipamento_grua">Equipamento (Complemento de Grua)</SelectItem>
+                              <SelectItem value="ferramenta">Ferramenta</SelectItem>
+                              <SelectItem value="ar_condicionado">Ar Condicionado</SelectItem>
+                              <SelectItem value="camera">Câmera</SelectItem>
+                              <SelectItem value="auto">Auto</SelectItem>
+                              <SelectItem value="pc">PC</SelectItem>
+                            </>
+                          ) : (
+                            subcategoriasAtivo.map((s) => (
+                              <SelectItem key={s.id} value={s.codigo}>
+                                {s.nome}
+                              </SelectItem>
+                            ))
+                          )}
                         </SelectContent>
                       </Select>
                     </div>

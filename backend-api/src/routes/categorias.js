@@ -47,7 +47,7 @@ const categoriaSchema = Joi.object({
 router.get('/', authenticateToken, requirePermission('estoque:visualizar'), async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1
-    const limit = parseInt(req.query.limit) || 10
+    const limit = Math.min(parseInt(req.query.limit) || 500, 1000)
     const offset = (page - 1) * limit
     const { status } = req.query
 
@@ -59,7 +59,7 @@ router.get('/', authenticateToken, requirePermission('estoque:visualizar'), asyn
       query = query.eq('status', status)
     }
 
-    query = query.range(offset, offset + limit - 1).order('created_at', { ascending: false })
+    query = query.range(offset, offset + limit - 1).order('nome', { ascending: true })
 
     const { data, error, count } = await query
 
@@ -178,7 +178,7 @@ router.get('/:id', authenticateToken, requirePermission('estoque:visualizar'), a
  *       400:
  *         description: Dados inválidos
  */
-router.post('/', authenticateToken, requirePermission('produtos:criar'), async (req, res) => {
+router.post('/', authenticateToken, requirePermission('estoque:criar'), async (req, res) => {
   try {
     const { error, value } = categoriaSchema.validate(req.body)
     if (error) {
@@ -256,7 +256,7 @@ router.post('/', authenticateToken, requirePermission('produtos:criar'), async (
  *       404:
  *         description: Categoria não encontrada
  */
-router.put('/:id', authenticateToken, requirePermission('produtos:editar'), async (req, res) => {
+router.put('/:id', authenticateToken, requirePermission('estoque:editar'), async (req, res) => {
   try {
     const { id } = req.params
 
@@ -328,7 +328,7 @@ router.put('/:id', authenticateToken, requirePermission('produtos:editar'), asyn
  *       404:
  *         description: Categoria não encontrada
  */
-router.delete('/:id', authenticateToken, requirePermission('produtos:excluir'), async (req, res) => {
+router.delete('/:id', authenticateToken, requirePermission('estoque:excluir'), async (req, res) => {
   try {
     const { id } = req.params
 
