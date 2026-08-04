@@ -30,24 +30,49 @@ const DialogClose = DialogPrimitive.Close
 const DialogOverlay = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Overlay>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Overlay>
->(({ className, ...props }, ref) => (
+>(({ className, style, ...props }, ref) => (
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/50 backdrop-blur-md data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className,
     )}
+    style={{
+      WebkitBackdropFilter: "blur(8px)",
+      backdropFilter: "blur(8px)",
+      ...style,
+    }}
     {...props}
   />
 ))
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
+
+/**
+ * Com `modal={false}` o Overlay do Radix não cobre o fundo de forma confiável.
+ * Usamos um backdrop em `div` para garantir escurecimento + blur (ex.: Novo Cliente).
+ */
+function DialogBackdrop({ className }: { className?: string }) {
+  return (
+    <div
+      aria-hidden="true"
+      className={cn(
+        "fixed inset-0 z-50 bg-black/50 backdrop-blur-md animate-in fade-in-0",
+        className,
+      )}
+      style={{
+        WebkitBackdropFilter: "blur(8px)",
+        backdropFilter: "blur(8px)",
+      }}
+    />
+  )
+}
 
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
 >(({ className, children, ...props }, ref) => (
   <DialogPortal>
-    <DialogOverlay />
+    <DialogBackdrop />
     <DialogPrimitive.Content
       ref={ref}
       className={cn(

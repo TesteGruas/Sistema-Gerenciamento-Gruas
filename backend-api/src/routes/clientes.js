@@ -52,6 +52,303 @@ async function vincularUsuarioExistenteComoCliente({ usuarioId, email, nome }) {
   return { ok: true }
 }
 
+function normalizarEmail(email) {
+  return String(email || '').toLowerCase().trim()
+}
+
+function authEmailJaRegistrado(authError) {
+  const msg = String(authError?.message || '').toLowerCase()
+  const code = String(authError?.code || '').toLowerCase()
+  return (
+    code === 'email_exists' ||
+    msg.includes('already been registered') ||
+    msg.includes('already registered') ||
+    msg.includes('user already exists') ||
+    msg.includes('email address has already')
+  )
+}
+
+function mensagemErroEmailAuth(email, authError) {
+  const emailNorm = normalizarEmail(email)
+  if (authEmailJaRegistrado(authError)) {
+    return (
+      `O e-mail ${emailNorm} já possui login no sistema, mas não está vinculado a nenhum cliente na listagem ` +
+      `(usuário órfão no Auth). Tente novamente — o sistema tentará reaproveitar esse login — ou use outro e-mail.`
+    )
+  }
+  return (
+    authError?.message ||
+    'Não foi possível criar o login do representante. Verifique o e-mail e tente novamente.'
+  )
+}
+
+/** Busca usuário no Supabase Auth por e-mail (paginado). */
+async function findAuthUserByEmail(email) {
+  const emailNorm = normalizarEmail(email)
+  if (!emailNorm) return null
+
+  const admin = supabaseAdmin.auth.admin
+  if (typeof admin.getUserByEmail === 'function') {
+    try {
+      const { data, error } = await admin.getUserByEmail(emailNorm)
+      if (!error && data?.user) return data.user
+    } catch {
+      /* fallback listUsers */
+    }
+  }
+
+  let page = 1
+  const perPage = 200
+  while (page <= 25) {
+    const { data, error } = await admin.listUsers({ page, perPage })
+    if (error) {
+      console.error('[clientes] listUsers ao buscar e-mail Auth:', error.message)
+      break
+    }
+    const users = data?.users || []
+    const found = users.find((u) => normalizarEmail(u.email) === emailNorm)
+    if (found) return found
+    if (users.length < perPage) break
+    page += 1
+  }
+  return null
+}
+
+async function ensurePerfilCliente(usuarioId) {
+  const { data: perfilExistente } = await supabaseAdmin
+    .from('usuario_perfis')
+    .select('id')
+    .eq('usuario_id', usuarioId)
+    .eq('perfil_id', 6)
+    .eq('status', 'Ativa')
+    .maybeSingle()
+
+  if (!perfilExistente) {
+    await supabaseAdmin.from('usuario_perfis').insert({
+      usuario_id: usuarioId,
+      perfil_id: 6,
+      status: 'Ativa',
+      data_atribuicao: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+  }
+}
+
+/**
+ * Resolve usuário para o representante do cliente:
+ * - já em `usuarios` → vincula
+ * - só no Auth (órfão) → cria linha em `usuarios` e reaproveita login
+ * - novo → cria Auth + `usuarios`
+ */
+async function obterOuCriarUsuarioCliente({
+  email,
+  nome,
+  cpf,
+  telefone,
+  endereco,
+  cidade,
+  estado,
+  cep,
+  usuario_senha,
+  ignoreClienteId = null,
+  _authRetry = false,
+}) {
+  const emailNorm = normalizarEmail(email)
+  if (!emailNorm || !nome) {
+    return { ok: false, status: 400, message: 'Nome e e-mail do contato são obrigatórios para criar o usuário.' }
+  }
+
+  let clienteEmailQuery = supabaseAdmin
+    .from('clientes')
+    .select('id, nome')
+    .ilike('contato_email', emailNorm)
+  if (ignoreClienteId != null) {
+    clienteEmailQuery = clienteEmailQuery.neq('id', ignoreClienteId)
+  }
+  const { data: clienteComEmail } = await clienteEmailQuery.maybeSingle()
+
+  if (clienteComEmail) {
+    return {
+      ok: false,
+      status: 409,
+      message: `Este e-mail já está vinculado ao cliente "${clienteComEmail.nome}" (ID ${clienteComEmail.id}). Use outro e-mail do representante.`,
+    }
+  }
+
+  const { data: existingUser } = await supabaseAdmin
+    .from('usuarios')
+    .select('id, nome')
+    .ilike('email', emailNorm)
+    .is('deleted_at', null)
+    .maybeSingle()
+
+  if (existingUser) {
+    console.log(`ℹ️ Usuário já existe com email ${emailNorm}, vinculando ao cliente`)
+    const vinculo = await vincularUsuarioExistenteComoCliente({
+      usuarioId: existingUser.id,
+      email: emailNorm,
+      nome: nome || existingUser.nome,
+    })
+    if (!vinculo.ok) {
+      return { ok: false, status: vinculo.status, message: vinculo.message }
+    }
+    return {
+      ok: true,
+      usuarioId: existingUser.id,
+      usuarioJaExistia: true,
+      senhaTemporaria: null,
+    }
+  }
+
+  const guard = await assertEmailAvailableForRole(emailNorm, TARGET_CLIENTE)
+  if (!guard.allowed) {
+    return { ok: false, status: 409, message: guard.message }
+  }
+
+  const authOrfao = await findAuthUserByEmail(emailNorm)
+  if (authOrfao) {
+    console.log(`ℹ️ Auth órfão para ${emailNorm}; reaproveitando login e criando registro em usuarios`)
+    const senhaTemporaria = usuario_senha || generateSecurePassword()
+    const { error: updAuthErr } = await supabaseAdmin.auth.admin.updateUserById(authOrfao.id, {
+      password: senhaTemporaria,
+      email_confirm: true,
+      user_metadata: {
+        nome,
+        tipo: 'cliente',
+        email_verified: true,
+      },
+    })
+    if (updAuthErr) {
+      console.error('[clientes] Falha ao atualizar Auth órfão:', updAuthErr)
+      return {
+        ok: false,
+        status: 409,
+        message:
+          `O e-mail ${emailNorm} já possui login no sistema, mas não está na listagem de clientes. ` +
+          'Não foi possível reaproveitar esse usuário automaticamente. Use outro e-mail ou peça ao administrador para remover o login órfão no Auth.',
+      }
+    }
+
+    const usuarioData = {
+      nome,
+      email: emailNorm,
+      cpf: cpf || null,
+      telefone: telefone || null,
+      endereco: endereco || null,
+      cidade: cidade || null,
+      estado: estado || null,
+      cep: cep || null,
+      status: 'Ativo',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    }
+
+    const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .insert(usuarioData)
+      .select()
+      .single()
+
+    if (usuarioError) {
+      console.error('[clientes] Erro ao criar usuarios a partir do Auth órfão:', usuarioError)
+      return {
+        ok: false,
+        status: 409,
+        message:
+          `O e-mail ${emailNorm} já existe no login (Auth), mas falhou ao registrar o usuário no sistema ` +
+          `(${usuarioError.message}). Use outro e-mail ou contate o suporte.`,
+      }
+    }
+
+    await ensurePerfilCliente(novoUsuario.id)
+    return {
+      ok: true,
+      usuarioId: novoUsuario.id,
+      usuarioJaExistia: false,
+      senhaTemporaria,
+      recuperadoDeAuthOrfao: true,
+    }
+  }
+
+  const senhaTemporaria = usuario_senha || generateSecurePassword()
+  const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    email: emailNorm,
+    password: senhaTemporaria,
+    email_confirm: true,
+    user_metadata: {
+      nome,
+      tipo: 'cliente',
+    },
+  })
+
+  if (authError) {
+    if (authEmailJaRegistrado(authError) && !_authRetry) {
+      // Corrida: Auth apareceu entre a busca e o create — tenta recuperar uma vez
+      const authRetry = await findAuthUserByEmail(emailNorm)
+      if (authRetry) {
+        return obterOuCriarUsuarioCliente({
+          email: emailNorm,
+          nome,
+          cpf,
+          telefone,
+          endereco,
+          cidade,
+          estado,
+          cep,
+          usuario_senha: senhaTemporaria,
+          ignoreClienteId,
+          _authRetry: true,
+        })
+      }
+    }
+    return {
+      ok: false,
+      status: authEmailJaRegistrado(authError) ? 409 : 500,
+      message: mensagemErroEmailAuth(emailNorm, authError),
+    }
+  }
+
+  const usuarioData = {
+    nome,
+    email: emailNorm,
+    cpf: cpf || null,
+    telefone: telefone || null,
+    endereco: endereco || null,
+    cidade: cidade || null,
+    estado: estado || null,
+    cep: cep || null,
+    status: 'Ativo',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  }
+
+  const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+    .from('usuarios')
+    .insert(usuarioData)
+    .select()
+    .single()
+
+  if (usuarioError) {
+    if (authData?.user?.id) {
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id).catch(() => {})
+    }
+    return {
+      ok: false,
+      status: 500,
+      message: `Erro ao registrar o usuário do representante: ${usuarioError.message}`,
+    }
+  }
+
+  await ensurePerfilCliente(novoUsuario.id)
+  return {
+    ok: true,
+    usuarioId: novoUsuario.id,
+    usuarioJaExistia: false,
+    senhaTemporaria,
+  }
+}
+
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%'
@@ -205,10 +502,12 @@ router.get('/', authenticateToken, requirePermission('clientes:visualizar'), asy
         )
       `, { count: 'exact' })
 
-    // Aplicar filtro de busca
+    // Aplicar filtro de busca (inclui e-mail do representante)
     if (req.query.search) {
       const searchTerm = `%${req.query.search}%`
-      query = query.or(`nome.ilike.${searchTerm},email.ilike.${searchTerm},cnpj.ilike.${searchTerm}`)
+      query = query.or(
+        `nome.ilike.${searchTerm},email.ilike.${searchTerm},cnpj.ilike.${searchTerm},contato_email.ilike.${searchTerm},contato.ilike.${searchTerm}`,
+      )
     }
 
     // Aplicar filtro de status
@@ -416,113 +715,31 @@ router.post('/', authenticateToken, requirePermission('clientes:criar'), async (
     
     if (deveCriarUsuario) {
       try {
-        // Verificar se já existe um usuário com este email
-        const { data: existingUser } = await supabaseAdmin
-          .from('usuarios')
-          .select('id, nome')
-          .eq('email', value.contato_email)
-          .maybeSingle()
-
-        if (existingUser) {
-          console.log(`ℹ️ Usuário já existe com email ${value.contato_email}, vinculando ao cliente`)
-          const vinculo = await vincularUsuarioExistenteComoCliente({
-            usuarioId: existingUser.id,
-            email: value.contato_email,
-            nome: value.contato || existingUser.nome,
+        const resolvido = await obterOuCriarUsuarioCliente({
+          email: value.contato_email,
+          nome: value.contato,
+          cpf: value.contato_cpf,
+          telefone: value.contato_telefone,
+          endereco: value.endereco,
+          cidade: value.cidade,
+          estado: value.estado,
+          cep: value.cep,
+          usuario_senha,
+        })
+        if (!resolvido.ok) {
+          return res.status(resolvido.status || 409).json({
+            error: 'E-mail em uso',
+            message: resolvido.message,
           })
-          if (!vinculo.ok) {
-            return res.status(vinculo.status).json({ error: 'E-mail em uso', message: vinculo.message })
-          }
-          usuarioId = existingUser.id
-          usuarioJaExistia = true
-        } else {
-          const guard = await assertEmailAvailableForRole(value.contato_email, TARGET_CLIENTE)
-          if (!guard.allowed) {
-            return res.status(409).json({
-              error: 'E-mail em uso',
-              message: guard.message,
-            })
-          }
-
-          // Usuário não existe, criar novo
-
-          // Gerar senha temporária (usar a fornecida ou gerar uma nova)
-          senhaTemporaria = usuario_senha || generateSecurePassword()
-
-          // 1. Criar usuário no Supabase Auth primeiro
-          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-            email: value.contato_email,
-            password: senhaTemporaria,
-            email_confirm: true, // Confirmar email automaticamente
-            user_metadata: {
-              nome: value.contato,
-              tipo: 'cliente'
-            }
-          })
-
-          if (authError) {
-            return res.status(500).json({
-              error: 'Erro ao criar usuário no sistema de autenticação',
-              message: authError.message
-            })
-          }
-
-          // 2. Criar usuário na tabela
-          const usuarioData = {
-            nome: value.contato,
-            email: value.contato_email,
-            cpf: value.contato_cpf || null,
-            telefone: value.contato_telefone || null,
-            endereco: value.endereco || null,
-            cidade: value.cidade || null,
-            estado: value.estado || null,
-            cep: value.cep || null,
-            status: 'Ativo',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-
-          const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
-            .from('usuarios')
-            .insert(usuarioData)
-            .select()
-            .single()
-
-          if (usuarioError) {
-            // Se falhou ao criar na tabela, remover do Auth
-            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-            
-            return res.status(500).json({
-              error: 'Erro ao criar usuário',
-              message: usuarioError.message
-            })
-          }
-
-          usuarioId = novoUsuario.id
-
-          // Atribuir perfil de cliente ao usuário
-          const { error: perfilError } = await supabaseAdmin
-            .from('usuario_perfis')
-            .insert({
-              usuario_id: usuarioId,
-              perfil_id: 6, // ID do perfil "Cliente"
-              status: 'Ativa',
-              data_atribuicao: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-
-          if (perfilError) {
-            console.error('Erro ao atribuir perfil ao usuário:', perfilError)
-            // Não falhar a criação do cliente por causa disso
-          }
         }
-
+        usuarioId = resolvido.usuarioId
+        usuarioJaExistia = Boolean(resolvido.usuarioJaExistia)
+        senhaTemporaria = resolvido.senhaTemporaria || null
       } catch (usuarioError) {
         console.error('Erro ao criar/vincular usuário:', usuarioError)
         return res.status(500).json({
           error: 'Erro ao criar/vincular usuário',
-          message: usuarioError.message
+          message: usuarioError.message || 'Falha inesperada ao criar o usuário do representante.',
         })
       }
     }
@@ -738,106 +955,30 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
 
     if (criar_usuario && !usuarioId && clienteData.contato && clienteData.contato_email) {
       try {
-        const { data: existingUser } = await supabaseAdmin
-          .from('usuarios')
-          .select('id, nome')
-          .eq('email', clienteData.contato_email)
-          .maybeSingle()
-
-        if (existingUser) {
-          console.log(`ℹ️ Usuário já existe com email ${clienteData.contato_email}, vinculando ao cliente`)
-          const vinculo = await vincularUsuarioExistenteComoCliente({
-            usuarioId: existingUser.id,
-            email: clienteData.contato_email,
-            nome: clienteData.contato || existingUser.nome,
+        const resolvido = await obterOuCriarUsuarioCliente({
+          email: clienteData.contato_email,
+          nome: clienteData.contato,
+          cpf: clienteData.contato_cpf,
+          telefone: clienteData.contato_telefone,
+          endereco: clienteData.endereco,
+          cidade: clienteData.cidade,
+          estado: clienteData.estado,
+          cep: clienteData.cep,
+          usuario_senha,
+          ignoreClienteId: id,
+        })
+        if (!resolvido.ok) {
+          return res.status(resolvido.status || 409).json({
+            error: 'E-mail em uso',
+            message: resolvido.message,
           })
-          if (!vinculo.ok) {
-            return res.status(vinculo.status).json({ error: 'E-mail em uso', message: vinculo.message })
-          }
-          usuarioId = existingUser.id
-          usuarioJaExistia = true
-        } else {
-          const guard = await assertEmailAvailableForRole(clienteData.contato_email, TARGET_CLIENTE)
-          if (!guard.allowed) {
-            return res.status(409).json({
-              error: 'E-mail em uso',
-              message: guard.message,
-            })
-          }
+        }
+        usuarioId = resolvido.usuarioId
+        usuarioJaExistia = Boolean(resolvido.usuarioJaExistia)
+        usuarioCriadoAgora = !resolvido.usuarioJaExistia
+        senhaTemporaria = resolvido.senhaTemporaria || null
 
-          // Usuário não existe, criar novo
-          senhaTemporaria = usuario_senha || generateSecurePassword()
-
-          // 1. Criar usuário no Supabase Auth primeiro
-          const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
-            email: clienteData.contato_email,
-            password: senhaTemporaria,
-            email_confirm: true,
-            user_metadata: {
-              nome: clienteData.contato,
-              tipo: 'cliente'
-            }
-          })
-
-          if (authError) {
-            return res.status(500).json({
-              error: 'Erro ao criar usuário no sistema de autenticação',
-              message: authError.message
-            })
-          }
-
-          // 2. Criar usuário na tabela
-          const usuarioData = {
-            nome: clienteData.contato,
-            email: clienteData.contato_email,
-            cpf: clienteData.contato_cpf || null,
-            telefone: clienteData.contato_telefone || null,
-            endereco: clienteData.endereco || null,
-            cidade: clienteData.cidade || null,
-            estado: clienteData.estado || null,
-            cep: clienteData.cep || null,
-            status: 'Ativo',
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString()
-          }
-
-          const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
-            .from('usuarios')
-            .insert(usuarioData)
-            .select()
-            .single()
-
-          if (usuarioError) {
-            // Se falhou ao criar na tabela, remover do Auth
-            await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
-            
-            return res.status(500).json({
-              error: 'Erro ao criar usuário',
-              message: usuarioError.message
-            })
-          }
-
-          usuarioId = novoUsuario.id
-          usuarioCriadoAgora = true
-
-          // Atribuir perfil de cliente ao usuário
-          const { error: perfilError } = await supabaseAdmin
-            .from('usuario_perfis')
-            .insert({
-              usuario_id: usuarioId,
-              perfil_id: 6, // ID do perfil "Cliente"
-              status: 'Ativa',
-              data_atribuicao: new Date().toISOString(),
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            })
-
-          if (perfilError) {
-            console.error('Erro ao atribuir perfil ao usuário:', perfilError)
-          }
-
-          // Enviar email e WhatsApp se criou novo usuário
-          if (senhaTemporaria && clienteData.contato_email) {
+        if (usuarioCriadoAgora && senhaTemporaria && clienteData.contato_email) {
             // Enviar email de boas-vindas
             try {
               await sendWelcomeEmail({
@@ -862,13 +1003,12 @@ router.put('/:id', authenticateToken, requirePermission('clientes:editar'), asyn
             } catch (importError) {
               console.error('❌ Erro ao importar serviço WhatsApp:', importError);
             }
-          }
         }
       } catch (usuarioError) {
         console.error('Erro ao criar/vincular usuário:', usuarioError)
         return res.status(500).json({
           error: 'Erro ao criar/vincular usuário',
-          message: usuarioError.message
+          message: usuarioError.message || 'Falha inesperada ao criar o usuário do representante.',
         })
       }
     }

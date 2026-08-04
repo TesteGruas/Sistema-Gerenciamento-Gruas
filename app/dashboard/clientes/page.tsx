@@ -129,6 +129,7 @@ export default function ClientesPage() {
   const [loadingArquivos, setLoadingArquivos] = useState(false)
 
   const abrirDialogNovoCliente = useCallback(() => {
+    setClienteFormData(createEmptyClienteFormData())
     setClienteCreateResetNonce((n) => n + 1)
     setIsCreateDialogOpen(true)
   }, [])
@@ -187,6 +188,7 @@ export default function ClientesPage() {
     if (!dadosIniciaisCarregados) return
     if (abrirCriacaoViaQueryConsumidoRef.current) return
     abrirCriacaoViaQueryConsumidoRef.current = true
+    setClienteFormData(createEmptyClienteFormData())
     setClienteCreateResetNonce((n) => n + 1)
     setIsCreateDialogOpen(true)
     // Remover query param da URL sem recarregar a página
@@ -699,6 +701,12 @@ export default function ClientesPage() {
       }
       
       const response = await clientesApi.criarCliente(dadosFormatados)
+
+      if (response && (response as { success?: boolean }).success === false) {
+        throw new Error(
+          (response as { message?: string }).message || 'Erro ao criar cliente',
+        )
+      }
       
       console.log('📦 Resposta da criação do cliente:', response)
       console.log('📦 ID do cliente criado:', response.data?.id)
@@ -722,7 +730,8 @@ export default function ClientesPage() {
       
       // Recarregar lista de clientes
       await carregarClientes()
-      
+
+      // Limpa o formulário só após sucesso (em erro a API, o rascunho permanece)
       setClienteFormData(createEmptyClienteFormData())
       setClienteCreateResetNonce((n) => n + 1)
       setIsCreateDialogOpen(false)
@@ -743,6 +752,7 @@ export default function ClientesPage() {
         description: err instanceof Error ? err.message : 'Erro ao criar cliente',
         variant: "destructive"
       })
+      // Não limpar clienteFormData / createResetNonce — usuário corrige e reenvia
     } finally {
       setIsSubmitting(false)
     }
@@ -1437,6 +1447,7 @@ export default function ClientesPage() {
           </DialogHeader>
           <ClienteForm 
             formData={clienteFormData}
+            onFormDataChange={setClienteFormData}
             createResetNonce={clienteCreateResetNonce}
             onSubmit={handleCreateCliente}
             onClose={() => setIsCreateDialogOpen(false)}
@@ -1563,7 +1574,8 @@ export default function ClientesPage() {
   )
 
 function ClienteForm({ 
-  formData, 
+  formData,
+  onFormDataChange,
   createResetNonce = 0,
   onSubmit, 
   onClose, 
@@ -1575,7 +1587,9 @@ function ClienteForm({
   onRemoverArquivo
 }: { 
   formData: ClienteFormData;
-  /** Só criação: ao incrementar, zera rascunho e arquivos pendentes (estado fica neste componente, não na página). */
+  /** Criação: rascunho fica na página para sobreviver a re-render/erro de API. */
+  onFormDataChange?: React.Dispatch<React.SetStateAction<ClienteFormData>>;
+  /** Só criação: ao incrementar, zera arquivos pendentes (não apaga o rascunho de texto). */
   createResetNonce?: number;
   onSubmit: (e: React.FormEvent, formData: ClienteFormData, arquivosPendentes: File[]) => void | Promise<void>;
   onClose: () => void;
@@ -1587,13 +1601,13 @@ function ClienteForm({
   onRemoverArquivo?: (arquivoId: number) => void;
 }) {
   const { toast } = useToast()
-  const [createDraft, setCreateDraft] = useState<ClienteFormData>(() => createEmptyClienteFormData())
   const [editDraft, setEditDraft] = useState<ClienteFormData>(() => formData)
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [buscandoCepCliente, setBuscandoCepCliente] = useState(false)
   const [buscandoCepObra, setBuscandoCepObra] = useState(false)
   const [erroCepCliente, setErroCepCliente] = useState('')
   const [erroCepObra, setErroCepObra] = useState('')
+  const prevCreateResetNonceRef = useRef(createResetNonce)
 
   useEffect(() => {
     if (isEdit) {
@@ -1602,22 +1616,27 @@ function ClienteForm({
     }
   }, [formData, isEdit])
 
+  // Arquivos locais só; o texto do formulário de criação vive em `formData` na página.
   useEffect(() => {
     if (isEdit) return
-    setCreateDraft(createEmptyClienteFormData())
+    if (prevCreateResetNonceRef.current === createResetNonce) return
+    prevCreateResetNonceRef.current = createResetNonce
     setSelectedFiles([])
   }, [createResetNonce, isEdit])
 
-  const fd = isEdit ? editDraft : createDraft
+  const fd = isEdit ? editDraft : formData
   const fdRef = useRef(fd)
   fdRef.current = fd
 
   const setFd = useCallback(
     (action: React.SetStateAction<ClienteFormData>) => {
-      if (isEdit) setEditDraft(action)
-      else setCreateDraft(action)
+      if (isEdit) {
+        setEditDraft(action)
+        return
+      }
+      if (onFormDataChange) onFormDataChange(action)
     },
-    [isEdit],
+    [isEdit, onFormDataChange],
   )
 
   const formatFileSize = useCallback((bytes: number) => {
