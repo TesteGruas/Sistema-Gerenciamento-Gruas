@@ -2436,6 +2436,10 @@ function PWAPerfilPageContent() {
                     
                     const IconComponent = avisoVencimento ? avisoVencimento.icon : null
                     
+                    const assinado = certificadoJaAssinado(certificado)
+                    const validadeLabel = certificado.data_validade
+                      ? `Validade ${new Date(certificado.data_validade).toLocaleDateString('pt-BR')}`
+                      : null
                     return (
                     <div 
                       key={certificado.id} 
@@ -2449,58 +2453,43 @@ function PWAPerfilPageContent() {
                           : 'border-gray-100'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="flex items-start justify-between mb-3 gap-2 flex-wrap">
-                            <h4 className="font-semibold text-lg">
-                              {certificado.nome}
-                            </h4>
-                            <div className="flex flex-wrap gap-1.5 justify-end">
-                              {certificadoJaAssinado(certificado) ? (
-                                <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">Assinado</Badge>
-                              ) : (
-                                <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">Pendente assinatura</Badge>
-                              )}
-                              {avisoVencimento && IconComponent && (
-                                <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
-                                  <IconComponent className="w-3 h-3" />
-                                  {avisoVencimento.texto}
-                                </Badge>
-                              )}
-                            </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-lg mb-1">{certificado.nome}</h4>
+                            <p className="text-sm text-gray-600">
+                              {[certificado.tipo, validadeLabel].filter(Boolean).join(' · ')}
+                            </p>
                           </div>
-                          <div className="grid grid-cols-2 gap-3 text-sm">
-                            <div>
-                              <p className="text-gray-500 text-xs mb-1">Tipo</p>
-                              <p className="font-medium">{certificado.tipo}</p>
-                            </div>
-                            {certificado.data_validade && (
-                              <div>
-                                <p className="text-gray-500 text-xs mb-1">Validade</p>
-                                <p className="font-medium text-xs">
-                                  {new Date(certificado.data_validade).toLocaleDateString('pt-BR')}
-                                </p>
-                              </div>
+                          <div className="flex flex-wrap gap-1.5 justify-end shrink-0">
+                            <Badge
+                              className={
+                                assinado
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }
+                            >
+                              {assinado ? 'Assinado' : 'Pendente'}
+                            </Badge>
+                            {avisoVencimento && IconComponent && (
+                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                <IconComponent className="w-3 h-3" />
+                                {avisoVencimento.texto}
+                              </Badge>
                             )}
                           </div>
                         </div>
                         {certificado.arquivo && (
-                          <div className="flex flex-wrap gap-2 ml-4 justify-end">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleVisualizarDocumento('certificado', certificado)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleDownload(certificado.arquivo!, certificado.nome)}
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-4 h-4 mr-1" />
+                              PDF
                             </Button>
-                            {!certificadoJaAssinado(certificado) ? (
+                            {!assinado ? (
                               <Button
                                 variant="default"
                                 size="sm"
@@ -2576,6 +2565,13 @@ function PWAPerfilPageContent() {
                       : null
                     
                     const IconComponent = avisoVencimento ? avisoVencimento.icon : null
+                    const assinado = admissionalJaAssinado(doc)
+                    const metaParts = [
+                      doc.data_validade
+                        ? `Validade ${new Date(doc.data_validade).toLocaleDateString('pt-BR')}`
+                        : null,
+                      `Criado em ${new Date(doc.created_at).toLocaleDateString('pt-BR')}`,
+                    ].filter(Boolean)
                     
                     return (
                     <div 
@@ -2590,91 +2586,70 @@ function PWAPerfilPageContent() {
                           : 'border-gray-100'
                       }`}
                     >
-                      <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                        <div className="min-w-0 flex-1 space-y-3">
-                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                            <h4 className="min-w-0 shrink font-semibold text-lg leading-tight">
-                              {doc.tipo}
-                            </h4>
-                            <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
-                              {admissionalJaAssinado(doc) ? (
-                                <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
-                                  Assinado
-                                </Badge>
-                              ) : (
-                                <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">
-                                  Pendente assinatura
-                                </Badge>
-                              )}
-                              {avisoVencimento && IconComponent && (
-                                <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
-                                  <IconComponent className="w-3 h-3" />
-                                  {avisoVencimento.texto}
-                                </Badge>
-                              )}
-                            </div>
+                      <div className="flex flex-col gap-3">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <h4 className="font-semibold text-lg mb-1">{doc.tipo}</h4>
+                            <p className="text-sm text-gray-600">{metaParts.join(' · ')}</p>
                           </div>
-                          <dl className="flex min-w-0 flex-col gap-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3">
-                            {doc.data_validade && (
-                              <div className="min-w-0">
-                                <dt className="text-gray-500 text-xs">Validade</dt>
-                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                  {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
-                                </dd>
-                              </div>
+                          <div className="flex flex-wrap gap-1.5 justify-end shrink-0">
+                            <Badge
+                              className={
+                                assinado
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }
+                            >
+                              {assinado ? 'Assinado' : 'Pendente'}
+                            </Badge>
+                            {avisoVencimento && IconComponent && (
+                              <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                <IconComponent className="w-3 h-3" />
+                                {avisoVencimento.texto}
+                              </Badge>
                             )}
-                            <div className="min-w-0">
-                              <dt className="text-gray-500 text-xs">Criado em</dt>
-                              <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                {new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                              </dd>
-                            </div>
-                            {doc.assinado_em && (
-                              <div className="min-w-0 sm:col-span-2">
-                                <dt className="text-gray-500 text-xs">Assinado em</dt>
-                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                  {new Date(doc.assinado_em).toLocaleString('pt-BR')}
-                                </dd>
-                              </div>
-                            )}
-                          </dl>
+                          </div>
                         </div>
                         {doc.arquivo && (
-                          <div className="flex min-w-0 w-full flex-wrap gap-2 border-t border-gray-100 pt-3 sm:w-auto sm:shrink-0 sm:border-t-0 sm:pt-0 sm:justify-end">
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => handleVisualizarDocumento('admissional', doc)}
-                            >
-                              <Eye className="w-4 h-4" />
-                            </Button>
+                          <div className="flex flex-wrap gap-2">
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={() => handleDownload(doc.arquivo, doc.tipo)}
                             >
-                              <Download className="w-4 h-4" />
+                              <Download className="w-4 h-4 mr-1" />
+                              PDF
                             </Button>
-                            {!admissionalJaAssinado(doc) && (
+                            {!assinado ? (
                               <Button
                                 variant="default"
                                 size="sm"
-                                className="bg-cyan-600 hover:bg-cyan-700"
+                                className="bg-amber-600 hover:bg-amber-700"
                                 onClick={() => abrirAssinaturaAdmissional(doc)}
                               >
                                 <PenTool className="w-4 h-4 mr-1" />
                                 Assinar
                               </Button>
-                            )}
-                            {admissionalJaAssinado(doc) && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleDownloadAdmissionalComAssinatura(doc)}
-                              >
-                                <FileSignature className="w-4 h-4 mr-1" />
-                                PDF assinado
-                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleDownloadAdmissionalComAssinatura(doc)}
+                                >
+                                  <FileSignature className="w-4 h-4 mr-1" />
+                                  PDF assinado
+                                </Button>
+                                <Button
+                                  variant="default"
+                                  size="sm"
+                                  className="bg-amber-600 hover:bg-amber-700"
+                                  onClick={() => abrirAssinaturaAdmissional(doc)}
+                                >
+                                  <PenTool className="w-4 h-4 mr-1" />
+                                  Reassinar
+                                </Button>
+                              </>
                             )}
                           </div>
                         )}
@@ -2710,6 +2685,13 @@ function PWAPerfilPageContent() {
                       ? getAvisoVencimento(diasParaVencimento)
                       : null
                     const IconComponent = avisoVencimento ? avisoVencimento.icon : null
+                    const assinado = demissaoJaAssinado(doc)
+                    const metaParts = [
+                      doc.data_validade
+                        ? `Validade ${new Date(doc.data_validade).toLocaleDateString('pt-BR')}`
+                        : null,
+                      `Recebido em ${new Date(doc.created_at).toLocaleDateString('pt-BR')}`,
+                    ].filter(Boolean)
                     return (
                       <div
                         key={doc.id}
@@ -2723,90 +2705,70 @@ function PWAPerfilPageContent() {
                                 : 'border-gray-100'
                         }`}
                       >
-                        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-                          <div className="min-w-0 flex-1 space-y-3">
-                            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between sm:gap-3">
-                              <h4 className="min-w-0 shrink font-semibold text-lg leading-tight">{doc.tipo}</h4>
-                              <div className="flex flex-wrap items-center gap-1.5 sm:shrink-0 sm:justify-end">
-                                {demissaoJaAssinado(doc) && (
-                                  <Badge className="text-xs bg-emerald-100 text-emerald-800 border-emerald-200">
-                                    Assinado
-                                  </Badge>
-                                )}
-                                {!demissaoJaAssinado(doc) && (
-                                  <Badge className="text-xs bg-amber-50 text-amber-900 border-amber-200">
-                                    Pendente assinatura
-                                  </Badge>
-                                )}
-                                {avisoVencimento && IconComponent && (
-                                  <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
-                                    <IconComponent className="w-3 h-3" />
-                                    {avisoVencimento.texto}
-                                  </Badge>
-                                )}
-                              </div>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="flex-1 min-w-0">
+                              <h4 className="font-semibold text-lg mb-1">{doc.tipo}</h4>
+                              <p className="text-sm text-gray-600">{metaParts.join(' · ')}</p>
                             </div>
-                            <dl className="flex min-w-0 flex-col gap-3 text-sm sm:grid sm:grid-cols-2 sm:gap-x-6 sm:gap-y-3">
-                              {doc.data_validade && (
-                                <div className="min-w-0">
-                                  <dt className="text-gray-500 text-xs">Validade</dt>
-                                  <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                    {new Date(doc.data_validade).toLocaleDateString('pt-BR')}
-                                  </dd>
-                                </div>
+                            <div className="flex flex-wrap gap-1.5 justify-end shrink-0">
+                              <Badge
+                                className={
+                                  assinado
+                                    ? 'bg-green-100 text-green-800'
+                                    : 'bg-amber-100 text-amber-800'
+                                }
+                              >
+                                {assinado ? 'Assinado' : 'Pendente'}
+                              </Badge>
+                              {avisoVencimento && IconComponent && (
+                                <Badge className={`text-xs flex items-center gap-1 ${avisoVencimento.className}`}>
+                                  <IconComponent className="w-3 h-3" />
+                                  {avisoVencimento.texto}
+                                </Badge>
                               )}
-                              <div className="min-w-0">
-                                <dt className="text-gray-500 text-xs">Recebido em</dt>
-                                <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                  {new Date(doc.created_at).toLocaleDateString('pt-BR')}
-                                </dd>
-                              </div>
-                              {doc.assinado_em && (
-                                <div className="min-w-0 sm:col-span-2">
-                                  <dt className="text-gray-500 text-xs">Assinado em</dt>
-                                  <dd className="mt-0.5 break-words font-medium text-xs text-gray-900">
-                                    {new Date(doc.assinado_em).toLocaleString('pt-BR')}
-                                  </dd>
-                                </div>
-                              )}
-                            </dl>
+                            </div>
                           </div>
                           {doc.arquivo && (
-                            <div className="flex min-w-0 w-full flex-wrap gap-2 border-t border-gray-100 pt-3 sm:w-auto sm:shrink-0 sm:border-t-0 sm:pt-0 sm:justify-end">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => handleVisualizarDocumento('demissao', doc)}
-                              >
-                                <Eye className="w-4 h-4" />
-                              </Button>
+                            <div className="flex flex-wrap gap-2">
                               <Button
                                 variant="outline"
                                 size="sm"
                                 onClick={() => handleDownload(doc.arquivo, doc.tipo)}
                               >
-                                <Download className="w-4 h-4" />
+                                <Download className="w-4 h-4 mr-1" />
+                                PDF
                               </Button>
-                              {!demissaoJaAssinado(doc) && (
+                              {!assinado ? (
                                 <Button
                                   variant="default"
                                   size="sm"
-                                  className="bg-rose-600 hover:bg-rose-700"
+                                  className="bg-amber-600 hover:bg-amber-700"
                                   onClick={() => abrirAssinaturaDemissao(doc)}
                                 >
                                   <PenTool className="w-4 h-4 mr-1" />
                                   Assinar
                                 </Button>
-                              )}
-                              {demissaoJaAssinado(doc) && (
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDownloadDemissaoComAssinatura(doc)}
-                                >
-                                  <FileSignature className="w-4 h-4 mr-1" />
-                                  PDF assinado
-                                </Button>
+                              ) : (
+                                <>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDownloadDemissaoComAssinatura(doc)}
+                                  >
+                                    <FileSignature className="w-4 h-4 mr-1" />
+                                    PDF assinado
+                                  </Button>
+                                  <Button
+                                    variant="default"
+                                    size="sm"
+                                    className="bg-amber-600 hover:bg-amber-700"
+                                    onClick={() => abrirAssinaturaDemissao(doc)}
+                                  >
+                                    <PenTool className="w-4 h-4 mr-1" />
+                                    Reassinar
+                                  </Button>
+                                </>
                               )}
                             </div>
                           )}
