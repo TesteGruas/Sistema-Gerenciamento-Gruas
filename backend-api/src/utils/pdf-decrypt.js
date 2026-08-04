@@ -4,6 +4,7 @@ import path from 'path'
 import { randomUUID } from 'crypto'
 import { createRequire } from 'module'
 import { spawnSync } from 'child_process'
+import zlib from 'zlib'
 import { PDFDocument, EncryptedPDFError } from 'pdf-lib'
 
 const require = createRequire(import.meta.url)
@@ -13,9 +14,9 @@ const require = createRequire(import.meta.url)
  * não podem ser modificados com pdf-lib (ignoreEncryption gera arquivo corrompido).
  *
  * Ordem de tentativas:
- * 1) muhammara (nativo)
- * 2) qpdf no PATH (se instalado no servidor)
- * 3) reconstrução via pdfjs + pngjs (scans de página inteira; puro JS)
+ * 1) muhammara (opcional, se instalado no servidor)
+ * 2) qpdf no PATH (opcional)
+ * 3) reconstrução via pdfjs + PNG (zlib nativo) — sem deps extras
  *
  * @param {Buffer|Uint8Array} pdfBuffer
  * @returns {Promise<Buffer>}
@@ -71,17 +72,20 @@ export async function garantirPdfSemCriptografia(pdfBuffer) {
 function carregarMuhammara() {
   try {
     return require('muhammara')
-  } catch (e1) {
-    // ignore — tenta ESM abaixo
+  } catch {
+    return null
   }
-  return null
 }
 
 async function descriptografarComMuhammara(input) {
   let muhammara = carregarMuhammara()
   if (!muhammara) {
-    const mod = await import('muhammara')
-    muhammara = mod.default || mod
+    try {
+      const mod = await import('muhammara')
+      muhammara = mod.default || mod
+    } catch (e) {
+      throw new Error(e?.message || 'pacote muhammara não instalado')
+    }
   }
   if (!muhammara?.recrypt) {
     throw new Error('módulo muhammara sem recrypt (binding nativo ausente?)')
@@ -138,12 +142,78 @@ function descriptografarComQpdf(input) {
 }
 
 /**
+ * CRC32 para chunks PNG (IEEE).
+ * @param {Buffer} buf
+ */
+function crc32(buf) {
+  let c = 0xffffffff
+  for (let i = 0; i < buf.length; i++) {
+    c ^= buf[i]
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? (0xedb88320 ^ (c >>> 1)) : c >>> 1
+    }
+  }
+  return (c ^ 0xffffffff) >>> 0
+}
+
+/**
+ * Codifica RGB/RGBA raw em PNG usando só zlib do Node (sem pngjs).
+ * @param {number} width
+ * @param {number} height
+ * @param {Uint8Array|Buffer} src
+ * @param {number} channels
+ */
+function rgbParaPng(width, height, src, channels) {
+  const stride = width * 3
+  const raw = Buffer.alloc((stride + 1) * height)
+  for (let y = 0; y < height; y++) {
+    const rowStart = y * (stride + 1)
+    raw[rowStart] = 0 // filter None
+    for (let x = 0; x < width; x++) {
+      const s = (y * width + x) * channels
+      const d = rowStart + 1 + x * 3
+      raw[d] = src[s]
+      raw[d + 1] = src[s + 1]
+      raw[d + 2] = src[s + 2]
+    }
+  }
+
+  const compressed = zlib.deflateSync(raw, { level: 6 })
+
+  function chunk(type, data) {
+    const typeBuf = Buffer.from(type, 'ascii')
+    const len = Buffer.alloc(4)
+    len.writeUInt32BE(data.length, 0)
+    const crcBuf = Buffer.concat([typeBuf, data])
+    const crc = Buffer.alloc(4)
+    crc.writeUInt32BE(crc32(crcBuf), 0)
+    return Buffer.concat([len, typeBuf, data, crc])
+  }
+
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 2 // color type RGB
+  ihdr[10] = 0
+  ihdr[11] = 0
+  ihdr[12] = 0
+
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', compressed),
+    chunk('IEND', Buffer.alloc(0))
+  ])
+}
+
+/**
  * Para PDFs escaneados (ASO/OS): cada página é uma imagem full-bleed.
- * Extrai as imagens via pdfjs (consegue ler com proteção de owner) e monta PDF novo sem Encrypt.
+ * Extrai via pdfjs (lê com proteção de owner) e monta PDF novo sem Encrypt.
+ * Usa apenas pdfjs-dist + pdf-lib + zlib (já no projeto).
  */
 async function reconstruirPdfDeImagensPagina(input) {
   const { getDocument, OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs')
-  const { PNG } = await import('pngjs')
 
   const loadingTask = getDocument({
     data: new Uint8Array(input),
@@ -162,14 +232,14 @@ async function reconstruirPdfDeImagensPagina(input) {
     const pageHeight = viewport.height
 
     const ops = await page.getOperatorList()
-    /** @type {Array<{ name: string, area: number }>} */
+    /** @type {Array<{ area: number, img: any }>} */
     const candidatos = []
     for (let i = 0; i < ops.fnArray.length; i++) {
       if (ops.fnArray[i] !== OPS.paintImageXObject) continue
       const name = ops.argsArray[i][0]
       const img = await new Promise((resolve) => page.objs.get(name, resolve))
       if (!img?.width || !img?.height || !img?.data) continue
-      candidatos.push({ name, area: img.width * img.height, img })
+      candidatos.push({ area: img.width * img.height, img })
     }
 
     if (candidatos.length === 0) {
@@ -184,16 +254,7 @@ async function reconstruirPdfDeImagensPagina(input) {
       throw new Error(`Página ${p}: formato de imagem não suportado (channels=${channels})`)
     }
 
-    const png = new PNG({ width: img.width, height: img.height })
-    const src = img.data
-    for (let i = 0, px = 0; i < img.width * img.height; i++, px += 4) {
-      const s = i * channels
-      png.data[px] = src[s]
-      png.data[px + 1] = src[s + 1]
-      png.data[px + 2] = src[s + 2]
-      png.data[px + 3] = 255
-    }
-    const pngBuf = PNG.sync.write(png)
+    const pngBuf = rgbParaPng(img.width, img.height, img.data, channels)
     const embedded = await outDoc.embedPng(pngBuf)
     const outPage = outDoc.addPage([pageWidth, pageHeight])
     outPage.drawImage(embedded, { x: 0, y: 0, width: pageWidth, height: pageHeight })
