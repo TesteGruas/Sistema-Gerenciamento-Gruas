@@ -52,7 +52,9 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
   {
     id: 'aso',
     match: (nome) =>
-      /\baso\b|atestado\s+de\s+sa[uú]de\s+ocupacional|sa[uú]de\s+ocupacional/i.test(nome || ''),
+      /\baso\b|aso[\s_-]|[\s_-]aso\b|atestado\s+de\s+sa[uú]de\s+ocupacional|sa[uú]de\s+ocupacional/i.test(
+        nome || ''
+      ),
     regra: {
       metodoAncora: 'caixa_fixa_a4_trabalhador_151',
       caixaPrimeirasPaginas: 1,
@@ -313,6 +315,11 @@ export function normalizarTipoDocumentoParaRegraAssinatura(tipo) {
   return String(tipo).trim().replace(/-/g, '_')
 }
 
+function regraAssinaturaDeTipo(tipoChave, override = {}) {
+  const { descricao: _, ...regraTipo } = REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipoChave]
+  return { ...REGRA_ASSINATURA_PADRAO, ...regraTipo, ...override }
+}
+
 /**
  * @param {{
  *   arquivo_original?: string,
@@ -323,6 +330,14 @@ export function normalizarTipoDocumentoParaRegraAssinatura(tipo) {
  * @returns {RegraPosicaoAssinatura}
  */
 export function resolverRegraPorDocumento(documento, override = {}) {
+  const nome = `${documento?.arquivo_original || ''} ${documento?.titulo || ''}`
+
+  // ASO no nome/título prevalece sobre tipo de certificado (PDF de ASO cadastrado como OS).
+  const perfilAso = PERFIS_ASSINATURA_DOCUMENTO.find((p) => p.id === 'aso')
+  if (perfilAso?.match(nome)) {
+    return { ...REGRA_ASSINATURA_PADRAO, ...perfilAso.regra, ...override }
+  }
+
   const tipoBruto =
     documento?.tipo_documento ||
     documento?.tipo_funcionario_documento ||
@@ -337,17 +352,186 @@ export function resolverRegraPorDocumento(documento, override = {}) {
     if (mapeadoDem) tipo = mapeadoDem
   }
   if (tipo && REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo]) {
-    const { descricao: _, ...regraTipo } = REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO[tipo];
-    return { ...REGRA_ASSINATURA_PADRAO, ...regraTipo, ...override };
+    return regraAssinaturaDeTipo(tipo, override)
   }
 
-  const nome = `${documento?.arquivo_original || ''} ${documento?.titulo || ''}`;
   for (const perfil of PERFIS_ASSINATURA_DOCUMENTO) {
     if (perfil.match(nome)) {
-      return { ...REGRA_ASSINATURA_PADRAO, ...perfil.regra, ...override };
+      return { ...REGRA_ASSINATURA_PADRAO, ...perfil.regra, ...override }
     }
   }
-  return { ...REGRA_ASSINATURA_PADRAO, ...override };
+  return { ...REGRA_ASSINATURA_PADRAO, ...override }
+}
+
+/**
+ * Detecta se o scan é ASO (rodapé «Assinatura do funcionário») ou OS NR-1
+ * («Assinatura do Colaborador» ~y=595), via linhas horizontais na imagem.
+ * @returns {Promise<{ layout: 'aso'|'ordem_servico'|null, linhaY: number|null }>}
+ */
+export async function detectarLayoutAssinaturaRhScan(pdfBuffer) {
+  try {
+    const { OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const data =
+      pdfBuffer instanceof Uint8Array && !Buffer.isBuffer(pdfBuffer)
+        ? pdfBuffer
+        : new Uint8Array(pdfBuffer)
+    const loadingTask = getDocument({
+      data,
+      useSystemFonts: true,
+      disableFontFace: true
+    })
+    const pdf = await loadingTask.promise
+    if (!pdf.numPages) return { layout: null, linhaY: null }
+
+    // OS: última página; ASO: em geral 1 página — usa a última em ambos.
+    const pageNum = pdf.numPages
+    const page = await pdf.getPage(pageNum)
+    const viewport = page.getViewport({ scale: 1 })
+    const pageW = viewport.width
+    const pageH = viewport.height
+    const ops = await page.getOperatorList()
+    /** @type {Array<{ area: number, img: any }>} */
+    const candidatos = []
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      if (ops.fnArray[i] !== OPS.paintImageXObject) continue
+      const name = ops.argsArray[i][0]
+      const img = await new Promise((resolve) => page.objs.get(name, resolve))
+      if (!img?.width || !img?.height || !img?.data) continue
+      candidatos.push({ area: img.width * img.height, img })
+    }
+    if (candidatos.length === 0) return { layout: null, linhaY: null }
+    candidatos.sort((a, b) => b.area - a.area)
+    const { img } = candidatos[0]
+    const channels = img.data.length / (img.width * img.height)
+    if (channels < 3) return { layout: null, linhaY: null }
+
+    const scoreLinha = (pdfY, x0p = 45, x1p = 290) => {
+      const row = Math.max(
+        0,
+        Math.min(img.height - 1, Math.round((1 - pdfY / pageH) * (img.height - 1)))
+      )
+      const x0 = Math.round((x0p / pageW) * img.width)
+      const x1 = Math.round((x1p / pageW) * img.width)
+      let dark = 0
+      let n = 0
+      for (let x = x0; x < x1; x++) {
+        const i = (row * img.width + x) * channels
+        const v = (img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3
+        if (v < 140) dark++
+        n++
+      }
+      return n ? dark / n : 0
+    }
+
+    const melhorLinhaFina = (ymin, ymax) => {
+      let best = { y: null, s: 0 }
+      for (let y = ymin; y <= ymax; y += 1) {
+        const s = scoreLinha(y)
+        const up = scoreLinha(y + 6)
+        const dn = scoreLinha(y - 6)
+        if (s > 0.035 && s < 0.4 && s > up * 1.25 && s > dn * 1.25 && s > best.s) {
+          best = { y, s }
+        }
+      }
+      return best
+    }
+
+    const contarLinhasFinas = (ymin, ymax) => {
+      let n = 0
+      for (let y = ymin; y <= ymax; y += 2) {
+        const s = scoreLinha(y)
+        const up = scoreLinha(y + 6)
+        const dn = scoreLinha(y - 6)
+        if (s > 0.035 && s < 0.4 && s > up * 1.25 && s > dn * 1.25) n++
+      }
+      return n
+    }
+
+    const densRegiao = (x0p, x1p, y0, y1, thr = 180) => {
+      const r0 = Math.round((1 - y1 / pageH) * (img.height - 1))
+      const r1 = Math.round((1 - y0 / pageH) * (img.height - 1))
+      const x0 = Math.round((x0p / pageW) * img.width)
+      const x1 = Math.round((x1p / pageW) * img.width)
+      let dark = 0
+      let n = 0
+      const ra = Math.min(r0, r1)
+      const rb = Math.max(r0, r1)
+      for (let r = ra; r <= rb; r++) {
+        for (let x = x0; x < x1; x++) {
+          const i = (r * img.width + x) * channels
+          const v = (img.data[i] + img.data[i + 1] + img.data[i + 2]) / 3
+          if (v < thr) dark++
+          n++
+        }
+      }
+      return n ? dark / n : 0
+    }
+
+    const aso = melhorLinhaFina(155, 210)
+    const os = melhorLinhaFina(560, 640)
+    const tabelasMeio = contarLinhasFinas(350, 560)
+    const tituloTopo = densRegiao(80, 520, 700, 800)
+
+    /** ASO LD Group: muitas linhas de tabela no meio + linha do funcionário ~y=166. */
+    let layout = null
+    let linhaY = null
+    if (tabelasMeio >= 8 && aso.y != null) {
+      layout = 'aso'
+      linhaY = aso.y
+    } else if (os.y != null && tabelasMeio < 8) {
+      layout = 'ordem_servico'
+      linhaY = os.y
+    } else if (tituloTopo > 0.15 && aso.y != null) {
+      layout = 'aso'
+      linhaY = aso.y
+    } else if (os.s > aso.s && os.y != null) {
+      layout = 'ordem_servico'
+      linhaY = os.y
+    } else if (aso.y != null) {
+      layout = 'aso'
+      linhaY = aso.y
+    }
+
+    return { layout, linhaY }
+  } catch (e) {
+    console.warn('[PDF Signature] Detecção ASO/OS falhou:', e?.message || e)
+    return { layout: null, linhaY: null }
+  }
+}
+
+/**
+ * Se o tipo cadastrado for OS mas o PDF for ASO (ou vice-versa), troca a regra.
+ * Evita carimbar ASO em y=602 («exames») quando o certificado foi tipado como Ordem de Serviço.
+ * @param {Buffer|Uint8Array} pdfBuffer
+ * @param {RegraPosicaoAssinatura} regra
+ * @returns {Promise<RegraPosicaoAssinatura>}
+ */
+export async function ajustarRegraCaixaFixaScanRh(pdfBuffer, regra) {
+  if (regra?.metodoAncora !== 'caixa_fixa_a4_trabalhador_151') return regra
+
+  const caixaY = Number(regra.caixaY) || 0
+  const pareceOs = regra.caixaSomenteUltimaPagina === true || caixaY >= 500
+  const pareceAso = caixaY > 100 && caixaY < 280 && regra.caixaSomenteUltimaPagina !== true
+  if (!pareceOs && !pareceAso) return regra
+
+  const det = await detectarLayoutAssinaturaRhScan(pdfBuffer)
+  if (!det?.layout) return regra
+
+  if (pareceOs && det.layout === 'aso') {
+    console.log(
+      `[PDF Signature] Scan parece ASO (linha y≈${det.linhaY}); corrigindo regra OS→ASO`
+    )
+    return regraAssinaturaDeTipo('aso')
+  }
+
+  if (pareceAso && det.layout === 'ordem_servico') {
+    console.log(
+      `[PDF Signature] Scan parece Ordem de Serviço (linha y≈${det.linhaY}); corrigindo regra ASO→OS`
+    )
+    return regraAssinaturaDeTipo('certificado_ordem_servico')
+  }
+
+  return regra
 }
 
 function normalizar(s) {

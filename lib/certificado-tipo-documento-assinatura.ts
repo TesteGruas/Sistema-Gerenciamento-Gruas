@@ -12,6 +12,9 @@ export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO =
 export function certificadoTipoParaTipoDocumentoAssinatura(tipo: string): string {
   const s = String(tipo || '').trim()
   if (!s) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO
+  if (/^\s*aso\s*$/i.test(s) || /atestado\s*(de\s*)?sa[uú]de\s*ocupacional/i.test(s)) {
+    return 'aso'
+  }
   if (
     /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) ||
     /^os$/i.test(s) ||

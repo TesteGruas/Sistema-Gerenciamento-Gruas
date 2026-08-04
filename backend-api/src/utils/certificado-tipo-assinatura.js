@@ -7,7 +7,10 @@
 export function certificadoTipoParaTipoDocumentoAssinatura(tipo) {
   const s = String(tipo || '').trim()
   if (!s) return 'certificado_padrao'
-  if (/ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) || /^os$/i.test(s) || /\bNR\s*-?\s*0*1\b/i.test(s) && /\bO\.?\s*S\.?\b/i.test(s)) {
+  if (/^\s*aso\s*$/i.test(s) || /atestado\s*(de\s*)?sa[uú]de\s*ocupacional/i.test(s)) {
+    return 'aso'
+  }
+  if (/ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) || /^os$/i.test(s) || (/\bNR\s*-?\s*0*1\b/i.test(s) && /\bO\.?\s*S\.?\b/i.test(s))) {
     return 'certificado_ordem_servico'
   }
   if (/\bNR\s*-?\s*0*12\b/i.test(s)) return 'certificado_nr12'

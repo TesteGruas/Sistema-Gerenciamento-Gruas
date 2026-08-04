@@ -8,7 +8,8 @@ import {
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
   encontrarPosicoesCaixaFixaA4Trabalhador151,
-  resolverRegraPorDocumento
+  resolverRegraPorDocumento,
+  ajustarRegraCaixaFixaScanRh
 } from './pdf-signature-placement.js';
 
 export {
@@ -286,7 +287,7 @@ async function dimensoesAssinaturaBase64(signatureBase64) {
 export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatureBase64, contexto = {}) {
   // Descriptografar uma vez (ASO etc.); pdf-lib corrompe se salvar com ignoreEncryption.
   const bufferTrabalho = await garantirPdfSemCriptografia(pdfBuffer)
-  const regra = resolverRegraPorDocumento(contexto.documento || {}, contexto.regra || {});
+  let regra = resolverRegraPorDocumento(contexto.documento || {}, contexto.regra || {});
   const dims = await dimensoesAssinaturaBase64(signatureBase64);
 
   /** @type {Array<{ pageIndex: number, x?: number, y?: number, height: number, metodo?: string, anchor?: string, pageWidth?: number, marginRight?: number, marginBottom?: number }>} */
@@ -308,6 +309,8 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
     } else if (regra.metodoAncora === 'certificado_multipagina_aluno') {
       posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'caixa_fixa_a4_trabalhador_151') {
+      // ASO tipado como OS (ou o inverso): corrige pela análise do scan.
+      regra = await ajustarRegraCaixaFixaScanRh(bufferTrabalho, regra)
       // OS NR-1 scan usa caixa; se o PDF tiver texto («Colaborador»/«Trabalhador»), prefere âncora.
       if (regra.caixaSomenteUltimaPagina === true && regra.anchors?.length) {
         try {
