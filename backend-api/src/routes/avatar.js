@@ -5,7 +5,6 @@
 
 import express from 'express'
 import { supabaseAdmin } from '../config/supabase.js'
-import { authenticateToken } from '../middleware/auth.js'
 
 const router = express.Router()
 
@@ -15,8 +14,6 @@ const router = express.Router()
  *   get:
  *     summary: Obter avatar do funcionário
  *     tags: [Avatar]
- *     security:
- *       - bearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -30,7 +27,9 @@ const router = express.Router()
  *       404:
  *         description: Funcionário não encontrado
  */
-router.get('/:id', authenticateToken, async (req, res) => {
+// Sem authenticateToken: usado em <img src="/api/avatar/:id">, que não envia Bearer.
+// A rota só redireciona para URL pública da foto ou placeholder (DiceBear).
+router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params
 

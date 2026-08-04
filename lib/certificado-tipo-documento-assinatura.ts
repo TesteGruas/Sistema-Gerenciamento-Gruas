@@ -4,7 +4,7 @@ export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO = 'certificado_padrao'
 /** Certificado NR12 — 1.ª folha junto ao instrutor (ANDERSON); outras páginas canto inferior direito */
 export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12 = 'certificado_nr12' as const
 
-/** Ordem de Serviço (SST) — última página, «Assinatura do Trabalhador» (não a do responsável pelo treinamento) */
+/** Ordem de Serviço / OS NR-1 — última página, «Assinatura do Colaborador» (não Emitente / SST) */
 export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO =
   'certificado_ordem_servico' as const
 
@@ -12,7 +12,11 @@ export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO =
 export function certificadoTipoParaTipoDocumentoAssinatura(tipo: string): string {
   const s = String(tipo || '').trim()
   if (!s) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO
-  if (/ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) || /^os$/i.test(s)) {
+  if (
+    /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b/i.test(s) ||
+    /^os$/i.test(s) ||
+    (/\bNR\s*-?\s*0*1\b/i.test(s) && /\bO\.?\s*S\.?\b/i.test(s))
+  ) {
     return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO
   }
   if (/\bNR\s*-?\s*0*12\b/i.test(s)) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12

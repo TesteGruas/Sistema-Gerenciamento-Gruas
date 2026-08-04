@@ -1,4 +1,5 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument } from 'pdf-lib'
+import { garantirPdfSemCriptografia } from './pdf-decrypt.js'
 import {
   encontrarPosicaoAssinaturaPorAncoras,
   encontrarTodasPosicoesPorAncoras,
@@ -36,8 +37,9 @@ export {
  */
 export async function adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, options = {}) {
   try {
-    // Carregar o PDF existente
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    // pdf-lib não altera PDFs criptografados com segurança (ASO etc.) — remove proteção antes.
+    const unlocked = await garantirPdfSemCriptografia(pdfBuffer)
+    const pdfDoc = await PDFDocument.load(unlocked)
 
     // Converter base64 para imagem
     let image;
@@ -126,8 +128,9 @@ export async function adicionarAssinaturaEmTodasPaginas(pdfBuffer, signatureBase
     console.log('🎨 [PDF Signature] Iniciando adição de assinatura em todas as páginas')
     console.log('🎨 [PDF Signature] Tipo de assinatura:', signatureBase64?.substring(0, 50))
     
-    // Carregar o PDF existente
-    const pdfDoc = await PDFDocument.load(pdfBuffer);
+    // Carregar o PDF existente (ASO e outros scans podem vir criptografados)
+    const unlocked = await garantirPdfSemCriptografia(pdfBuffer)
+    const pdfDoc = await PDFDocument.load(unlocked)
     const pages = pdfDoc.getPages();
     console.log(`🎨 [PDF Signature] PDF carregado com ${pages.length} página(s)`)
 
@@ -281,6 +284,8 @@ async function dimensoesAssinaturaBase64(signatureBase64) {
  * @param {{ documento?: { arquivo_original?: string, titulo?: string, tipo_documento?: string }, regra?: Record<string, unknown>, opacity?: number }} contexto
  */
 export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatureBase64, contexto = {}) {
+  // Descriptografar uma vez (ASO etc.); pdf-lib corrompe se salvar com ignoreEncryption.
+  const bufferTrabalho = await garantirPdfSemCriptografia(pdfBuffer)
   const regra = resolverRegraPorDocumento(contexto.documento || {}, contexto.regra || {});
   const dims = await dimensoesAssinaturaBase64(signatureBase64);
 
@@ -292,22 +297,37 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
       regra.todasOcorrenciasColunaFuncionario === true &&
       regra.metodoAncora === 'duas_colunas_funcionario_esquerda'
     ) {
-      posicoes = await encontrarTodasPosicoesDuasColunasFuncionario(pdfBuffer, regra);
+      posicoes = await encontrarTodasPosicoesDuasColunasFuncionario(bufferTrabalho, regra);
     } else if (
       regra.todasPaginasRodapeColunaEsquerda === true &&
       regra.metodoAncora === 'rodape_coluna_esquerda'
     ) {
-      posicoes = await encontrarTodasPosicoesRodapeColunaEsquerda(pdfBuffer, regra);
+      posicoes = await encontrarTodasPosicoesRodapeColunaEsquerda(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'certificado_nr12_multi') {
-      posicoes = await encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, regra);
+      posicoes = await encontrarPosicoesCertificadoNr12MultiPagina(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'certificado_multipagina_aluno') {
-      posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra);
+      posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'caixa_fixa_a4_trabalhador_151') {
-      posicoes = await encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regra);
+      // OS NR-1 scan usa caixa; se o PDF tiver texto («Colaborador»/«Trabalhador»), prefere âncora.
+      if (regra.caixaSomenteUltimaPagina === true && regra.anchors?.length) {
+        try {
+          const porAncora = await encontrarPosicaoAssinaturaPorAncoras(bufferTrabalho, {
+            ...regra,
+            metodoAncora: undefined,
+            centralizarHorizontal: false
+          })
+          if (porAncora) posicoes = [porAncora]
+        } catch {
+          /* segue para caixa fixa */
+        }
+      }
+      if (posicoes.length === 0) {
+        posicoes = await encontrarPosicoesCaixaFixaA4Trabalhador151(bufferTrabalho, regra)
+      }
     } else if (regra.todasOcorrenciasAncora === true && regra.anchors?.length) {
-      posicoes = await encontrarTodasPosicoesPorAncoras(pdfBuffer, regra);
+      posicoes = await encontrarTodasPosicoesPorAncoras(bufferTrabalho, regra);
     } else {
-      const pos = await encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, regra);
+      const pos = await encontrarPosicaoAssinaturaPorAncoras(bufferTrabalho, regra);
       if (pos) posicoes = [pos];
     }
   } catch (e) {
@@ -315,7 +335,7 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
   }
 
   if (posicoes.length > 0) {
-    let buf = pdfBuffer;
+    let buf = bufferTrabalho;
     for (let i = 0; i < posicoes.length; i++) {
       const pos = posicoes[i];
       let drawX;
@@ -379,7 +399,7 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
 
   if (isCertificadoNr) {
     console.warn('[PDF Signature] Nenhuma âncora encontrada em certificado; usando 1.ª página e y=50');
-    return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
+    return adicionarAssinaturaNoPDF(bufferTrabalho, signatureBase64, {
       pageIndex: 0,
       x: regra.marginLeftCanto ?? 80,
       y: 50,
@@ -388,7 +408,7 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
   }
 
   console.warn('[PDF Signature] Nenhuma âncora encontrada; usando última página e y=50');
-  return adicionarAssinaturaNoPDF(pdfBuffer, signatureBase64, {
+  return adicionarAssinaturaNoPDF(bufferTrabalho, signatureBase64, {
     pageIndex: -1,
     y: 50,
     opacity: contexto.opacity ?? 1.0

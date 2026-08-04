@@ -4,6 +4,7 @@
 export function tipoAdmissionalParaTipoDocumentoAssinatura(tipo: string): string {
   const t = String(tipo || '').trim()
   const map: Record<string, string> = {
+    ASO: 'aso',
     'Acordo de compensação de horas': 'acordo_compensacao',
     'Contrato de experiência / prorrogação': 'contrato_experiencia_prorrogacao',
     'Contrato de Experiência': 'contrato_experiencia_prorrogacao',

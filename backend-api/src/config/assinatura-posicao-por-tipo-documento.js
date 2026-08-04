@@ -162,22 +162,57 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     marginBottomCanto: 40
   },
   /**
-   * Ordem de Serviço (SST / certificados RH): última página — campo do trabalhador
-   * (não «Assinatura do Responsável pelo Treinamento», que já pode vir carimbada).
+   * Ordem de Serviço / OS NR-1 (LD Group): PDF costuma ser scan — última página,
+   * caixa sobre «Assinatura do Colaborador» (esquerda). Não cobre Emitente nem o
+   * carimbo do Profissional de Segurança abaixo.
+   * PDFs antigos com texto «Assinatura do Trabalhador» ainda tentam âncora se houver texto.
    */
   certificado_ordem_servico: {
     descricao:
-      'Ordem de Serviço: última página, âncora «Assinatura do Trabalhador» (linha acima do rótulo); ignora a assinatura do responsável à direita.',
-    anchors: [/Assinatura do Trabalhador/i],
+      'Ordem de Serviço (NR-1): última página — assinatura acima da linha «Assinatura do Colaborador» (coluna esquerda).',
+    metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+    caixaSomenteUltimaPagina: true,
+    caixaAnchorLabel: 'Assinatura do Colaborador (OS NR-1)',
+    /**
+     * Linha «Assinatura do Colaborador» medida no scan LD Group ≈ y=595–597.
+     * Caixa logo acima da linha (não no branco abaixo do formulário).
+     */
+    caixaX: 70,
+    caixaY: 602,
+    caixaWidth: 200,
+    caixaHeight: 52,
+    caixaPageWidth: 595,
+    caixaPageHeight: 842,
+    caixaToleranciaPts: 8,
+    /** Fallback se o PDF tiver texto pesquisável (layout antigo). */
+    anchors: [/Assinatura do Colaborador/i, /Assinatura do Trabalhador/i],
     match: 'last',
-    /** Centraliza na faixa da linha (≈ centro da página no layout TCPDF). */
-    metodoAncora: 'assinatura_centralizada',
-    centralizarHorizontal: true,
-    offsetXPoints: -40,
-    /** Sobe a imagem até a linha tracejada acima do nome/CPF. */
-    offsetYPoints: 80,
+    offsetXPoints: -20,
+    offsetYPoints: 72,
     gapAbaixoTextoPoints: 4,
     signatureHeight: 48
+  },
+  /**
+   * ASO (Atestado de Saúde Ocupacional): PDF costuma ser scan/imagem sem texto.
+   * Caixa fixa sobre «Assinatura do funcionário» — carimbo centralizado na faixa
+   * (sem sobrepor o carimbo do médico à direita).
+   */
+  aso: {
+    descricao:
+      'ASO: PDF escaneado — assinatura na linha «Assinatura do funcionário» (célula esquerda do rodapé), sem cobrir o carimbo do médico.',
+    metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+    caixaPrimeirasPaginas: 1,
+    /**
+     * Célula esquerda do fecho. y=78 ficava no branco abaixo da tabela.
+     * Linha do funcionário fica acima do rodapé «Médico responsável pelo PCMSO».
+     */
+    caixaX: 50,
+    caixaY: 188,
+    caixaWidth: 245,
+    caixaHeight: 44,
+    caixaPageWidth: 595,
+    caixaPageHeight: 842,
+    caixaToleranciaPts: 8
   },
   /** Documentos de demissão / rescisão: formulário eSocial A4 sem AcroForm — campo 151 (trabalhador). */
   demissao_termo_rescisao: {

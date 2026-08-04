@@ -50,6 +50,22 @@ export const REGRA_ASSINATURA_PADRAO = {
 /** Perfis por padrão no nome do arquivo ou título (ordem importa: primeiro match vence). */
 export const PERFIS_ASSINATURA_DOCUMENTO = [
   {
+    id: 'aso',
+    match: (nome) =>
+      /\baso\b|atestado\s+de\s+sa[uú]de\s+ocupacional|sa[uú]de\s+ocupacional/i.test(nome || ''),
+    regra: {
+      metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+      caixaPrimeirasPaginas: 1,
+      caixaX: 50,
+      caixaY: 188,
+      caixaWidth: 245,
+      caixaHeight: 44,
+      caixaPageWidth: 595,
+      caixaPageHeight: 842,
+      caixaToleranciaPts: 8
+    }
+  },
+  {
     id: 'holerite',
     match: (nome) => /holerite|contracheque|folha\s*de\s*pagamento/i.test(nome || ''),
     regra: {
@@ -251,19 +267,23 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     }
   },
   {
-    /** Antes de certificado_padrao — «OS» no nome do arquivo não é certificado NR. */
+    /** Antes de certificado_padrao — «OS» / NR-1 no nome do arquivo. */
     id: 'certificado_ordem_servico',
     match: (nome) =>
-      /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b|-\s*OS(\.pdf)?$/i.test(nome || ''),
+      /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b|-\s*OS(\.pdf)?$|\bNR\s*-?\s*0*1\b.*\bO\.?\s*S\.?\b|\bO\.?\s*S\.?\b.*\bNR\s*-?\s*0*1\b/i.test(
+        nome || ''
+      ),
     regra: {
-      metodoAncora: 'assinatura_centralizada',
-      centralizarHorizontal: true,
-      anchors: [/Assinatura do Trabalhador/i],
-      match: 'last',
-      offsetXPoints: -40,
-      offsetYPoints: 80,
-      gapAbaixoTextoPoints: 4,
-      signatureHeight: 48
+      metodoAncora: 'caixa_fixa_a4_trabalhador_151',
+      caixaSomenteUltimaPagina: true,
+      caixaAnchorLabel: 'Assinatura do Colaborador (OS NR-1)',
+      caixaX: 70,
+      caixaY: 602,
+      caixaWidth: 200,
+      caixaHeight: 52,
+      caixaPageWidth: 595,
+      caixaPageHeight: 842,
+      caixaToleranciaPts: 8
     }
   },
   {
@@ -856,18 +876,39 @@ export async function encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regr
     width: r.caixaWidth ?? 240,
     height: r.caixaHeight ?? 38
   };
+  const anchorLabel = r.caixaAnchorLabel || 'Campo 151 — Assinatura do Trabalhador (caixa fixa A4)'
+
+  const paginaOk = (pag) => {
+    const okSize =
+      Math.abs(pag.pageWidth - refW) <= tol && Math.abs(pag.pageHeight - refH) <= tol;
+    return okSize || r.caixaExigeDimensaoA4 === false;
+  };
+
+  /** Ordem de Serviço NR-1 (scan): só a última folha. */
+  if (r.caixaSomenteUltimaPagina === true && paginas.length > 0) {
+    const pag = paginas[paginas.length - 1];
+    if (paginaOk(pag) || r.caixaFallbackPrimeirasPaginas !== false) {
+      return [
+        {
+          pageIndex: pag.pageIndex,
+          metodo: 'caixa_fixa_centrada',
+          box: { ...box },
+          anchor: anchorLabel
+        }
+      ];
+    }
+    return [];
+  }
 
   const out = [];
   for (const pag of paginas) {
     if (pag.pageIndex >= maxIdxExclusive) break;
-    const okSize =
-      Math.abs(pag.pageWidth - refW) <= tol && Math.abs(pag.pageHeight - refH) <= tol;
-    if (!okSize && r.caixaExigeDimensaoA4 !== false) continue;
+    if (!paginaOk(pag) && r.caixaExigeDimensaoA4 !== false) continue;
     out.push({
       pageIndex: pag.pageIndex,
       metodo: 'caixa_fixa_centrada',
       box: { ...box },
-      anchor: 'Campo 151 — Assinatura do Trabalhador (caixa fixa A4)'
+      anchor: anchorLabel
     });
   }
 
@@ -878,7 +919,7 @@ export async function encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regr
         pageIndex: pag.pageIndex,
         metodo: 'caixa_fixa_centrada',
         box: { ...box },
-        anchor: 'Campo 151 (fallback sem checagem de tamanho de página)'
+        anchor: r.caixaAnchorLabel || 'Campo 151 (fallback sem checagem de tamanho de página)'
       });
     }
   }
