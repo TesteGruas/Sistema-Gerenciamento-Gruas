@@ -138,9 +138,9 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
   },
   certificado_padrao: {
     descricao:
-      'Certificados NR / sinaleiro: só 1.ª página — «ALUNO» no quadrante inferior esquerdo; senão nome do participante (layout Vetor); senão canto inferior esquerdo.',
+      'Certificados NR / sinaleiro: 1.ª página — linha «Assinatura do trabalhador» (LD Group); senão «ALUNO» / Vetor; senão canto inferior esquerdo.',
     metodoAncora: 'certificado_multipagina_aluno',
-    anchors: [/^\s*ALUNO\s*:?\s*$/i],
+    anchors: [/^\s*ALUNO\s*:?\s*$/i, /Assinatura do trabalhador/i],
     match: 'last',
     offsetXPoints: -32,
     offsetYPoints: 42,
@@ -151,7 +151,7 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
   },
   certificado_nr12: {
     descricao:
-      'Certificado NR-12: só 1.ª página — «ALUNO» / «ANDERSON» / nome do participante (Vetor); senão canto inferior esquerdo.',
+      'Certificado NR-12: 1.ª página — linha «Assinatura do trabalhador» (LD Group); senão «ALUNO» / «ANDERSON» / Vetor; senão canto inferior esquerdo.',
     metodoAncora: 'certificado_nr12_multi',
     /** Linha de assinatura fica acima do texto do nome — sobe a imagem e puxa para a esquerda. */
     offsetXPoints: -52,
@@ -162,19 +162,18 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     marginBottomCanto: 40
   },
   /**
-   * Ordem de Serviço / OS NR-1 (LD Group): PDF costuma ser scan — última página,
-   * caixa sobre «Assinatura do Colaborador» (esquerda). Não cobre Emitente nem o
-   * carimbo do Profissional de Segurança abaixo.
-   * PDFs antigos com texto «Assinatura do Trabalhador» ainda tentam âncora se houver texto.
+   * Ordem de Serviço / OS NR-1 (LD Group): com texto usa linha «Assinatura do Colaborador»;
+   * scan sem texto — caixa fixa ~y=602. Não cobre Emitente nem o carimbo SST.
    */
   certificado_ordem_servico: {
     descricao:
-      'Ordem de Serviço (NR-1): última página — assinatura acima da linha «Assinatura do Colaborador» (coluna esquerda).',
+      'Ordem de Serviço (NR-1): última página — linha «Assinatura do Colaborador» centrada; fallback caixa scan y≈602.',
     metodoAncora: 'caixa_fixa_a4_trabalhador_151',
     caixaSomenteUltimaPagina: true,
+    linhaSomenteUltimaPagina: true,
     caixaAnchorLabel: 'Assinatura do Colaborador (OS NR-1)',
     /**
-     * Linha «Assinatura do Colaborador» medida no scan LD Group ≈ y=595–597.
+     * Fallback scan LD Group ≈ y=595–597.
      * Caixa logo acima da linha (não no branco abaixo do formulário).
      */
     caixaX: 70,
@@ -184,35 +183,38 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     caixaPageWidth: 595,
     caixaPageHeight: 842,
     caixaToleranciaPts: 8,
-    /** Fallback se o PDF tiver texto pesquisável (layout antigo). */
+    /** Com texto pesquisável (layout LD Group). */
     anchors: [/Assinatura do Colaborador/i, /Assinatura do Trabalhador/i],
+    linhaRotulos: [/Assinatura do Colaborador/i, /Assinatura do Trabalhador/i],
     match: 'last',
-    offsetXPoints: -20,
-    offsetYPoints: 72,
+    offsetXPoints: 0,
+    offsetYPoints: 0,
     gapAbaixoTextoPoints: 4,
     signatureHeight: 48
   },
   /**
-   * ASO (Atestado de Saúde Ocupacional): PDF costuma ser scan/imagem sem texto.
-   * Caixa fixa sobre «Assinatura do funcionário» — carimbo centralizado na faixa
-   * (sem sobrepor o carimbo do médico à direita).
+   * ASO (Atestado de Saúde Ocupacional): com texto ancora na linha «Assinatura do funcionário»;
+   * scan sem texto — caixa fixa na célula esquerda (sem cobrir o médico à direita).
    */
   aso: {
     descricao:
-      'ASO: PDF escaneado — assinatura na linha «Assinatura do funcionário» (célula esquerda do rodapé), sem cobrir o carimbo do médico.',
+      'ASO: linha «Assinatura do funcionário» centrada na célula esquerda; fallback caixa A4 calibrada (~y=278).',
     metodoAncora: 'caixa_fixa_a4_trabalhador_151',
     caixaPrimeirasPaginas: 1,
     /**
-     * Célula esquerda do fecho. y=78 ficava no branco abaixo da tabela.
-     * Linha do funcionário fica acima do rodapé «Médico responsável pelo PCMSO».
+     * Célula esquerda do fecho (PDF LD Group com texto: linha ≈ y=272, x≈84, w≈147).
      */
-    caixaX: 50,
-    caixaY: 188,
-    caixaWidth: 245,
-    caixaHeight: 44,
+    caixaX: 84,
+    caixaY: 278,
+    caixaWidth: 147,
+    caixaHeight: 48,
     caixaPageWidth: 595,
     caixaPageHeight: 842,
-    caixaToleranciaPts: 8
+    caixaToleranciaPts: 8,
+    anchors: [/Assinatura do funcion[aá]rio/i],
+    linhaRotulos: [/Assinatura do funcion[aá]rio/i],
+    match: 'last',
+    signatureHeight: 48
   },
   /** Documentos de demissão / rescisão: formulário eSocial A4 sem AcroForm — campo 151 (trabalhador). */
   demissao_termo_rescisao: {

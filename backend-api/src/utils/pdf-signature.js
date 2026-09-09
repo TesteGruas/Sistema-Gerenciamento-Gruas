@@ -8,6 +8,7 @@ import {
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
   encontrarPosicoesCaixaFixaA4Trabalhador151,
+  encontrarPosicoesLinhaAssinaturaCentrada,
   resolverRegraPorDocumento,
   ajustarRegraCaixaFixaScanRh
 } from './pdf-signature-placement.js';
@@ -20,6 +21,7 @@ export {
   encontrarPosicoesCertificadoNr12MultiPagina,
   encontrarPosicoesCertificadoMultipaginaAluno,
   encontrarPosicoesCaixaFixaA4Trabalhador151,
+  encontrarPosicoesLinhaAssinaturaCentrada,
   encontrarTodasPosicoesPorAncoras,
   resolverRegraPorDocumento,
   normalizarTipoDocumentoParaRegraAssinatura,
@@ -308,24 +310,28 @@ export async function adicionarAssinaturaPorAncorasOuFallback(pdfBuffer, signatu
       posicoes = await encontrarPosicoesCertificadoNr12MultiPagina(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'certificado_multipagina_aluno') {
       posicoes = await encontrarPosicoesCertificadoMultipaginaAluno(bufferTrabalho, regra);
+    } else if (regra.metodoAncora === 'linha_assinatura_centrada') {
+      posicoes = await encontrarPosicoesLinhaAssinaturaCentrada(bufferTrabalho, regra);
     } else if (regra.metodoAncora === 'caixa_fixa_a4_trabalhador_151') {
-      // ASO tipado como OS (ou o inverso): corrige pela análise do scan.
-      regra = await ajustarRegraCaixaFixaScanRh(bufferTrabalho, regra)
-      // OS NR-1 scan usa caixa; se o PDF tiver texto («Colaborador»/«Trabalhador»), prefere âncora.
-      if (regra.caixaSomenteUltimaPagina === true && regra.anchors?.length) {
+      // ASO / OS com texto: centralizar na linha «Assinatura do …» antes da caixa de scan.
+      try {
+        const porLinha = await encontrarPosicoesLinhaAssinaturaCentrada(bufferTrabalho, regra);
+        if (porLinha.length) posicoes = porLinha;
+      } catch {
+        /* segue */
+      }
+      if (posicoes.length === 0) {
+        // ASO tipado como OS (ou o inverso): corrige pela análise do scan (só PDFs sem texto).
+        regra = await ajustarRegraCaixaFixaScanRh(bufferTrabalho, regra);
         try {
-          const porAncora = await encontrarPosicaoAssinaturaPorAncoras(bufferTrabalho, {
-            ...regra,
-            metodoAncora: undefined,
-            centralizarHorizontal: false
-          })
-          if (porAncora) posicoes = [porAncora]
+          const porLinha2 = await encontrarPosicoesLinhaAssinaturaCentrada(bufferTrabalho, regra);
+          if (porLinha2.length) posicoes = porLinha2;
         } catch {
           /* segue para caixa fixa */
         }
       }
       if (posicoes.length === 0) {
-        posicoes = await encontrarPosicoesCaixaFixaA4Trabalhador151(bufferTrabalho, regra)
+        posicoes = await encontrarPosicoesCaixaFixaA4Trabalhador151(bufferTrabalho, regra);
       }
     } else if (regra.todasOcorrenciasAncora === true && regra.anchors?.length) {
       posicoes = await encontrarTodasPosicoesPorAncoras(bufferTrabalho, regra);

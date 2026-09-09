@@ -23,7 +23,7 @@ try {
  * @property {number} [gapAbaixoTextoPoints] — espaço entre a base do texto e o topo da imagem da assinatura
  * @property {number} [signatureHeight] — altura desejada da assinatura (pontos PDF)
  * @property {number} [pageIndex] — forçar página (0-based). Com `rodape_coluna_esquerda`, usa só essa página (ex.: ficha de registro na 2.ª folha).
- * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'|'assinatura_centralizada'} [metodoAncora] — assinatura_centralizada: Y pela âncora, X no centro da página. caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi / certificado_multipagina_aluno: só 1.ª página (ALUNO → ANDERSON → nome participante Vetor → canto inf. esquerdo).
+ * @property {'ancoras'|'duas_colunas_funcionario_esquerda'|'rodape_mais_a_direita'|'rodape_coluna_esquerda'|'certificado_nr12_multi'|'certificado_multipagina_aluno'|'caixa_fixa_a4_trabalhador_151'|'assinatura_centralizada'|'linha_assinatura_centrada'} [metodoAncora] — linha_assinatura_centrada: caixa centrada na linha «Assinatura do trabalhador/funcionário/colaborador». assinatura_centralizada: Y pela âncora, X no centro da página. caixa_fixa_a4_trabalhador_151: CD / formulário sem AcroForm — caixa do campo 151 (origem inferior esquerda). certificado_nr12_multi / certificado_multipagina_aluno: linha LD Group → ALUNO → ANDERSON → Vetor → canto inf. esquerdo.
  * @property {boolean} [centralizarHorizontal] — se true, ignora X da âncora e centraliza a imagem na largura da página
  * @property {number} [caixaPrimeirasPaginas] — com `caixa_fixa_a4_trabalhador_151`: quantas páginas a partir da 1.ª (default 3).
  * @property {number} [caixaX] — canto inferior esquerdo da caixa (pt).
@@ -37,6 +37,10 @@ try {
  * @property {boolean} [todasOcorrenciasColunaFuncionario] — se true, assina em cada linha com coluna empresa + funcionário (ex.: dois blocos ANDERSON no mesmo PDF)
  * @property {boolean} [todasPaginasRodapeColunaEsquerda] — se true, aplica rodape_coluna_esquerda em **cada página** que tiver rodapé na coluna esquerda (ex.: ficha EPIs: termo + tabela em páginas distintas)
  * @property {boolean} [todasOcorrenciasAncora] — se true, usa **todas** as ocorrências de `anchors` no PDF (ex.: duas vias de aviso prévio na mesma folha), ordenadas topo→fundo
+ * @property {boolean} [linhaSomenteUltimaPagina] — com `linha_assinatura_centrada`: só a última página (OS NR-1).
+ * @property {(string|RegExp)[]} [linhaRotulos] — rótulos extras para achar a linha (além dos padrões trabalhador/funcionário/colaborador).
+ * @property {number} [linhaOffsetXPoints] — microajuste X só na caixa da linha (não confundir com offsetX do ALUNO).
+ * @property {number} [linhaOffsetYPoints] — microajuste Y só na caixa da linha.
  */
 
 export const REGRA_ASSINATURA_PADRAO = {
@@ -58,13 +62,17 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     regra: {
       metodoAncora: 'caixa_fixa_a4_trabalhador_151',
       caixaPrimeirasPaginas: 1,
-      caixaX: 50,
-      caixaY: 188,
-      caixaWidth: 245,
-      caixaHeight: 44,
+      /** Fallback scan sem texto; com texto usa linha «Assinatura do funcionário». */
+      caixaX: 84,
+      caixaY: 278,
+      caixaWidth: 147,
+      caixaHeight: 48,
       caixaPageWidth: 595,
       caixaPageHeight: 842,
-      caixaToleranciaPts: 8
+      caixaToleranciaPts: 8,
+      anchors: [/Assinatura do funcion[aá]rio/i],
+      match: 'last',
+      signatureHeight: 48
     }
   },
   {
@@ -257,7 +265,9 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
   },
   {
     id: 'certificado_nr12',
-    match: (nome) => /nr\s*0*12\b|nr12\b|certificado.*nr\s*12/i.test(nome || ''),
+    /** Aceita NR12_, NR-12, nr 12 — `\b` falha quando o próximo char é `_`. */
+    match: (nome) =>
+      /nr[\s_-]*0*12(?![0-9])|certificado.*nr[\s_-]*12/i.test(nome || ''),
     regra: {
       metodoAncora: 'certificado_nr12_multi',
       offsetXPoints: -52,
@@ -269,15 +279,21 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
     }
   },
   {
-    /** Antes de certificado_padrao — «OS» / NR-1 no nome do arquivo. */
+    /** Antes de certificado_padrao — «OS» / NR-1 no nome do arquivo (inclui NR-1__O.S__). */
     id: 'certificado_ordem_servico',
-    match: (nome) =>
-      /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b|-\s*OS(\.pdf)?$|\bNR\s*-?\s*0*1\b.*\bO\.?\s*S\.?\b|\bO\.?\s*S\.?\b.*\bNR\s*-?\s*0*1\b/i.test(
-        nome || ''
-      ),
+    match: (nome) => {
+      const n = nome || ''
+      return (
+        /ordem\s*de\s*servi[cç]o|\bordem\s*servi[cç]o\b|-\s*OS(\.pdf)?$/i.test(n) ||
+        /NR[\s_-]*0*1[\s_-]*O\.?\s*S\.?/i.test(n) ||
+        /O\.?\s*S\.?[\s_-]*NR[\s_-]*0*1(?![0-9])/i.test(n) ||
+        (/\bNR\s*-?\s*0*1\b/i.test(n) && /\bO\.?\s*S\.?\b/i.test(n))
+      )
+    },
     regra: {
       metodoAncora: 'caixa_fixa_a4_trabalhador_151',
       caixaSomenteUltimaPagina: true,
+      linhaSomenteUltimaPagina: true,
       caixaAnchorLabel: 'Assinatura do Colaborador (OS NR-1)',
       caixaX: 70,
       caixaY: 602,
@@ -285,13 +301,17 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       caixaHeight: 52,
       caixaPageWidth: 595,
       caixaPageHeight: 842,
-      caixaToleranciaPts: 8
+      caixaToleranciaPts: 8,
+      anchors: [/Assinatura do Colaborador/i, /Assinatura do Trabalhador/i],
+      linhaRotulos: [/Assinatura do Colaborador/i, /Assinatura do Trabalhador/i],
+      match: 'last',
+      signatureHeight: 48
     }
   },
   {
     id: 'certificado_padrao',
     match: (nome) =>
-      /certificado|nr\s*0?\d+|sinaleiro|reciclagem|especifica[cç][aã]o/i.test(nome || ''),
+      /certificado|nr[\s_-]*0?\d+|sinaleiro|reciclagem|especifica[cç][aã]o/i.test(nome || ''),
     regra: {
       metodoAncora: 'certificado_multipagina_aluno',
       anchors: [/^\s*ALUNO\s*:?\s*$/i],
@@ -502,12 +522,18 @@ export async function detectarLayoutAssinaturaRhScan(pdfBuffer) {
 /**
  * Se o tipo cadastrado for OS mas o PDF for ASO (ou vice-versa), troca a regra.
  * Evita carimbar ASO em y=602 («exames») quando o certificado foi tipado como Ordem de Serviço.
+ * Não troca quando o PDF já tem texto «Assinatura do funcionário/colaborador» (LD Group pesquisável).
  * @param {Buffer|Uint8Array} pdfBuffer
  * @param {RegraPosicaoAssinatura} regra
  * @returns {Promise<RegraPosicaoAssinatura>}
  */
 export async function ajustarRegraCaixaFixaScanRh(pdfBuffer, regra) {
   if (regra?.metodoAncora !== 'caixa_fixa_a4_trabalhador_151') return regra
+
+  // PDF com texto pesquisável: a linha centrada cuida do posicionamento; não inverter ASO↔OS.
+  if (await pdfTemRotuloAssinaturaTrabalhador(pdfBuffer)) {
+    return regra
+  }
 
   const caixaY = Number(regra.caixaY) || 0
   const pareceOs = regra.caixaSomenteUltimaPagina === true || caixaY >= 500
@@ -1023,13 +1049,157 @@ export async function encontrarTodasPosicoesRodapeColunaEsquerda(pdfBuffer, regr
 }
 
 /**
- * Certificado NR-12: só 1.ª página — ALUNO (quadrante) → ANDERSON → ALUNO na página → nome participante (Vetor) → canto inferior esquerdo.
+ * Rótulo típico LD Group / ASO / OS na coluna esquerda da assinatura.
+ */
+const RE_ROTULO_ASSINATURA_TRAB = /Assinatura\s+do\s+(trabalhador|funcion[aá]rio|colaborador)/i;
+const RE_LINHA_UNDERSCORE = /_{8,}/;
+
+/**
+ * Na página, acha rótulo «Assinatura do …» (coluna esquerda) + underscores acima dele.
+ * @param {{ pageIndex: number, pageWidth: number, pageHeight: number, items: Array<{ str?: string, x: number, y: number, width?: number, fontSize?: number }> }} pagina
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ * @returns {{ pageIndex: number, metodo: string, box: { x: number, y: number, width: number, height: number }, anchor?: string } | null}
+ */
+function encontrarCaixaLinhaAssinaturaNaPagina(pagina, regra = {}) {
+  const rotulosExtra = Array.isArray(regra.linhaRotulos) ? regra.linhaRotulos : [];
+  const anchorsExtra = Array.isArray(regra.anchors) ? regra.anchors : [];
+  const rotuloOk = (str) => {
+    const s = String(str || '');
+    if (RE_ROTULO_ASSINATURA_TRAB.test(s)) return true;
+    for (const a of [...rotulosExtra, ...anchorsExtra]) {
+      if (itemCombina(s, a) && /assinatura/i.test(s)) return true;
+    }
+    return false;
+  };
+
+  const limiteX = pagina.pageWidth * 0.55;
+  const rotulos = (pagina.items || []).filter(
+    (it) => rotuloOk(it.str) && it.x < limiteX
+  );
+  if (rotulos.length === 0) return null;
+
+  // Preferir o mais baixo na página (fecho / rodapé).
+  const rotulo = rotulos.reduce((a, b) => (a.y <= b.y ? a : b));
+
+  const underscores = (pagina.items || []).filter((it) => {
+    const s = String(it.str || '');
+    if (!RE_LINHA_UNDERSCORE.test(s)) return false;
+    if (it.x >= limiteX) return false;
+    // Linha tipicamente logo acima do rótulo (Y maior) ou quase na mesma altura.
+    const dy = it.y - rotulo.y;
+    return dy >= -8 && dy <= 40;
+  });
+
+  let linha = null;
+  if (underscores.length) {
+    // Mais próxima do rótulo (menor |dy|); em empate, a de maior Y (acima).
+    linha = underscores.reduce((a, b) => {
+      const da = Math.abs(a.y - rotulo.y);
+      const db = Math.abs(b.y - rotulo.y);
+      if (da !== db) return da < db ? a : b;
+      return a.y >= b.y ? a : b;
+    });
+  }
+
+  const sigH = regra.signatureHeight ?? regra.caixaHeight ?? 48;
+  const gapAcimaLinha = 6;
+  let boxX;
+  let boxW;
+  let lineY;
+
+  if (linha) {
+    boxX = linha.x;
+    boxW = Math.max(linha.width || 0, 120);
+    lineY = linha.y;
+  } else {
+    // Sem underscores: caixa centrada sobre o rótulo (largura típica LD Group).
+    boxW = Math.max(rotulo.width || 0, 150);
+    boxX = Math.max(24, rotulo.x + (rotulo.width || 0) / 2 - boxW / 2);
+    lineY = rotulo.y + 12;
+  }
+
+  // Não reutilizar offsetX/Y do layout ALUNO/Vetor — só microajuste explícito da linha.
+  const offX = Number(regra.linhaOffsetXPoints) || 0;
+  const offY = Number(regra.linhaOffsetYPoints) || 0;
+  return {
+    pageIndex: pagina.pageIndex,
+    metodo: 'caixa_fixa_centrada',
+    box: {
+      x: boxX + offX,
+      y: lineY + gapAcimaLinha + offY,
+      width: boxW,
+      height: sigH
+    },
+    anchor: String(rotulo.str || '').slice(0, 80)
+  };
+}
+
+/**
+ * LD Group / ASO / OS com texto: caixa centrada na linha «Assinatura do trabalhador/funcionário/colaborador».
+ * @param {Buffer|Uint8Array} pdfBuffer
+ * @param {Partial<RegraPosicaoAssinatura>} regra
+ * @returns {Promise<Array<{ pageIndex: number, metodo: string, box: { x: number, y: number, width: number, height: number }, anchor?: string }>>}
+ */
+export async function encontrarPosicoesLinhaAssinaturaCentrada(pdfBuffer, regra = {}) {
+  const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
+  const { paginas } = await extrairItensTextoPdf(pdfBuffer);
+  if (!paginas.length) return [];
+
+  if (r.linhaSomenteUltimaPagina === true || r.caixaSomenteUltimaPagina === true) {
+    const pag = paginas[paginas.length - 1];
+    const caixa = encontrarCaixaLinhaAssinaturaNaPagina(pag, r);
+    return caixa ? [caixa] : [];
+  }
+
+  if (typeof r.pageIndex === 'number' && r.pageIndex >= 0) {
+    const pag = paginas[r.pageIndex];
+    if (!pag) return [];
+    const caixa = encontrarCaixaLinhaAssinaturaNaPagina(pag, r);
+    return caixa ? [caixa] : [];
+  }
+
+  // Preferir última página com rótulo; senão varrer do fim para o início.
+  for (let i = paginas.length - 1; i >= 0; i--) {
+    const caixa = encontrarCaixaLinhaAssinaturaNaPagina(paginas[i], r);
+    if (caixa) return [caixa];
+  }
+  return [];
+}
+
+/**
+ * True se o PDF tiver texto pesquisável de assinatura do funcionário/trabalhador/colaborador.
+ * @param {Buffer|Uint8Array} pdfBuffer
+ */
+export async function pdfTemRotuloAssinaturaTrabalhador(pdfBuffer) {
+  try {
+    const { paginas } = await extrairItensTextoPdf(pdfBuffer);
+    for (const pag of paginas) {
+      for (const it of pag.items || []) {
+        if (RE_ROTULO_ASSINATURA_TRAB.test(String(it.str || ''))) return true;
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
+/**
+ * Certificado NR-12: só 1.ª página — linha «Assinatura do trabalhador» → ALUNO → ANDERSON → Vetor → canto.
  * @param {Buffer|Uint8Array} pdfBuffer
  * @param {Partial<RegraPosicaoAssinatura>} regra
  * @returns {Promise<Array<Record<string, unknown>>>}
  */
 export async function encontrarPosicoesCertificadoNr12MultiPagina(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
+  const porLinha = await encontrarPosicoesLinhaAssinaturaCentrada(pdfBuffer, {
+    ...r,
+    pageIndex: 0,
+    linhaSomenteUltimaPagina: false,
+    caixaSomenteUltimaPagina: false
+  });
+  if (porLinha.length) return porLinha;
+
   const { paginas } = await extrairItensTextoPdf(pdfBuffer);
   const p0 = paginas[0];
   if (!p0) return [];
@@ -1112,13 +1282,21 @@ export async function encontrarPosicoesCaixaFixaA4Trabalhador151(pdfBuffer, regr
 }
 
 /**
- * Certificados NR (exceto NR-12): só 1.ª página — ALUNO (quadrante) → nome participante (Vetor) → canto inferior esquerdo.
+ * Certificados NR (exceto NR-12): só 1.ª página — linha «Assinatura do trabalhador» → ALUNO → Vetor → canto.
  * @param {Buffer|Uint8Array} pdfBuffer
  * @param {Partial<RegraPosicaoAssinatura>} regra
  * @returns {Promise<Array<Record<string, unknown>>>}
  */
 export async function encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
+  const porLinha = await encontrarPosicoesLinhaAssinaturaCentrada(pdfBuffer, {
+    ...r,
+    pageIndex: 0,
+    linhaSomenteUltimaPagina: false,
+    caixaSomenteUltimaPagina: false
+  });
+  if (porLinha.length) return porLinha;
+
   const { paginas } = await extrairItensTextoPdf(pdfBuffer);
   const p0 = paginas[0];
   if (!p0) return [];
@@ -1135,6 +1313,11 @@ export async function encontrarPosicoesCertificadoMultipaginaAluno(pdfBuffer, re
 export async function encontrarPosicaoAssinaturaPorAncoras(pdfBuffer, regra = {}) {
   const r = { ...REGRA_ASSINATURA_PADRAO, ...regra };
   const anchors = r.anchors?.length ? r.anchors : REGRA_ASSINATURA_PADRAO.anchors;
+
+  if (r.metodoAncora === 'linha_assinatura_centrada') {
+    const list = await encontrarPosicoesLinhaAssinaturaCentrada(pdfBuffer, r);
+    return list[0] || null;
+  }
 
   if (r.metodoAncora === 'rodape_coluna_esquerda') {
     const { paginas } = await extrairItensTextoPdf(pdfBuffer);
