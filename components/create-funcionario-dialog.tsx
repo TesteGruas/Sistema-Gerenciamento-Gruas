@@ -134,10 +134,10 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       camposFaltando.push('Data de Admissão')
     }
 
-    if (form.criar_usuario) {
-      if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
-        camposFaltando.push('Email (formato inválido)')
-      }
+    if (!form.email || !form.email.trim()) {
+      camposFaltando.push('E-mail')
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      camposFaltando.push('E-mail (formato inválido)')
     }
 
     if (camposFaltando.length > 0) {
@@ -170,7 +170,7 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
       data_admissao: form.hireDate,
       salario: salarioNumerico,
       observacoes: form.observations,
-      criar_usuario: form.criar_usuario,
+      criar_usuario: true,
       eh_supervisor: ehSupervisor
     })
   }, [form, onSubmit, toast, ehSupervisor])
@@ -305,13 +305,18 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="email">E-mail</Label>
+              <Label htmlFor="email">E-mail *</Label>
               <Input
                 id="email"
                 type="email"
                 value={form.email}
                 onChange={(e) => handleChange('email', e.target.value)}
+                required
+                placeholder="email@empresa.com.br"
               />
+              <p className="text-xs text-muted-foreground">
+                Obrigatório: será o login do usuário no sistema.
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -497,38 +502,21 @@ const CreateFuncionarioDialog = memo(function CreateFuncionarioDialog({
             />
           </div>
 
-          <div className="flex items-center justify-between pt-4 border-t">
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="criar_usuario"
-                checked={form.criar_usuario}
-                onChange={(e) => handleChange('criar_usuario', e.target.checked)}
-                className="rounded border-gray-300"
-              />
-              <Label htmlFor="criar_usuario" className="cursor-pointer">
-                Criar usuário de acesso ao sistema
-              </Label>
-            </div>
-          </div>
-
-          {form.criar_usuario && (
-            <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
-              <div className="flex items-start gap-3">
-                <div className="flex-shrink-0">
-                  <User className="w-5 h-5 mt-0.5 text-blue-600" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-medium mb-1 text-blue-900">
-                    Criação de Usuário
-                  </h4>
-                  <p className="text-sm text-blue-700">
-                    Será criado um usuário para o funcionário com acesso ao sistema. Uma senha temporária será gerada automaticamente e enviada por email e WhatsApp.
-                  </p>
-                </div>
+          <div className="border rounded-lg p-4 bg-blue-50 border-blue-200">
+            <div className="flex items-start gap-3">
+              <div className="flex-shrink-0">
+                <User className="w-5 h-5 mt-0.5 text-blue-600" />
+              </div>
+              <div>
+                <h4 className="text-sm font-medium mb-1 text-blue-900">
+                  Usuário do sistema (automático)
+                </h4>
+                <p className="text-sm text-blue-700">
+                  Todo colaborador recebe um usuário de acesso. Uma senha temporária é gerada e enviada por e-mail e WhatsApp.
+                </p>
               </div>
             </div>
-          )}
+          </div>
 
           <div className="flex justify-between items-center pt-4 border-t">
             <Button

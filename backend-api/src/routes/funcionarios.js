@@ -33,6 +33,97 @@ function possuiUsuarioVinculado(usuario) {
   return Boolean(usuario)
 }
 
+/** PostgREST: embed pode vir como objeto (1:1) ou array (1:N). */
+function usuarioEmbutido(u) {
+  return (Array.isArray(u) ? u[0] : u) || null
+}
+
+/**
+ * Resolve o usuário do colaborador: FK funcionario_id, senão email/CPF.
+ * Se achar usuário órfão (funcionario_id null) com mesmo email/CPF, religa automaticamente.
+ */
+async function resolverUsuarioDoFuncionario(funcionario) {
+  if (!funcionario) return null
+
+  const viaFk = usuarioEmbutido(funcionario.usuario)
+  if (viaFk?.id) {
+    return {
+      id: viaFk.id,
+      nome: viaFk.nome,
+      email: viaFk.email,
+      status: viaFk.status
+    }
+  }
+
+  const funcionarioId = funcionario.id
+  const email = String(funcionario.email || '').trim().toLowerCase()
+  const cpfDigits = limparCpf(funcionario.cpf)
+
+  let candidato = null
+
+  if (email) {
+    const { data } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email, status, funcionario_id')
+      .ilike('email', email)
+      .is('deleted_at', null)
+      .limit(5)
+
+    const lista = data || []
+    candidato =
+      lista.find((u) => Number(u.funcionario_id) === Number(funcionarioId)) ||
+      lista.find((u) => u.funcionario_id == null) ||
+      null
+  }
+
+  if (!candidato && cpfDigits.length >= 11) {
+    const { data } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, nome, email, status, funcionario_id, cpf')
+      .is('deleted_at', null)
+      .limit(50)
+
+    const match = (data || []).find((u) => limparCpf(u.cpf) === cpfDigits)
+    if (match && (match.funcionario_id == null || Number(match.funcionario_id) === Number(funcionarioId))) {
+      candidato = match
+    }
+  }
+
+  if (!candidato?.id) return null
+
+  if (candidato.funcionario_id == null) {
+    const { error: linkError } = await supabaseAdmin
+      .from('usuarios')
+      .update({
+        funcionario_id: funcionarioId,
+        eh_funcionario: true,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', candidato.id)
+      .is('funcionario_id', null)
+
+    if (linkError) {
+      console.warn(
+        `[FUNCIONARIOS] Falha ao religar usuario ${candidato.id} → funcionario ${funcionarioId}:`,
+        linkError.message
+      )
+    } else {
+      console.log(
+        `[FUNCIONARIOS] Usuário ${candidato.id} religado ao funcionário ${funcionarioId} (email/CPF)`
+      )
+    }
+  } else if (Number(candidato.funcionario_id) !== Number(funcionarioId)) {
+    return null
+  }
+
+  return {
+    id: candidato.id,
+    nome: candidato.nome,
+    email: candidato.email,
+    status: candidato.status
+  }
+}
+
 function limparCpf(cpf) {
   return String(cpf || '').replace(/\D/g, '')
 }
@@ -193,7 +284,11 @@ const funcionarioSchema = Joi.object({
   nome: Joi.string().min(2).max(255).required(),
   cargo: Joi.string().min(2).max(255).required(), // Validação dinâmica - aceita qualquer cargo do banco
   telefone: Joi.string().max(20).allow(null, '').optional(),
-  email: Joi.string().email().allow(null, '').optional(),
+  email: Joi.string().email().required().messages({
+    'any.required': 'E-mail é obrigatório para criar o colaborador e o usuário do sistema',
+    'string.email': 'E-mail inválido',
+    'string.empty': 'E-mail é obrigatório para criar o colaborador e o usuário do sistema'
+  }),
   cpf: Joi.string().pattern(/^\d{3}\.\d{3}\.\d{3}-\d{2}$|^\d{11}$/).allow(null, '').optional(),
   turno: Joi.string().valid('Diurno', 'Noturno', 'Sob Demanda').default('Diurno'),
   status: Joi.string().valid('Ativo', 'Inativo', 'Férias').default('Ativo'),
@@ -202,7 +297,7 @@ const funcionarioSchema = Joi.object({
   observacoes: Joi.string().allow(null, '').optional(),
   // Campo para indicar se é supervisor (usado como informação auxiliar)
   eh_supervisor: Joi.boolean().default(false).optional(),
-  // Campos para criação do usuário
+  // Sempre cria usuário no POST; aceito no payload só por compatibilidade
   criar_usuario: Joi.boolean().default(true).optional(),
   usuario_senha: Joi.string().min(6).optional().allow('', null)
 })
@@ -332,8 +427,6 @@ router.get('/', authenticateToken, async (req, res) => {
 
     /** PostgREST limita linhas por requisição (ex.: 1000); sem range, parte dos registros some. */
     const TAMANHO_LOTE_SUPABASE = 1000
-
-    const usuarioEmbutido = (u) => (Array.isArray(u) ? u[0] : u) || null
 
     console.log('='.repeat(80))
     console.log('[FUNCIONARIOS] Rota GET / chamada')
@@ -642,8 +735,9 @@ router.get('/', authenticateToken, async (req, res) => {
       
       return {
         ...funcionario,
-        usuario_existe: funcionario.usuario_existe ?? possuiUsuarioVinculado(funcionario.usuario),
-        usuario_criado: funcionario.usuario_criado ?? possuiUsuarioVinculado(funcionario.usuario),
+        usuario: uVinc,
+        usuario_existe: funcionario.usuario_existe ?? Boolean(uVinc),
+        usuario_criado: funcionario.usuario_criado ?? Boolean(uVinc),
         obra_atual: obraAtual,
         obras_vinculadas: obrasVinculadas
       }
@@ -1348,12 +1442,15 @@ router.get('/:id', async (req, res) => {
       const obraAtualResolvido =
         alocacoesAtivasResolvido.length > 0 ? alocacoesAtivasResolvido[0].obras : null
 
+      const usuarioResolvido = await resolverUsuarioDoFuncionario(funcionarioResolvido)
+
       return res.json({
         success: true,
         data: {
           ...funcionarioResolvido,
-          usuario_existe: possuiUsuarioVinculado(funcionarioResolvido.usuario),
-          usuario_criado: possuiUsuarioVinculado(funcionarioResolvido.usuario),
+          usuario: usuarioResolvido,
+          usuario_existe: Boolean(usuarioResolvido),
+          usuario_criado: Boolean(usuarioResolvido),
           obra_atual: obraAtualResolvido,
           obras_vinculadas: alocacoesAtivasResolvido,
           historico_obras: funcionarioResolvido.funcionarios_obras || [],
@@ -1375,11 +1472,14 @@ router.get('/:id', async (req, res) => {
       data.cargo = data.cargo_info.nome
     }
 
+    const usuarioResolvido = await resolverUsuarioDoFuncionario(data)
+
     // Adicionar informações sobre o usuário vinculado e obra atual
     const responseData = {
       ...data,
-      usuario_existe: possuiUsuarioVinculado(data.usuario),
-      usuario_criado: possuiUsuarioVinculado(data.usuario),
+      usuario: usuarioResolvido,
+      usuario_existe: Boolean(usuarioResolvido),
+      usuario_criado: Boolean(usuarioResolvido),
       obra_atual: obraAtual,
       obras_vinculadas: alocacoesAtivas,
       historico_obras: todasObras // Todas as obras, incluindo finalizadas
@@ -1451,7 +1551,7 @@ router.post('/', async (req, res) => {
         'usuario_senha': 'A senha do usuário deve ter no mínimo 6 caracteres',
         'nome': 'O nome é obrigatório e deve ter no mínimo 2 caracteres',
         'cargo': 'O cargo é obrigatório',
-        'email': 'O email fornecido é inválido',
+        'email': 'O e-mail é obrigatório e deve ser válido (cria o usuário do sistema)',
         'cpf': 'O CPF fornecido é inválido'
       }
       
@@ -1467,7 +1567,16 @@ router.post('/', async (req, res) => {
       })
     }
 
-    const { criar_usuario, usuario_senha, ...funcionarioData } = value
+    const { criar_usuario: _criarUsuarioIgnorado, usuario_senha, ...funcionarioData } = value
+
+    // Sempre criar usuário do sistema ao cadastrar colaborador no RH
+    const criar_usuario = true
+    if (!value.email || !String(value.email).trim()) {
+      return res.status(400).json({
+        error: 'E-mail obrigatório',
+        message: 'Informe um e-mail válido. Todo colaborador cadastrado no RH recebe usuário do sistema.'
+      })
+    }
 
     // Validar se cargo existe e está ativo
     let cargoInfo = null
@@ -1520,10 +1629,10 @@ router.post('/', async (req, res) => {
       await liberarCpfDeFuncionariosExcluidos(cpfNormalizado)
     }
 
-    // Iniciar transação
+    // Iniciar criação: colaborador + usuário (obrigatório)
     let usuarioId = null
 
-    // Criar usuário se solicitado
+    // Criar usuário sempre (e-mail já validado acima)
     if (criar_usuario && value.email) {
       try {
         const guard = await assertEmailAvailableForRole(value.email, TARGET_OPERARIO)
@@ -1764,53 +1873,6 @@ router.post('/', async (req, res) => {
           message: usuarioError.message
         })
       }
-    } else {
-      // Criar apenas funcionário sem usuário
-      const { data, error: createError } = await supabaseAdmin
-        .from('funcionarios')
-        .insert([funcionarioData])
-        .select()
-        .single()
-
-      if (createError) {
-        return res.status(500).json({
-          error: 'Erro ao criar funcionário',
-          message: createError.message
-        })
-      }
-
-      // Buscar dados completos do funcionário com JOIN
-      const { data: funcionarioCompleto } = await supabaseAdmin
-        .from('funcionarios')
-        .select(`
-          *,
-          cargo_info:cargos!cargo_id(
-            id,
-            nome,
-            nivel,
-            descricao
-          )
-        `)
-        .eq('id', data.id)
-        .single()
-
-      // Popular campo cargo com o nome do cargo do cargo_info
-      if (funcionarioCompleto) {
-        if (funcionarioCompleto.cargo_info) {
-          funcionarioCompleto.cargo = funcionarioCompleto.cargo_info.nome
-        } else if (cargoInfo) {
-          funcionarioCompleto.cargo = cargoInfo.nome
-        }
-      }
-
-      res.status(201).json({
-        success: true,
-        data: {
-          ...(funcionarioCompleto || data),
-          usuario_criado: false
-        },
-        message: 'Funcionário criado com sucesso'
-      })
     }
   } catch (error) {
     console.error('Erro ao criar funcionário:', error)
@@ -2436,6 +2498,253 @@ router.delete('/:id', async (req, res) => {
  *         description: Erro interno do servidor
  */
 /**
+ * POST /api/funcionarios/:id/criar-usuario
+ * Cria usuário do sistema (Auth + tabela usuarios) para colaborador que ainda não tem.
+ */
+router.post('/:id/criar-usuario', requirePermission('rh:editar'), async (req, res) => {
+  console.log('👤 Rota criar-usuario chamada para funcionário ID:', req.params.id)
+  try {
+    const funcionarioId = parseInt(req.params.id, 10)
+    if (isNaN(funcionarioId) || funcionarioId <= 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'ID do funcionário inválido'
+      })
+    }
+
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select(`
+        id,
+        nome,
+        email,
+        telefone,
+        telefone_whatsapp,
+        cpf,
+        cargo,
+        turno,
+        status,
+        data_admissao,
+        salario,
+        cargo_id,
+        cargo_info:cargos!cargo_id(
+          id,
+          nome,
+          perfil_id
+        ),
+        usuario:usuarios!funcionario_id(
+          id,
+          email,
+          status
+        )
+      `)
+      .eq('id', funcionarioId)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (funcionarioError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar funcionário',
+        error: funcionarioError.message
+      })
+    }
+
+    if (!funcionario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado'
+      })
+    }
+
+    const jaTem = await resolverUsuarioDoFuncionario(funcionario)
+    if (jaTem?.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Este funcionário já possui usuário do sistema vinculado.',
+        data: { usuario: jaTem }
+      })
+    }
+
+    const email = String(funcionario.email || '').trim().toLowerCase()
+    if (!email || !email.includes('@')) {
+      return res.status(400).json({
+        success: false,
+        message: 'Cadastre um e-mail válido no colaborador antes de criar o usuário.'
+      })
+    }
+
+    const guard = await assertEmailAvailableForRole(email, TARGET_OPERARIO)
+    if (!guard.allowed) {
+      return res.status(409).json({
+        success: false,
+        message: guard.message
+      })
+    }
+
+    const { data: existingUser } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, funcionario_id, email')
+      .ilike('email', email)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (existingUser) {
+      if (existingUser.funcionario_id == null) {
+        await supabaseAdmin
+          .from('usuarios')
+          .update({
+            funcionario_id: funcionarioId,
+            eh_funcionario: true,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', existingUser.id)
+
+        return res.json({
+          success: true,
+          message: 'Usuário existente religado ao colaborador.',
+          data: {
+            usuario: {
+              id: existingUser.id,
+              email: existingUser.email,
+              status: 'Ativo'
+            },
+            religado: true
+          }
+        })
+      }
+      return res.status(400).json({
+        success: false,
+        message: 'Já existe um usuário com este e-mail vinculado a outro colaborador.'
+      })
+    }
+
+    const mapearTurno = (turnoFuncionario) => {
+      switch (turnoFuncionario) {
+        case 'Diurno':
+          return 'Manhã'
+        case 'Noturno':
+          return 'Noite'
+        case 'Sob Demanda':
+          return 'Integral'
+        default:
+          return 'Manhã'
+      }
+    }
+
+    const cargoNome =
+      funcionario.cargo_info?.nome || funcionario.cargo || 'Operador'
+    const senhaTemporaria = generateSecurePassword()
+
+    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      email,
+      password: senhaTemporaria,
+      email_confirm: true,
+      user_metadata: {
+        nome: funcionario.nome,
+        cargo: cargoNome,
+        funcionario_id: funcionarioId
+      }
+    })
+
+    if (authError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao criar usuário no sistema de autenticação',
+        error: authError.message
+      })
+    }
+
+    const usuarioData = {
+      nome: funcionario.nome,
+      email,
+      cpf: funcionario.cpf || null,
+      telefone: funcionario.telefone || null,
+      cargo: cargoNome,
+      turno: mapearTurno(funcionario.turno),
+      data_admissao: funcionario.data_admissao || null,
+      salario: funcionario.salario || null,
+      status: funcionario.status || 'Ativo',
+      eh_funcionario: true,
+      funcionario_id: funcionarioId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    }
+
+    const { data: novoUsuario, error: usuarioError } = await supabaseAdmin
+      .from('usuarios')
+      .insert(usuarioData)
+      .select('id, nome, email, status')
+      .single()
+
+    if (usuarioError) {
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao criar usuário na tabela',
+        error: usuarioError.message
+      })
+    }
+
+    let perfilId = 4
+    if (funcionario.cargo_info?.perfil_id) {
+      perfilId = funcionario.cargo_info.perfil_id
+    }
+
+    const { error: perfilError } = await supabaseAdmin.from('usuario_perfis').insert({
+      usuario_id: novoUsuario.id,
+      perfil_id: perfilId,
+      status: 'Ativa',
+      data_atribuicao: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
+    if (perfilError) {
+      console.error('Erro ao atribuir perfil:', perfilError)
+    }
+
+    let emailEnviado = false
+    try {
+      await sendWelcomeEmail({
+        nome: funcionario.nome,
+        email,
+        senha_temporaria: senhaTemporaria
+      })
+      emailEnviado = true
+    } catch (emailError) {
+      console.error('Erro ao enviar e-mail de boas-vindas:', emailError)
+    }
+
+    let whatsappEnviado = false
+    try {
+      const { enviarMensagemNovoUsuarioFuncionario } = await import(
+        '../services/whatsapp-service.js'
+      )
+      await enviarMensagemNovoUsuarioFuncionario(funcionario, email, senhaTemporaria)
+      whatsappEnviado = true
+    } catch (waError) {
+      console.warn('WhatsApp novo usuário falhou:', waError?.message || waError)
+    }
+
+    return res.json({
+      success: true,
+      message: 'Usuário criado com sucesso. Senha temporária enviada quando possível.',
+      data: {
+        usuario: novoUsuario,
+        email_enviado: emailEnviado,
+        whatsapp_enviado: whatsappEnviado
+      }
+    })
+  } catch (error) {
+    console.error('Erro ao criar usuário do funcionário:', error)
+    return res.status(500).json({
+      success: false,
+      message: error.message || 'Erro interno ao criar usuário'
+    })
+  }
+})
+
+/**
  * POST /api/funcionarios/:id/reset-password
  * Resetar senha do funcionário e enviar senha temporária por email e WhatsApp
  * IMPORTANTE: Esta rota deve estar ANTES das rotas genéricas /:id para evitar conflitos
@@ -2491,11 +2800,8 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
       })
     }
 
-    // Verificar se o funcionário tem usuário vinculado
-    // O usuário pode vir como objeto (array) ou null
-    const usuario = Array.isArray(funcionario.usuario) 
-      ? funcionario.usuario[0] 
-      : funcionario.usuario
+    // Verificar se o funcionário tem usuário vinculado (FK, ou email/CPF com auto-religa)
+    const usuario = await resolverUsuarioDoFuncionario(funcionario)
 
     console.log('✅ Funcionário encontrado:', { 
       id: funcionario.id, 
@@ -2506,7 +2812,8 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     if (!usuario || !usuario.id) {
       return res.status(400).json({
         success: false,
-        message: 'Funcionário não possui usuário vinculado. Crie um usuário primeiro.'
+        message:
+          'Funcionário não possui usuário vinculado. Verifique e-mail/CPF ou crie um usuário primeiro.'
       })
     }
 

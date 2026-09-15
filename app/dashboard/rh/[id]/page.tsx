@@ -49,6 +49,7 @@ import {
   BarChart3,
   PieChart,
   KeyRound,
+  UserPlus,
   Bell,
   Clock,
   ExternalLink
@@ -66,6 +67,7 @@ import { ColaboradorHolerites } from "@/components/colaborador-holerites"
 import { DocumentoUpload } from "@/components/documento-upload"
 import { Upload as UploadIcon } from "lucide-react"
 import { CARGOS_PREDEFINIDOS } from "@/lib/utils/cargos-predefinidos"
+import { normalizarUsuarioVinculado } from "@/lib/utils/normalizar-usuario-vinculado"
 import { getApiOrigin } from "@/lib/runtime-config"
 import { colaboradoresDocumentosApi } from "@/lib/api-colaboradores-documentos"
 import { getHistoricoAlocacoesFuncionario } from "@/lib/api-funcionarios-obras"
@@ -205,6 +207,7 @@ export default function FuncionarioDetalhesPage() {
   const [isEditDocumentoDialogOpen, setIsEditDocumentoDialogOpen] = useState(false)
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFuncionario | null>(null)
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false)
+  const [isCriarUsuarioDialogOpen, setIsCriarUsuarioDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   
   // Formulário de edição
@@ -490,7 +493,7 @@ export default function FuncionarioDetalhesPage() {
           observacoes: func.observacoes,
           created_at: func.created_at,
           updated_at: func.updated_at,
-          usuario: funcAny.usuario && Array.isArray(funcAny.usuario) && funcAny.usuario.length > 0 ? funcAny.usuario[0] : undefined,
+          usuario: normalizarUsuarioVinculado(funcAny.usuario),
           obra_atual: funcAny.obra_atual
             ? {
                 id: funcAny.obra_atual.id,
@@ -1472,6 +1475,47 @@ export default function FuncionarioDetalhesPage() {
     setIsResetPasswordDialogOpen(true)
   }
 
+  const handleCriarUsuarioClick = () => {
+    if (!funcionario) return
+    if (!funcionario.email) {
+      toast({
+        title: "E-mail obrigatório",
+        description: "Cadastre um e-mail no colaborador antes de criar o usuário.",
+        variant: "destructive"
+      })
+      return
+    }
+    setIsCriarUsuarioDialogOpen(true)
+  }
+
+  const handleConfirmCriarUsuario = async () => {
+    if (!funcionario) return
+    setSubmitting(true)
+    try {
+      const response = await funcionariosApi.criarUsuarioFuncionario(funcionario.id)
+      if (!response.success) {
+        throw new Error(response.message || 'Erro ao criar usuário')
+      }
+      toast({
+        title: "Usuário criado",
+        description: `${response.message || 'Usuário criado com sucesso.'}${
+          response.data?.email_enviado ? ' E-mail enviado.' : ''
+        }${response.data?.whatsapp_enviado ? ' WhatsApp enviado.' : ''}`,
+      })
+      setIsCriarUsuarioDialogOpen(false)
+      await carregarFuncionario()
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Erro ao criar usuário'
+      toast({
+        title: "Erro",
+        description: msg,
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleConfirmResetPassword = async () => {
     if (!funcionario) return
 
@@ -2226,6 +2270,17 @@ export default function FuncionarioDetalhesPage() {
           </div>
         </div>
         <div className="flex gap-2">
+          {!funcionario.usuario && !isEditMode && (
+            <Button
+              variant="outline"
+              onClick={handleCriarUsuarioClick}
+              disabled={submitting}
+              className="text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            >
+              <UserPlus className="w-4 h-4 mr-2" />
+              Criar Usuário
+            </Button>
+          )}
           {funcionario.usuario && !isEditMode && (
             <Button 
               variant="outline" 
@@ -3947,6 +4002,54 @@ export default function FuncionarioDetalhesPage() {
                 )}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Confirmação de Criar Usuário */}
+      <Dialog open={isCriarUsuarioDialogOpen} onOpenChange={setIsCriarUsuarioDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-5 h-5 text-blue-600" />
+              Criar Usuário do Sistema
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <p className="text-sm text-gray-600">
+              Criar acesso ao sistema para <strong>{funcionario?.nome}</strong>?
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-semibold text-blue-900">O que acontecerá:</p>
+              <ul className="text-sm text-blue-800 space-y-1 list-disc list-inside">
+                <li>Será criado um usuário com o e-mail <strong>{funcionario?.email}</strong></li>
+                <li>Uma senha temporária será gerada automaticamente</li>
+                <li>A senha será enviada por e-mail e, se possível, por WhatsApp</li>
+                <li>Depois disso, você poderá resetar a senha quando precisar</li>
+              </ul>
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsCriarUsuarioDialogOpen(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleConfirmCriarUsuario} disabled={submitting}>
+              {submitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Criando...
+                </>
+              ) : (
+                <>
+                  <UserPlus className="w-4 h-4 mr-2" />
+                  Criar Usuário
+                </>
+              )}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

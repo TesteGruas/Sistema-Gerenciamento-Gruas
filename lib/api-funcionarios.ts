@@ -281,6 +281,21 @@ export const funcionariosApi = {
     })
   },
 
+  /** Cria usuário do sistema para colaborador sem vínculo (Auth + tabela usuarios). */
+  async criarUsuarioFuncionario(id: number): Promise<{
+    success: boolean
+    message?: string
+    data?: {
+      usuario?: { id: number; nome?: string; email: string; status?: string }
+      email_enviado?: boolean
+      whatsapp_enviado?: boolean
+      religado?: boolean
+    }
+  }> {
+    const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/${id}/criar-usuario`)
+    return apiRequest(url, { method: 'POST' })
+  },
+
   // Excluir funcionário
   async excluirFuncionario(id: number): Promise<{ success: boolean; message: string }> {
     const url = buildApiUrl(`${API_ENDPOINTS.FUNCIONARIOS}/${id}`)

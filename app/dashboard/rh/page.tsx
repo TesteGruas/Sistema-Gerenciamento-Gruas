@@ -54,6 +54,7 @@ import { FuncionarioSearch } from "@/components/funcionario-search"
 import { NotificarFuncionariosSelecionadosDialog } from "@/components/notificar-funcionarios-selecionados-dialog"
 import { NotificarUmFuncionarioRhDialog } from "@/components/notificar-um-funcionario-rh-dialog"
 import { Checkbox } from "@/components/ui/checkbox"
+import { normalizarUsuarioVinculado } from "@/lib/utils/normalizar-usuario-vinculado"
 
 interface FuncionarioRH {
   id: number
@@ -161,7 +162,7 @@ export default function RHPage() {
     observacoes: func.observacoes,
     created_at: func.created_at,
     updated_at: func.updated_at,
-    usuario: Array.isArray(func.usuario) && func.usuario.length > 0 ? func.usuario[0] : undefined,
+    usuario: normalizarUsuarioVinculado(func.usuario),
     obra_atual: undefined,
   })
 
