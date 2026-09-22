@@ -138,14 +138,27 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
   },
   certificado_padrao: {
     descricao:
-      'Certificados NR / sinaleiro: 1.ª página — linha «Assinatura do trabalhador» (LD Group); senão «ALUNO» / Vetor; senão canto inferior esquerdo.',
+      'Certificados NR / sinaleiro: 1.ª página — linha «Assinatura do trabalhador» (LD Group; NR18 novo no centro); senão «ALUNO» / Vetor; senão canto inferior esquerdo.',
     metodoAncora: 'certificado_multipagina_aluno',
     anchors: [/^\s*ALUNO\s*:?\s*$/i, /Assinatura do trabalhador/i],
     match: 'last',
     offsetXPoints: -32,
     offsetYPoints: 42,
     gapAbaixoTextoPoints: 6,
-    signatureHeight: 52,
+    signatureHeight: 44,
+    linhaGapAcimaPoints: 2,
+    marginLeftCanto: 80,
+    marginBottomCanto: 40
+  },
+  /** NR-18 (LD Group): fecho com linha «Assinatura do trabalhador» — layout novo costuma ser centralizado. */
+  certificado_nr18: {
+    descricao:
+      'Certificado NR-18: 1.ª página — linha «Assinatura do trabalhador» centrada na faixa do rótulo (layout LD Group).',
+    metodoAncora: 'certificado_multipagina_aluno',
+    anchors: [/Assinatura do trabalhador/i, /^\s*ALUNO\s*:?\s*$/i],
+    match: 'last',
+    signatureHeight: 42,
+    linhaGapAcimaPoints: 2,
     marginLeftCanto: 80,
     marginBottomCanto: 40
   },
@@ -157,7 +170,8 @@ export const REGRAS_ASSINATURA_POR_TIPO_DOCUMENTO = {
     offsetXPoints: -52,
     offsetYPoints: 44,
     gapAbaixoTextoPoints: 5,
-    signatureHeight: 52,
+    signatureHeight: 44,
+    linhaGapAcimaPoints: 2,
     marginLeftCanto: 80,
     marginBottomCanto: 40
   },

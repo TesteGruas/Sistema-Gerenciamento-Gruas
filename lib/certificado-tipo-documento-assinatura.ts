@@ -1,8 +1,11 @@
-/** Certificados NR (exceto NR12) — campo ALUNO */
+/** Certificados NR (exceto NR12/NR18) — campo ALUNO / linha trabalhador */
 export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO = 'certificado_padrao' as const
 
 /** Certificado NR12 — 1.ª folha junto ao instrutor (ANDERSON); outras páginas canto inferior direito */
 export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12 = 'certificado_nr12' as const
+
+/** Certificado NR18 / Operador de Grua — linha «Assinatura do trabalhador» (layout LD Group) */
+export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR18 = 'certificado_nr18' as const
 
 /** Ordem de Serviço / OS NR-1 — última página, «Assinatura do Colaborador» (não Emitente / SST) */
 export const TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO =
@@ -24,7 +27,11 @@ export function certificadoTipoParaTipoDocumentoAssinatura(tipo: string): string
     return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_ORDEM_SERVICO
   }
   if (/nr[\s_-]*0*12(?![0-9])/i.test(s)) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12
+  if (/nr[\s_-]*0*18(?![0-9])/i.test(s) || /operador\s*de\s*grua/i.test(s)) {
+    return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR18
+  }
   const compact = s.replace(/[\s_-]+/g, '')
   if (/NR0*12(?![0-9])/i.test(compact)) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR12
+  if (/NR0*18(?![0-9])/i.test(compact)) return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_NR18
   return TIPO_DOCUMENTO_ASSINATURA_CERTIFICADO_PADRAO
 }

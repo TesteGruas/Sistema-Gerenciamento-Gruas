@@ -41,6 +41,7 @@ try {
  * @property {(string|RegExp)[]} [linhaRotulos] — rótulos extras para achar a linha (além dos padrões trabalhador/funcionário/colaborador).
  * @property {number} [linhaOffsetXPoints] — microajuste X só na caixa da linha (não confundir com offsetX do ALUNO).
  * @property {number} [linhaOffsetYPoints] — microajuste Y só na caixa da linha.
+ * @property {number} [linhaGapAcimaPoints] — espaço entre a linha de underscore e a base da caixa (default 3).
  */
 
 export const REGRA_ASSINATURA_PADRAO = {
@@ -273,7 +274,22 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       offsetXPoints: -52,
       offsetYPoints: 44,
       gapAbaixoTextoPoints: 5,
-      signatureHeight: 52,
+      signatureHeight: 44,
+      linhaGapAcimaPoints: 2,
+      marginLeftCanto: 80,
+      marginBottomCanto: 40
+    }
+  },
+  {
+    id: 'certificado_nr18',
+    match: (nome) =>
+      /nr[\s_-]*0*18(?![0-9])|certificado.*nr[\s_-]*18|operador\s*de\s*grua/i.test(nome || ''),
+    regra: {
+      metodoAncora: 'certificado_multipagina_aluno',
+      anchors: [/Assinatura do trabalhador/i],
+      match: 'last',
+      signatureHeight: 42,
+      linhaGapAcimaPoints: 2,
       marginLeftCanto: 80,
       marginBottomCanto: 40
     }
@@ -319,7 +335,8 @@ export const PERFIS_ASSINATURA_DOCUMENTO = [
       offsetXPoints: -32,
       offsetYPoints: 42,
       gapAbaixoTextoPoints: 6,
-      signatureHeight: 52,
+      signatureHeight: 44,
+      linhaGapAcimaPoints: 2,
       marginLeftCanto: 80,
       marginBottomCanto: 40
     }
@@ -1055,7 +1072,8 @@ const RE_ROTULO_ASSINATURA_TRAB = /Assinatura\s+do\s+(trabalhador|funcion[aá]ri
 const RE_LINHA_UNDERSCORE = /_{8,}/;
 
 /**
- * Na página, acha rótulo «Assinatura do …» (coluna esquerda) + underscores acima dele.
+ * Na página, acha rótulo «Assinatura do …» + underscores acima dele.
+ * LD Group NR18 recente: linha no centro da página; ASO/NR06 etc. na coluna esquerda.
  * @param {{ pageIndex: number, pageWidth: number, pageHeight: number, items: Array<{ str?: string, x: number, y: number, width?: number, fontSize?: number }> }} pagina
  * @param {Partial<RegraPosicaoAssinatura>} regra
  * @returns {{ pageIndex: number, metodo: string, box: { x: number, y: number, width: number, height: number }, anchor?: string } | null}
@@ -1072,7 +1090,8 @@ function encontrarCaixaLinhaAssinaturaNaPagina(pagina, regra = {}) {
     return false;
   };
 
-  const limiteX = pagina.pageWidth * 0.55;
+  // Até ~85% da largura: cobre coluna esquerda (ASO/NR06) e linha central (NR18 novo).
+  const limiteX = pagina.pageWidth * 0.85;
   const rotulos = (pagina.items || []).filter(
     (it) => rotuloOk(it.str) && it.x < limiteX
   );
@@ -1084,10 +1103,13 @@ function encontrarCaixaLinhaAssinaturaNaPagina(pagina, regra = {}) {
   const underscores = (pagina.items || []).filter((it) => {
     const s = String(it.str || '');
     if (!RE_LINHA_UNDERSCORE.test(s)) return false;
-    if (it.x >= limiteX) return false;
     // Linha tipicamente logo acima do rótulo (Y maior) ou quase na mesma altura.
     const dy = it.y - rotulo.y;
-    return dy >= -8 && dy <= 40;
+    if (dy < -8 || dy > 40) return false;
+    // Mesma faixa horizontal do rótulo (centro da linha perto do centro do texto).
+    const lineMid = it.x + (it.width || 0) / 2;
+    const rotuloMid = rotulo.x + (rotulo.width || 0) / 2;
+    return Math.abs(lineMid - rotuloMid) < pagina.pageWidth * 0.25;
   });
 
   let linha = null;
@@ -1101,21 +1123,35 @@ function encontrarCaixaLinhaAssinaturaNaPagina(pagina, regra = {}) {
     });
   }
 
-  const sigH = regra.signatureHeight ?? regra.caixaHeight ?? 48;
-  const gapAcimaLinha = 6;
+  const sigH = regra.signatureHeight ?? regra.caixaHeight ?? 44;
+  const gapAcimaLinha =
+    regra.linhaGapAcimaPoints != null ? Number(regra.linhaGapAcimaPoints) : 3;
   let boxX;
   let boxW;
   let lineY;
 
   if (linha) {
-    boxX = linha.x;
     boxW = Math.max(linha.width || 0, 120);
+    boxX = linha.x;
     lineY = linha.y;
   } else {
     // Sem underscores: caixa centrada sobre o rótulo (largura típica LD Group).
     boxW = Math.max(rotulo.width || 0, 150);
     boxX = Math.max(24, rotulo.x + (rotulo.width || 0) / 2 - boxW / 2);
     lineY = rotulo.y + 12;
+  }
+
+  // Centralizar a caixa no centro geométrico da linha/rótulo.
+  const ancoraMid =
+    linha != null
+      ? linha.x + (linha.width || boxW) / 2
+      : rotulo.x + (rotulo.width || 0) / 2;
+  boxX = ancoraMid - boxW / 2;
+
+  // Se a linha já está na faixa central da página, forçar centro da folha (NR18 novo).
+  const pageMid = pagina.pageWidth / 2;
+  if (Math.abs(ancoraMid - pageMid) < pagina.pageWidth * 0.12) {
+    boxX = pageMid - boxW / 2;
   }
 
   // Não reutilizar offsetX/Y do layout ALUNO/Vetor — só microajuste explícito da linha.
@@ -1125,7 +1161,7 @@ function encontrarCaixaLinhaAssinaturaNaPagina(pagina, regra = {}) {
     pageIndex: pagina.pageIndex,
     metodo: 'caixa_fixa_centrada',
     box: {
-      x: boxX + offX,
+      x: Math.max(12, boxX + offX),
       y: lineY + gapAcimaLinha + offY,
       width: boxW,
       height: sigH
