@@ -3541,9 +3541,9 @@ useEffect(() => {
   }, [obra, obra?.latitude, obra?.longitude, obra?.id])
 
   const raioPontoPwa = useMemo(() => {
-    if (obra?.raio_permitido == null || obra?.raio_permitido === "") return 5000
+    if (obra?.raio_permitido == null || obra?.raio_permitido === "") return 500
     const r = Number(obra.raio_permitido as unknown as number)
-    return Number.isFinite(r) && r > 0 ? r : 5000
+    return Number.isFinite(r) && r > 0 ? r : 500
   }, [obra?.raio_permitido])
 
   // Tratamento de loading e erro

@@ -340,6 +340,45 @@ function PWAPerfilPageContent() {
   const [modalAssinaturaBeneficioOpen, setModalAssinaturaBeneficioOpen] = useState(false)
   const [beneficioAssinando, setBeneficioAssinando] = useState<FuncionarioBeneficio | null>(null)
   const [enviandoAssinaturaBeneficio, setEnviandoAssinaturaBeneficio] = useState(false)
+  const assinaturaModalAberto =
+    modalAssinaturaAdmissionalOpen ||
+    modalAssinaturaCertificadoOpen ||
+    modalAssinaturaDemissaoOpen ||
+    modalAssinaturaBeneficioOpen
+
+  useEffect(() => {
+    if (!assinaturaModalAberto) return
+
+    const html = document.documentElement
+    const body = document.body
+    const scrollY = window.scrollY
+    const prevHtmlOverflow = html.style.overflow
+    const prevBodyOverflow = body.style.overflow
+    const prevPosition = body.style.position
+    const prevTop = body.style.top
+    const prevLeft = body.style.left
+    const prevRight = body.style.right
+    const prevWidth = body.style.width
+
+    html.style.overflow = "hidden"
+    body.style.overflow = "hidden"
+    body.style.position = "fixed"
+    body.style.top = `-${scrollY}px`
+    body.style.left = "0"
+    body.style.right = "0"
+    body.style.width = "100%"
+
+    return () => {
+      html.style.overflow = prevHtmlOverflow
+      body.style.overflow = prevBodyOverflow
+      body.style.position = prevPosition
+      body.style.top = prevTop
+      body.style.left = prevLeft
+      body.style.right = prevRight
+      body.style.width = prevWidth
+      window.scrollTo(0, scrollY)
+    }
+  }, [assinaturaModalAberto])
 
   // Estados para modais e visualização
   const [documentoSelecionado, setDocumentoSelecionado] = useState<{
@@ -2996,7 +3035,7 @@ function PWAPerfilPageContent() {
           if (!open) setDocAdmissionalAssinando(null)
         }}
       >
-        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-hidden overscroll-none">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="w-5 h-5" />
@@ -3019,6 +3058,7 @@ function PWAPerfilPageContent() {
               <SignaturePad
                 compact
                 compactDense
+                lockScroll
                 showCancelButton
                 applyLabel="Enviar assinatura"
                 title=""
@@ -3044,7 +3084,7 @@ function PWAPerfilPageContent() {
           if (!open) setCertificadoAssinando(null)
         }}
       >
-        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-hidden overscroll-none">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="w-5 h-5" />
@@ -3071,6 +3111,7 @@ function PWAPerfilPageContent() {
               <SignaturePad
                 compact
                 compactDense
+                lockScroll
                 showCancelButton
                 applyLabel={
                   certificadoJaAssinado(certificadoAssinando)
@@ -3100,7 +3141,7 @@ function PWAPerfilPageContent() {
           if (!open) setBeneficioAssinando(null)
         }}
       >
-        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-hidden overscroll-none">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="w-5 h-5" />
@@ -3125,6 +3166,7 @@ function PWAPerfilPageContent() {
               <SignaturePad
                 compact
                 compactDense
+                lockScroll
                 showCancelButton
                 applyLabel={
                   beneficioJaAssinado(beneficioAssinando)
@@ -3154,7 +3196,7 @@ function PWAPerfilPageContent() {
           if (!open) setDocDemissaoAssinando(null)
         }}
       >
-        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[95vw] max-w-md max-h-[90vh] overflow-hidden overscroll-none">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileSignature className="w-5 h-5" />
@@ -3177,6 +3219,7 @@ function PWAPerfilPageContent() {
               <SignaturePad
                 compact
                 compactDense
+                lockScroll
                 showCancelButton
                 applyLabel="Enviar assinatura"
                 title=""

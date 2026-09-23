@@ -307,7 +307,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
             estado,
             cep,
             coordenadas: cacheAtual.coordenadas,
-            raio_permitido: 5000,
+            raio_permitido: 500,
             geocoding_status: `${cacheAtual.status} (cache)`
           }
         }
@@ -336,7 +336,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
                 estado,
                 cep,
                 coordenadas: resolvidas,
-                raio_permitido: 5000,
+                raio_permitido: 500,
                 geocoding_status: statusResolver
               }
             }
@@ -395,7 +395,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
           estado,
           cep,
           coordenadas,
-          raio_permitido: 5000,
+          raio_permitido: 500,
           geocoding_status: geocodingStatus
         }
       }
@@ -408,7 +408,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
         estado,
         cep,
         coordenadas,
-        raio_permitido: 5000,
+        raio_permitido: 500,
         geocoding_status: geocodingStatus || (coordenadas ? "Coordenadas vindas do cadastro da obra." : "Sem coordenadas no cadastro.")
       }
     }))

@@ -22,6 +22,8 @@ interface SignaturePadProps {
   canvasHeightPx?: number
   /** Botões e espaçamentos menores (telas PWA “fit na viewport”) */
   compactDense?: boolean
+  /** Modal: o dedo só desenha; não rola a página nem o diálogo */
+  lockScroll?: boolean
 }
 
 export function SignaturePad({
@@ -34,7 +36,8 @@ export function SignaturePad({
   applyLabel,
   showCancelButton = true,
   canvasHeightPx,
-  compactDense = false
+  compactDense = false,
+  lockScroll = false
 }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isDrawing, setIsDrawing] = useState(false)
@@ -79,12 +82,12 @@ export function SignaturePad({
     if (!canvas) return
 
     const blockScrollWhileDrawing = (e: TouchEvent) => {
-      if (touchModeRef.current === "draw") e.preventDefault()
+      if (lockScroll || touchModeRef.current === "draw") e.preventDefault()
     }
 
     canvas.addEventListener("touchmove", blockScrollWhileDrawing, { passive: false })
     return () => canvas.removeEventListener("touchmove", blockScrollWhileDrawing)
-  }, [])
+  }, [lockScroll])
 
   const beginStrokeAt = (
     e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>
@@ -109,6 +112,13 @@ export function SignaturePad({
   const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
     if ("touches" in e) {
       if (e.touches.length !== 1) return
+      if (lockScroll) {
+        const t = e.touches[0]
+        touchModeRef.current = "draw"
+        touchStartRef.current = { x: t.clientX, y: t.clientY }
+        beginStrokeAt(e)
+        return
+      }
       const t = e.touches[0]
       touchModeRef.current = "undecided"
       touchStartRef.current = { x: t.clientX, y: t.clientY }
@@ -206,11 +216,12 @@ export function SignaturePad({
           onTouchEnd={stopDrawing}
           className={cn(
             "w-full cursor-crosshair bg-white",
+            lockScroll && "touch-none",
             compact
               ? "border-0 rounded-xl"
               : "border-2 border-dashed border-gray-300 rounded-lg"
           )}
-          style={{ height: `${canvasH}px` }}
+          style={{ height: `${canvasH}px`, touchAction: lockScroll ? "none" : undefined }}
         />
         {!hasSignature && (
           <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
