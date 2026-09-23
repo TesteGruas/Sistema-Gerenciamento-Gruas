@@ -1227,7 +1227,7 @@ export default function PWAPontoPage() {
 
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
-  const raioPermitidoAtual = obra?.raio_permitido ?? 500
+  const raioPermitidoAtual = obra?.raio_permitido ?? 100
   const raioPermitidoFormatado = formatarDistancia(raioPermitidoAtual)
 
   const statusBadgeClass =

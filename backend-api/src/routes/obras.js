@@ -720,7 +720,7 @@ const obraSchema = Joi.object({
   // Campos de geolocalização
   latitude: Joi.number().min(-90).max(90).allow(null).optional(),
   longitude: Joi.number().min(-180).max(180).allow(null).optional(),
-  raio_permitido: Joi.number().integer().positive().default(500).optional(),
+  raio_permitido: Joi.number().integer().positive().default(100).optional(),
   // Custos mensais
   custos_mensais: Joi.array().items(
     Joi.object({
@@ -2119,7 +2119,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       // Campos de geolocalização
       latitude: coordenadasResolvidas.latitude,
       longitude: coordenadasResolvidas.longitude,
-      raio_permitido: value.raio_permitido || 500,
+      raio_permitido: value.raio_permitido || 100,
       // Campos obrigatórios (CNO, ART, Apólice)
       cno: value.cno,
       cno_arquivo: value.cno_arquivo,
