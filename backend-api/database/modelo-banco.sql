@@ -148,6 +148,17 @@ CREATE TABLE IF NOT EXISTS obras (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS obra_operadores (
+  id SERIAL PRIMARY KEY,
+  obra_id INTEGER NOT NULL REFERENCES obras(id) ON DELETE CASCADE,
+  funcionario_id INTEGER NOT NULL REFERENCES funcionarios(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (obra_id, funcionario_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_obra_operadores_obra_id ON obra_operadores (obra_id);
+CREATE INDEX IF NOT EXISTS idx_obra_operadores_funcionario_id ON obra_operadores (funcionario_id);
+
 ALTER TABLE funcionarios
   DROP CONSTRAINT IF EXISTS funcionarios_obra_atual_id_fkey;
 ALTER TABLE funcionarios

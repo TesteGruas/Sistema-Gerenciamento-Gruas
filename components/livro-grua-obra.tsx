@@ -116,19 +116,36 @@ function primeiroTecnicoManutencaoNaEquipe(funcionariosGrua: any[]) {
   })
 }
 
-/** Operador vinculado no cadastro da obra tem prioridade sobre a equipe inferida na grua */
-function operadorObraOuEquipeGrua(obra: any, operadorGruaEquipe: any) {
-  const op = obra?.operador_obra_funcionario
-  if (op && (op.nome || op.id)) {
-    return {
-      funcionario: {
-        nome: op.nome,
-        cargo: op.cargo || "Operador",
-        telefone: op.telefone
-      }
+function normalizarOperadorExibicao(op: any) {
+  if (!op || !(op.nome || op.id || op.funcionario?.nome)) return null
+  if (op.funcionario) return op
+  return {
+    funcionario: {
+      nome: op.nome,
+      cargo: op.cargo || "Operador",
+      telefone: op.telefone
     }
   }
-  return operadorGruaEquipe
+}
+
+/** Operadores vinculados na obra. Se a lista estiver vazia, usa a equipe da grua. */
+function operadoresGruaDaObra(obra: any, operadorGruaEquipe: any) {
+  const lista = Array.isArray(obra?.operadores_obra) ? obra.operadores_obra : []
+  const daObra = lista.map(normalizarOperadorExibicao).filter(Boolean)
+  if (daObra.length) return daObra
+
+  const legado = normalizarOperadorExibicao(obra?.operador_obra_funcionario)
+  if (legado) return [legado]
+
+  const equipe = normalizarOperadorExibicao(operadorGruaEquipe)
+  return equipe ? [equipe] : []
+}
+
+function textoOperadoresGrua(operadores: any[]) {
+  if (!operadores.length) return "Não informado"
+  return operadores
+    .map((op) => `${op.funcionario?.nome || "N/A"} (${op.funcionario?.cargo || "N/A"})`)
+    .join("; ")
 }
 
 interface LivroGruaObraProps {
@@ -1785,10 +1802,10 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       doc.setFontSize(9)
       doc.setFont('helvetica', 'normal')
 
-      const opObra = obra?.operador_obra_funcionario
-      const operador = opObra?.nome
-        ? { funcionario: { nome: opObra.nome, cargo: opObra.cargo || 'Operador' } }
-        : funcionariosGrua.find((f: any) => f.funcionario?.cargo?.toLowerCase().includes('operador'))
+      const operadores = operadoresGruaDaObra(
+        obra,
+        primeiroOperadorGruaNaEquipe(funcionariosGrua)
+      )
       const montador = funcionariosGrua.find((f: any) => 
         f.funcionario?.cargo?.toLowerCase().includes('montagem') || 
         f.funcionario?.cargo?.toLowerCase().includes('montador')
@@ -1802,7 +1819,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
         [`Fax:`, 'Não informado'],
         [`Responsável Técnico:`, relacaoGrua?.empresa_montagem_responsavel_tecnico || 'ALEX MARCELO DA SILVA NASCIMENTO'],
         [`Nº do CREA:`, relacaoGrua?.empresa_montagem_crea || '5071184591'],
-        [`Operador da Grua:`, operador ? `${operador.funcionario?.nome || 'N/A'} (${operador.funcionario?.cargo || 'N/A'})` : 'Não informado'],
+        [`Operador da Grua:`, textoOperadoresGrua(operadores)],
         [`Responsável pela Montagem:`, montador ? `${montador.funcionario?.nome || 'N/A'} (${montador.funcionario?.cargo || 'N/A'})` : 'Não informado']
       ]
       renderTabelaPares(dadosEmpresaMontagem, true)
@@ -2391,7 +2408,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
   }) || []
 
   const operadorGruaEquipe = primeiroOperadorGruaNaEquipe(funcionariosGrua)
-  const operadorGruaExibicao = operadorObraOuEquipeGrua(obra, operadorGruaEquipe)
+  const operadoresGruaExibicao = operadoresGruaDaObra(obra, operadorGruaEquipe)
   const tecnicoManutencaoFunc = primeiroTecnicoManutencaoNaEquipe(funcionariosGrua)
 
   const iniciarEdicaoLivro = () => {
@@ -3017,23 +3034,21 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
 
                 <div>
                   <p className="text-xs text-gray-500 mb-2">Operador da Grua</p>
-                  <div className="p-3 bg-gray-50 rounded-md">
-                    {operadorGruaExibicao ? (
-                      <>
-                        <p className="font-medium">
-                          {operadorGruaExibicao.funcionario?.nome}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          {operadorGruaExibicao.funcionario?.cargo}
-                        </p>
-                        {operadorGruaExibicao.funcionario?.telefone && (
-                          <p className="text-sm text-gray-600">
-                            Telefone: {operadorGruaExibicao.funcionario.telefone}
-                          </p>
-                        )}
-                      </>
+                  <div className="space-y-2">
+                    {operadoresGruaExibicao.length > 0 ? (
+                      operadoresGruaExibicao.map((op: any, idx: number) => (
+                        <div key={`${op.funcionario?.nome || "op"}-${idx}`} className="p-3 bg-gray-50 rounded-md">
+                          <p className="font-medium">{op.funcionario?.nome}</p>
+                          <p className="text-sm text-gray-600">{op.funcionario?.cargo}</p>
+                          {op.funcionario?.telefone && (
+                            <p className="text-sm text-gray-600">Telefone: {op.funcionario.telefone}</p>
+                          )}
+                        </div>
+                      ))
                     ) : (
-                      <p className="text-gray-500">Não informado</p>
+                      <div className="p-3 bg-gray-50 rounded-md">
+                        <p className="text-gray-500">Não informado</p>
+                      </div>
                     )}
                   </div>
                 </div>
@@ -3698,22 +3713,22 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
                 {/* Operador */}
                 <div>
                   <p className="text-xs text-gray-500 mb-2 font-semibold">Operador da Grua</p>
-                  {operadorGruaExibicao ? (
-                    <div className="p-3 bg-gray-50 rounded-md">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                          <p className="text-xs text-gray-500">Nome</p>
-                          <p className="font-medium">
-                            {operadorGruaExibicao.funcionario?.nome}
-                          </p>
+                  {operadoresGruaExibicao.length > 0 ? (
+                    <div className="space-y-2">
+                      {operadoresGruaExibicao.map((op: any, idx: number) => (
+                        <div key={`${op.funcionario?.nome || "op"}-${idx}`} className="p-3 bg-gray-50 rounded-md">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <p className="text-xs text-gray-500">Nome</p>
+                              <p className="font-medium">{op.funcionario?.nome}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-gray-500">Cargo</p>
+                              <p className="font-medium">{op.funcionario?.cargo}</p>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-xs text-gray-500">Cargo</p>
-                          <p className="font-medium">
-                            {operadorGruaExibicao.funcionario?.cargo}
-                          </p>
-                        </div>
-                      </div>
+                      ))}
                     </div>
                   ) : (
                     <div className="p-3 bg-gray-50 rounded-md">

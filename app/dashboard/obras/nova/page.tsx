@@ -524,13 +524,13 @@ export default function NovaObraPage() {
     toggleSort: toggleRespSort,
   } = useClientSortedList(responsaveisObra as unknown as Record<string, unknown>[])
 
-  /** Um funcionário cadastrado como operador da obra (empresa) — exibido no Livro da Grua */
-  const [operadorObraFuncionario, setOperadorObraFuncionario] = useState<{
+  /** Funcionários cadastrados como operadores da obra (empresa) — exibidos no Livro da Grua */
+  const [operadoresObraFuncionarios, setOperadoresObraFuncionarios] = useState<Array<{
     id: string
     userId: string
     name: string
     role: string
-  } | null>(null)
+  }>>([])
   
   // Estados para orçamento aprovado
   const [orcamentoAprovado, setOrcamentoAprovado] = useState<Orcamento | null>(null)
@@ -1124,7 +1124,7 @@ export default function NovaObraPage() {
         dados_montagem_equipamento: dadosMontagemEquipamento,
         // Lista de funcionários
         funcionarios: funcionariosSelecionados,
-        operadorObraFuncionario,
+        operadoresObraFuncionarios,
         // Valores - converter para formato do backend
         custos_mensais: custosMensais.map(custo => ({
           item: custo.item,
@@ -1193,7 +1193,7 @@ export default function NovaObraPage() {
           responsaveis_obra: responsaveisObra,
           funcionarios: funcionariosSelecionados,
           sinaleiros: sinaleirosConsolidadosParaObra,
-          operador_obra: operadorObraFuncionario
+          operador_obra: operadoresObraFuncionarios
         },
         payloadCriacaoObra: obraData
       }
@@ -2175,7 +2175,7 @@ export default function NovaObraPage() {
     })
     setSinaleiros([])
     setResponsaveisObra([])
-    setOperadorObraFuncionario(null)
+    setOperadoresObraFuncionarios([])
     setGruasSelecionadas([])
     setFuncionariosSelecionados([])
     setClienteSelecionado(null)
@@ -4190,56 +4190,66 @@ startxref
               </CardContent>
             </Card>
 
-            {/* Seção: Operador da Obra */}
+            {/* Seção: Operadores da Obra */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <HardHat className="w-5 h-5 text-amber-600" />
-                  Operador da Obra
+                  Operadores da Obra
                 </CardTitle>
                 <CardDescription>
-                  Funcionário da empresa cadastrado como operador nesta obra (aparece no Livro da Grua). Opcional.
+                  Funcionários da empresa cadastrados como operadores nesta obra (aparecem no Livro da Grua). Opcional.
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {!operadorObraFuncionario ? (
-                  <div>
-                    <Label htmlFor="operadorObraSearch">Buscar operador</Label>
-                    <FuncionarioSearch
-                      onFuncionarioSelect={(f) => setOperadorObraFuncionario(f)}
-                      placeholder="Buscar por nome (cargo operador)..."
-                      className="mt-1"
-                      onlyActive={true}
-                      onlyRealEmployees={true}
-                      allowedRoles={['Operador', 'Auxiliar Operacional']}
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      Selecione um funcionário com cargo de operador ou auxiliar operacional
-                    </p>
-                  </div>
-                ) : (
-                  <div className="flex gap-2 p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border-amber-200/80">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <HardHat className="w-4 h-4 text-amber-700" />
-                        <div>
-                          <p className="font-medium text-amber-950 dark:text-amber-100">{operadorObraFuncionario.name}</p>
-                          <p className="text-sm text-amber-800/90 dark:text-amber-200/80">{operadorObraFuncionario.role}</p>
+                {operadoresObraFuncionarios.length > 0 ? (
+                  <div className="space-y-2">
+                    {operadoresObraFuncionarios.map((op) => (
+                      <div key={op.userId || op.id} className="flex gap-2 p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20 border-amber-200/80">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <HardHat className="w-4 h-4 text-amber-700" />
+                            <div>
+                              <p className="font-medium text-amber-950 dark:text-amber-100">{op.name}</p>
+                              <p className="text-sm text-amber-800/90 dark:text-amber-200/80">{op.role}</p>
+                            </div>
+                          </div>
                         </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setOperadoresObraFuncionarios((lista) => lista.filter((item) => (item.userId || item.id) !== (op.userId || op.id)))}
+                          className="shrink-0"
+                        >
+                          <X className="w-4 h-4 mr-1" />
+                          Remover
+                        </Button>
                       </div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setOperadorObraFuncionario(null)}
-                      className="shrink-0"
-                    >
-                      <X className="w-4 h-4 mr-1" />
-                      Remover
-                    </Button>
+                    ))}
                   </div>
-                )}
+                ) : null}
+                <div>
+                  <Label htmlFor="operadorObraSearch">Adicionar operador</Label>
+                  <FuncionarioSearch
+                    onFuncionarioSelect={(f) => {
+                      if (!f) return
+                      const chave = f.userId || f.id
+                      setOperadoresObraFuncionarios((lista) => {
+                        if (lista.some((item) => (item.userId || item.id) === chave)) return lista
+                        return [...lista, f]
+                      })
+                    }}
+                    placeholder="Buscar por nome (cargo operador)..."
+                    className="mt-1"
+                    onlyActive={true}
+                    onlyRealEmployees={true}
+                    allowedRoles={['Operador', 'Auxiliar Operacional']}
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Selecione um ou mais funcionários com cargo de operador ou auxiliar operacional
+                  </p>
+                </div>
               </CardContent>
             </Card>
 

@@ -602,6 +602,119 @@ async function resolverCoordenadasDaObra({
   }
 }
 
+function idsOperadoresUnicos(ids) {
+  const vistos = new Set()
+  const unicos = []
+  for (const raw of ids || []) {
+    const n = parseInt(raw, 10)
+    if (!Number.isFinite(n) || n <= 0 || vistos.has(n)) continue
+    vistos.add(n)
+    unicos.push(n)
+  }
+  return unicos
+}
+
+function funcionarioOperadorAtivo(funcionario) {
+  if (!funcionario || funcionario.deleted_at) return false
+  const status = String(funcionario.status || 'Ativo').toLowerCase()
+  return status !== 'inativo' && status !== 'demitido'
+}
+
+async function validarOperadoresAtivos(ids) {
+  if (!ids.length) return { ok: true }
+  const { data, error } = await supabaseAdmin
+    .from('funcionarios')
+    .select('id, status, deleted_at')
+    .in('id', ids)
+
+  if (error) {
+    return { ok: false, message: error.message }
+  }
+
+  const ativos = new Set((data || []).filter(funcionarioOperadorAtivo).map((f) => f.id))
+  const invalidos = ids.filter((id) => !ativos.has(id))
+  if (invalidos.length) {
+    return {
+      ok: false,
+      message: `Funcionário(s) inválido(s) ou inativo(s): ${invalidos.join(', ')}`
+    }
+  }
+  return { ok: true }
+}
+
+async function buscarOperadoresObra(obraId) {
+  const { data, error } = await supabaseAdmin
+    .from('obra_operadores')
+    .select(`
+      created_at,
+      funcionario:funcionarios (
+        id,
+        nome,
+        cargo,
+        telefone,
+        email,
+        status
+      )
+    `)
+    .eq('obra_id', obraId)
+    .order('created_at', { ascending: true })
+
+  if (error) {
+    console.warn('[obras] Falha ao buscar operadores da obra:', error.message)
+    return null
+  }
+
+  return (data || [])
+    .map((row) => (Array.isArray(row.funcionario) ? row.funcionario[0] : row.funcionario))
+    .filter(Boolean)
+}
+
+async function sincronizarOperadoresObra(obraId, ids) {
+  const { error: deleteError } = await supabaseAdmin
+    .from('obra_operadores')
+    .delete()
+    .eq('obra_id', obraId)
+
+  if (deleteError) throw deleteError
+
+  if (ids.length) {
+    const { error: insertError } = await supabaseAdmin.from('obra_operadores').insert(
+      ids.map((funcionario_id) => ({
+        obra_id: obraId,
+        funcionario_id
+      }))
+    )
+    if (insertError) throw insertError
+  }
+
+  const primeiro = ids[0] ?? null
+  const { error: updateError } = await supabaseAdmin
+    .from('obras')
+    .update({
+      operador_obra_funcionario_id: primeiro,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', obraId)
+
+  if (updateError) throw updateError
+  return primeiro
+}
+
+function anexarOperadoresNaObra(obra, operadores) {
+  if (!obra) return obra
+  const lista = Array.isArray(operadores) && operadores.length
+    ? operadores
+    : obra.operador_obra_funcionario
+      ? [obra.operador_obra_funcionario]
+      : []
+  return {
+    ...obra,
+    operadores_obra: lista,
+    operador_obra_funcionario: lista[0] || obra.operador_obra_funcionario || null,
+    operador_obra_funcionario_id: lista[0]?.id ?? obra.operador_obra_funcionario_id ?? null
+  }
+}
+
 const router = express.Router()
 
 // Schema de validação para obras
@@ -632,6 +745,7 @@ const obraSchema = Joi.object({
   responsavel_id: Joi.number().integer().positive().allow(null).optional(),
   responsavel_nome: Joi.string().allow('', null).optional(),
   operador_obra_funcionario_id: Joi.number().integer().positive().allow(null).optional(),
+  operadores_obra_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
   created_at: Joi.date().optional(),
   updated_at: Joi.date().optional(),
   // Dados da grua (mantido para compatibilidade)
@@ -794,6 +908,7 @@ const obraUpdateSchema = Joi.object({
   responsavel_id: Joi.number().integer().positive().allow(null).optional(),
   responsavel_nome: Joi.string().allow('', null).optional(),
   operador_obra_funcionario_id: Joi.number().integer().positive().allow(null).optional(),
+  operadores_obra_ids: Joi.array().items(Joi.number().integer().positive()).optional(),
   latitude: Joi.number().min(-90).max(90).allow(null).optional(),
   longitude: Joi.number().min(-180).max(180).allow(null).optional(),
   raio_permitido: Joi.number().integer().positive().optional(),
@@ -1637,7 +1752,8 @@ router.get('/:id', authenticateToken, async (req, res) => {
       total + parseFloat(custo.valor || 0), 0) || 0
 
     // Adicionar totais aos dados e combinar gruas
-    const obraComTotais = {
+    const operadoresObra = await buscarOperadoresObra(id)
+    const obraComTotais = anexarOperadoresNaObra({
       ...data,
       grua_obra: gruasUnicas,
       // Manter obra_gruas_configuracao para compatibilidade
@@ -1647,7 +1763,7 @@ router.get('/:id', authenticateToken, async (req, res) => {
       custos_iniciais: totalCustosMensais, // Para compatibilidade com frontend
       custos_adicionais: totalCustosGerais,
       total_custos: totalCustosMensais + totalCustosGerais
-    }
+    }, operadoresObra)
 
     res.json({
       success: true,
@@ -2089,6 +2205,22 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       console.warn('⚠️ Não foi possível gerar coordenadas automaticamente para a obra.')
     }
 
+    const idsOperadores = value.operadores_obra_ids !== undefined
+      ? idsOperadoresUnicos(value.operadores_obra_ids)
+      : value.operador_obra_funcionario_id
+        ? idsOperadoresUnicos([value.operador_obra_funcionario_id])
+        : []
+
+    if (idsOperadores.length) {
+      const operadoresValidos = await validarOperadoresAtivos(idsOperadores)
+      if (!operadoresValidos.ok) {
+        return res.status(400).json({
+          error: 'Operadores inválidos',
+          message: operadoresValidos.message
+        })
+      }
+    }
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const obraData = {
       nome: value.nome,
@@ -2115,7 +2247,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
-      operador_obra_funcionario_id: value.operador_obra_funcionario_id ?? null,
+      operador_obra_funcionario_id: idsOperadores[0] ?? null,
       // Campos de geolocalização
       latitude: coordenadasResolvidas.latitude,
       longitude: coordenadasResolvidas.longitude,
@@ -2148,6 +2280,17 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     }
 
     console.log('✅ Obra criada com sucesso:', data?.id)
+
+    try {
+      await sincronizarOperadoresObra(data.id, idsOperadores)
+    } catch (operadoresError) {
+      console.error('❌ Erro ao vincular operadores da obra:', operadoresError)
+      return res.status(500).json({
+        error: 'Erro ao vincular operadores',
+        message: operadoresError.message
+      })
+    }
+
     console.log('🔍 DEBUG - Responsável técnico recebido:', value.responsavel_tecnico)
     console.log('🔍 DEBUG - Sinaleiros recebidos:', value.sinaleiros)
     console.log('🔍 DEBUG - Tipo de sinaleiros:', typeof value.sinaleiros)
@@ -2802,7 +2945,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
 
     res.status(201).json({
       success: true,
-      data: obraCompleta || data,
+      data: anexarOperadoresNaObra(obraCompleta || data, await buscarOperadoresObra((obraCompleta || data).id)),
       message: 'Obra criada com sucesso',
       warnings: errosGruas.length > 0 ? {
         message: `${errosGruas.length} grua(s) não puderam ser vinculada(s)`,
@@ -3083,6 +3226,22 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       console.log('📍 Coordenadas geradas automaticamente na atualização da obra:', coordenadasResolvidas.geocodingInfo)
     }
 
+    const idsOperadoresPut = value.operadores_obra_ids !== undefined
+      ? idsOperadoresUnicos(value.operadores_obra_ids)
+      : value.operador_obra_funcionario_id !== undefined
+        ? idsOperadoresUnicos(value.operador_obra_funcionario_id ? [value.operador_obra_funcionario_id] : [])
+        : null
+
+    if (idsOperadoresPut && idsOperadoresPut.length) {
+      const operadoresValidos = await validarOperadoresAtivos(idsOperadoresPut)
+      if (!operadoresValidos.ok) {
+        return res.status(400).json({
+          error: 'Operadores inválidos',
+          message: operadoresValidos.message
+        })
+      }
+    }
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const updateData = {
       nome: value.nome,
@@ -3109,8 +3268,11 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       observacoes: value.observacoes,
       responsavel_id: value.responsavel_id,
       responsavel_nome: value.responsavel_nome,
-      operador_obra_funcionario_id:
-        value.operador_obra_funcionario_id !== undefined ? value.operador_obra_funcionario_id : undefined,
+      operador_obra_funcionario_id: idsOperadoresPut !== null
+        ? (idsOperadoresPut[0] ?? null)
+        : value.operador_obra_funcionario_id !== undefined
+          ? value.operador_obra_funcionario_id
+          : undefined,
       // Campos de geolocalização
       latitude: coordenadasResolvidas.latitude ?? undefined,
       longitude: coordenadasResolvidas.longitude ?? undefined,
@@ -3169,6 +3331,18 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
     console.log('  - ART:', data.art_numero || 'N/A')
     console.log('  - Apólice:', data.apolice_numero || 'N/A')
     console.log('═══════════════════════════════════════════════════════════\n')
+
+    if (idsOperadoresPut !== null) {
+      try {
+        await sincronizarOperadoresObra(parseInt(id, 10), idsOperadoresPut)
+      } catch (operadoresError) {
+        console.error('❌ Erro ao atualizar operadores da obra:', operadoresError)
+        return res.status(500).json({
+          error: 'Erro ao atualizar operadores',
+          message: operadoresError.message
+        })
+      }
+    }
 
     // Processar dados dos funcionários (incluindo quando vier array vazio)
     if (value.funcionarios !== undefined) {
@@ -3373,7 +3547,10 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
 
     res.json({
       success: true,
-      data: obraAtualizadaCompleta || data,
+      data: anexarOperadoresNaObra(
+        obraAtualizadaCompleta || data,
+        await buscarOperadoresObra((obraAtualizadaCompleta || data).id)
+      ),
       message: 'Obra atualizada com sucesso'
     })
   } catch (error) {

@@ -53,6 +53,19 @@ interface ObraStore {
   apolice_numero?: string
   apolice_arquivo?: string
   observations?: string // Observações da obra
+  operador_obra_funcionario_id?: number | null
+  operador_obra_funcionario?: {
+    id: number
+    nome: string
+    cargo?: string | null
+    telefone?: string | null
+  } | null
+  operadores_obra?: Array<{
+    id: number
+    nome: string
+    cargo?: string | null
+    telefone?: string | null
+  }>
   // Preservar sinaleiros_obra do backend
   sinaleiros_obra?: Array<{
     id: string

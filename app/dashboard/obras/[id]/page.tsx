@@ -2684,34 +2684,48 @@ function ObraDetailsPageContent() {
     }
   }
 
-  const persistirOperadorObra = async (funcionario: { userId?: string; id?: string; name: string; role: string } | null) => {
+  const persistirOperadoresObra = async (ids: number[]) => {
     if (!obra?.id) return
     setSalvandoOperadorObra(true)
     try {
-      const idStr = funcionario ? (funcionario.userId ?? funcionario.id) : null
-      const idNum = idStr != null && String(idStr).trim() !== '' ? parseInt(String(idStr), 10) : NaN
+      const unicos = [...new Set(ids.filter((id) => Number.isFinite(id) && id > 0))]
       const res = await obrasApi.atualizarObra(parseInt(obra.id, 10), {
-        operador_obra_funcionario_id: funcionario && Number.isFinite(idNum) && idNum > 0 ? idNum : null
+        operadores_obra_ids: unicos
       })
       if (res.success) {
-        toast({ title: "Sucesso", description: "Operador da obra atualizado." })
+        toast({ title: "Sucesso", description: "Operadores da obra atualizados." })
         await carregarObra(obraId, { force: true })
       } else {
         toast({
           title: "Erro",
-          description: (res as any).message || "Não foi possível salvar o operador da obra.",
+          description: (res as any).message || "Não foi possível salvar os operadores da obra.",
           variant: "destructive"
         })
       }
     } catch {
       toast({
         title: "Erro",
-        description: "Falha ao salvar o operador da obra.",
+        description: "Falha ao salvar os operadores da obra.",
         variant: "destructive"
       })
     } finally {
       setSalvandoOperadorObra(false)
     }
+  }
+
+  const persistirOperadorObra = async (funcionario: { userId?: string; id?: string; name: string; role: string } | null) => {
+    if (!funcionario) return
+    const atuais = (obra?.operadores_obra || [])
+      .map((op: { id?: number }) => Number(op.id))
+      .filter((id: number) => Number.isFinite(id) && id > 0)
+    const idStr = funcionario.userId ?? funcionario.id
+    const idNum = idStr != null && String(idStr).trim() !== '' ? parseInt(String(idStr), 10) : NaN
+    if (!Number.isFinite(idNum) || idNum <= 0) return
+    if (atuais.includes(idNum)) {
+      toast({ title: "Operador já vinculado", description: "Esse funcionário já está na lista." })
+      return
+    }
+    await persistirOperadoresObra([...atuais, idNum])
   }
 
   const handleAtualizarGrua = (gruaId: string, campo: string, valor: number) => {
@@ -5857,43 +5871,51 @@ useEffect(() => {
             </CardContent>
           </Card>
 
-          {/* Operador da Obra (funcionário — cadastro da empresa) */}
+          {/* Operadores da Obra (funcionários — cadastro da empresa) */}
           <Card className="order-2">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <HardHat className="w-5 h-5 text-amber-600" />
-                Operador da Obra
+                Operadores da Obra
               </CardTitle>
               <CardDescription>
-                Designe o operador da empresa para esta obra. Os dados aparecem no Livro da Grua (Operador da Grua).
+                Designe os operadores da empresa para esta obra. Os dados aparecem no Livro da Grua (Operador da Grua).
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {obra?.operador_obra_funcionario?.nome ? (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20">
-                  <div>
-                    <p className="font-medium">{obra.operador_obra_funcionario.nome}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {obra.operador_obra_funcionario.cargo || "Operador"}
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      disabled={salvandoOperadorObra}
-                      onClick={() => persistirOperadorObra(null)}
+              {(obra?.operadores_obra || []).length > 0 ? (
+                <div className="space-y-2">
+                  {(obra.operadores_obra as Array<{ id: number; nome: string; cargo?: string | null }>).map((op) => (
+                    <div
+                      key={op.id}
+                      className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-3 border rounded-lg bg-amber-50/80 dark:bg-amber-950/20"
                     >
-                      {salvandoOperadorObra ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                      Remover
-                    </Button>
-                  </div>
+                      <div>
+                        <p className="font-medium">{op.nome}</p>
+                        <p className="text-sm text-muted-foreground">{op.cargo || "Operador"}</p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={salvandoOperadorObra}
+                        onClick={() => {
+                          const restantes = (obra.operadores_obra as Array<{ id: number }>)
+                            .map((item) => item.id)
+                            .filter((id) => id !== op.id)
+                          persistirOperadoresObra(restantes)
+                        }}
+                      >
+                        {salvandoOperadorObra ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        Remover
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               ) : null}
 
               <div>
-                <Label>{obra?.operador_obra_funcionario?.nome ? "Trocar operador" : "Buscar operador"}</Label>
+                <Label>Adicionar operador</Label>
                 <FuncionarioSearch
                   onFuncionarioSelect={(f) => persistirOperadorObra(f)}
                   placeholder="Buscar funcionário operador..."
@@ -5902,7 +5924,7 @@ useEffect(() => {
                   allowedRoles={["Operador", "Auxiliar Operacional"]}
                 />
                 <p className="text-xs text-muted-foreground mt-1">
-                  Ao selecionar, o vínculo é salvo automaticamente na obra.
+                  Ao selecionar, o operador é incluído na lista e salvo na obra.
                 </p>
               </div>
             </CardContent>

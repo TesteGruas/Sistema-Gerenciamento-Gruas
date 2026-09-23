@@ -22,7 +22,7 @@ export interface ObraBackend {
   email_obra?: string
   responsavel_id?: number | null
   responsavel_nome?: string | null
-  /** Funcionário (empresa) designado como operador da obra — Livro da Grua / aba Funcionários */
+  /** Funcionário (empresa) designado como operador da obra — primeiro da lista, compatibilidade */
   operador_obra_funcionario_id?: number | null
   operador_obra_funcionario?: {
     id: number
@@ -32,6 +32,14 @@ export interface ObraBackend {
     email?: string | null
     status?: string | null
   } | null
+  operadores_obra?: Array<{
+    id: number
+    nome: string
+    cargo?: string | null
+    telefone?: string | null
+    email?: string | null
+    status?: string | null
+  }>
   status: 'Planejamento' | 'Em Andamento' | 'Pausada' | 'Concluída' | 'Cancelada'
   // Novos campos adicionados
   descricao?: string
@@ -307,6 +315,13 @@ export interface ObraCreateData {
   cliente_email?: string
   cliente_telefone?: string
   operador_obra_funcionario_id?: number | null
+  operadores_obra_ids?: number[]
+  operadoresObraFuncionarios?: Array<{
+    id?: string
+    userId?: string
+    name: string
+    role: string
+  }>
 }
 
 export interface ObraUpdateData {
@@ -339,6 +354,7 @@ export interface ObraUpdateData {
   apolice_numero?: string
   apolice_arquivo?: string
   operador_obra_funcionario_id?: number | null
+  operadores_obra_ids?: number[]
 }
 
 export interface ObrasResponse {
@@ -478,7 +494,7 @@ export const obrasApi = {
     // Remover undefined; manter null só para operador_obra_funcionario_id (limpar vínculo no PUT)
     const cleanData = Object.entries(data).reduce((acc, [key, value]) => {
       if (value === undefined) return acc
-      if (value === null && key !== 'operador_obra_funcionario_id') return acc
+      if (value === null && key !== 'operador_obra_funcionario_id' && key !== 'operadores_obra_ids') return acc
       acc[key] = value
       return acc
     }, {} as any)
@@ -821,6 +837,11 @@ export const converterObraBackendParaFrontend = (obraBackend: ObraBackend, relac
     responsavelName: obraBackend.responsavel_nome ?? null,
     operador_obra_funcionario_id: obraBackend.operador_obra_funcionario_id ?? null,
     operador_obra_funcionario: obraBackend.operador_obra_funcionario ?? null,
+    operadores_obra: Array.isArray(obraBackend.operadores_obra) && obraBackend.operadores_obra.length
+      ? obraBackend.operadores_obra
+      : obraBackend.operador_obra_funcionario
+        ? [obraBackend.operador_obra_funcionario]
+        : [],
     // Campos obrigatórios (CNO, ART, Apólice)
     cno: obraBackend.cno,
     cno_arquivo: obraBackend.cno_arquivo,
@@ -1052,6 +1073,19 @@ export const converterObraFrontendParaBackend = (obraFrontend: any): ObraCreateD
           tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
         }
       }) : undefined,
+    operadores_obra_ids: (() => {
+      const lista = obraFrontend.operadoresObraFuncionarios
+      if (Array.isArray(lista)) {
+        const ids = lista
+          .map((op: any) => parseInt(String(op?.userId ?? op?.id ?? ''), 10))
+          .filter((n: number) => Number.isFinite(n) && n > 0)
+        return [...new Set(ids)]
+      }
+      if (Array.isArray(obraFrontend.operadores_obra_ids)) {
+        return obraFrontend.operadores_obra_ids
+      }
+      return undefined
+    })(),
     operador_obra_funcionario_id: (() => {
       const v = obraFrontend.operador_obra_funcionario_id
       if (v === null) return null
