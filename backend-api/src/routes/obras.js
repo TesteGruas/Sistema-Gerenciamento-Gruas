@@ -669,6 +669,81 @@ async function buscarOperadoresObra(obraId) {
     .filter(Boolean)
 }
 
+const OBS_OPERADOR_ALOCADO = 'Alocado automaticamente como operador da obra'
+
+async function sincronizarAlocacaoOperadores(obraId, ids) {
+  const hoje = new Date().toISOString().split('T')[0]
+  const { data: ativos, error: ativosError } = await supabaseAdmin
+    .from('funcionarios_obras')
+    .select('id, funcionario_id, observacoes')
+    .eq('obra_id', obraId)
+    .eq('status', 'ativo')
+
+  if (ativosError) throw ativosError
+
+  const ativosPorFuncionario = new Map((ativos || []).map((row) => [row.funcionario_id, row]))
+  const idsSet = new Set(ids)
+
+  for (const funcionarioId of ids) {
+    if (!ativosPorFuncionario.has(funcionarioId)) {
+      const { error: insertError } = await supabaseAdmin.from('funcionarios_obras').insert({
+        funcionario_id: funcionarioId,
+        obra_id: obraId,
+        data_inicio: hoje,
+        status: 'ativo',
+        horas_trabalhadas: 0,
+        is_supervisor: false,
+        observacoes: OBS_OPERADOR_ALOCADO
+      })
+      if (insertError) throw insertError
+    }
+
+    const { error: obraAtualError } = await supabaseAdmin
+      .from('funcionarios')
+      .update({ obra_atual_id: obraId })
+      .eq('id', funcionarioId)
+
+    if (obraAtualError) {
+      console.error('[obras] Erro ao atualizar obra_atual_id do operador:', obraAtualError.message)
+    }
+  }
+
+  for (const row of ativos || []) {
+    if (idsSet.has(row.funcionario_id)) continue
+    if (!String(row.observacoes || '').includes(OBS_OPERADOR_ALOCADO)) continue
+
+    const { error: fimError } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .update({
+        status: 'finalizado',
+        data_fim: hoje,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', row.id)
+
+    if (fimError) throw fimError
+
+    const { data: outra } = await supabaseAdmin
+      .from('funcionarios_obras')
+      .select('obra_id')
+      .eq('funcionario_id', row.funcionario_id)
+      .eq('status', 'ativo')
+      .neq('obra_id', obraId)
+      .limit(1)
+      .maybeSingle()
+
+    const { error: limparError } = await supabaseAdmin
+      .from('funcionarios')
+      .update({ obra_atual_id: outra?.obra_id ?? null })
+      .eq('id', row.funcionario_id)
+      .eq('obra_atual_id', obraId)
+
+    if (limparError) {
+      console.error('[obras] Erro ao limpar obra_atual_id do operador removido:', limparError.message)
+    }
+  }
+}
+
 async function sincronizarOperadoresObra(obraId, ids) {
   const { error: deleteError } = await supabaseAdmin
     .from('obra_operadores')
@@ -2800,6 +2875,12 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       }
     }
 
+    try {
+      await sincronizarAlocacaoOperadores(data.id, idsOperadores)
+    } catch (alocacaoOperadoresError) {
+      console.error('❌ Erro ao alocar operadores como funcionários da obra:', alocacaoOperadoresError)
+    }
+
     // Processar custos mensais se fornecidos
     if (value.custos_mensais && value.custos_mensais.length > 0) {
       console.log('💰 Processando custos mensais...')
@@ -3409,6 +3490,18 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       } catch (funcionarioError) {
         console.error('❌ Erro ao processar funcionários:', funcionarioError)
         // Não falhar a atualização da obra por causa dos funcionários
+      }
+    }
+
+    if (idsOperadoresPut !== null) {
+      try {
+        await sincronizarAlocacaoOperadores(parseInt(id, 10), idsOperadoresPut)
+      } catch (alocacaoOperadoresError) {
+        console.error('❌ Erro ao alocar operadores como funcionários da obra:', alocacaoOperadoresError)
+        return res.status(500).json({
+          error: 'Erro ao alocar operadores',
+          message: alocacaoOperadoresError.message
+        })
       }
     }
 
@@ -4637,6 +4730,46 @@ router.get('/:id/sinaleiros', authenticateToken, async (req, res) => {
     res.json({ success: true, data: data || [] })
   } catch (error) {
     console.error('Erro ao listar sinaleiros:', error)
+    res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
+  }
+})
+
+/**
+ * DELETE /api/obras/:id/sinaleiros/:sinaleiroId
+ * Remove o vínculo do sinaleiro com a obra. Documentos do sinaleiro caem em cascata.
+ */
+router.delete('/:id/sinaleiros/:sinaleiroId', authenticateToken, requirePermission('obras:editar'), async (req, res) => {
+  try {
+    const obraId = parseInt(req.params.id, 10)
+    const sinaleiroId = String(req.params.sinaleiroId || '')
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    if (!Number.isFinite(obraId) || obraId <= 0 || !uuidRegex.test(sinaleiroId)) {
+      return res.status(400).json({
+        error: 'Identificador inválido',
+        message: 'Informe a obra e o sinaleiro corretamente.'
+      })
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .delete()
+      .eq('id', sinaleiroId)
+      .eq('obra_id', obraId)
+      .select('id')
+      .maybeSingle()
+
+    if (error) throw error
+    if (!data) {
+      return res.status(404).json({
+        error: 'Sinaleiro não encontrado',
+        message: 'Esse sinaleiro não está vinculado a esta obra.'
+      })
+    }
+
+    res.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro ao remover sinaleiro:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })
   }
 })

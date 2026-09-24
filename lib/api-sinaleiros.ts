@@ -139,6 +139,11 @@ export const sinaleirosApi = {
     }
   },
 
+  async remover(obraId: number, sinaleiroId: string): Promise<{ success: boolean }> {
+    const url = buildApiUrl(`obras/${obraId}/sinaleiros/${sinaleiroId}`)
+    return apiRequest(url, { method: 'DELETE' })
+  },
+
   // Listar documentos de um sinaleiro
   async listarDocumentos(sinaleiroId: string): Promise<DocumentosSinaleiroResponse> {
     const url = buildApiUrl(`obras/sinaleiros/${sinaleiroId}/documentos`)

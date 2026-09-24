@@ -213,6 +213,7 @@ function ObraDetailsPageContent() {
     email: ''
   })
   const [salvandoSinaleiro, setSalvandoSinaleiro] = useState(false)
+  const [removendoSinaleiroId, setRemovendoSinaleiroId] = useState<string | null>(null)
   
   // Estado para responsáveis técnicos adicionais dinâmicos
   const [responsaveisAdicionais, setResponsaveisAdicionais] = useState<Array<ResponsavelTecnicoData & { tipo?: string; area?: string }>>([])
@@ -944,6 +945,30 @@ function ObraDetailsPageContent() {
       })
     } finally {
       setSalvandoSinaleiro(false)
+    }
+  }
+
+  const handleRemoverSinaleiro = async (sinaleiro: SinaleiroBackend) => {
+    if (!obraId || removendoSinaleiroId) return
+    const confirmar = window.confirm(`Remover ${sinaleiro.nome} dos sinaleiros desta obra?`)
+    if (!confirmar) return
+
+    setRemovendoSinaleiroId(sinaleiro.id)
+    try {
+      await sinaleirosApi.remover(parseInt(obraId, 10), sinaleiro.id)
+      toast({
+        title: "Sucesso",
+        description: "Sinaleiro removido da obra."
+      })
+      await carregarSinaleiros()
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Não foi possível remover o sinaleiro.",
+        variant: "destructive"
+      })
+    } finally {
+      setRemovendoSinaleiroId(null)
     }
   }
 
@@ -2695,6 +2720,7 @@ function ObraDetailsPageContent() {
       if (res.success) {
         toast({ title: "Sucesso", description: "Operadores da obra atualizados." })
         await carregarObra(obraId, { force: true })
+        await carregarFuncionariosVinculados()
       } else {
         toast({
           title: "Erro",
@@ -5812,9 +5838,25 @@ useEffect(() => {
                                 {sinaleiro.tipo === 'principal' ? 'Sinaleiro Principal' : 'Sinaleiro Reserva'}
                               </CardDescription>
                             </div>
-                            <Badge variant={sinaleiro.tipo === 'principal' ? 'default' : 'secondary'}>
-                              {sinaleiro.tipo === 'principal' ? 'Principal' : 'Reserva'}
-                            </Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant={sinaleiro.tipo === 'principal' ? 'default' : 'secondary'}>
+                                {sinaleiro.tipo === 'principal' ? 'Principal' : 'Reserva'}
+                              </Badge>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={removendoSinaleiroId === sinaleiro.id}
+                                onClick={() => handleRemoverSinaleiro(sinaleiro)}
+                              >
+                                {removendoSinaleiroId === sinaleiro.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4 mr-1" />
+                                )}
+                                Remover
+                              </Button>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
