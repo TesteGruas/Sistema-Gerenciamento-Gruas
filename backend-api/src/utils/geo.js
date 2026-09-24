@@ -36,10 +36,10 @@ export function calcularDistanciaEmMetros(lat1, lon1, lat2, lon2) {
  * @param {number} lonUsuario Longitude do usuário
  * @param {number} latObra Latitude da obra
  * @param {number} lonObra Longitude da obra
- * @param {number} raioPermitido Raio permitido em metros (padrão: 100m)
+ * @param {number} raioPermitido Raio permitido em metros (padrão: 400m)
  * @returns {Object} Objeto com valido, distancia e mensagem
  */
-export function validarProximidadeObra(latUsuario, lonUsuario, latObra, lonObra, raioPermitido = 100) {
+export function validarProximidadeObra(latUsuario, lonUsuario, latObra, lonObra, raioPermitido = 400) {
   if (!latUsuario || !lonUsuario || !latObra || !lonObra) {
     return {
       valido: false,
