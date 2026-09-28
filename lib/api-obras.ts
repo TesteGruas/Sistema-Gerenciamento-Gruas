@@ -411,6 +411,10 @@ const redirectToLogin = () => {
 const requestCache = new Map<string, { data: any; timestamp: number }>()
 const CACHE_TTL = 5000 // 5 segundos
 
+export class ErroApi extends Error {
+  campos?: Array<{ mensagem: string; aba?: string }>
+}
+
 // Função para fazer requisições autenticadas com tratamento de erro 429
 const apiRequest = async (url: string, options: RequestInit = {}, useCache = true) => {
   try {
@@ -435,7 +439,20 @@ const apiRequest = async (url: string, options: RequestInit = {}, useCache = tru
         throw new Error(`Muitas tentativas. Tente novamente em ${Math.ceil(waitTime / 1000 / 60)} minutos.`)
       }
       
-      throw new Error(errorData.message || errorData.error || `Erro ${response.status}: ${response.statusText}`);
+      const campos = Array.isArray(errorData.campos)
+        ? errorData.campos
+            .map((campo: { mensagem?: string; aba?: string }) => ({
+              mensagem: String(campo?.mensagem || '').trim(),
+              aba: campo?.aba
+            }))
+            .filter((campo: { mensagem: string }) => campo.mensagem)
+        : undefined
+      const mensagemCampos = campos?.map((campo: { mensagem: string }) => campo.mensagem).join('\n')
+      const erro = new ErroApi(
+        mensagemCampos || errorData.message || errorData.details || errorData.error || `Erro ${response.status}: ${response.statusText}`
+      )
+      if (campos?.length) erro.campos = campos
+      throw erro
     }
     
     const data = await response.json();

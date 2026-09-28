@@ -790,6 +790,79 @@ function anexarOperadoresNaObra(obra, operadores) {
   }
 }
 
+const ROTULOS_CAMPO_OBRA = {
+  nome: 'Nome da Obra',
+  cliente_id: 'Cliente',
+  endereco: 'Endereço',
+  endereco_rua: 'Rua',
+  endereco_numero: 'Número',
+  endereco_bairro: 'Bairro',
+  endereco_complemento: 'Complemento',
+  cidade: 'Cidade',
+  estado: 'Estado',
+  tipo: 'Tipo de Obra',
+  cep: 'CEP',
+  contato_obra: 'Contato da obra',
+  telefone_obra: 'Telefone da obra',
+  email_obra: 'E-mail da obra',
+  status: 'Status',
+  descricao: 'Descrição',
+  data_inicio: 'Data de início',
+  data_fim: 'Data de fim',
+  orcamento: 'Orçamento',
+  cno: 'CNO da Obra',
+  cno_arquivo: 'Arquivo do CNO',
+  art_numero: 'Número da ART',
+  art_arquivo: 'Arquivo da ART',
+  apolice_numero: 'Número da Apólice de Seguro',
+  apolice_arquivo: 'Arquivo da Apólice de Seguro',
+  responsavel_tecnico: 'Responsável técnico',
+  'responsavel_tecnico.nome': 'Nome do responsável técnico',
+  'responsavel_tecnico.email': 'E-mail do responsável técnico',
+  'responsavel_tecnico.cpf_cnpj': 'CPF/CNPJ do responsável técnico',
+  sinaleiros: 'Sinaleiro',
+  'sinaleiros.nome': 'Nome do sinaleiro',
+  'sinaleiros.email': 'E-mail do sinaleiro',
+  'sinaleiros.rg_cpf': 'RG/CPF do sinaleiro',
+  gruas: 'Grua',
+  'gruas.grua_id': 'Grua',
+  'gruas.valor_locacao': 'Valor de locação da grua',
+  'gruas.taxa_mensal': 'Taxa mensal da grua',
+  funcionarios: 'Funcionário',
+  'funcionarios.name': 'Nome do funcionário',
+  'funcionarios.userId': 'Funcionário',
+  custos_mensais: 'Custo mensal',
+  'custos_mensais.item': 'Item do custo mensal',
+  'custos_mensais.mes': 'Mês do custo mensal'
+}
+
+function abaDoCampoObra(path) {
+  const raiz = path?.[0]
+  if (['cno', 'cno_arquivo', 'art_numero', 'art_arquivo', 'apolice_numero', 'apolice_arquivo'].includes(raiz)) {
+    return 'documentos'
+  }
+  if (raiz === 'responsavel_tecnico') return 'responsavel-tecnico'
+  if (raiz === 'gruas' || raiz === 'grua_id' || raiz === 'grua_valor' || raiz === 'grua_mensalidade') return 'grua'
+  if (raiz === 'funcionarios' || raiz === 'sinaleiros' || raiz === 'custos_mensais') return 'funcionarios'
+  return 'obra'
+}
+
+function descreverErroCampoObra(detail) {
+  const path = Array.isArray(detail.path) ? detail.path : []
+  const chave = path.filter((parte) => typeof parte !== 'number').join('.')
+  const rotulo = ROTULOS_CAMPO_OBRA[chave] || ROTULOS_CAMPO_OBRA[path[0]] || 'Campo do formulário'
+  const tipo = detail.type || ''
+  let mensagem = `${rotulo} está inválido.`
+  if (tipo === 'any.required' || tipo === 'string.empty') mensagem = `${rotulo} é obrigatório.`
+  else if (tipo === 'string.email') mensagem = `${rotulo} está com e-mail inválido.`
+  else if (tipo === 'string.pattern.base' || tipo === 'string.min' || tipo === 'string.max') mensagem = `${rotulo} está com formato inválido.`
+  else if (tipo === 'any.only') mensagem = `${rotulo} tem um valor não permitido.`
+  else if (tipo.startsWith('date')) mensagem = `${rotulo} está com data inválida.`
+  else if (tipo.startsWith('number')) mensagem = `${rotulo} está com valor numérico inválido.`
+  else if (tipo === 'object.unknown') mensagem = `${rotulo} não é aceito neste cadastro.`
+  return { mensagem, aba: abaDoCampoObra(path), campo: chave || String(path[0] || '') }
+}
+
 const router = express.Router()
 
 // Schema de validação para obras
@@ -2139,9 +2212,12 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     })
     if (error) {
       console.error('❌ Erro de validação:', error.details)
+      const campos = error.details.map(descreverErroCampoObra)
       return res.status(400).json({
         error: 'Dados inválidos',
-        details: error.details[0].message,
+        message: campos.map((campo) => campo.mensagem).join('\n'),
+        details: campos[0]?.mensagem,
+        campos,
         allErrors: error.details
       })
     }

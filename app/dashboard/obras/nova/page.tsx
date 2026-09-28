@@ -39,7 +39,7 @@ import {
   Edit,
   HardHat
 } from "lucide-react"
-import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ObraBackend } from "@/lib/api-obras"
+import { obrasApi, converterObraBackendParaFrontend, converterObraFrontendParaBackend, ErroApi, ObraBackend } from "@/lib/api-obras"
 import { CustoMensal } from "@/lib/api-custos-mensais"
 import { getOrcamentoAprovadoPorCliente, getOrcamentoCompleto, Orcamento } from "@/lib/api-orcamentos"
 import { ButtonLoader } from "@/components/ui/loader"
@@ -412,6 +412,8 @@ export default function NovaObraPage() {
   const [creating, setCreating] = useState(false)
   const creatingObraInFlightRef = useRef(false)
   const [error, setError] = useState<string | null>(null)
+  const [errosCampos, setErrosCampos] = useState<Array<{ mensagem: string; aba?: string }>>([])
+  const [abaFormulario, setAbaFormulario] = useState("obra")
 
   // Prevenir saída da página durante criação
   useEffect(() => {
@@ -859,6 +861,23 @@ export default function NovaObraPage() {
     setResponsaveisObra(responsaveisObra.filter((_, i) => i !== index))
   }
 
+  const exibirErrosCampos = (campos: Array<{ mensagem: string; aba?: string }>) => {
+    const unicos = campos.filter((campo) => campo.mensagem?.trim())
+    setErrosCampos(unicos)
+    setError(unicos.map((campo) => campo.mensagem).join('\n'))
+    const aba = unicos.find((campo) => campo.aba)?.aba
+    if (aba) setAbaFormulario(aba)
+    toast({
+      title: unicos.length === 1 ? "Campo inválido" : "Campos inválidos",
+      description: unicos.map((campo) => campo.mensagem).join(' '),
+      variant: "destructive",
+      duration: 10000
+    })
+    setTimeout(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    }, 100)
+  }
+
   // Função para criar obra
   const handleCreateObra = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -880,98 +899,76 @@ export default function NovaObraPage() {
     const clienteIdFinal = obraFormData.clienteId || clienteSelecionado?.id || clienteSelecionado?.cliente_id
     
     // Validação de campos obrigatórios - listar todos os campos faltantes
-    const camposFaltando: string[] = []
+    const camposFaltando: Array<{ mensagem: string; aba: string }> = []
     
     if (!obraFormData.name || !obraFormData.name.trim()) {
-      camposFaltando.push('Nome da Obra')
+      camposFaltando.push({ mensagem: 'Nome da Obra é obrigatório.', aba: 'obra' })
     }
     
     if (!clienteIdFinal) {
-      camposFaltando.push('Cliente')
+      camposFaltando.push({ mensagem: 'Cliente é obrigatório.', aba: 'obra' })
     }
     
     if (!obraFormData.endereco_rua || !obraFormData.endereco_rua.trim()) {
-      camposFaltando.push('Rua')
+      camposFaltando.push({ mensagem: 'Rua é obrigatória.', aba: 'obra' })
     }
 
     if (!obraFormData.endereco_numero || !obraFormData.endereco_numero.trim()) {
-      camposFaltando.push('Número')
+      camposFaltando.push({ mensagem: 'Número é obrigatório.', aba: 'obra' })
     }
 
     if (!obraFormData.endereco_bairro || !obraFormData.endereco_bairro.trim()) {
-      camposFaltando.push('Bairro')
+      camposFaltando.push({ mensagem: 'Bairro é obrigatório.', aba: 'obra' })
     }
     
     if (!obraFormData.cidade || !obraFormData.cidade.trim()) {
-      camposFaltando.push('Cidade')
+      camposFaltando.push({ mensagem: 'Cidade é obrigatória.', aba: 'obra' })
     }
     
     if (!obraFormData.estado || !obraFormData.estado.trim()) {
-      camposFaltando.push('Estado')
+      camposFaltando.push({ mensagem: 'Estado é obrigatório.', aba: 'obra' })
     }
 
     if (!obraFormData.cep || !obraFormData.cep.trim()) {
-      camposFaltando.push('CEP')
+      camposFaltando.push({ mensagem: 'CEP é obrigatório.', aba: 'obra' })
     }
     
     if (!obraFormData.tipo || !obraFormData.tipo.trim()) {
-      camposFaltando.push('Tipo de Obra')
+      camposFaltando.push({ mensagem: 'Tipo de Obra é obrigatório.', aba: 'obra' })
     }
     
     // Orçamento não é obrigatório - obra pode ser criada sem orçamento
     
     if (!cno || !cno.trim()) {
-      camposFaltando.push('CNO da Obra')
+      camposFaltando.push({ mensagem: 'CNO da Obra é obrigatório.', aba: 'documentos' })
     }
     
     if (!artNumero || !artNumero.trim()) {
-      camposFaltando.push('Número da ART')
+      camposFaltando.push({ mensagem: 'Número da ART é obrigatório.', aba: 'documentos' })
     }
     
     if (!artArquivo) {
-      camposFaltando.push('Arquivo da ART')
+      camposFaltando.push({ mensagem: 'Arquivo da ART é obrigatório.', aba: 'documentos' })
     }
     
     if (!apoliceNumero || !apoliceNumero.trim()) {
-      camposFaltando.push('Número da Apólice de Seguro')
+      camposFaltando.push({ mensagem: 'Número da Apólice de Seguro é obrigatório.', aba: 'documentos' })
     }
     
     if (!apoliceArquivo) {
-      camposFaltando.push('Arquivo da Apólice de Seguro')
+      camposFaltando.push({ mensagem: 'Arquivo da Apólice de Seguro é obrigatório.', aba: 'documentos' })
     }
     
     if (camposFaltando.length > 0) {
-      // Prevenir o comportamento padrão do formulário (scroll automático)
       e.preventDefault()
       e.stopPropagation()
-      
-      // Mostrar mensagem de erro de forma mais visível
-      const mensagemErro = camposFaltando.length === 1 
-        ? `O campo "${camposFaltando[0]}" é obrigatório e precisa ser preenchido.`
-        : `Os seguintes campos são obrigatórios e precisam ser preenchidos:\n\n${camposFaltando.map((campo, index) => `${index + 1}. ${campo}`).join('\n')}`
-      
-      toast({
-        title: "Campos obrigatórios não preenchidos",
-        description: mensagemErro,
-        variant: "destructive",
-        duration: 10000, // Manter visível por mais tempo
-      })
-      
-      // Também mostrar um alerta visual no topo do formulário
-      setError(camposFaltando.length === 1 
-        ? `Campo obrigatório faltando: ${camposFaltando[0]}`
-        : `Campos obrigatórios faltando: ${camposFaltando.join(', ')}`)
-      
-      // Scroll suave para o topo da página para mostrar a mensagem de erro
-      setTimeout(() => {
-        window.scrollTo({ top: 0, behavior: 'smooth' })
-      }, 100)
-      
+      exibirErrosCampos(camposFaltando)
       return
     }
     
     // Limpar erro se tudo estiver válido
     setError(null)
+    setErrosCampos([])
 
     // Validação do responsável técnico removida - agora é opcional na criação
     // O responsável técnico pode ser cadastrado depois de criar a obra
@@ -2104,10 +2101,17 @@ export default function NovaObraPage() {
       router.push('/dashboard/obras')
     } catch (err) {
       console.error('Erro ao criar obra:', err)
-      setError(err instanceof Error ? err.message : 'Erro ao criar obra')
       const mensagemErro = err instanceof Error ? err.message : String(err)
+      if (err instanceof ErroApi && err.campos?.length) {
+        exibirErrosCampos(err.campos)
+      } else if (mensagemErro && mensagemErro !== 'Dados inválidos') {
+        const linhas = mensagemErro.split('\n').map((linha) => linha.trim()).filter(Boolean)
+        exibirErrosCampos(linhas.map((mensagem) => ({ mensagem })))
+      } else {
+        setErrosCampos([])
+        setError(mensagemErro || 'Erro ao criar obra')
+      }
       if (!mensagemErro.includes('[TRAVA-DEBUG]')) {
-        // Evita duplicidade de toast genérico. O detalhe já fica no setError + console.
         console.error('⛔ [Nova Obra] Erro final sem trava-debug:', mensagemErro)
       }
     } finally {
@@ -2687,14 +2691,31 @@ startxref
         <div className="bg-destructive/10 border border-destructive rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <h3 className="font-semibold text-destructive mb-1">Campos obrigatórios não preenchidos</h3>
-            <p className="text-sm text-destructive/90">{error}</p>
+            <h3 className="font-semibold text-destructive mb-1">
+              {errosCampos.length > 1
+                ? "Corrija estes campos"
+                : errosCampos.length === 1
+                  ? "Corrija este campo"
+                  : "Não foi possível salvar a obra"}
+            </h3>
+            {errosCampos.length > 0 ? (
+              <ul className="list-disc space-y-1 pl-5 text-sm text-destructive/90">
+                {errosCampos.map((campo) => (
+                  <li key={campo.mensagem}>{campo.mensagem}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-destructive/90 whitespace-pre-line">{error}</p>
+            )}
           </div>
           <Button
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => setError(null)}
+            onClick={() => {
+              setError(null)
+              setErrosCampos([])
+            }}
             className="text-destructive hover:text-destructive"
           >
             <X className="w-4 h-4" />
@@ -2704,7 +2725,7 @@ startxref
 
       {/* Formulário */}
       <form noValidate onSubmit={handleCreateObra} className="">
-        <Tabs defaultValue="obra" className="w-full">
+        <Tabs value={abaFormulario} onValueChange={setAbaFormulario} className="w-full">
           <TabsList className="grid w-full grid-cols-5 gap-1">
             <TabsTrigger value="obra" className="px-4">Dados da Obra</TabsTrigger>
             <TabsTrigger value="documentos" className="px-4">Documentos</TabsTrigger>
