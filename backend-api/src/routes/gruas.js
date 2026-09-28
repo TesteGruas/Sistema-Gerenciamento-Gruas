@@ -269,7 +269,7 @@ const gruaSchema = Joi.object({
   name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
   model: Joi.string().min(2).required(), // Modelo da grua
   capacity: Joi.string().required(), // Capacidade da grua
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa', 'Rascunho').default('disponivel'),
   
   // Campos técnicos obrigatórios
   fabricante: Joi.string().min(2).required().messages({
@@ -344,13 +344,74 @@ const gruaSchema = Joi.object({
   currentObraName: Joi.string().allow(null, '').optional() // Nome da obra atual - obtido de grua_obra
 })
 
+function textoGruaPreenchido(valor) {
+  return valor != null && String(valor).trim() !== ''
+}
+
+function numeroGruaPreenchido(valor) {
+  return valor != null && valor !== '' && Number.isFinite(Number(valor))
+}
+
+function nomeGruaValido(dados) {
+  return textoGruaPreenchido(dados?.name) && String(dados.name).trim().length >= 2
+}
+
+function faltandoCadastroGrua(dados) {
+  const fonte = dados || {}
+  const regras = [
+    { campo: 'model', mensagem: 'Modelo é obrigatório.', ok: textoGruaPreenchido(fonte.model) && String(fonte.model).trim().length >= 2 },
+    { campo: 'capacity', mensagem: 'Capacidade é obrigatória.', ok: textoGruaPreenchido(fonte.capacity) },
+    { campo: 'fabricante', mensagem: 'Fabricante é obrigatório.', ok: textoGruaPreenchido(fonte.fabricante) && String(fonte.fabricante).trim().length >= 2 },
+    { campo: 'tipo', mensagem: 'Tipo é obrigatório.', ok: textoGruaPreenchido(fonte.tipo) },
+    { campo: 'lanca', mensagem: 'Lança é obrigatória.', ok: textoGruaPreenchido(fonte.lanca) },
+    { campo: 'altura_final', mensagem: 'Altura final é obrigatória.', ok: numeroGruaPreenchido(fonte.altura_final) },
+    { campo: 'ano', mensagem: 'Ano é obrigatório.', ok: numeroGruaPreenchido(fonte.ano) },
+    { campo: 'tipo_base', mensagem: 'Tipo de base é obrigatório.', ok: textoGruaPreenchido(fonte.tipo_base) && String(fonte.tipo_base).trim().length >= 2 },
+    { campo: 'capacidade_1_cabo', mensagem: 'Capacidade com 2 cabos (mínima) é obrigatória.', ok: numeroGruaPreenchido(fonte.capacidade_1_cabo) },
+    { campo: 'capacidade_2_cabos', mensagem: 'Capacidade com 4 cabos (máxima) é obrigatória.', ok: numeroGruaPreenchido(fonte.capacidade_2_cabos) },
+    { campo: 'potencia_instalada', mensagem: 'Potência instalada é obrigatória.', ok: numeroGruaPreenchido(fonte.potencia_instalada) },
+    { campo: 'voltagem', mensagem: 'Voltagem é obrigatória.', ok: textoGruaPreenchido(fonte.voltagem) },
+    { campo: 'velocidade_rotacao', mensagem: 'Velocidade de rotação é obrigatória.', ok: numeroGruaPreenchido(fonte.velocidade_rotacao) },
+    { campo: 'velocidade_elevacao', mensagem: 'Velocidade de elevação é obrigatória.', ok: textoGruaPreenchido(fonte.velocidade_elevacao) }
+  ]
+  return regras.filter((regra) => !regra.ok).map(({ campo, mensagem }) => ({ campo, mensagem, aba: 'grua' }))
+}
+
+function resolverStatusGrua(statusInformado, faltando) {
+  if (faltando.length) return 'Rascunho'
+  if (!statusInformado || statusInformado === 'Rascunho') return 'disponivel'
+  return statusInformado
+}
+
+function gruaBancoParaChecagem(row) {
+  if (!row) return {}
+  return {
+    name: row.name,
+    model: row.modelo ?? row.model,
+    capacity: row.capacidade ?? row.capacity,
+    fabricante: row.fabricante,
+    tipo: row.tipo,
+    lanca: row.lanca,
+    altura_final: row.altura_final,
+    ano: row.ano,
+    tipo_base: row.tipo_base,
+    capacidade_1_cabo: row.capacidade_1_cabo,
+    capacidade_2_cabos: row.capacidade_2_cabos,
+    potencia_instalada: row.potencia_instalada,
+    voltagem: row.voltagem,
+    velocidade_rotacao: row.velocidade_rotacao,
+    velocidade_elevacao: row.velocidade_elevacao,
+    status: row.status
+  }
+}
+
 // Schema para dados de entrada (baseado nos campos do frontend)
 const gruaInputSchema = Joi.object({
   // Campos obrigatórios (baseados no frontend)
   name: Joi.string().min(2).required(), // Nome da grua (ex: "Grua 001")
   model: Joi.string().min(2).required(), // Modelo da grua
   capacity: Joi.string().required(), // Capacidade da grua
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').default('disponivel'),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa', 'Rascunho').default('disponivel'),
   
   // Campos técnicos obrigatórios
   fabricante: Joi.string().min(2).required().messages({
@@ -431,12 +492,17 @@ const gruaInputSchema = Joi.object({
   cliente_telefone: Joi.string().allow(null, '').optional()
 })
 
+const gruaInputSchemaRascunho = gruaInputSchema.fork(
+  ['model', 'capacity', 'fabricante', 'tipo', 'lanca', 'altura_final', 'ano', 'tipo_base', 'capacidade_1_cabo', 'capacidade_2_cabos', 'potencia_instalada', 'voltagem', 'velocidade_rotacao', 'velocidade_elevacao'],
+  (schema) => Joi.alternatives().try(schema, Joi.valid(null, '')).optional()
+)
+
 // Schema para atualização parcial de grua (PUT/PATCH)
 const gruaUpdateSchema = Joi.object({
   name: Joi.string().min(2).optional(),
   model: Joi.string().min(2).optional(),
   capacity: Joi.string().optional(),
-  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa').optional(),
+  status: Joi.string().valid('Disponível', 'Operacional', 'Manutenção', 'Vendida', 'disponivel', 'em_obra', 'manutencao', 'inativa', 'Rascunho').optional(),
   fabricante: Joi.string().min(2).optional(),
   tipo: tipoGruaNomeJoiOptional.optional(),
   lanca: Joi.string().allow(null, '').optional(),
@@ -1555,8 +1621,16 @@ router.get('/:id', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
-    // Validar dados (criação completa)
-    const { error, value } = gruaInputSchema.validate(req.body)
+    if (!nomeGruaValido(req.body)) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'Nome da grua é obrigatório.',
+        campos: [{ mensagem: 'Nome da grua é obrigatório.', aba: 'grua', campo: 'name' }]
+      })
+    }
+
+    const schemaGrua = faltandoCadastroGrua(req.body).length ? gruaInputSchemaRascunho : gruaInputSchema
+    const { error, value } = schemaGrua.validate(req.body)
     if (error) {
       return res.status(400).json({
         error: 'Dados inválidos',
@@ -1574,6 +1648,9 @@ router.post('/', async (req, res) => {
         telefone: value.cliente_telefone
       })
     }
+
+    const faltandoGrua = faltandoCadastroGrua(value)
+    const statusGrua = resolverStatusGrua(value.status, faltandoGrua)
 
     // Preparar dados da grua (mapear campos do frontend para campos do banco)
     const gruaData = {
@@ -1596,8 +1673,10 @@ router.post('/', async (req, res) => {
       potencia_instalada: value.potencia_instalada,
       voltagem: value.voltagem,
       velocidade_rotacao: value.velocidade_rotacao,
-      velocidade_elevacao: normalizarVelocidadeElevacao(value.velocidade_elevacao),
-      status: value.status,
+      velocidade_elevacao: value.velocidade_elevacao == null || value.velocidade_elevacao === ''
+        ? value.velocidade_elevacao ?? null
+        : normalizarVelocidadeElevacao(value.velocidade_elevacao),
+      status: statusGrua,
       localizacao: value.localizacao ?? '',
       horas_operacao: value.horas_operacao ?? 0,
       valor_locacao: value.valor_locacao ?? null,
@@ -1632,7 +1711,9 @@ router.post('/', async (req, res) => {
         ...data,
         cliente: cliente
       },
-      message: 'Grua criada com sucesso'
+      rascunho: statusGrua === 'Rascunho',
+      faltando: faltandoGrua,
+      message: statusGrua === 'Rascunho' ? 'Grua salva como rascunho' : 'Grua criada com sucesso'
     })
   } catch (error) {
     console.error('Erro ao criar grua:', error)
@@ -1783,6 +1864,36 @@ router.put('/:id', async (req, res) => {
       })
     }
 
+    const { data: gruaParaRascunho } = await supabaseAdmin
+      .from('gruas')
+      .select('name, modelo, capacidade, fabricante, tipo, lanca, altura_final, ano, tipo_base, capacidade_1_cabo, capacidade_2_cabos, potencia_instalada, voltagem, velocidade_rotacao, velocidade_elevacao, status')
+      .eq('id', gruaId)
+      .maybeSingle()
+
+    const gruaMesclada = {
+      ...gruaBancoParaChecagem(gruaParaRascunho),
+      ...Object.fromEntries(Object.entries(value).filter(([, valor]) => valor !== undefined))
+    }
+    if (!nomeGruaValido(gruaMesclada)) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'Nome da grua é obrigatório.',
+        campos: [{ mensagem: 'Nome da grua é obrigatório.', aba: 'grua', campo: 'name' }]
+      })
+    }
+    const faltandoAtualizacaoGrua = faltandoCadastroGrua(gruaMesclada)
+    const reavaliarRascunhoGrua = Object.keys(value).some((chave) => [
+      'name', 'model', 'capacity', 'fabricante', 'tipo', 'lanca', 'altura_final', 'ano',
+      'tipo_base', 'capacidade_1_cabo', 'capacidade_2_cabos', 'potencia_instalada',
+      'voltagem', 'velocidade_rotacao', 'velocidade_elevacao', 'status'
+    ].includes(chave))
+    const statusGruaAtualizacao = reavaliarRascunhoGrua
+      ? resolverStatusGrua(
+        value.status !== undefined ? value.status : gruaMesclada.status,
+        faltandoAtualizacaoGrua
+      )
+      : (value.status !== undefined ? value.status : gruaMesclada.status)
+
     // Buscar ou criar cliente se dados do cliente foram fornecidos
     let cliente = null
     if (value.cliente_nome) {
@@ -1818,7 +1929,7 @@ router.put('/:id', async (req, res) => {
           ? value.velocidade_elevacao
           : normalizarVelocidadeElevacao(value.velocidade_elevacao)
     }
-    if (value.status !== undefined) updateData.status = value.status
+    updateData.status = statusGruaAtualizacao
     if (value.localizacao !== undefined) updateData.localizacao = value.localizacao
     if (value.horas_operacao !== undefined) updateData.horas_operacao = value.horas_operacao
     if (value.valor_locacao !== undefined) updateData.valor_locacao = value.valor_locacao
@@ -1866,7 +1977,9 @@ router.put('/:id', async (req, res) => {
         ...data,
         cliente: cliente
       },
-      message: 'Grua atualizada com sucesso'
+      rascunho: statusGruaAtualizacao === 'Rascunho',
+      faltando: faltandoAtualizacaoGrua,
+      message: statusGruaAtualizacao === 'Rascunho' ? 'Grua salva como rascunho' : 'Grua atualizada com sucesso'
     })
   } catch (error) {
     console.error('Erro ao atualizar grua:', error)

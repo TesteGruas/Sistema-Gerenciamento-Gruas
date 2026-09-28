@@ -675,6 +675,7 @@ export default function ObrasPage() {
       case 'Pausada': return 'bg-yellow-100 text-yellow-800'
       case 'Concluída': return 'bg-gray-100 text-gray-800'
       case 'Cancelada': return 'bg-red-100 text-red-800'
+      case 'Rascunho': return 'bg-amber-100 text-amber-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -686,6 +687,7 @@ export default function ObrasPage() {
       case 'Pausada': return <Clock className="w-4 h-4" />
       case 'Concluída': return <CheckCircle className="w-4 h-4" />
       case 'Cancelada': return <AlertCircle className="w-4 h-4" />
+      case 'Rascunho': return <Clock className="w-4 h-4" />
       default: return <AlertCircle className="w-4 h-4" />
     }
   }

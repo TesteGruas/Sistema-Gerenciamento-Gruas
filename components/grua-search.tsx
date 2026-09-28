@@ -55,6 +55,7 @@ export default function GruaSearch({
             let gruasConvertidas = response.data
             
             // Filtrar apenas disponíveis se solicitado
+            gruasConvertidas = gruasConvertidas.filter(grua => grua.status !== 'Rascunho')
             if (onlyAvailable) {
               gruasConvertidas = gruasConvertidas.filter(grua => 
                 grua.status === 'disponivel'
@@ -104,6 +105,7 @@ export default function GruaSearch({
             (grua.id || '').toLowerCase().includes(searchTerm.toLowerCase())
           )
           
+          gruasConvertidas = gruasConvertidas.filter(grua => grua.status !== 'Rascunho')
           // Filtrar apenas disponíveis se solicitado
           if (onlyAvailable) {
             gruasConvertidas = gruasConvertidas.filter(grua => 
@@ -216,6 +218,7 @@ export default function GruaSearch({
                 if (response.success) {
                   let gruasConvertidas = response.data
                   
+                  gruasConvertidas = gruasConvertidas.filter(grua => grua.status !== 'Rascunho')
                   // Filtrar apenas disponíveis se solicitado
                   if (onlyAvailable) {
                     gruasConvertidas = gruasConvertidas.filter(grua => 

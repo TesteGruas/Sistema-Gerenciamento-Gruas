@@ -321,6 +321,13 @@ router.post('/', async (req, res) => {
       })
     }
 
+    if (grua.status === 'Rascunho') {
+      return res.status(400).json({
+        error: 'Grua em rascunho',
+        message: `A grua "${grua.name}" ainda é um rascunho e não pode ser vinculada a uma obra.`
+      })
+    }
+
     if (grua.status !== 'disponivel') {
       return res.status(400).json({
         error: 'Grua não disponível',
@@ -339,6 +346,13 @@ router.post('/', async (req, res) => {
       return res.status(400).json({
         error: 'Obra não encontrada',
         message: 'A obra especificada não existe'
+      })
+    }
+
+    if (obra.status === 'Rascunho') {
+      return res.status(400).json({
+        error: 'Obra em rascunho',
+        message: `A obra "${obra.nome}" ainda é um rascunho e não pode receber grua.`
       })
     }
 

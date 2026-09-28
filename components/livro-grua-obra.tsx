@@ -192,7 +192,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
   useEffect(() => {
     if (!obra || loading) return
 
-    const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+    const gruasDisponiveis = (obra.gruasVinculadas || obra.grua_obra || []).filter((item: any) => (item?.grua?.status || item?.status) !== 'Rascunho')
     if (gruasDisponiveis.length === 0) return
 
     const idGruaItem = (g: any) => String(g?.grua?.id ?? g?.grua_id ?? g?.id ?? "")
@@ -2357,6 +2357,18 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
     )
   }
 
+  if (obra.status === 'Rascunho') {
+    return (
+      <Card>
+        <CardContent className="py-8">
+          <p className="text-center text-gray-600">
+            Esta obra está em rascunho. O Livro da Grua fica liberado quando o cadastro obrigatório estiver completo.
+          </p>
+        </CardContent>
+      </Card>
+    )
+  }
+
   // Buscar relação da grua (pode estar em grua_obra ou gruasVinculadas)
   const relacaoGruaBase = gruaSelecionada?.relacao || 
     obra.gruasVinculadas?.find((g: any) => 
@@ -2575,7 +2587,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
     <div className="space-y-4 print:space-y-4">
       {/* Seletor de Grua */}
       {(() => {
-        const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+        const gruasDisponiveis = (obra.gruasVinculadas || obra.grua_obra || []).filter((item: any) => (item?.grua?.status || item?.status) !== 'Rascunho')
         if (gruasDisponiveis.length > 1) {
           return (
             <Card>
@@ -2620,7 +2632,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       })()}
 
       {(() => {
-        const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+        const gruasDisponiveis = (obra.gruasVinculadas || obra.grua_obra || []).filter((item: any) => (item?.grua?.status || item?.status) !== 'Rascunho')
         
         // Se não houver gruas disponíveis
         if (gruasDisponiveis.length === 0) {
@@ -2655,7 +2667,7 @@ export function LivroGruaObra({ obraId, gruaIdPreferencial, cachedData, onDataLo
       })()}
 
       {(() => {
-        const gruasDisponiveis = obra.gruasVinculadas || obra.grua_obra || []
+        const gruasDisponiveis = (obra.gruasVinculadas || obra.grua_obra || []).filter((item: any) => (item?.grua?.status || item?.status) !== 'Rascunho')
         
         // Se não houver grua selecionada mas houver gruas disponíveis, mostrar mensagem
         if (!gruaSelecionada && gruasDisponiveis.length > 0) {

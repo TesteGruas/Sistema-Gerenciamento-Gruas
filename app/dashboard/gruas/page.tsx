@@ -446,6 +446,7 @@ export default function GruasPage() {
       case 'em_obra': return 'bg-blue-100 text-blue-800'
       case 'manutencao': return 'bg-yellow-100 text-yellow-800'
       case 'inativa': return 'bg-gray-100 text-gray-800'
+      case 'Rascunho': return 'bg-amber-100 text-amber-800'
       default: return 'bg-gray-100 text-gray-800'
     }
   }
@@ -456,6 +457,7 @@ export default function GruasPage() {
       case 'em_obra': return <Building2 className="w-4 h-4" />
       case 'manutencao': return <Wrench className="w-4 h-4" />
       case 'inativa': return <Clock className="w-4 h-4" />
+      case 'Rascunho': return <Clock className="w-4 h-4" />
       default: return <Clock className="w-4 h-4" />
     }
   }
@@ -1296,8 +1298,27 @@ export default function GruasPage() {
     }
   }
 
+  const numeroInformado = (valor: string) => {
+    if (valor == null || String(valor).trim() === '') return null
+    const n = parseFloat(String(valor).replace(',', '.'))
+    return Number.isFinite(n) ? n : null
+  }
+  const inteiroInformado = (valor: string) => {
+    if (valor == null || String(valor).trim() === '') return null
+    const n = parseInt(String(valor), 10)
+    return Number.isFinite(n) ? n : null
+  }
+
   const handleCreateGrua = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!gruaFormData.name || gruaFormData.name.trim().length < 2) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Informe o nome da grua para salvar.",
+        variant: "destructive"
+      })
+      return
+    }
     
     try {
       startCreating()
@@ -1311,15 +1332,15 @@ export default function GruasPage() {
         fabricante: gruaFormData.fabricante,
         tipo: gruaFormData.tipo,
         lanca: gruaFormData.lanca,
-        altura_final: parseFloat(gruaFormData.altura_final) || 0,
-        ano: parseInt(gruaFormData.ano) || new Date().getFullYear(),
+        altura_final: numeroInformado(gruaFormData.altura_final),
+        ano: inteiroInformado(gruaFormData.ano),
         tipo_base: gruaFormData.tipo_base,
-        capacidade_1_cabo: parseFloat(gruaFormData.capacidade_1_cabo) || 0,
-        capacidade_2_cabos: parseFloat(gruaFormData.capacidade_2_cabos) || 0,
-        potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
+        capacidade_1_cabo: numeroInformado(gruaFormData.capacidade_1_cabo),
+        capacidade_2_cabos: numeroInformado(gruaFormData.capacidade_2_cabos),
+        potencia_instalada: numeroInformado(gruaFormData.potencia_instalada),
         voltagem: gruaFormData.voltagem,
-        velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
-        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim(),
+        velocidade_rotacao: numeroInformado(gruaFormData.velocidade_rotacao),
+        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim() || null,
         observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
         capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
         altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
@@ -1376,9 +1397,15 @@ export default function GruasPage() {
         })
         setIsCreateDialogOpen(false)
         
+        const salvouRascunho = Boolean((response as { rascunho?: boolean }).rascunho)
+        const faltando = ((response as { faltando?: Array<{ mensagem: string }> }).faltando) || []
         toast({
-        title: "Informação",
-        description: "Grua criada com sucesso!",
+        title: salvouRascunho ? "Grua salva como rascunho" : "Informação",
+        description: salvouRascunho
+          ? (faltando.length
+            ? `Ainda não liberada. ${faltando.map((campo) => campo.mensagem).join(' ')}`
+            : "A grua foi salva, mas ainda não está liberada para uso.")
+          : "Grua criada com sucesso!",
         variant: "default"
       })
       } else {
@@ -1404,6 +1431,14 @@ export default function GruasPage() {
     e.preventDefault()
     
     if (!gruaToEdit) return
+    if (!gruaFormData.name || gruaFormData.name.trim().length < 2) {
+      toast({
+        title: "Nome obrigatório",
+        description: "Informe o nome da grua para salvar.",
+        variant: "destructive"
+      })
+      return
+    }
     
     try {
       startUpdating()
@@ -1417,15 +1452,15 @@ export default function GruasPage() {
         fabricante: gruaFormData.fabricante,
         tipo: gruaFormData.tipo,
         lanca: gruaFormData.lanca,
-        altura_final: parseFloat(gruaFormData.altura_final) || 0,
-        ano: parseInt(gruaFormData.ano) || new Date().getFullYear(),
+        altura_final: numeroInformado(gruaFormData.altura_final),
+        ano: inteiroInformado(gruaFormData.ano),
         tipo_base: gruaFormData.tipo_base,
-        capacidade_1_cabo: parseFloat(gruaFormData.capacidade_1_cabo) || 0,
-        capacidade_2_cabos: parseFloat(gruaFormData.capacidade_2_cabos) || 0,
-        potencia_instalada: parseFloat(gruaFormData.potencia_instalada) || 0,
+        capacidade_1_cabo: numeroInformado(gruaFormData.capacidade_1_cabo),
+        capacidade_2_cabos: numeroInformado(gruaFormData.capacidade_2_cabos),
+        potencia_instalada: numeroInformado(gruaFormData.potencia_instalada),
         voltagem: gruaFormData.voltagem,
-        velocidade_rotacao: parseFloat(gruaFormData.velocidade_rotacao) || 0,
-        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim(),
+        velocidade_rotacao: numeroInformado(gruaFormData.velocidade_rotacao),
+        velocidade_elevacao: gruaFormData.velocidade_elevacao.trim() || null,
         observacoes: normalizarTextoOpcional(gruaFormData.observacoes) || undefined,
         capacidade_ponta: normalizarTextoOpcional(gruaFormData.capacidade_ponta) || undefined,
         altura_trabalho: normalizarTextoOpcional(gruaFormData.altura_trabalho) || undefined,
@@ -1483,9 +1518,15 @@ export default function GruasPage() {
         setIsEditDialogOpen(false)
         setGruaToEdit(null)
         
+        const salvouRascunho = Boolean((response as { rascunho?: boolean }).rascunho)
+        const faltando = ((response as { faltando?: Array<{ mensagem: string }> }).faltando) || []
         toast({
-        title: "Informação",
-        description: "Grua atualizada com sucesso!",
+        title: salvouRascunho ? "Grua salva como rascunho" : "Informação",
+        description: salvouRascunho
+          ? (faltando.length
+            ? `Ainda não liberada. ${faltando.map((campo) => campo.mensagem).join(' ')}`
+            : "A grua foi salva, mas ainda não está liberada para uso.")
+          : "Grua atualizada com sucesso!",
         variant: "default"
       })
       } else {
@@ -2183,6 +2224,7 @@ export default function GruasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="disponivel">Disponível</SelectItem>
+                    <SelectItem value="Rascunho">Rascunho</SelectItem>
                     <SelectItem value="em_obra">Em Obra</SelectItem>
                     <SelectItem value="manutencao">Manutenção</SelectItem>
                     <SelectItem value="inativa">Inativa</SelectItem>
@@ -2559,6 +2601,7 @@ export default function GruasPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="disponivel">Disponível</SelectItem>
+                    <SelectItem value="Rascunho">Rascunho</SelectItem>
                     <SelectItem value="em_obra">Em Obra</SelectItem>
                     <SelectItem value="manutencao">Manutenção</SelectItem>
                     <SelectItem value="inativa">Inativa</SelectItem>

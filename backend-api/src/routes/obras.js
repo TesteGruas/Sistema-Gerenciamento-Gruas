@@ -847,6 +847,40 @@ function abaDoCampoObra(path) {
   return 'obra'
 }
 
+function textoPreenchido(valor) {
+  return valor != null && String(valor).trim() !== ''
+}
+
+function nomeObraValido(dados) {
+  return textoPreenchido(dados?.nome) && String(dados.nome).trim().length >= 2
+}
+
+function faltandoCadastroObra(dados) {
+  const fonte = dados || {}
+  const regras = [
+    { campo: 'cliente_id', mensagem: 'Cliente é obrigatório.', aba: 'obra', ok: Number(fonte.cliente_id) > 0 },
+    { campo: 'endereco_rua', mensagem: 'Rua é obrigatória.', aba: 'obra', ok: textoPreenchido(fonte.endereco_rua) },
+    { campo: 'endereco_numero', mensagem: 'Número é obrigatório.', aba: 'obra', ok: textoPreenchido(fonte.endereco_numero) },
+    { campo: 'endereco_bairro', mensagem: 'Bairro é obrigatório.', aba: 'obra', ok: textoPreenchido(fonte.endereco_bairro) },
+    { campo: 'cidade', mensagem: 'Cidade é obrigatória.', aba: 'obra', ok: textoPreenchido(fonte.cidade) },
+    { campo: 'estado', mensagem: 'Estado é obrigatório.', aba: 'obra', ok: textoPreenchido(fonte.estado) },
+    { campo: 'cep', mensagem: 'CEP é obrigatório.', aba: 'obra', ok: textoPreenchido(fonte.cep) },
+    { campo: 'tipo', mensagem: 'Tipo de Obra é obrigatório.', aba: 'obra', ok: textoPreenchido(fonte.tipo) },
+    { campo: 'cno', mensagem: 'CNO da Obra é obrigatório.', aba: 'documentos', ok: textoPreenchido(fonte.cno) },
+    { campo: 'art_numero', mensagem: 'Número da ART é obrigatório.', aba: 'documentos', ok: textoPreenchido(fonte.art_numero) },
+    { campo: 'art_arquivo', mensagem: 'Arquivo da ART é obrigatório.', aba: 'documentos', ok: textoPreenchido(fonte.art_arquivo) },
+    { campo: 'apolice_numero', mensagem: 'Número da Apólice de Seguro é obrigatório.', aba: 'documentos', ok: textoPreenchido(fonte.apolice_numero) },
+    { campo: 'apolice_arquivo', mensagem: 'Arquivo da Apólice de Seguro é obrigatório.', aba: 'documentos', ok: textoPreenchido(fonte.apolice_arquivo) }
+  ]
+  return regras.filter((regra) => !regra.ok).map(({ campo, mensagem, aba }) => ({ campo, mensagem, aba }))
+}
+
+function resolverStatusObra(statusInformado, faltando) {
+  if (faltando.length) return 'Rascunho'
+  if (!statusInformado || statusInformado === 'Rascunho') return 'Em Andamento'
+  return statusInformado
+}
+
 function descreverErroCampoObra(detail) {
   const path = Array.isArray(detail.path) ? detail.path : []
   const chave = path.filter((parte) => typeof parte !== 'number').join('.')
@@ -881,7 +915,7 @@ const obraSchema = Joi.object({
   contato_obra: Joi.string().allow('', null).optional(),
   telefone_obra: Joi.string().allow('', null).optional(),
   email_obra: Joi.string().email().allow('', null).optional(),
-  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').default('Planejamento'),
+  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada', 'Rascunho').default('Planejamento'),
   // Novos campos adicionados - todos opcionais conforme tabela
   descricao: Joi.string().allow('', null).optional(),
   canteiro: Joi.string().allow('', null).optional(),
@@ -1029,6 +1063,11 @@ const obraSchema = Joi.object({
   ).allow(null).optional()
 })
 
+const obraSchemaRascunho = obraSchema.fork(
+  ['cliente_id', 'cidade', 'estado', 'tipo'],
+  (schema) => Joi.alternatives().try(schema, Joi.valid(null, '')).optional()
+)
+
 // Schema para atualização parcial de obra (PUT/PATCH)
 const obraUpdateSchema = Joi.object({
   nome: Joi.string().min(2).optional(),
@@ -1045,7 +1084,7 @@ const obraUpdateSchema = Joi.object({
   contato_obra: Joi.string().allow('', null).optional(),
   telefone_obra: Joi.string().allow('', null).optional(),
   email_obra: Joi.string().email().allow('', null).optional(),
-  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada').optional(),
+  status: Joi.string().valid('Planejamento', 'Em Andamento', 'Pausada', 'Concluída', 'Cancelada', 'Rascunho').optional(),
   descricao: Joi.string().allow('', null).optional(),
   canteiro: Joi.string().allow('', null).optional(),
   data_inicio: Joi.date().allow(null).optional(),
@@ -2206,7 +2245,16 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     console.log('🔍 DEBUG - Tipo de gruas no req.body:', typeof req.body.gruas)
     console.log('🔍 DEBUG - É array?', Array.isArray(req.body.gruas))
     
-    const { error, value } = obraSchema.validate(req.body, {
+    if (!nomeObraValido(req.body)) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'Nome da Obra é obrigatório.',
+        campos: [{ mensagem: 'Nome da Obra é obrigatório.', aba: 'obra', campo: 'nome' }]
+      })
+    }
+
+    const cadastroIncompleto = faltandoCadastroObra(req.body).length > 0
+    const { error, value } = (cadastroIncompleto ? obraSchemaRascunho : obraSchema).validate(req.body, {
       stripUnknown: false, // Não remover campos desconhecidos
       abortEarly: false // Retornar todos os erros, não apenas o primeiro
     })
@@ -2372,6 +2420,9 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       }
     }
 
+    const faltandoResposta = faltandoCadastroObra(value)
+    const statusObra = resolverStatusObra(value.status, faltandoResposta)
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const obraData = {
       nome: value.nome,
@@ -2388,7 +2439,7 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
       contato_obra: value.contato_obra,
       telefone_obra: value.telefone_obra,
       email_obra: value.email_obra,
-      status: value.status,
+      status: statusObra,
       // Novos campos adicionados
       descricao: value.descricao,
       data_inicio: value.data_inicio,
@@ -3103,7 +3154,9 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
     res.status(201).json({
       success: true,
       data: anexarOperadoresNaObra(obraCompleta || data, await buscarOperadoresObra((obraCompleta || data).id)),
-      message: 'Obra criada com sucesso',
+      rascunho: statusObra === 'Rascunho',
+      faltando: faltandoResposta,
+      message: statusObra === 'Rascunho' ? 'Obra salva como rascunho' : 'Obra criada com sucesso',
       warnings: errosGruas.length > 0 ? {
         message: `${errosGruas.length} grua(s) não puderam ser vinculada(s)`,
         erros: errosGruas
@@ -3240,7 +3293,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
 
     const { data: obraAtualExistente, error: obraAtualError } = await supabaseAdmin
       .from('obras')
-      .select('id, endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento, cidade, estado, cep, latitude, longitude')
+      .select('id, nome, cliente_id, tipo, status, endereco, endereco_rua, endereco_numero, endereco_bairro, endereco_complemento, cidade, estado, cep, cno, art_numero, art_arquivo, apolice_numero, apolice_arquivo, latitude, longitude')
       .eq('id', id)
       .single()
 
@@ -3399,6 +3452,30 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       }
     }
 
+    const obraMesclada = {
+      ...obraAtualExistente,
+      ...Object.fromEntries(Object.entries(value).filter(([, valor]) => valor !== undefined))
+    }
+    if (!nomeObraValido(obraMesclada)) {
+      return res.status(400).json({
+        error: 'Dados inválidos',
+        message: 'Nome da Obra é obrigatório.',
+        campos: [{ mensagem: 'Nome da Obra é obrigatório.', aba: 'obra', campo: 'nome' }]
+      })
+    }
+    const faltandoAtualizacao = faltandoCadastroObra(obraMesclada)
+    const reavaliarRascunho = Object.keys(value).some((chave) => [
+      'nome', 'cliente_id', 'endereco_rua', 'endereco_numero', 'endereco_bairro',
+      'cidade', 'estado', 'cep', 'tipo', 'cno', 'art_numero', 'art_arquivo',
+      'apolice_numero', 'apolice_arquivo', 'status'
+    ].includes(chave))
+    const statusObraAtualizacao = reavaliarRascunho
+      ? resolverStatusObra(
+        value.status !== undefined ? value.status : obraAtualExistente.status,
+        faltandoAtualizacao
+      )
+      : (value.status !== undefined ? value.status : obraAtualExistente.status)
+
     // Preparar dados da obra (incluindo todos os campos da tabela)
     const updateData = {
       nome: value.nome,
@@ -3415,7 +3492,7 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
       contato_obra: value.contato_obra,
       telefone_obra: value.telefone_obra,
       email_obra: value.email_obra,
-      status: value.status,
+      status: statusObraAtualizacao,
       // Novos campos adicionados
       descricao: value.descricao,
       canteiro: value.canteiro,
@@ -3720,7 +3797,9 @@ router.put('/:id', authenticateToken, requirePermission('obras:editar'), async (
         obraAtualizadaCompleta || data,
         await buscarOperadoresObra((obraAtualizadaCompleta || data).id)
       ),
-      message: 'Obra atualizada com sucesso'
+      rascunho: statusObraAtualizacao === 'Rascunho',
+      faltando: faltandoAtualizacao,
+      message: statusObraAtualizacao === 'Rascunho' ? 'Obra salva como rascunho' : 'Obra atualizada com sucesso'
     })
   } catch (error) {
     console.error('Erro ao atualizar obra:', error)
@@ -4485,7 +4564,28 @@ router.put('/:id/documentos', authenticateToken, requirePermission('obras:editar
 
     if (error) throw error
 
-    return res.json({ success: true, data })
+    const faltandoDocumentos = faltandoCadastroObra(data)
+    const statusDocumentos = resolverStatusObra(
+      faltandoDocumentos.length ? 'Rascunho' : data.status,
+      faltandoDocumentos
+    )
+    let obraDocumentos = data
+    if (statusDocumentos !== data.status) {
+      const { data: obraStatus } = await supabaseAdmin
+        .from('obras')
+        .update({ status: statusDocumentos, updated_at: new Date().toISOString() })
+        .eq('id', id)
+        .select('*')
+        .single()
+      if (obraStatus) obraDocumentos = obraStatus
+    }
+
+    return res.json({
+      success: true,
+      data: obraDocumentos,
+      rascunho: obraDocumentos.status === 'Rascunho',
+      faltando: faltandoDocumentos
+    })
   } catch (error) {
     console.error('Erro ao atualizar documentos da obra:', error)
     res.status(500).json({ error: 'Erro interno do servidor', message: error.message })

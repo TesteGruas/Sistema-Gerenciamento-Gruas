@@ -577,9 +577,15 @@ function ObraDetailsPageContent() {
       const response = await obrasApi.atualizarObra(parseInt(obra.id), updateData)
       
       if (response.success) {
+        const salvouRascunho = Boolean((response as { rascunho?: boolean }).rascunho)
+        const faltando = ((response as { faltando?: Array<{ mensagem: string }> }).faltando) || []
         toast({
-          title: "Sucesso",
-          description: "Obra atualizada com sucesso",
+          title: salvouRascunho ? "Obra salva como rascunho" : "Sucesso",
+          description: salvouRascunho
+            ? (faltando.length
+              ? `Ainda não liberada. ${faltando.map((campo) => campo.mensagem).join(' ')}`
+              : "A obra foi salva, mas ainda não está liberada para uso.")
+            : "Obra atualizada com sucesso",
           variant: "default"
         })
         

@@ -959,10 +959,11 @@ export default function NovaObraPage() {
       camposFaltando.push({ mensagem: 'Arquivo da Apólice de Seguro é obrigatório.', aba: 'documentos' })
     }
     
-    if (camposFaltando.length > 0) {
+    const faltaNome = camposFaltando.some((campo) => campo.mensagem.startsWith('Nome da Obra'))
+    if (faltaNome) {
       e.preventDefault()
       e.stopPropagation()
-      exibirErrosCampos(camposFaltando)
+      exibirErrosCampos(camposFaltando.filter((campo) => campo.mensagem.startsWith('Nome da Obra')))
       return
     }
     
@@ -1363,6 +1364,8 @@ export default function NovaObraPage() {
       if (!response.success || !response.data?.id) {
         throw new Error('Erro ao criar obra')
       }
+      let salvouComoRascunho = Boolean((response as { rascunho?: boolean }).rascunho)
+      let faltandoRascunho = ((response as { faltando?: Array<{ mensagem: string; aba?: string }> }).faltando) || []
       
       const obraId = response.data.id
       console.debug('\n✅ Obra criada com ID:', obraId)
@@ -1627,6 +1630,10 @@ export default function NovaObraPage() {
         console.debug('📤 Dados de documentos para atualizar:', JSON.stringify(documentosUpdate, null, 2))
         const documentosResponse = await obrasApi.atualizarDocumentos(obraId, documentosUpdate)
         console.debug('✅ Documentos atualizados:', JSON.stringify(documentosResponse, null, 2))
+        if (typeof (documentosResponse as { rascunho?: boolean }).rascunho === 'boolean') {
+          salvouComoRascunho = Boolean((documentosResponse as { rascunho?: boolean }).rascunho)
+          faltandoRascunho = ((documentosResponse as { faltando?: Array<{ mensagem: string; aba?: string }> }).faltando) || []
+        }
       } catch (uploadError) {
         if (TRAVAR_FLUXO_EM_ERRO) {
           interromperFluxo('Upload de arquivos/documentos', uploadError, {
@@ -2070,10 +2077,24 @@ export default function NovaObraPage() {
         })
       }
       
-      toast({
-        title: "Sucesso",
-        description: "Obra criada com sucesso!"
-      })
+      if (salvouComoRascunho) {
+        const primeiraAba = faltandoRascunho.find((campo) => campo.aba)?.aba
+        if (primeiraAba) setAbaFormulario(primeiraAba)
+        setErrosCampos(faltandoRascunho)
+        setError(faltandoRascunho.map((campo) => campo.mensagem).join('\n') || 'Obra salva como rascunho.')
+        toast({
+          title: "Obra salva como rascunho",
+          description: faltandoRascunho.length
+            ? `Ainda não liberada. ${faltandoRascunho.map((campo) => campo.mensagem).join(' ')}`
+            : "A obra foi salva, mas ainda não está liberada para uso.",
+          duration: 10000
+        })
+      } else {
+        toast({
+          title: "Sucesso",
+          description: "Obra criada com sucesso!"
+        })
+      }
       // Resumo final de tudo que foi enviado e salvo
       console.debug('\n═══════════════════════════════════════════════════════════')
       console.debug('📊 RESUMO FINAL - TUDO QUE FOI ENVIADO E SALVO')

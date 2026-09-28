@@ -1709,6 +1709,7 @@ router.post('/registros', async (req, res) => {
                 latitude,
                 longitude,
                 raio_permitido,
+                status,
                 endereco,
                 cidade,
                 estado
@@ -1720,13 +1721,13 @@ router.post('/registros', async (req, res) => {
             .limit(1)
             .single();
 
-          if (!gruaError && gruaFuncionario && gruaFuncionario.grua) {
+          if (!gruaError && gruaFuncionario && gruaFuncionario.grua && gruaFuncionario.grua.status !== 'Rascunho') {
             const grua = gruaFuncionario.grua;
             tipoAlvo = 'grua';
             nomeAlvo = grua.name || grua.id;
 
             // Se a grua tem obra associada com coordenadas, usar a obra
-            if (gruaFuncionario.obra && gruaFuncionario.obra.latitude && gruaFuncionario.obra.longitude) {
+            if (gruaFuncionario.obra && gruaFuncionario.obra.status !== 'Rascunho' && gruaFuncionario.obra.latitude && gruaFuncionario.obra.longitude) {
               coordenadasAlvo = {
                 lat: parseFloat(gruaFuncionario.obra.latitude),
                 lng: parseFloat(gruaFuncionario.obra.longitude)
@@ -1767,11 +1768,11 @@ router.post('/registros', async (req, res) => {
           if (!coordenadasAlvo && funcionario.obra_atual_id) {
             const { data: obra, error: obraError } = await supabaseAdmin
               .from('obras')
-              .select('id, nome, latitude, longitude, raio_permitido')
+              .select('id, nome, latitude, longitude, raio_permitido, status')
               .eq('id', funcionario.obra_atual_id)
               .single();
 
-            if (!obraError && obra && obra.latitude && obra.longitude) {
+            if (!obraError && obra && obra.status !== 'Rascunho' && obra.latitude && obra.longitude) {
               coordenadasAlvo = {
                 lat: parseFloat(obra.latitude),
                 lng: parseFloat(obra.longitude)

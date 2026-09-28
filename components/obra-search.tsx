@@ -50,9 +50,11 @@ export function ObraSearch({
           
           // Filtrar por nome, endereço ou cidade
           const obrasFiltradas = obrasConvertidas.filter(obra => 
+            obra.status !== 'Rascunho' && (
             obra.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
             obra.endereco?.toLowerCase().includes(searchTerm.toLowerCase()) ||
             obra.cidade?.toLowerCase().includes(searchTerm.toLowerCase())
+            )
           )
           
           setObras(obrasFiltradas.slice(0, 10)) // Limitar a 10 resultados
