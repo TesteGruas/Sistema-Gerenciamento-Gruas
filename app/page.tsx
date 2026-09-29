@@ -100,7 +100,7 @@ function LoginPageContent() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          email: email,
+          email: String(email || '').trim().toLowerCase(),
           password: password
         })
       })

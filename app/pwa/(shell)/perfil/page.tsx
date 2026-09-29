@@ -96,10 +96,22 @@ function formatarMoedaBrl(val: number | null | undefined): string {
 
 function formatarTelefoneBr(val: string | null | undefined): string {
   if (!val || typeof val !== "string") return "Não informado"
-  const d = val.replace(/\D/g, "")
+  let d = val.replace(/\D/g, "")
+  if (d.startsWith("55") && (d.length === 12 || d.length === 13)) d = d.slice(2)
   if (d.length === 11) return d.replace(/(\d{2})(\d{5})(\d{4})/, "($1) $2-$3")
   if (d.length === 10) return d.replace(/(\d{2})(\d{4})(\d{4})/, "($1) $2-$3")
   return val
+}
+
+/** Data de cadastro (YYYY-MM-DD) sem deslocar o dia pelo fuso. */
+function formatarDataBr(val: unknown): string {
+  if (val == null || val === "") return "Não informado"
+  const raw = String(val)
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})/)
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return "Não informado"
+  return d.toLocaleDateString("pt-BR")
 }
 
 /** Mescla objetos priorizando valores não vazios de `extra` */
@@ -527,6 +539,34 @@ function PWAPerfilPageContent() {
           }
         } else if (!merged) {
           console.warn("[PERFIL] meu-perfil sem dados e /me sem perfil — usando localStorage")
+        }
+
+        const funcionarioIdPerfil = Number(merged?.funcionario_id || 0)
+        if (funcionarioIdPerfil > 0) {
+          const funcRes = await fetch(`/api/funcionarios/${funcionarioIdPerfil}`, { headers })
+          const funcJson = await funcRes.json().catch(() => ({}))
+          if (funcJson.success && funcJson.data && typeof funcJson.data === "object") {
+            const f = funcJson.data as Record<string, unknown>
+            const cargoInfo = f.cargo_info as { nome?: string } | null | undefined
+            merged = mergePerfilPreferindoExtra(merged || {}, {
+              nome: f.nome,
+              email: f.email,
+              telefone: f.telefone,
+              cargo: cargoInfo?.nome || f.cargo,
+              cpf: f.cpf,
+              turno: f.turno,
+              data_admissao: f.data_admissao,
+              data_nascimento: f.data_nascimento,
+              endereco: f.endereco,
+              cidade: f.cidade,
+              estado: f.estado,
+              cep: f.cep,
+              status: f.status,
+              salario: f.salario,
+              departamento: f.departamento,
+              funcionario_id: f.id,
+            })
+          }
         }
 
         if (merged) {
@@ -1624,13 +1664,11 @@ function PWAPerfilPageContent() {
                   <p className="text-sm font-medium tabular-nums text-foreground">
                     {isResponsavelObra
                       ? funcionarioCompleto?.usuario_login || "Não informado"
-                      : funcionarioCompleto?.data_admissao
-                        ? new Date(String(funcionarioCompleto.data_admissao)).toLocaleDateString("pt-BR")
-                        : (user as any)?.data_admissao
-                          ? new Date(String((user as any).data_admissao)).toLocaleDateString("pt-BR")
-                          : (user as any)?.dataAdmissao
-                            ? new Date(String((user as any).dataAdmissao)).toLocaleDateString("pt-BR")
-                            : "Não informado"}
+                      : formatarDataBr(
+                          funcionarioCompleto?.data_admissao ||
+                            (user as any)?.data_admissao ||
+                            (user as any)?.dataAdmissao
+                        )}
                   </p>
                 </div>
                 <div className="space-y-1">
@@ -1688,11 +1726,7 @@ function PWAPerfilPageContent() {
                 <div className="space-y-1">
                   <p className="text-xs font-medium text-muted-foreground">Data de nascimento</p>
                   <p className="text-sm font-medium tabular-nums text-foreground">
-                    {(funcionarioCompleto as any)?.data_nascimento
-                      ? new Date(String((funcionarioCompleto as any).data_nascimento)).toLocaleDateString(
-                          "pt-BR"
-                        )
-                      : "Não informado"}
+                    {formatarDataBr((funcionarioCompleto as any)?.data_nascimento)}
                   </p>
                 </div>
               </div>

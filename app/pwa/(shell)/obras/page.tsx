@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useRouter } from "next/navigation"
 import { obrasApi, Obra } from "@/lib/api-obras"
 import { clientesApi } from "@/lib/api-clientes"
+import { getApiOrigin } from "@/lib/runtime-config"
 
 export default function PWAObrasPage() {
   const router = useRouter()
@@ -96,6 +97,9 @@ export default function PWAObrasPage() {
 
       const userData = JSON.parse(userDataStr)
       const userId = userData?.user?.id || userData?.id
+      const funcionarioId = userData?.profile?.funcionario_id
+        || userData?.funcionario_id
+        || userData?.user_metadata?.funcionario_id
 
       if (!userId) {
         toast({
@@ -147,6 +151,38 @@ export default function PWAObrasPage() {
         }
         setIsLoading(false)
         return
+      }
+
+      if (funcionarioId) {
+        const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+        const respostaFuncionario = await fetch(`${getApiOrigin()}/api/funcionarios/${funcionarioId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {}
+        })
+        const jsonFuncionario = await respostaFuncionario.json()
+        if (respostaFuncionario.ok && jsonFuncionario.success && jsonFuncionario.data) {
+          const alocacoes = (jsonFuncionario.data.obras_vinculadas || jsonFuncionario.data.funcionarios_obras || [])
+            .filter((alocacao: any) => String(alocacao.status || '').toLowerCase() === 'ativo' && !alocacao.data_fim)
+          const obrasDoFuncionario = alocacoes
+            .map((alocacao: any) => {
+              const obra = alocacao.obras || {}
+              return {
+                id: obra.id || alocacao.obra_id,
+                nome: obra.nome,
+                cidade: obra.cidade,
+                estado: obra.estado,
+                status: obra.status,
+                tipo: obra.tipo,
+                clientes: obra.cliente ? { nome: obra.cliente.nome } : undefined,
+                data_inicio: alocacao.data_inicio,
+                data_fim: alocacao.data_fim,
+              }
+            })
+            .filter((obra: any) => obra.id && obra.status !== 'Rascunho') as Obra[]
+          setObras(obrasDoFuncionario)
+          localStorage.setItem('cached_obras', JSON.stringify(obrasDoFuncionario))
+          setIsLoading(false)
+          return
+        }
       }
 
       // Buscar cliente pelo usuario_id

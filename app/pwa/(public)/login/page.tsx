@@ -132,7 +132,7 @@ function PWALoginPageContent(): JSX.Element {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          email: formData.usuario,
+          email: String(formData.usuario || '').trim().toLowerCase(),
           password: formData.senha
         })
       })

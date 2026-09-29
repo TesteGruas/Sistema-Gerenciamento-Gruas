@@ -8,6 +8,7 @@ import { enviarMensagemForgotPassword } from '../services/whatsapp-service.js'
 import { getRolePermissions, getRoleLevel, normalizeRoleName } from '../config/roles.js'
 import { resolvePwaProfile, isFuncionarioAtivo } from '../utils/pwa-profile.js'
 import { buscarClientePorUsuarioComAutoVinculo } from '../utils/cliente-usuario-link.js'
+import { resolverUsuarioPorEmail, normalizarEmail } from '../utils/resolver-usuario-email.js'
 
 const router = express.Router()
 
@@ -85,13 +86,13 @@ async function syncProfileWithFuncionario(profile) {
       email,
       cpf,
       telefone,
-      data_nascimento,
       endereco,
       cidade,
       estado,
       cep,
       status,
       cargo,
+      turno,
       data_admissao,
       salario
     `)
@@ -120,8 +121,50 @@ async function syncProfileWithFuncionario(profile) {
     cep: funcionario.cep || profile.cep,
     status: funcionario.status || profile.status,
     cargo: funcionario.cargo || profile.cargo,
+    turno: funcionario.turno || profile.turno,
     data_admissao: funcionario.data_admissao || profile.data_admissao,
     salario: funcionario.salario ?? profile.salario
+  }
+}
+
+/** Se o login ainda não aponta para o colaborador, liga pelo e-mail do cadastro de RH. */
+async function garantirVinculoFuncionario(profile) {
+  if (!profile?.id || profile.funcionario_id) return profile
+
+  const email = String(profile.email || '').trim()
+  if (!email) return profile
+
+  const { data, error } = await supabaseAdmin
+    .from('funcionarios')
+    .select('id')
+    .ilike('email', email)
+    .is('deleted_at', null)
+    .limit(1)
+
+  if (error || !data?.[0]?.id) return profile
+
+  const funcionarioId = data[0].id
+  const { error: updateError } = await supabaseAdmin
+    .from('usuarios')
+    .update({
+      funcionario_id: funcionarioId,
+      eh_funcionario: true,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', profile.id)
+    .is('funcionario_id', null)
+
+  if (updateError) {
+    console.warn(
+      `⚠️  Não foi possível vincular usuário ${profile.id} ao funcionário ${funcionarioId}:`,
+      updateError.message
+    )
+  }
+
+  return {
+    ...profile,
+    funcionario_id: funcionarioId,
+    eh_funcionario: true
   }
 }
 
@@ -359,20 +402,12 @@ router.post('/login', async (req, res) => {
       })
     }
 
-    // Buscar perfil do usuário
-    const { data: rawProfile, error: profileError } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('email', email)
-      .single()
+    // Buscar perfil do usuário (e-mail sem diferenciar maiúsculas; prefere o vínculo com funcionário)
+    const rawProfile = await resolverUsuarioPorEmail(supabaseAdmin, authData.user?.email || email)
 
     let profile = rawProfile
     if (profile?.funcionario_id) {
       profile = await syncProfileWithFuncionario(rawProfile)
-    }
-
-    if (profileError) {
-      console.error('Erro ao buscar perfil:', profileError)
     }
 
     // Buscar perfil do usuário (Sistema Simplificado v2.0)
@@ -523,7 +558,8 @@ router.post('/register', async (req, res) => {
       })
     }
 
-    const { email, password, nome, cpf, telefone } = value
+    const { password, nome, cpf, telefone } = value
+    const email = normalizarEmail(value.email)
 
     // Registrar no Supabase Auth
     const { data: authData, error: authError } = await supabase.auth.signUp({
@@ -642,18 +678,7 @@ router.get('/me', authenticateToken, async (req, res) => {
   try {
     // Buscar perfil completo do usuário
     // Usar .maybeSingle() ao invés de .single() para evitar erro quando não há resultado
-    let { data: profile, error } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('email', req.user.email)
-      .maybeSingle()
-
-    if (error) {
-      return res.status(404).json({
-        error: 'Perfil não encontrado',
-        message: error.message
-      })
-    }
+    let profile = await resolverUsuarioPorEmail(supabaseAdmin, req.user.email)
 
     // Se o usuário não existe na tabela, criar automaticamente a partir dos dados do Auth
     if (!profile) {
@@ -671,7 +696,7 @@ router.get('/me', authenticateToken, async (req, res) => {
       const { data: novoProfile, error: createError } = await supabaseAdmin
         .from('usuarios')
         .insert({
-          email: req.user.email,
+          email: normalizarEmail(req.user.email),
           nome: nome,
           cpf: cpf,
           telefone: telefone,
@@ -684,17 +709,27 @@ router.get('/me', authenticateToken, async (req, res) => {
         .single()
 
       if (createError) {
-        console.error('❌ Erro ao criar usuário na tabela:', createError)
-        return res.status(500).json({
-          error: 'Erro ao criar perfil',
-          message: createError.message
-        })
+        const jaExiste = String(createError.message || '').includes('duplicate key')
+        if (jaExiste) {
+          profile = await resolverUsuarioPorEmail(supabaseAdmin, req.user.email)
+        }
+        if (!profile) {
+          console.error('❌ Erro ao criar usuário na tabela:', createError)
+          return res.status(500).json({
+            error: 'Erro ao criar perfil',
+            message: createError.message
+          })
+        }
+      } else {
+        profile = novoProfile
       }
 
-      profile = await syncProfileWithFuncionario(novoProfile)
+      profile = await garantirVinculoFuncionario(profile)
+      profile = await syncProfileWithFuncionario(profile)
       profile = await garantirFlagFuncionario(profile)
       console.log(`✅ Usuário criado com sucesso na tabela: ${req.user.email} (ID: ${profile.id})`)
     } else {
+      profile = await garantirVinculoFuncionario(profile)
       profile = await syncProfileWithFuncionario(profile)
       profile = await garantirFlagFuncionario(profile)
     }
@@ -828,19 +863,13 @@ router.get('/me', authenticateToken, async (req, res) => {
  */
 router.get('/meu-perfil', authenticateToken, async (req, res) => {
   try {
-    const { data: usuario, error: userError } = await supabaseAdmin
-      .from('usuarios')
-      .select('*')
-      .eq('email', req.user.email)
-      .maybeSingle()
-
-    if (userError) {
-      return res.status(500).json({ success: false, error: 'Erro ao buscar usuário', message: userError.message })
-    }
+    let usuario = await resolverUsuarioPorEmail(supabaseAdmin, req.user.email)
 
     if (!usuario) {
       return res.status(404).json({ success: false, error: 'Usuário não encontrado' })
     }
+
+    usuario = await garantirVinculoFuncionario(usuario)
 
     const { data: perfilUsuario } = await supabaseAdmin
       .from('usuario_perfis')
@@ -871,13 +900,6 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
     const isClientePerfil =
       rawPerfil === 'clientes' || rawPerfil === 'cliente' || rawPerfil === 'visualizador' || role === 'Clientes'
     const isSupervisorPerfil = rawPerfil === 'supervisores' || rawPerfil === 'supervisor'
-    const isOperarioPerfil =
-      rawPerfil === 'operários' ||
-      rawPerfil === 'operarios' ||
-      rawPerfil === 'operário' ||
-      rawPerfil === 'operario' ||
-      rawPerfil === 'operador' ||
-      role === 'Operários'
 
     // 1) Cliente — prioridade sobre funcionario_id/responsavel_obra legados
     if (isClientePerfil) {
@@ -948,15 +970,15 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
       }
     }
 
-    // 3) Operário / funcionário ativo
-    if (isOperarioPerfil && usuario.funcionario_id && funcionarioAtivo) {
+    // 3) Colaborador vinculado — independente do nome do perfil de acesso
+    if (usuario.funcionario_id && funcionarioAtivo) {
       const { data: funcionario, error: funcError } = await supabaseAdmin
         .from('funcionarios')
         .select(`
           *,
-          cargo_info:cargos(id, nome, departamento),
+          cargo_info:cargos(id, nome),
           funcionarios_obras(
-            id, obra_id, data_inicio, data_fim, ativo,
+            id, obra_id, data_inicio, data_fim, status,
             obras(id, nome, status)
           )
         `)
@@ -978,18 +1000,23 @@ router.get('/meu-perfil', authenticateToken, async (req, res) => {
             email: funcionario.email || usuario.email,
             telefone: funcionario.telefone,
             cargo: funcionario.cargo_info?.nome || funcionario.cargo || usuario.cargo,
-            departamento: funcionario.cargo_info?.departamento,
+            departamento: funcionario.departamento || null,
             cpf: funcionario.cpf,
+            turno: funcionario.turno,
             data_admissao: funcionario.data_admissao,
             data_nascimento: funcionario.data_nascimento,
             endereco: funcionario.endereco,
+            cidade: funcionario.cidade,
+            estado: funcionario.estado,
+            cep: funcionario.cep,
             status: funcionario.status,
             salario: funcionario.salario,
             foto_url: funcionario.foto_url,
             usuario_id: usuario.id,
             funcionario_id: funcionario.id,
+            perfil_acesso_nome: perfilNome,
             obras: (funcionario.funcionarios_obras || [])
-              .filter((fo) => fo.ativo)
+              .filter((fo) => String(fo.status || '').toLowerCase() === 'ativo' && !fo.data_fim)
               .map((fo) => ({
                 obra_id: fo.obra_id,
                 obra_nome: fo.obras?.nome || '',

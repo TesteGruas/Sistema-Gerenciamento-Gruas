@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../config/supabase.js'
 import { sendWelcomeEmail, sendPasswordResetEmail } from '../services/email.service.js'
 import { authenticateToken, requirePermission } from '../middleware/auth.js'
 import { sortRecordsInMemory } from '../utils/apply-list-sort.js'
+import { normalizarEmail, atualizarEmailNoAuth, removerLoginAuthPorEmail } from '../utils/resolver-usuario-email.js'
 
 const router = express.Router()
 
@@ -595,6 +596,7 @@ router.post('/', authenticateToken, requirePermission('usuarios:criar'), async (
 
     // Separar perfil_id e senha dos dados do usuário
     const { perfil_id, senha, ...userData } = value
+    if (userData.email) userData.email = normalizarEmail(userData.email)
     
     // Usar senha fornecida ou gerar senha temporária
     const senhaUsuario = senha || generateSecurePassword()
@@ -747,6 +749,7 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
 
     // Separar perfil_id e senha dos dados do usuário
     const { perfil_id, senha, ...userData } = value
+    if (userData.email) userData.email = normalizarEmail(userData.email)
     
     // Se a senha foi fornecida, atualizar no Supabase Auth
     if (senha) {
@@ -780,6 +783,16 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
       }
     }
     
+    let emailAnteriorUsuario = null
+    if (userData.email) {
+      const { data: usuarioAntes } = await supabaseAdmin
+        .from('usuarios')
+        .select('email')
+        .eq('id', id)
+        .maybeSingle()
+      emailAnteriorUsuario = usuarioAntes?.email || null
+    }
+
     const updateData = {
       ...userData,
       updated_at: new Date().toISOString()
@@ -803,6 +816,10 @@ router.put('/:id', authenticateToken, requirePermission('usuarios:editar'), asyn
         error: 'Erro ao atualizar usuário',
         message: updateError.message
       })
+    }
+
+    if (userData.email) {
+      await atualizarEmailNoAuth(supabaseAdmin, emailAnteriorUsuario, userData.email)
     }
 
     // Enviar WhatsApp com nova senha (não bloqueia a resposta se falhar)
@@ -1045,6 +1062,27 @@ router.delete('/:id', authenticateToken, requirePermission('usuarios:deletar'), 
   try {
     const { id } = req.params
 
+    const { data: usuario, error: buscaError } = await supabaseAdmin
+      .from('usuarios')
+      .select('id, email, nome')
+      .eq('id', id)
+      .maybeSingle()
+
+    if (buscaError) {
+      return res.status(500).json({
+        error: 'Erro ao excluir usuário',
+        message: buscaError.message
+      })
+    }
+    if (!usuario) {
+      return res.status(404).json({
+        error: 'Usuário não encontrado',
+        message: 'O usuário com o ID especificado não existe'
+      })
+    }
+
+    await supabaseAdmin.from('usuario_perfis').delete().eq('usuario_id', id)
+
     const { error } = await supabaseAdmin
       .from('usuarios')
       .delete()
@@ -1056,6 +1094,8 @@ router.delete('/:id', authenticateToken, requirePermission('usuarios:deletar'), 
         message: error.message
       })
     }
+
+    await removerLoginAuthPorEmail(supabaseAdmin, usuario.email)
 
     res.json({
       success: true,

@@ -12,6 +12,7 @@ import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.serv
 import { applyListSort } from '../utils/apply-list-sort.js'
 import { assertEmailAvailableForRole, TARGET_OPERARIO } from '../utils/email-role-guard.js'
 import { resolverFuncionarioId } from '../utils/resolver-funcionario-id.js'
+import { normalizarEmail, atualizarEmailNoAuth, mensagemErroCriacaoLogin, removerLoginAuthPorEmail } from '../utils/resolver-usuario-email.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -1577,6 +1578,8 @@ router.post('/', async (req, res) => {
         message: 'Informe um e-mail válido. Todo colaborador cadastrado no RH recebe usuário do sistema.'
       })
     }
+    value.email = normalizarEmail(value.email)
+    funcionarioData.email = value.email
 
     // Validar se cargo existe e está ativo
     let cargoInfo = null
@@ -1647,8 +1650,9 @@ router.post('/', async (req, res) => {
         const { data: existingUser } = await supabaseAdmin
           .from('usuarios')
           .select('id')
-          .eq('email', value.email)
+          .ilike('email', value.email)
           .is('deleted_at', null)
+          .limit(1)
           .maybeSingle()
 
         if (existingUser) {
@@ -1721,7 +1725,7 @@ router.post('/', async (req, res) => {
           
           return res.status(500).json({
             error: 'Erro ao criar usuário no sistema de autenticação',
-            message: authError.message
+            message: mensagemErroCriacaoLogin(authError)
           })
         }
 
@@ -1797,7 +1801,13 @@ router.post('/', async (req, res) => {
 
         if (perfilError) {
           console.error('Erro ao atribuir perfil ao usuário:', perfilError)
-          // Não falhar a criação do funcionário por causa disso
+          await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+          await supabaseAdmin.from('usuarios').delete().eq('id', usuarioId)
+          await supabaseAdmin.from('funcionarios').delete().eq('id', novoFuncionario.id)
+          return res.status(500).json({
+            error: 'Erro ao atribuir perfil',
+            message: 'O colaborador não foi criado porque o perfil de acesso não pôde ser gravado. Tente novamente.'
+          })
         }
 
         // Enviar email de boas-vindas com senha temporária
@@ -1973,6 +1983,9 @@ router.put('/:id', async (req, res) => {
 
     // Filtrar campos que não devem ser salvos na tabela funcionarios
     const { criar_usuario, usuario_senha, ...funcionarioData } = value
+    if (funcionarioData.email) {
+      funcionarioData.email = normalizarEmail(funcionarioData.email)
+    }
 
     // Validar se cargo existe e está ativo (se fornecido)
     let cargoInfo = null
@@ -2035,6 +2048,16 @@ router.put('/:id', async (req, res) => {
       }
 
       await liberarCpfDeFuncionariosExcluidos(cpfNormalizado)
+    }
+
+    let emailAnterior = null
+    if (funcionarioData.email) {
+      const { data: funcionarioAntes } = await supabaseAdmin
+        .from('funcionarios')
+        .select('email')
+        .eq('id', funcionarioId)
+        .maybeSingle()
+      emailAnterior = funcionarioAntes?.email || null
     }
 
     // Atualizar funcionário
@@ -2122,6 +2145,18 @@ router.put('/:id', async (req, res) => {
         error: 'Erro ao atualizar funcionário',
         message: updateError.message
       })
+    }
+
+    if (funcionarioData.email) {
+      await supabaseAdmin
+        .from('usuarios')
+        .update({
+          email: funcionarioData.email,
+          updated_at: new Date().toISOString()
+        })
+        .eq('funcionario_id', funcionarioId)
+        .is('deleted_at', null)
+      await atualizarEmailNoAuth(supabaseAdmin, emailAnterior, funcionarioData.email)
     }
 
     // Se cargo mudou e funcionário tem usuário, atualizar perfil do usuário
@@ -2287,11 +2322,14 @@ router.delete('/:id', async (req, res) => {
           })
         }
 
+        const emailArquivadoUsuario = `deleted+${usuarioSemFuncionario.id}.${Date.now()}@excluido.local`
         const { error: deleteUsuarioDiretoError } = await supabaseAdmin
           .from('usuarios')
           .update({
             deleted_at: new Date().toISOString(),
-            status: 'Inativo'
+            status: 'Inativo',
+            email: emailArquivadoUsuario,
+            updated_at: new Date().toISOString()
           })
           .eq('id', funcionarioId)
           .is('deleted_at', null)
@@ -2302,6 +2340,8 @@ router.delete('/:id', async (req, res) => {
             message: deleteUsuarioDiretoError.message
           })
         }
+
+        await removerLoginAuthPorEmail(supabaseAdmin, usuarioSemFuncionario.email)
 
         return res.json({
           success: true,
@@ -2377,24 +2417,7 @@ router.delete('/:id', async (req, res) => {
         })
       }
 
-      // Liberar email também no Supabase Auth (senão createUser falha no re-cadastro)
-      try {
-        const { data: { users }, error: authListError } = await supabaseAdmin.auth.admin.listUsers()
-        if (!authListError && users) {
-          const authUser = users.find(
-            (u) => u.email?.toLowerCase() === String(usuarioAssociado.email || '').toLowerCase()
-          )
-          if (authUser) {
-            await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
-              email: emailArquivado,
-              email_confirm: true
-            })
-            console.log(`✅ Auth user ${authUser.id} arquivado com email ${emailArquivado}`)
-          }
-        }
-      } catch (authArchiveError) {
-        console.warn('⚠️ Não foi possível arquivar usuário no Auth (seguindo soft delete):', authArchiveError?.message || authArchiveError)
-      }
+      await removerLoginAuthPorEmail(supabaseAdmin, usuarioAssociado.email)
 
       console.log(`✅ Usuário ${usuarioAssociado.email} do funcionário ${funcionario.nome} marcado como deletado (soft delete)`)
     }
@@ -2650,8 +2673,8 @@ router.post('/:id/criar-usuario', requirePermission('rh:editar'), async (req, re
     if (authError) {
       return res.status(500).json({
         success: false,
-        message: 'Erro ao criar usuário no sistema de autenticação',
-        error: authError.message
+        message: mensagemErroCriacaoLogin(authError),
+        error: mensagemErroCriacaoLogin(authError)
       })
     }
 
@@ -2701,6 +2724,12 @@ router.post('/:id/criar-usuario', requirePermission('rh:editar'), async (req, re
     })
     if (perfilError) {
       console.error('Erro ao atribuir perfil:', perfilError)
+      await supabaseAdmin.auth.admin.deleteUser(authData.user.id)
+      await supabaseAdmin.from('usuarios').delete().eq('id', novoUsuario.id)
+      return res.status(500).json({
+        success: false,
+        message: 'O usuário não foi criado porque o perfil de acesso não pôde ser gravado. Tente novamente.'
+      })
     }
 
     let emailEnviado = false

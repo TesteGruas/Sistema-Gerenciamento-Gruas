@@ -8,6 +8,7 @@ import { enviarWhatsAppResponsavelObraAcesso } from '../services/whatsapp-servic
 import { validarTelefoneWhatsappBrasil } from '../utils/telefone-brasil.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
 import { assertEmailAvailableForRole, TARGET_SUPERVISOR } from '../utils/email-role-guard.js'
+import { normalizarEmail } from '../utils/resolver-usuario-email.js'
 
 // Função auxiliar para gerar senha segura aleatória
 function generateSecurePassword(length = 12) {
@@ -6142,6 +6143,7 @@ router.post('/:id/responsaveis-obra', authenticateToken, requirePermission('obra
     if (validationError) {
       return res.status(400).json({ success: false, error: 'Dados inválidos', message: validationError.details[0].message })
     }
+    if (value.email) value.email = normalizarEmail(value.email)
 
     // Verificar se a obra existe
     const { data: obra, error: obraError } = await supabaseAdmin
@@ -6346,6 +6348,8 @@ router.put('/:obra_id/responsaveis-obra/:id', authenticateToken, requirePermissi
     if (validationError) {
       return res.status(400).json({ success: false, error: 'Dados inválidos', message: validationError.details[0].message })
     }
+
+    if (value.email) value.email = normalizarEmail(value.email)
 
     const updatePayload = {
       nome: value.nome,

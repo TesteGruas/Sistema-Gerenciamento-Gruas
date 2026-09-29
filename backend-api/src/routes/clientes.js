@@ -14,6 +14,7 @@ import {
 import {
   buscarClientePorUsuarioComAutoVinculo,
 } from '../utils/cliente-usuario-link.js'
+import { resolverUsuarioPorEmail } from '../utils/resolver-usuario-email.js'
 
 async function vincularUsuarioExistenteComoCliente({ usuarioId, email, nome }) {
   const guard = await assertEmailAvailableForRole(email, TARGET_CLIENTE, usuarioId)
@@ -1182,16 +1183,34 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
       })
     }
 
-    // Fallback: quando o usuário for funcionário sem vínculo direto em contato_usuario_id,
-    // buscar o cliente pela obra ativa do funcionário.
+    // Fallback: funcionário sem vínculo direto em contato_usuario_id.
+    // A obra ativa do colaborador define o cliente, mesmo se o login
+    // caiu numa conta duplicada (e-mail igual, só muda a maiúscula).
     if (!isClienteRole) {
       const { data: usuarioComFuncionario, error: usuarioComFuncionarioError } = await supabaseAdmin
         .from('usuarios')
-        .select('id, funcionario_id')
+        .select('id, email, funcionario_id')
         .eq('id', usuarioIdNumerico)
-        .single()
+        .maybeSingle()
 
-      if (!usuarioComFuncionarioError && usuarioComFuncionario?.funcionario_id) {
+      let funcionarioIdAlvo = usuarioComFuncionario?.funcionario_id || null
+      if (!funcionarioIdAlvo) {
+        const emailBusca = usuarioComFuncionario?.email || userEmail
+        const canonico = await resolverUsuarioPorEmail(supabaseAdmin, emailBusca)
+        funcionarioIdAlvo = canonico?.funcionario_id || null
+        if (!funcionarioIdAlvo && emailBusca) {
+          const { data: funcionarioPorEmail } = await supabaseAdmin
+            .from('funcionarios')
+            .select('id')
+            .ilike('email', emailBusca)
+            .is('deleted_at', null)
+            .limit(1)
+            .maybeSingle()
+          funcionarioIdAlvo = funcionarioPorEmail?.id || null
+        }
+      }
+
+      if (!usuarioComFuncionarioError && funcionarioIdAlvo) {
         const { data: alocacoesAtivas, error: alocacoesError } = await supabaseAdmin
           .from('funcionarios_obras')
           .select(`
@@ -1206,7 +1225,7 @@ router.get('/usuario/:usuario_id', authenticateToken, async (req, res) => {
               cliente_id
             )
           `)
-          .eq('funcionario_id', usuarioComFuncionario.funcionario_id)
+          .eq('funcionario_id', funcionarioIdAlvo)
           .eq('status', 'ativo')
           .order('data_inicio', { ascending: false })
 
