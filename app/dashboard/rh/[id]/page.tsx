@@ -57,6 +57,7 @@ import {
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { useToast } from "@/hooks/use-toast"
+import { usePermissions } from "@/hooks/use-permissions"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { rhApi } from "@/lib/api-rh-completo"
 import { apiRegistrosPonto } from "@/lib/api-ponto-eletronico"
@@ -195,6 +196,7 @@ export default function FuncionarioDetalhesPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { isAdmin } = usePermissions()
   const [funcionario, setFuncionario] = useState<FuncionarioRH | null>(null)
   const [loading, setLoading] = useState(true)
   const [isEditMode, setIsEditMode] = useState(false)
@@ -207,6 +209,9 @@ export default function FuncionarioDetalhesPage() {
   const [isEditDocumentoDialogOpen, setIsEditDocumentoDialogOpen] = useState(false)
   const [documentoSelecionado, setDocumentoSelecionado] = useState<DocumentoFuncionario | null>(null)
   const [isResetPasswordDialogOpen, setIsResetPasswordDialogOpen] = useState(false)
+  const [isDefinirSenhaDialogOpen, setIsDefinirSenhaDialogOpen] = useState(false)
+  const [senhaAdmin, setSenhaAdmin] = useState('')
+  const [senhaAdminConfirmacao, setSenhaAdminConfirmacao] = useState('')
   const [isCriarUsuarioDialogOpen, setIsCriarUsuarioDialogOpen] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   
@@ -1516,6 +1521,60 @@ export default function FuncionarioDetalhesPage() {
     }
   }
 
+  const handleConfirmDefinirSenha = async () => {
+    if (!funcionario) return
+    if (senhaAdmin.length < 6) {
+      toast({
+        title: "Senha curta",
+        description: "Use pelo menos 6 caracteres.",
+        variant: "destructive"
+      })
+      return
+    }
+    if (senhaAdmin !== senhaAdminConfirmacao) {
+      toast({
+        title: "Senhas diferentes",
+        description: "A confirmação precisa ser igual à senha.",
+        variant: "destructive"
+      })
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      const apiUrl = getApiOrigin()
+      const token = localStorage.getItem('access_token') || localStorage.getItem('token')
+      const response = await fetch(`${apiUrl}/api/funcionarios/${funcionario.id}/definir-senha`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ senha: senhaAdmin })
+      })
+      const data = await response.json()
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Erro ao alterar a senha')
+      }
+      toast({
+        title: "Senha alterada",
+        description: `Entre com ${data.data?.email || funcionario.email} e a senha que você definiu.`
+      })
+      setIsDefinirSenhaDialogOpen(false)
+      setSenhaAdmin('')
+      setSenhaAdminConfirmacao('')
+    } catch (error: unknown) {
+      const msg = error instanceof Error ? error.message : 'Erro ao alterar a senha'
+      toast({
+        title: "Erro",
+        description: msg,
+        variant: "destructive"
+      })
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   const handleConfirmResetPassword = async () => {
     if (!funcionario) return
 
@@ -2279,6 +2338,21 @@ export default function FuncionarioDetalhesPage() {
             >
               <UserPlus className="w-4 h-4 mr-2" />
               Criar Usuário
+            </Button>
+          )}
+          {funcionario.usuario && !isEditMode && isAdmin() && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setSenhaAdmin('')
+                setSenhaAdminConfirmacao('')
+                setIsDefinirSenhaDialogOpen(true)
+              }}
+              disabled={submitting}
+              className="text-violet-700 hover:text-violet-800 hover:bg-violet-50"
+            >
+              <KeyRound className="w-4 h-4 mr-2" />
+              Alterar senha admin
             </Button>
           )}
           {funcionario.usuario && !isEditMode && (
@@ -4049,6 +4123,62 @@ export default function FuncionarioDetalhesPage() {
                   Criar Usuário
                 </>
               )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isDefinirSenhaDialogOpen} onOpenChange={setIsDefinirSenhaDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <KeyRound className="w-5 h-5 text-violet-700" />
+              Alterar senha
+            </DialogTitle>
+            <DialogDescription>
+              Define a senha de acesso de {funcionario?.nome} agora. Só o administrador vê este campo. A senha não é enviada por e-mail nem WhatsApp.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="senha-admin">Nova senha</Label>
+              <Input
+                id="senha-admin"
+                type="text"
+                autoComplete="off"
+                value={senhaAdmin}
+                onChange={(e) => setSenhaAdmin(e.target.value)}
+                placeholder="Mínimo de 6 caracteres"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="senha-admin-confirmacao">Confirmar senha</Label>
+              <Input
+                id="senha-admin-confirmacao"
+                type="text"
+                autoComplete="off"
+                value={senhaAdminConfirmacao}
+                onChange={(e) => setSenhaAdminConfirmacao(e.target.value)}
+              />
+            </div>
+            <p className="text-xs text-gray-500">
+              Login: {funcionario?.usuario?.email || funcionario?.email || 'e-mail do funcionário'}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsDefinirSenhaDialogOpen(false)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleConfirmDefinirSenha}
+              disabled={submitting}
+              className="bg-violet-700 hover:bg-violet-800 text-white"
+            >
+              {submitting ? 'Salvando...' : 'Definir senha'}
             </Button>
           </div>
         </DialogContent>

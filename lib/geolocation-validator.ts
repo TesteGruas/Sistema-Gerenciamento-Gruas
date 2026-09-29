@@ -192,9 +192,9 @@ export function validarProximidadeObra(
 
   let mensagem = ""
   if (valido) {
-    mensagem = `Você está a ${Math.round(distancia)}m da obra ${obra.nome}`
+    mensagem = 'Você está na área da obra e pode bater o ponto.'
   } else {
-    mensagem = `Você está muito longe da obra (${Math.round(distancia)}m). Distância máxima permitida: ${obra.raio_permitido}m`
+    mensagem = 'Aproxime-se da obra para bater o ponto.'
   }
 
   return {
@@ -307,7 +307,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
             estado,
             cep,
             coordenadas: cacheAtual.coordenadas,
-            raio_permitido: 400,
+            raio_permitido: 700,
             geocoding_status: `${cacheAtual.status} (cache)`
           }
         }
@@ -336,7 +336,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
                 estado,
                 cep,
                 coordenadas: resolvidas,
-                raio_permitido: 400,
+                raio_permitido: 700,
                 geocoding_status: statusResolver
               }
             }
@@ -395,7 +395,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
           estado,
           cep,
           coordenadas,
-          raio_permitido: 400,
+          raio_permitido: 700,
           geocoding_status: geocodingStatus
         }
       }
@@ -408,7 +408,7 @@ export async function buscarObrasFuncionario(funcionarioId?: number): Promise<Ob
         estado,
         cep,
         coordenadas,
-        raio_permitido: 400,
+        raio_permitido: 700,
         geocoding_status: geocodingStatus || (coordenadas ? "Coordenadas vindas do cadastro da obra." : "Sem coordenadas no cadastro.")
       }
     }))

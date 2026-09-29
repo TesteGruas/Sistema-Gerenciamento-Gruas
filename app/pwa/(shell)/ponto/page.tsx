@@ -778,7 +778,7 @@ export default function PWAPontoPage() {
       setValidacaoLocalizacao(validacao)
 
       if (!validacao.valido) {
-        throw new Error(`Você está fora do raio permitido (${raioPermitidoFormatado}) da obra. Distância atual: ${formatarDistancia(validacao.distancia)}.`)
+        throw new Error('Aproxime-se da obra para bater o ponto.')
       }
     } catch (error: any) {
       setIsLoading(false)
@@ -880,7 +880,7 @@ export default function PWAPontoPage() {
         setIsLoading(false)
         toast({
           title: "Fora do perímetro",
-          description: `Você precisa estar em até ${raioPermitidoFormatado} da obra para registrar ponto. Distância atual: ${formatarDistancia(validacaoLocalizacao.distancia)}.`,
+          description: 'Aproxime-se da obra para registrar o ponto.',
           variant: "destructive"
         })
         return
@@ -1059,7 +1059,7 @@ export default function PWAPontoPage() {
       const validacao = validarProximidadeObra(coordenadas, obraResolvida)
       setValidacaoLocalizacao(validacao)
       if (!validacao.valido) {
-        throw new Error(`Você está fora do raio permitido (${raioPermitidoFormatado}) da obra. Distância atual: ${formatarDistancia(validacao.distancia)}.`)
+        throw new Error('Aproxime-se da obra para bater o ponto.')
       }
 
       const agora = new Date()
@@ -1227,7 +1227,7 @@ export default function PWAPontoPage() {
 
   const proximoRegistro = getProximoRegistro()
   const podeRegistrar = proximoRegistro !== null
-  const raioPermitidoAtual = obra?.raio_permitido ?? 400
+  const raioPermitidoAtual = obra?.raio_permitido ?? 700
   const raioPermitidoFormatado = formatarDistancia(raioPermitidoAtual)
 
   const statusBadgeClass =
@@ -1372,8 +1372,8 @@ export default function PWAPontoPage() {
             </p>
             <p className="mt-1 text-xs leading-relaxed opacity-90">
               {validacaoLocalizacao.valido
-                ? `Você está a ${formatarDistancia(validacaoLocalizacao.distancia)} da obra (dentro do raio de ${raioPermitidoFormatado}).`
-                : validacaoLocalizacao.mensagem}
+                ? "Você pode bater o ponto nesta obra."
+                : "Aproxime-se da obra para bater o ponto."}
             </p>
           </div>
         </div>
@@ -1779,10 +1779,6 @@ export default function PWAPontoPage() {
                 <p className="font-semibold text-slate-700">Resultado da validação</p>
                 {validacaoLocalizacao ? (
                   <>
-                    <p>
-                      <span className="text-muted-foreground">Distância:</span>{" "}
-                      {formatarDistancia(validacaoLocalizacao.distancia)}
-                    </p>
                     <p>
                       <span className="text-muted-foreground">Status:</span>{" "}
                       <span

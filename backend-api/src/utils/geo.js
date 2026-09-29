@@ -36,10 +36,10 @@ export function calcularDistanciaEmMetros(lat1, lon1, lat2, lon2) {
  * @param {number} lonUsuario Longitude do usuário
  * @param {number} latObra Latitude da obra
  * @param {number} lonObra Longitude da obra
- * @param {number} raioPermitido Raio permitido em metros (padrão: 400m)
+ * @param {number} raioPermitido Raio permitido em metros (padrão: 700m)
  * @returns {Object} Objeto com valido, distancia e mensagem
  */
-export function validarProximidadeObra(latUsuario, lonUsuario, latObra, lonObra, raioPermitido = 400) {
+export function validarProximidadeObra(latUsuario, lonUsuario, latObra, lonObra, raioPermitido = 700) {
   if (!latUsuario || !lonUsuario || !latObra || !lonObra) {
     return {
       valido: false,
@@ -59,9 +59,9 @@ export function validarProximidadeObra(latUsuario, lonUsuario, latObra, lonObra,
 
   let mensagem = '';
   if (valido) {
-    mensagem = `Você está a ${Math.round(distancia)}m da obra. Dentro do raio permitido de ${raioPermitido}m.`;
+    mensagem = 'Você está na área da obra e pode bater o ponto.';
   } else {
-    mensagem = `Você está a ${Math.round(distancia)}m da obra. O limite é ${raioPermitido}m. Aproxime-se do local.`;
+    mensagem = 'Aproxime-se da obra para bater o ponto.';
   }
 
   return {

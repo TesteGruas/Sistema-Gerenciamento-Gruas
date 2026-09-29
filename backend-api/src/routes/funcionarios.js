@@ -7,7 +7,7 @@ import express from 'express'
 import Joi from 'joi'
 import crypto from 'crypto'
 import { supabaseAdmin } from '../config/supabase.js'
-import { authenticateToken, requirePermission } from '../middleware/auth.js'
+import { authenticateToken, requirePermission, requireAdmin } from '../middleware/auth.js'
 import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email.service.js'
 import { applyListSort } from '../utils/apply-list-sort.js'
 import { assertEmailAvailableForRole, TARGET_OPERARIO } from '../utils/email-role-guard.js'
@@ -2994,6 +2994,138 @@ router.post('/:id/reset-password', requirePermission('rh:editar'), async (req, r
     res.status(500).json({
       success: false,
       message: 'Erro interno do servidor',
+      error: error.message
+    })
+  }
+})
+
+const definirSenhaAdminSchema = Joi.object({
+  senha: Joi.string().min(6).max(72).required()
+})
+
+router.post('/:id/definir-senha', requireAdmin(), async (req, res) => {
+  try {
+    const { error: validationError, value } = definirSenhaAdminSchema.validate(req.body)
+    if (validationError) {
+      return res.status(400).json({
+        success: false,
+        message: 'A senha deve ter entre 6 e 72 caracteres.'
+      })
+    }
+
+    const { data: funcionario, error: funcionarioError } = await supabaseAdmin
+      .from('funcionarios')
+      .select(`
+        id,
+        nome,
+        email,
+        usuario:usuarios!funcionario_id(id, email, status)
+      `)
+      .eq('id', req.params.id)
+      .is('deleted_at', null)
+      .maybeSingle()
+
+    if (funcionarioError) {
+      return res.status(500).json({
+        success: false,
+        message: 'Erro ao buscar funcionário',
+        error: funcionarioError.message
+      })
+    }
+    if (!funcionario) {
+      return res.status(404).json({
+        success: false,
+        message: 'Funcionário não encontrado'
+      })
+    }
+
+    const usuario = await resolverUsuarioDoFuncionario(funcionario)
+    if (!usuario?.id) {
+      return res.status(400).json({
+        success: false,
+        message: 'Funcionário não possui usuário vinculado. Crie o usuário antes de definir a senha.'
+      })
+    }
+
+    const emailAcesso = String(funcionario.email || usuario.email || '').trim()
+    if (!emailAcesso) {
+      return res.status(400).json({
+        success: false,
+        message: 'Funcionário não possui e-mail de acesso.'
+      })
+    }
+
+    let authUser = null
+    const adminAuth = supabaseAdmin.auth.admin
+    if (typeof adminAuth.getUserByEmail === 'function') {
+      try {
+        const { data: byEmail, error: byEmailError } = await adminAuth.getUserByEmail(emailAcesso)
+        if (!byEmailError && byEmail?.user) authUser = byEmail.user
+      } catch {
+        authUser = null
+      }
+    }
+    if (!authUser) {
+      let page = 1
+      while (page <= 25) {
+        const { data: listData, error: listError } = await adminAuth.listUsers({ page, perPage: 200 })
+        if (listError) {
+          return res.status(500).json({
+            success: false,
+            message: 'Erro ao buscar usuário no acesso',
+            error: listError.message
+          })
+        }
+        const users = listData?.users || []
+        authUser = users.find((user) => user.email?.toLowerCase() === emailAcesso.toLowerCase()) || null
+        if (authUser || users.length < 200) break
+        page += 1
+      }
+    }
+
+    if (!authUser) {
+      const { error: createError } = await supabaseAdmin.auth.admin.createUser({
+        email: emailAcesso,
+        password: value.senha,
+        email_confirm: true,
+        user_metadata: {
+          nome: funcionario.nome,
+          funcionario_id: funcionario.id,
+          usuario_id: usuario.id,
+          created_via: 'definir_senha_admin'
+        }
+      })
+      if (createError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao criar o acesso com a senha informada',
+          error: createError.message
+        })
+      }
+    } else {
+      const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(authUser.id, {
+        password: value.senha,
+        email_confirm: true
+      })
+      if (updateError) {
+        return res.status(500).json({
+          success: false,
+          message: 'Erro ao alterar a senha',
+          error: updateError.message
+        })
+      }
+    }
+
+    return res.json({
+      success: true,
+      message: 'Senha alterada. Use o e-mail do funcionário e a senha definida para entrar.',
+      data: { email: emailAcesso }
+    })
+  } catch (error) {
+    console.error('Erro ao definir senha pelo admin:', error)
+    return res.status(500).json({
+      success: false,
+      message: 'Erro interno ao alterar a senha',
       error: error.message
     })
   }
