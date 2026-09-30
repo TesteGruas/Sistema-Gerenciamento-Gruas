@@ -671,6 +671,126 @@ async function buscarOperadoresObra(obraId) {
 }
 
 const OBS_OPERADOR_ALOCADO = 'Alocado automaticamente como operador da obra'
+const OBS_SINALEIRO_ALOCADO = 'Alocado automaticamente como sinaleiro da obra'
+
+function digitosDocumento(valor) {
+  return String(valor || '').replace(/\D/g, '')
+}
+
+async function resolverFuncionarioDoSinaleiro(sinaleiro) {
+  const idInformado = Number(sinaleiro?.funcionario_id)
+  if (Number.isFinite(idInformado) && idInformado > 0) {
+    const { data } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id')
+      .eq('id', idInformado)
+      .is('deleted_at', null)
+      .maybeSingle()
+    if (data?.id) return data.id
+  }
+
+  const email = normalizarEmail(sinaleiro?.email)
+  if (email) {
+    const { data } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id')
+      .ilike('email', email)
+      .is('deleted_at', null)
+      .limit(1)
+    if (data?.[0]?.id) return data[0].id
+  }
+
+  const documento = digitosDocumento(sinaleiro?.rg_cpf)
+  if (documento.length === 11) {
+    const { data } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, cpf')
+      .is('deleted_at', null)
+      .limit(2000)
+    const achado = (data || []).find((funcionario) => digitosDocumento(funcionario.cpf) === documento)
+    if (achado?.id) return achado.id
+  }
+
+  return null
+}
+
+async function garantirAlocacaoFuncionarioObra(obraId, funcionarioId, observacao) {
+  const hoje = new Date().toISOString().split('T')[0]
+  const { data: ativa, error: ativaError } = await supabaseAdmin
+    .from('funcionarios_obras')
+    .select('id')
+    .eq('obra_id', obraId)
+    .eq('funcionario_id', funcionarioId)
+    .eq('status', 'ativo')
+    .maybeSingle()
+
+  if (ativaError) throw ativaError
+
+  if (!ativa) {
+    const { error: insertError } = await supabaseAdmin.from('funcionarios_obras').insert({
+      funcionario_id: funcionarioId,
+      obra_id: obraId,
+      data_inicio: hoje,
+      status: 'ativo',
+      horas_trabalhadas: 0,
+      is_supervisor: false,
+      observacoes: observacao
+    })
+    if (insertError) throw insertError
+  }
+
+  const { error: obraAtualError } = await supabaseAdmin
+    .from('funcionarios')
+    .update({ obra_atual_id: obraId })
+    .eq('id', funcionarioId)
+
+  if (obraAtualError) {
+    console.error('[obras] Erro ao atualizar obra_atual_id:', obraAtualError.message)
+  }
+}
+
+async function encerrarAlocacaoAutomatica(obraId, funcionarioId, observacao) {
+  const hoje = new Date().toISOString().split('T')[0]
+  const { data: ativa } = await supabaseAdmin
+    .from('funcionarios_obras')
+    .select('id, observacoes')
+    .eq('obra_id', obraId)
+    .eq('funcionario_id', funcionarioId)
+    .eq('status', 'ativo')
+    .maybeSingle()
+
+  if (!ativa || !String(ativa.observacoes || '').includes(observacao)) return
+
+  await supabaseAdmin
+    .from('funcionarios_obras')
+    .update({
+      status: 'finalizado',
+      data_fim: hoje,
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', ativa.id)
+
+  const { data: outra } = await supabaseAdmin
+    .from('funcionarios_obras')
+    .select('obra_id')
+    .eq('funcionario_id', funcionarioId)
+    .eq('status', 'ativo')
+    .neq('obra_id', obraId)
+    .limit(1)
+    .maybeSingle()
+
+  await supabaseAdmin
+    .from('funcionarios')
+    .update({ obra_atual_id: outra?.obra_id ?? null })
+    .eq('id', funcionarioId)
+    .eq('obra_atual_id', obraId)
+}
+
+async function alocarSinaleiroComoFuncionario(obraId, sinaleiro) {
+  const funcionarioId = await resolverFuncionarioDoSinaleiro(sinaleiro)
+  if (!funcionarioId) return
+  await garantirAlocacaoFuncionarioObra(obraId, funcionarioId, OBS_SINALEIRO_ALOCADO)
+}
 
 async function sincronizarAlocacaoOperadores(obraId, ids) {
   const hoje = new Date().toISOString().split('T')[0]
@@ -1059,7 +1179,8 @@ const obraSchema = Joi.object({
       rg_cpf: Joi.string().allow(null, '').optional(),
       telefone: Joi.string().allow(null, '').optional(),
       email: Joi.string().email().allow(null, '').optional(),
-      tipo: Joi.string().valid('principal', 'reserva').allow(null, '').optional()
+      tipo: Joi.string().valid('principal', 'reserva').allow(null, '').optional(),
+      funcionario_id: Joi.number().integer().positive().allow(null).optional()
     })
   ).allow(null).optional()
 })
@@ -2584,7 +2705,15 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
           const tipo = s.tipo === 'reserva' ? 'reserva' : 'principal'
           const tel = s.telefone != null && String(s.telefone).trim() !== '' ? String(s.telefone).trim() : null
           const em = s.email != null && String(s.email).trim() !== '' ? String(s.email).trim() : null
-          return { nome, rg_cpf, tipo, telefone: tel, email: em }
+          const funcionarioId = Number(s.funcionario_id)
+          return {
+            nome,
+            rg_cpf,
+            tipo,
+            telefone: tel,
+            email: em,
+            funcionario_id: Number.isFinite(funcionarioId) && funcionarioId > 0 ? funcionarioId : null
+          }
         })
         .filter((r) => {
           const d = r.rg_cpf.replace(/\D/g, '')
@@ -2606,6 +2735,13 @@ router.post('/', authenticateToken, requirePermission('obras:criar'), async (req
           console.error('⚠️ [OBRAS POST] Falha ao gravar sinaleiros na criação (obra já criada):', sinInsErr.message)
         } else {
           console.log(`✅ [OBRAS POST] ${insertPayload.length} sinaleiro(s) gravado(s) na obra ${obraIdNovo}`)
+          for (const sinaleiro of rows) {
+            try {
+              await alocarSinaleiroComoFuncionario(obraIdNovo, sinaleiro)
+            } catch (alocacaoError) {
+              console.error('⚠️ [OBRAS POST] Falha ao alocar sinaleiro como funcionário:', alocacaoError.message)
+            }
+          }
         }
       } else {
         console.log('ℹ️ [OBRAS POST] Sinaleiros no payload sem linhas válidas (nome/documento) — nada inserido')
@@ -4682,7 +4818,8 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
             }),
           telefone: Joi.string().pattern(/^[\d\s\(\)\-\+]+$/).allow(null, '').empty('').optional(),
           email: Joi.string().email().max(255).trim().allow(null, '').empty('').optional(),
-          tipo: Joi.string().valid('principal', 'reserva').required()
+          tipo: Joi.string().valid('principal', 'reserva').required(),
+          funcionario_id: Joi.number().integer().positive().allow(null).optional()
         })
       ).min(0).max(2).required()
     }).options({ stripUnknown: true, abortEarly: false })
@@ -4805,7 +4942,7 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
         rg_cpf: sinaleiro.rg_cpf
       })
       
-      const { id: sinaleiroId, ...data } = sinaleiro
+      const { id: sinaleiroId, funcionario_id: _funcionarioId, ...data } = sinaleiro
       const chaveNomeRgCpf = `${data.nome}_${data.rg_cpf}`
 
       // Verificar se já existe um sinaleiro com mesmo nome e rg_cpf
@@ -4865,6 +5002,12 @@ router.post('/:id/sinaleiros', authenticateToken, requirePermission('obras:edita
         }
         console.log(`✅ Sinaleiro ${data.nome} criado com sucesso:`, created)
         results.push(created)
+      }
+
+      try {
+        await alocarSinaleiroComoFuncionario(obraId, sinaleiro)
+      } catch (alocacaoError) {
+        console.error(`⚠️ Falha ao alocar sinaleiro ${sinaleiro.nome} como funcionário da obra:`, alocacaoError.message)
       }
     }
 
@@ -4928,6 +5071,13 @@ router.delete('/:id/sinaleiros/:sinaleiroId', authenticateToken, requirePermissi
       })
     }
 
+    const { data: sinaleiroAtual } = await supabaseAdmin
+      .from('sinaleiros_obra')
+      .select('id, email, rg_cpf')
+      .eq('id', sinaleiroId)
+      .eq('obra_id', obraId)
+      .maybeSingle()
+
     const { data, error } = await supabaseAdmin
       .from('sinaleiros_obra')
       .delete()
@@ -4942,6 +5092,13 @@ router.delete('/:id/sinaleiros/:sinaleiroId', authenticateToken, requirePermissi
         error: 'Sinaleiro não encontrado',
         message: 'Esse sinaleiro não está vinculado a esta obra.'
       })
+    }
+
+    if (sinaleiroAtual) {
+      const funcionarioId = await resolverFuncionarioDoSinaleiro(sinaleiroAtual)
+      if (funcionarioId) {
+        await encerrarAlocacaoAutomatica(obraId, funcionarioId, OBS_SINALEIRO_ALOCADO)
+      }
     }
 
     res.json({ success: true, data })

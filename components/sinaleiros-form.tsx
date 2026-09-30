@@ -24,6 +24,7 @@ export interface Sinaleiro {
   email?: string
   tipo: 'principal' | 'reserva'
   tipo_vinculo?: 'interno' | 'cliente'
+  funcionario_id?: number
   cliente_informou?: boolean
   documentos?: any[]
   certificados?: any[]
@@ -481,7 +482,8 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
             rg_cpf: s.rg_cpf || s.cpf || s.rg || '',
             telefone: s.telefone,
             email: s.email,
-            tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva')
+            tipo: s.tipo || (s.tipo_vinculo === 'interno' ? 'principal' : 'reserva'),
+            funcionario_id: s.funcionario_id || undefined
           }
         })
       
@@ -638,6 +640,7 @@ export const SinaleirosForm = forwardRef<SinaleirosFormRef, SinaleirosFormProps>
                   onFuncionarioSelect={(funcionario) => {
                     if (funcionario) {
                       // Preencher campos automaticamente com dados do funcionário
+                      handleUpdateSinaleiro(sinaleiro.id, 'funcionario_id', Number(funcionario.id) || undefined)
                       handleUpdateSinaleiro(sinaleiro.id, 'nome', funcionario.name || '')
                       handleUpdateSinaleiro(sinaleiro.id, 'telefone', funcionario.phone || '')
                       handleUpdateSinaleiro(sinaleiro.id, 'email', funcionario.email || '')

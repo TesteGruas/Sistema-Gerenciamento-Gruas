@@ -871,7 +871,8 @@ function ObraDetailsPageContent() {
         rg_cpf: rgCpf,
         telefone: funcionario?.telefone || funcionarioSelecionado.phone || '',
         email: funcionario?.email || funcionarioSelecionado.email || '',
-        tipo: tipoSinaleiroFuncionario
+        tipo: tipoSinaleiroFuncionario,
+        funcionario_id: Number(funcionario?.id || funcionarioSelecionado.id) || undefined
       }
 
       const response = await sinaleirosApi.criarOuAtualizar(parseInt(obraId), [sinaleiroData])

@@ -1901,7 +1901,8 @@ export default function NovaObraPage() {
                 rg_cpf: rgCpf,
                 telefone: (s.telefone || '').trim(),
                 email: (s.email || '').trim(),
-                tipo: tipo
+                tipo: tipo,
+                funcionario_id: s.funcionario_id || undefined
               }
             })
             console.debug('═══════════════════════════════════════════════════════════')
