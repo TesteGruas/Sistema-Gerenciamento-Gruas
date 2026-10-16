@@ -310,6 +310,19 @@ export const apiRegistrosPonto = {
     return response.data;
   },
 
+  /** Envia o WhatsApp de assinatura do responsável para um número de teste. */
+  async testarLinkAssinatura(
+    id: string | number,
+    telefone: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+    data?: { telefone: string; responsavel_nome: string | null; obra_nome: string };
+  }> {
+    const response = await api.post(`ponto-eletronico/registros/${id}/testar-link-assinatura`, { telefone });
+    return response.data;
+  },
+
   /** Reenvia e-mail / WhatsApp / notificação in-app aos responsáveis da obra (dia já encerrado). */
   async notificarResponsaveis(id: string | number): Promise<{
     success: boolean;

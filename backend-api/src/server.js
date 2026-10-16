@@ -83,6 +83,7 @@ import aditivosRoutes from './routes/aditivos.js'
 import notasDebitoRoutes from './routes/notas-debito.js'
 import notasFiscaisLocacaoRoutes from './routes/notas-fiscais-locacao.js'
 import pontoEletronicoRoutes from './routes/ponto-eletronico.js'
+import pontoAssinaturaPublicaRoutes from './routes/ponto-assinatura-publica.js'
 import pontoEletronicoGraficosRoutes from './routes/ponto-eletronico-graficos.js'
 import gruaComponentesRoutes from './routes/grua-componentes.js'
 import gruaConfiguracoesRoutes from './routes/grua-configuracoes.js'
@@ -621,6 +622,7 @@ app.use('/api/medicoes-mensais', medicoesMensaisRoutes)
 app.use('/api/aditivos', aditivosRoutes)
 app.use('/api/notas-debito', notasDebitoRoutes)
 app.use('/api/notas-fiscais-locacao', notasFiscaisLocacaoRoutes)
+app.use('/api/ponto-eletronico', pontoAssinaturaPublicaRoutes)
 app.use('/api/ponto-eletronico', pontoEletronicoRoutes)
 app.use('/api/ponto-eletronico/graficos', pontoEletronicoGraficosRoutes)
 app.use('/api/grua-componentes', gruaComponentesRoutes)

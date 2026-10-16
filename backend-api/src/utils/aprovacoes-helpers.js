@@ -44,6 +44,7 @@ async function buscarSupervisorPorObra(obra_id) {
         nome: usuario.nome || responsavel.nome,
         email: usuario.email || responsavel.email,
         telefone: usuario.telefone || responsavel.telefone || null,
+        responsavel_obra_id: responsavel.id,
         cargo: 'Responsável de Obra',
         role: usuario.role,
       };

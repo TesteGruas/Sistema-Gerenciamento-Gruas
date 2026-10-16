@@ -8,5 +8,6 @@ export function isPwaPublicAuthPath(pathname: string | null | undefined): boolea
   if (["/pwa/login", "/pwa/redirect", "/pwa/forgot-password"].includes(pathname)) return true
   if (pathname.startsWith("/pwa/test-api")) return true
   if (pathname.startsWith("/pwa/reset-password")) return true
+  if (pathname.startsWith("/pwa/assinar-ponto")) return true
   return false
 }

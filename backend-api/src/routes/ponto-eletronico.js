@@ -2,7 +2,7 @@ import express from 'express';
 import multer from 'multer';
 import { supabaseAdmin } from '../config/supabase.js';
 import { getPublicFrontendUrl } from '../config/public-frontend-url.js';
-import { authenticateToken, requirePermission } from '../middleware/auth.js';
+import { authenticateToken, requirePermission, requireAdmin } from '../middleware/auth.js';
 import PDFDocument from 'pdfkit';
 import crypto from 'crypto';
 import { 
@@ -25,6 +25,7 @@ import { criarNotificacaoNovaAprovacao } from '../services/notificacoes-horas-ex
 import { enviarMensagemAprovacao } from '../services/whatsapp-service.js';
 import {
   notificarResponsaveisObraPontoConcluido,
+  enviarLinkAssinaturaTeste,
   notificarFuncionarioPontoAssinado,
   notificarFuncionarioPontoRejeitado,
   notificarResponsaveisObraPontosPendentes,
@@ -5246,6 +5247,58 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
   } catch (error) {
     console.error('[Assinatura-Funcionario] Erro:', error);
     res.status(500).json({ success: false, message: 'Erro interno do servidor', error: error.message });
+  }
+});
+
+// =========================================================
+// Teste do admin: envia o link de assinatura do responsável para um número informado
+// =========================================================
+router.post('/registros/:id/testar-link-assinatura', requireAdmin(), async (req, res) => {
+  try {
+    const id = String(req.params.id || '').trim();
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'ID do registro é obrigatório' });
+    }
+
+    const { data: registro, error: errorBusca } = await supabaseAdmin
+      .from('registros_ponto')
+      .select(
+        `
+        *,
+        funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, obra_atual_id)
+      `
+      )
+      .eq('id', id)
+      .maybeSingle();
+
+    if (errorBusca || !registro) {
+      return res.status(404).json({ success: false, message: 'Registro não encontrado' });
+    }
+
+    if (!registro.entrada || !registro.saida) {
+      return res.status(400).json({
+        success: false,
+        message: 'Salve o registro com entrada e saída antes de enviar o link.',
+      });
+    }
+
+    const resultado = await enviarLinkAssinaturaTeste({
+      registro,
+      funcionario: registro.funcionario || { id: registro.funcionario_id, nome: 'Funcionário' },
+      telefone: req.body?.telefone,
+    });
+
+    return res.json({
+      success: true,
+      message: `Link de assinatura enviado para ${resultado.telefone}.`,
+      data: resultado,
+    });
+  } catch (error) {
+    console.error('[testar-link-assinatura] Erro:', error);
+    return res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Não foi possível enviar o link de assinatura.',
+    });
   }
 });
 

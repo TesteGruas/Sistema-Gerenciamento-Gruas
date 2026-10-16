@@ -5,6 +5,7 @@ import { enviarMensagemWebhook, renderWhatsAppMessage } from '../services/whatsa
 import { isWebPushConfigured, sendWebPush } from '../services/web-push-service.js';
 import { emitirNotificacao } from '../server.js';
 import { buscarSupervisorPorObra } from './aprovacoes-helpers.js';
+import { gerarTokenAssinaturaResponsavel } from './token-assinatura-ponto.js';
 import { validarTelefoneWhatsappBrasil, normalizarTelefoneBrasilParaWhatsApp } from './telefone-brasil.js';
 
 const FRONTEND_URL = () => getPublicFrontendUrl();
@@ -23,6 +24,17 @@ function urlPwaAbs(path) {
   const base = String(FRONTEND_URL() || '').replace(/\/+$/, '');
   const p = String(path || '').startsWith('/') ? path : `/${path || ''}`;
   return `${base}${p}`;
+}
+
+function linkAssinaturaResponsavel({ registroId, obraId, responsavelObraId, usuarioId }) {
+  const token = gerarTokenAssinaturaResponsavel({
+    registroId,
+    obraId,
+    responsavelObraId,
+    usuarioId,
+  });
+  const path = `/pwa/assinar-ponto?token=${encodeURIComponent(token)}`;
+  return { absoluto: urlPwaAbs(path), app: path };
 }
 
 /**
@@ -411,7 +423,8 @@ async function enviarPacoteNotificacaoResponsavelPonto({
   registro,
   funcionario,
   obraNome,
-  linkAssinar
+  linkAssinar,
+  linkApp
 }) {
   const usuarioId =
     typeof usuarioIdDireto === 'number' && !Number.isNaN(usuarioIdDireto)
@@ -472,7 +485,7 @@ async function enviarPacoteNotificacaoResponsavelPonto({
         tipo: 'info',
         titulo: 'Registro de ponto concluído',
         mensagem: `${funcionario.nome || 'Funcionário'} fechou o dia ${formatarData(registro.data)} — aguardando sua assinatura`,
-        link: `/pwa/aprovacao-assinatura?id=${registro.id}`,
+        link: linkApp || `/pwa/aprovacao-assinatura?id=${registro.id}`,
         lida: false,
         remetente: 'Sistema',
         destinatarios: [],
@@ -495,7 +508,7 @@ async function enviarPacoteNotificacaoResponsavelPonto({
         enviarPushParaUsuario(usuarioId, {
           title: 'Ponto pendente de assinatura',
           body: `${funcionario.nome || 'Funcionário'} finalizou o dia e aguarda sua assinatura.`,
-          ...pushPwaRelativo({ path: `/pwa/aprovacao-assinatura?id=${registro.id}` }),
+          ...pushPwaRelativo({ path: linkApp || `/pwa/aprovacao-assinatura?id=${registro.id}` }),
           tag: `ponto-pendente-${registro.id}`
         }),
         MS_TIMEOUT_PUSH,
@@ -777,6 +790,98 @@ async function notificarFuncionarioDiaEnviadoAssinatura(registro, funcionario, o
 }
 
 /**
+ * Envia só o WhatsApp de assinatura do responsável para um número informado no teste.
+ * O link continua identificando o responsável ativo da obra.
+ */
+export async function enviarLinkAssinaturaTeste({ registro, funcionario, telefone }) {
+  const tel = validarTelefoneWhatsappBrasil(telefone);
+  if (!tel.ok) {
+    const erro = new Error(tel.mensagem || 'Telefone inválido.');
+    erro.status = 400;
+    throw erro;
+  }
+
+  const obraId = await resolverObraIdParaNotificacao(registro, funcionario);
+  if (!obraId) {
+    const erro = new Error('Registro sem obra vinculada.');
+    erro.status = 400;
+    throw erro;
+  }
+
+  const { data: responsaveis, error } = await supabaseAdmin
+    .from('responsaveis_obra')
+    .select('id, nome')
+    .eq('obra_id', obraId)
+    .eq('ativo', true)
+    .order('id', { ascending: true })
+    .limit(1);
+
+  if (error) {
+    const erro = new Error('Não foi possível localizar o responsável da obra.');
+    erro.status = 500;
+    throw erro;
+  }
+
+  const responsavel = responsaveis?.[0];
+  if (!responsavel) {
+    const erro = new Error('Esta obra não tem responsável ativo para gerar o link de assinatura.');
+    erro.status = 400;
+    throw erro;
+  }
+
+  const { data: obra } = await supabaseAdmin.from('obras').select('nome').eq('id', obraId).maybeSingle();
+  const obraNome = obra?.nome || `Obra #${obraId}`;
+  const links = linkAssinaturaResponsavel({
+    registroId: registro.id,
+    obraId,
+    responsavelObraId: responsavel.id,
+    usuarioId: null,
+  });
+  const funcNome = funcionario?.nome || 'Funcionário';
+
+  const texto = await renderWhatsAppMessage({
+    tipo: 'ponto_responsavel',
+    fallbackText: mensagemWhatsAppResponsavel({
+      funcionarioNome: funcNome,
+      obraNome,
+      data: registro.data,
+      entrada: registro.entrada,
+      saida: registro.saida,
+      horasTrabalhadas: registro.horas_trabalhadas,
+      horasExtras: registro.horas_extras,
+      link: links.absoluto,
+    }),
+    vars: {
+      funcionario_nome: funcNome,
+      obra_nome: obraNome,
+      data_formatada: formatarData(registro.data),
+      entrada: registro.entrada || '-',
+      saida: registro.saida || '-',
+      horas_trabalhadas: formatarHoras(registro.horas_trabalhadas),
+      horas_extras: formatarHoras(registro.horas_extras),
+      link_assinar: links.absoluto,
+    },
+  });
+
+  const envio = await enviarMensagemWebhook(tel.e164, texto, links.absoluto, {
+    tipo: 'ponto_responsavel',
+    destinatario_nome: responsavel.nome || 'Responsável',
+  });
+
+  if (envio?.sucesso === false) {
+    const erro = new Error(envio.erro || 'Não foi possível enviar o WhatsApp.');
+    erro.status = 502;
+    throw erro;
+  }
+
+  return {
+    telefone: tel.e164,
+    responsavel_nome: responsavel.nome || null,
+    obra_nome: obraNome,
+  };
+}
+
+/**
  * Notifica todos os responsáveis da obra quando um funcionário fecha o dia.
  * Envia: email + WhatsApp + notificação in-app
  */
@@ -836,14 +941,18 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
       .single();
 
     const obraNome = obra?.nome || `Obra #${obraId}`;
-    const baseUrl = FRONTEND_URL();
-    const linkAssinar = `${baseUrl}/pwa/aprovacao-assinatura?id=${registro.id}`;
 
     /** @type {Array<Record<string, unknown>>} */
     const destinatarios = [];
 
     for (const resp of lista) {
       try {
+        const links = linkAssinaturaResponsavel({
+          registroId: registro.id,
+          obraId,
+          responsavelObraId: resp.id,
+          usuarioId: null,
+        });
         const det = await enviarPacoteNotificacaoResponsavelPonto({
           nome: resp.nome,
           email: resp.email,
@@ -853,7 +962,8 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
           registro,
           funcionario,
           obraNome,
-          linkAssinar
+          linkAssinar: links.absoluto,
+          linkApp: links.app,
         });
         if (det) destinatarios.push({ responsavel_obra_id: resp.id, ...det });
       } catch (e) {
@@ -875,6 +985,12 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
         );
         modo = 'supervisor_obra';
         try {
+          const links = linkAssinaturaResponsavel({
+            registroId: registro.id,
+            obraId,
+            responsavelObraId: supervisor.responsavel_obra_id || null,
+            usuarioId: supervisor.id,
+          });
           const det = await enviarPacoteNotificacaoResponsavelPonto({
             nome: supervisor.nome,
             email: supervisor.email,
@@ -884,7 +1000,8 @@ export async function notificarResponsaveisObraPontoConcluido(registro, funciona
             registro,
             funcionario,
             obraNome,
-            linkAssinar
+            linkAssinar: links.absoluto,
+            linkApp: links.app,
           });
           if (det) destinatarios.push(det);
         } catch (e) {

@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect, useRef, useCallback, useMemo, useDeferredValue } from "react"
+import { createPortal } from "react-dom"
 import { useToast } from "@/hooks/use-toast"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -27,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Textarea } from "@/components/ui/textarea"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Clock, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2 } from "lucide-react"
+import { Clock, User, AlertCircle, CheckCircle, Search, FileText, Check, X, MessageSquare, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Download, Loader2, Calendar, TrendingUp, BarChart3, Filter, Image as ImageIcon, Upload, Eye, FileSignature, Trash2, Bell } from "lucide-react"
 import { AprovacaoHorasExtrasDialog } from "@/components/aprovacao-horas-extras-dialog"
 import { AuthService } from "@/app/lib/auth"
 import { 
@@ -47,6 +48,8 @@ import { ProtectedRoute } from "@/components/protected-route"
 import { FuncionarioSearch } from "@/components/funcionario-search"
 import { funcionariosApi } from "@/lib/api-funcionarios"
 import { JustificativaDialog } from "@/components/justificativa-dialog"
+import { PontosDoDia } from "@/components/ponto/pontos-do-dia"
+import { NavegacaoPonto } from "@/components/ponto/navegacao-ponto"
 import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { getApiOrigin } from "@/lib/runtime-config"
 import { usePermissions } from "@/hooks/use-permissions"
@@ -61,6 +64,16 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
+import { formatDateYYYYMMDDLocal, parseYYYYMMDDLocal } from "@/lib/date-local"
+import { useRouter, useSearchParams } from "next/navigation"
+
+const CONSULTAS_PONTO = ["historico", "pendencias", "extras", "justificativas", "corrido", "relatorio", "espelho"] as const
+type ConsultaPonto = "dia" | (typeof CONSULTAS_PONTO)[number]
+
+function consultaDaUrl(valor: string | null): ConsultaPonto {
+  if (valor && (CONSULTAS_PONTO as readonly string[]).includes(valor)) return valor as ConsultaPonto
+  return "dia"
+}
 
 /** Status na tabela: só ícone; texto completo no tooltip (hover). */
 function RegistroStatusIconBadge({
@@ -114,7 +127,7 @@ interface EstatisticasHorasExtras {
 
 export default function PontoPage() {
   const { toast } = useToast()
-  const { hasPermission } = usePermissions()
+  const { hasPermission, isAdmin } = usePermissions()
   const [currentTime, setCurrentTime] = useState<Date | null>(null)
   const [isClient, setIsClient] = useState(false)
   const [data, setData] = useState(estadoInicial)
@@ -141,7 +154,35 @@ export default function PontoPage() {
 
   const [registroParaExcluir, setRegistroParaExcluir] = useState<RegistroPonto | null>(null)
   const [excluindoRegistro, setExcluindoRegistro] = useState(false)
+  const [enviandoNotificacaoResponsaveis, setEnviandoNotificacaoResponsaveis] = useState(false)
+  const [modalLinkTesteAberto, setModalLinkTesteAberto] = useState(false)
+  const [telefoneLinkTeste, setTelefoneLinkTeste] = useState("")
   const podeExcluirRegistroPonto = hasPermission("ponto_eletronico:gerenciar")
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const consultaPonto = consultaDaUrl(searchParams.get("consulta"))
+  const abrirConsulta = (consulta: ConsultaPonto) => {
+    if (consulta === "dia") {
+      router.push("/dashboard/ponto")
+      return
+    }
+    router.push(`/dashboard/ponto?consulta=${consulta}`)
+  }
+  const painelDia = consultaPonto === "dia" || consultaPonto === "pendencias"
+  const [slotConteudo, setSlotConteudo] = useState<HTMLDivElement | null>(null)
+  const [slotOculto, setSlotOculto] = useState<HTMLDivElement | null>(null)
+  const destinoConteudo = !painelDia && slotConteudo ? slotConteudo : slotOculto
+  const sincronizarDia = useCallback((iso: string) => {
+    setDataHorasExtras((atual) => (atual === iso ? atual : iso))
+    setFiltroData((atual) => (atual === iso ? atual : iso))
+  }, [])
+  const abaConsulta =
+    consultaPonto === "extras" ? "horas-extras" :
+    consultaPonto === "justificativas" ? "justificativas" :
+    consultaPonto === "corrido" ? "trabalho-corrido" :
+    consultaPonto === "relatorio" ? "relatorio" :
+    consultaPonto === "espelho" ? "historico" :
+    "registros"
   
   // Estados para edição de registros
   const [isEditarOpen, setIsEditarOpen] = useState(false)
@@ -235,6 +276,7 @@ export default function PontoPage() {
     pages: 1
   })
   // Estados para horas extras
+  const [dataHorasExtras, setDataHorasExtras] = useState(() => formatDateYYYYMMDDLocal())
   const [registrosHorasExtras, setRegistrosHorasExtras] = useState<RegistroPonto[]>([])
   const [estatisticasHorasExtras, setEstatisticasHorasExtras] = useState<EstatisticasHorasExtras | null>(null)
   const [loadingHorasExtras, setLoadingHorasExtras] = useState(false)
@@ -553,6 +595,53 @@ export default function PontoPage() {
     }
   }
 
+  const abrirModalLinkTeste = () => {
+    if (!registroEditando?.id) return
+    if (!registroEditando.entrada || !registroEditando.saida) {
+      toast({
+        title: "Dia ainda aberto",
+        description: "Salve o registro com entrada e saída antes de enviar o link.",
+        variant: "destructive",
+      })
+      return
+    }
+    setModalLinkTesteAberto(true)
+  }
+
+  const enviarLinkTeste = async () => {
+    if (!registroEditando?.id) return
+    const telefone = telefoneLinkTeste.trim()
+    if (!telefone) {
+      toast({
+        title: "Informe o número",
+        description: "Digite o WhatsApp que vai receber o link de assinatura.",
+        variant: "destructive",
+      })
+      return
+    }
+    try {
+      setEnviandoNotificacaoResponsaveis(true)
+      const res = await apiRegistrosPonto.testarLinkAssinatura(registroEditando.id, telefone)
+      toast({
+        title: "Link enviado",
+        description: res.message,
+      })
+      setModalLinkTesteAberto(false)
+    } catch (err: unknown) {
+      const ax = err as { response?: { data?: { message?: string } }; message?: string }
+      toast({
+        title: "Erro ao enviar",
+        description:
+          ax?.response?.data?.message ||
+          ax?.message ||
+          "Não foi possível enviar o link de assinatura.",
+        variant: "destructive",
+      })
+    } finally {
+      setEnviandoNotificacaoResponsaveis(false)
+    }
+  }
+
   // Função para limpar todos os filtros
   const limparFiltros = () => {
     setFiltroData("")
@@ -580,17 +669,13 @@ export default function PontoPage() {
   const carregarHorasExtras = async () => {
     setLoadingHorasExtras(true)
     try {
-      const params: any = {
+      const registros = await apiRegistrosPonto.listar({
+        data_inicio: dataHorasExtras,
+        data_fim: dataHorasExtras,
         page: 1,
-        limit: 100
-      }
-
-      if (filtroData) {
-        params.data = filtroData
-      }
-
-      // Buscar registros com os filtros aplicados
-      const registros = await apiHorasExtras.listar(params)
+        limit: 500,
+        recalcular: false,
+      })
       const registrosFiltrados = registros.data || []
       
       setRegistrosHorasExtras(registrosFiltrados)
@@ -598,10 +683,11 @@ export default function PontoPage() {
       // Calcular estatísticas localmente baseado nos registros filtrados
       const estatisticasCalculadas = {
         total_registros: registrosFiltrados.length,
-        total_horas_extras: registrosFiltrados.reduce((sum, r) => sum + (r.horas_extras || 0), 0),
-        media_horas_extras: registrosFiltrados.length > 0 
-          ? registrosFiltrados.reduce((sum, r) => sum + (r.horas_extras || 0), 0) / registrosFiltrados.length 
-          : 0,
+        total_horas_extras: registrosFiltrados.reduce((sum, r) => {
+          if (!r.saida || (r.horas_extras || 0) <= 0) return sum
+          return sum + (r.horas_extras || 0)
+        }, 0),
+        media_horas_extras: 0,
         max_horas_extras: registrosFiltrados.length > 0 
           ? Math.max(...registrosFiltrados.map(r => r.horas_extras || 0)) 
           : 0,
@@ -1134,7 +1220,7 @@ export default function PontoPage() {
     }, 400)
     
     return () => clearTimeout(timer)
-  }, [filtroData, dadosIniciaisCarregados])
+  }, [dataHorasExtras, dadosIniciaisCarregados])
 
   const escapeCsvCelulaRegistro = (valor: unknown) => {
     const s = valor == null ? "" : String(valor)
@@ -1880,12 +1966,39 @@ export default function PontoPage() {
   return (
     <ProtectedRoute permission="ponto_eletronico:visualizar" showAccessDenied={true}>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Ponto Eletrônico</h1>
-          <p className="text-gray-600">Sistema de controle de frequência dos funcionários</p>
+        <PontosDoDia
+          modo={consultaPonto === "pendencias" ? "pendencias" : "dia"}
+          consulta={consultaPonto}
+          podeRegistrar={hasPermission("ponto_eletronico:registrar") || hasPermission("ponto_eletronico:gerenciar") || isAdmin()}
+          onEditar={abrirEdicao}
+          onAbrirConsulta={abrirConsulta}
+          onDiaChange={sincronizarDia}
+          onSlotConteudo={setSlotConteudo}
+        />
+        <div className="hidden">
+        <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-600 text-white">
+              <Clock className="h-6 w-6" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">Ponto Eletrônico</h1>
+              <p className="text-sm text-slate-500">
+                {consultaPonto === "extras" ? "Gerencie e aprove horas extras dos funcionários." :
+                  consultaPonto === "justificativas" ? "Justificativas de ponto dos funcionários." :
+                  consultaPonto === "corrido" ? "Registros de trabalho corrido." :
+                  consultaPonto === "relatorio" ? "Relatório mensal de ponto." :
+                  consultaPonto === "espelho" ? "Espelho de ponto dos funcionários." :
+                  "Histórico de registros de ponto dos funcionários."}
+              </p>
+            </div>
+          </div>
+          <Button type="button" variant="outline" className="h-10 bg-white" onClick={() => abrirConsulta("dia")}>
+            Pontos do dia
+          </Button>
         </div>
-        <div className="flex gap-2">
+        <NavegacaoPonto atual={consultaPonto === "dia" ? "historico" : consultaPonto} onAbrir={abrirConsulta} />
+        <div className="hidden">
           <Dialog open={isJustificativaOpen} onOpenChange={setIsJustificativaOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" className="border-blue-600 text-blue-600 hover:bg-blue-50 bg-transparent">
@@ -1901,7 +2014,6 @@ export default function PontoPage() {
             onSuccess={handleJustificativaSuccess}
           />
         </div>
-      </div>
 
       {data.funcionarios.length === 0 && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 flex gap-3 items-start">
@@ -2452,16 +2564,81 @@ export default function PontoPage() {
 
             </form>
             </div>
-            <div className="flex justify-end gap-3 pt-4 px-6 pb-6 border-t bg-background flex-shrink-0">
-              <Button type="button" variant="outline" onClick={() => setIsEditarOpen(false)}>
-                Cancelar
-              </Button>
-              <Button type="submit" form="editar-registro-form" className="bg-blue-600 hover:bg-blue-700">
-                Salvar Alterações
-              </Button>
+            <div className="flex items-center justify-between gap-3 pt-4 px-6 pb-6 border-t bg-background flex-shrink-0">
+              <div>
+                {isAdmin() && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={abrirModalLinkTeste}
+                    disabled={!registroEditando?.id}
+                  >
+                    <Bell className="w-4 h-4 mr-2" />
+                    Enviar link de teste
+                  </Button>
+                )}
+              </div>
+              <div className="flex gap-3">
+                <Button type="button" variant="outline" onClick={() => setIsEditarOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button type="submit" form="editar-registro-form" className="bg-blue-600 hover:bg-blue-700">
+                  Salvar Alterações
+                </Button>
+              </div>
             </div>
           </DialogContent>
         </Dialog>
+
+      <Dialog open={modalLinkTesteAberto} onOpenChange={setModalLinkTesteAberto}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Enviar link de assinatura</DialogTitle>
+            <DialogDescription>
+              Informe o WhatsApp que vai receber o link para testar a assinatura do responsável.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            className="space-y-4"
+            onSubmit={(evento) => {
+              evento.preventDefault()
+              void enviarLinkTeste()
+            }}
+          >
+            <div className="space-y-2">
+              <Label htmlFor="telefone-link-teste">Número</Label>
+              <Input
+                id="telefone-link-teste"
+                inputMode="tel"
+                autoComplete="tel"
+                placeholder="81987440990"
+                value={telefoneLinkTeste}
+                onChange={(evento) => setTelefoneLinkTeste(evento.target.value)}
+              />
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setModalLinkTesteAberto(false)}
+                disabled={enviandoNotificacaoResponsaveis}
+              >
+                Cancelar
+              </Button>
+              <Button type="submit" className="bg-blue-600 hover:bg-blue-700" disabled={enviandoNotificacaoResponsaveis}>
+                {enviandoNotificacaoResponsaveis ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Enviando…
+                  </>
+                ) : (
+                  "Enviar"
+                )}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Modal de Visualização de Assinatura */}
       <Dialog open={isAssinaturaModalOpen} onOpenChange={(open) => {
@@ -2507,7 +2684,7 @@ export default function PontoPage() {
       </Dialog>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="hidden">
         {stats.map((stat, index) => (
           <Card key={index}>
             <CardContent className="p-6">
@@ -2525,8 +2702,20 @@ export default function PontoPage() {
         ))}
       </div>
 
-      <Tabs defaultValue="registros">
-        <TabsList className="grid w-full grid-cols-6">
+      <div ref={setSlotOculto} />
+      {destinoConteudo ? createPortal(
+      <Tabs
+        value={abaConsulta}
+        onValueChange={(valor) => {
+          if (valor === "horas-extras") abrirConsulta("extras")
+          else if (valor === "justificativas") abrirConsulta("justificativas")
+          else if (valor === "trabalho-corrido") abrirConsulta("corrido")
+          else if (valor === "relatorio") abrirConsulta("relatorio")
+          else if (valor === "historico") abrirConsulta("espelho")
+          else abrirConsulta("historico")
+        }}
+      >
+        <TabsList className="hidden">
           <TabsTrigger value="registros">Registros de Ponto</TabsTrigger>
           <TabsTrigger value="horas-extras">Controle de Horas Extras</TabsTrigger>
           <TabsTrigger value="justificativas">Justificativas</TabsTrigger>
@@ -2537,10 +2726,6 @@ export default function PontoPage() {
 
         <TabsContent value="registros">
           <Card>
-            <CardHeader>
-              <CardTitle>Histórico de Registros</CardTitle>
-              <CardDescription>Visualize todos os registros de ponto dos funcionários</CardDescription>
-            </CardHeader>
             <CardContent>
               <div className="mb-6 space-y-4">
                 {/* Barra de busca e filtros */}
@@ -2765,6 +2950,9 @@ export default function PontoPage() {
                         <TableCell>
                           {(() => {
                             const horasExtras = registro.horas_extras || 0;
+                            if (!registro.saida) {
+                              return <span className="text-gray-400">—</span>;
+                            }
                             if (horasExtras > 0) {
                               return (
                                 <Badge
@@ -2790,6 +2978,9 @@ export default function PontoPage() {
                         </TableCell>
                         <TableCell>
                           {(() => {
+                            if (!registro.saida) {
+                              return <span className="text-gray-500">Em apuração</span>;
+                            }
                             const horasTrabalhadas = utilsPonto.calcularHorasTrabalhadas(
                               registro.entrada,
                               registro.saida
@@ -2873,12 +3064,9 @@ export default function PontoPage() {
 
         <TabsContent value="horas-extras">
           <Card>
+            {registrosSelecionadosHorasExtras.size > 0 && (
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle>Controle de Horas Extras</CardTitle>
-                  <CardDescription>Gerencie e aprove horas extras dos funcionários</CardDescription>
-                </div>
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 {registrosSelecionadosHorasExtras.size > 0 && (
                   <div className="flex gap-2">
                     <Button
@@ -2906,6 +3094,7 @@ export default function PontoPage() {
                 )}
               </div>
             </CardHeader>
+            )}
             <CardContent>
               <div >
                 {/* Estatísticas de Horas Extras */}
@@ -2932,7 +3121,7 @@ export default function PontoPage() {
                           </div>
                           <div>
                             <p className="text-sm text-gray-600">Total Horas</p>
-                            <p className="text-2xl font-bold">{estatisticasHorasExtras.total_horas_extras}h</p>
+                            <p className="text-2xl font-bold">{Number(estatisticasHorasExtras.total_horas_extras).toFixed(2)}h</p>
                           </div>
                         </div>
                       </CardContent>
@@ -2997,7 +3186,7 @@ export default function PontoPage() {
                         {registrosHorasExtras.length === 0 ? (
                           <TableRow>
                             <TableCell colSpan={8} className="text-center text-gray-500 py-8">
-                              Nenhum registro de hora extra encontrado
+                              Nenhum registro de ponto neste dia
                             </TableCell>
                           </TableRow>
                         ) : (
@@ -3021,9 +3210,15 @@ export default function PontoPage() {
                                 </Badge>
                               </TableCell>
                               <TableCell>
-                                <Badge className="bg-orange-100 text-orange-800">
-                                  +{registro.horas_extras || 0}h
-                                </Badge>
+                                {!registro.saida ? (
+                                  <span className="text-gray-500">Em apuração</span>
+                                ) : (registro.horas_extras || 0) > 0 ? (
+                                  <Badge className="bg-orange-100 text-orange-800">
+                                    +{Number(registro.horas_extras).toFixed(2)}h
+                                  </Badge>
+                                ) : (
+                                  <span className="text-gray-400">—</span>
+                                )}
                               </TableCell>
                               <TableCell>
                                 {(() => {
@@ -3114,10 +3309,6 @@ export default function PontoPage() {
 
         <TabsContent value="justificativas">
           <Card>
-            <CardHeader>
-              <CardTitle>Justificativas</CardTitle>
-              <CardDescription>Gerencie justificativas de atrasos, faltas e saídas antecipadas</CardDescription>
-            </CardHeader>
             <CardContent>
               {/* Filtro por nome */}
               <div className="mb-4">
@@ -3338,7 +3529,7 @@ export default function PontoPage() {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <div>
+                <div className="hidden">
                   <CardTitle>Relatório Mensal</CardTitle>
                   <CardDescription>Resumo das horas trabalhadas e frequência dos funcionários</CardDescription>
                 </div>
@@ -3697,15 +3888,6 @@ export default function PontoPage() {
 
         <TabsContent value="trabalho-corrido">
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Clock className="w-5 h-5" />
-                Confirmação de Trabalho Corrido
-              </CardTitle>
-              <CardDescription>
-                Confirme ou rejeite registros de trabalho corrido (sem pausa para almoço)
-              </CardDescription>
-            </CardHeader>
             <CardContent>
               <div className="mb-4">
                 <Button
@@ -3728,15 +3910,6 @@ export default function PontoPage() {
           <div className="space-y-6">
             {/* Card de Filtros */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Filter className="w-5 h-5" />
-                  Filtros de Busca
-                </CardTitle>
-                <CardDescription>
-                  Selecione o funcionário e o período para visualizar o histórico completo
-                </CardDescription>
-              </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                   {/* Busca de Funcionário */}
@@ -3989,22 +4162,6 @@ export default function PontoPage() {
 
             {/* Tabela de Histórico */}
             <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-5 h-5" />
-                  Histórico de Registros
-                  {historicoRegistros.length > 0 && (
-                    <Badge variant="secondary" className="ml-2">
-                      {historicoRegistros.length} registro(s)
-                    </Badge>
-                  )}
-                </CardTitle>
-                <CardDescription>
-                  {funcionarioHistorico 
-                    ? `Registros de ${funcionarioHistorico.nome || (funcionarioHistorico as any)?.name || 'Funcionário'} - ${mesHistorico}/${anoHistorico}`
-                    : 'Selecione um funcionário para visualizar o histórico'}
-                </CardDescription>
-              </CardHeader>
               <CardContent>
                 {loadingHistorico ? (
                   <TableLoading />
@@ -4086,7 +4243,9 @@ export default function PontoPage() {
             </Card>
           </div>
         </TabsContent>
-      </Tabs>
+      </Tabs>,
+      destinoConteudo
+      ) : null}
 
       {/* Dialog de Aprovação de Horas Extras */}
       <AprovacaoHorasExtrasDialog
@@ -4369,6 +4528,7 @@ export default function PontoPage() {
           </div>
         </DialogContent>
       </Dialog>
+        </div>
       </div>
     </ProtectedRoute>
   )
