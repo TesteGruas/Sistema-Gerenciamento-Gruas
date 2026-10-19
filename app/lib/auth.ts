@@ -142,7 +142,7 @@ export class AuthService {
   }
 
   // Obter dados do usuário atual
-  static async getCurrentUser(): Promise<any> {
+  static async getCurrentUser(jaRenovou = false): Promise<any> {
     try {
       const token = this.getToken()
       
@@ -161,7 +161,16 @@ export class AuthService {
 
       // Se receber 403 ou 401, token é inválido ou expirado
       if (response.status === 403 || response.status === 401) {
-        // Limpar token inválido
+        const noPwa = typeof window !== 'undefined' && window.location.pathname.startsWith('/pwa')
+        if (noPwa && !jaRenovou) {
+          const { garantirInicioSessaoPwa, renovarSessaoPwa, sessaoPwaVencida } = await import('@/lib/pwa-session-ttl')
+          garantirInicioSessaoPwa()
+          if (!sessaoPwaVencida()) {
+            const renovacao = await renovarSessaoPwa()
+            if (renovacao === 'ok') return this.getCurrentUser(true)
+            if (renovacao === 'indisponivel') throw new Error('Sessão temporariamente indisponível')
+          }
+        }
         if (typeof window !== 'undefined') {
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')

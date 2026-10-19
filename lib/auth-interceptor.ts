@@ -5,6 +5,7 @@
  */
 
 import { sessionPersistence } from './session-persistence'
+import { limparInicioSessaoPwa, refreshFoiRecusado, sessaoPwaVencida } from './pwa-session-ttl'
 
 export interface AuthError {
   status: number
@@ -81,6 +82,12 @@ class AuthInterceptor {
       return
     }
 
+    const noPwa = typeof window !== 'undefined' && window.location.pathname.startsWith('/pwa')
+    if (noPwa && !sessaoPwaVencida() && !refreshFoiRecusado()) {
+      console.warn('[AuthInterceptor] Sessão PWA mantida: o backend não recusou e os 7 dias não venceram')
+      return
+    }
+
     this.isRedirecting = true
 
     try {
@@ -105,6 +112,7 @@ class AuthInterceptor {
         localStorage.removeItem('redirect_count')
         localStorage.removeItem('last_redirect_path')
         localStorage.removeItem('loop_detected')
+        limparInicioSessaoPwa()
         
         // Limpar sessionStorage também
         sessionStorage.clear()

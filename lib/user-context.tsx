@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, useRef, ReactNode } from 'react'
 import { AuthService } from '@/app/lib/auth'
 import { decodeJwtPayload } from '@/lib/jwt-payload-browser'
+import { garantirInicioSessaoPwa, renovarSessaoPwa, sessaoPwaVencida } from '@/lib/pwa-session-ttl'
 
 interface User {
   id: string
@@ -63,7 +64,19 @@ export function UserProvider({ children }: { children: ReactNode }) {
             if (payload?.exp) {
               const isExpired = payload.exp * 1000 < Date.now()
               if (isExpired) {
-                // Token expirado, limpar e não fazer requisição
+                const noPwa = typeof window !== 'undefined' && window.location.pathname.startsWith('/pwa')
+                if (noPwa) {
+                  garantirInicioSessaoPwa()
+                  if (!sessaoPwaVencida()) {
+                    const renovacao = await renovarSessaoPwa()
+                    if (renovacao !== 'ok') {
+                      setLoading(false)
+                      setDadosIniciaisCarregados(true)
+                      loadingRef.current = false
+                      return
+                    }
+                  }
+                }
                 if (typeof window !== 'undefined') {
                   localStorage.removeItem('token')
                   localStorage.removeItem('access_token')
@@ -111,8 +124,10 @@ export function UserProvider({ children }: { children: ReactNode }) {
         if (error instanceof Error && !error.message.includes('Token inválido')) {
           console.error('Erro ao carregar usuário:', error.message)
         }
-        // Se falhar, limpar token inválido
-        if (typeof window !== 'undefined') {
+        const noPwa = typeof window !== 'undefined' && window.location.pathname.startsWith('/pwa')
+        const backendRecusou = error instanceof Error && error.message.includes('Token inválido')
+        const manterSessaoPwa = noPwa && !backendRecusou && !sessaoPwaVencida()
+        if (!manterSessaoPwa && typeof window !== 'undefined') {
           localStorage.removeItem('token')
           localStorage.removeItem('access_token')
           localStorage.removeItem('refresh_token')

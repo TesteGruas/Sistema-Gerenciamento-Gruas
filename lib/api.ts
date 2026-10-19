@@ -112,18 +112,31 @@ const refreshToken = async (): Promise<string | null> => {
       const { access_token, refresh_token } = response.data.data
       localStorage.setItem('access_token', access_token)
       localStorage.setItem('refresh_token', refresh_token)
+      const { marcarRefreshRecusado } = await import('@/lib/pwa-session-ttl')
+      marcarRefreshRecusado(false)
       return access_token
     }
     
     throw new Error('Falha ao renovar token')
   } catch (error) {
     console.error('Erro ao renovar token:', error)
-    // Limpar tokens e redirecionar para login
+    const status = axios.isAxiosError(error) ? error.response?.status : undefined
+    const semRefresh = error instanceof Error && error.message === 'Refresh token não encontrado'
+    const backendRecusou = status === 401 || status === 403 || semRefresh
+    const { limparInicioSessaoPwa, marcarRefreshRecusado } = await import('@/lib/pwa-session-ttl')
+    marcarRefreshRecusado(backendRecusou)
+
+    if (!backendRecusou) {
+      return null
+    }
+
     localStorage.removeItem('access_token')
     localStorage.removeItem('refresh_token')
     localStorage.removeItem('user_data')
+    limparInicioSessaoPwa()
     if (typeof window !== 'undefined') {
-      window.location.href = '/'
+      const noPwa = window.location.pathname.startsWith('/pwa')
+      window.location.href = noPwa ? '/pwa/login' : '/'
     }
     return null
   }

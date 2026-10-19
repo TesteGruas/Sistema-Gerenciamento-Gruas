@@ -28,6 +28,7 @@ import { EmpresaProvider } from "@/hooks/use-empresa"
 import PWAInstallPrompt from "@/components/pwa-install-prompt"
 import Image from "next/image"
 import { getApiBasePath } from "@/lib/runtime-config"
+import { marcarInicioSessaoPwa } from "@/lib/pwa-session-ttl"
 
 function PWALoginPageContent(): JSX.Element {
   const [formData, setFormData] = useState({
@@ -266,6 +267,7 @@ function PWALoginPageContent(): JSX.Element {
         if (data.data.refresh_token) {
           localStorage.setItem('refresh_token', data.data.refresh_token)
         }
+        marcarInicioSessaoPwa()
 
         // Salvar sessão persistente
         await saveSession(

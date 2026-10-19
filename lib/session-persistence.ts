@@ -132,8 +132,8 @@ class SessionPersistenceManager {
   private isSessionValid(session: SessionData): boolean {
     if (!session || !session.token) return false
     
-    // Verificar se não passou muito tempo desde o último login
-    const maxIdleTime = 24 * 60 * 60 * 1000 // 24 horas
+    // 7 dias desde a última entrada. Cada abertura do PWA atualiza lastLogin.
+    const maxIdleTime = 7 * 24 * 60 * 60 * 1000
     const timeSinceLogin = Date.now() - (session.lastLogin || 0)
     
     return timeSinceLogin < maxIdleTime

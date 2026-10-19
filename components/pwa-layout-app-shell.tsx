@@ -447,7 +447,7 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
   const carregarNotificacoesNaoLidas = async (userId: number) => {
     try {
       let countAPI = 0
-      const token = localStorage.getItem('access_token')
+      let token = localStorage.getItem('access_token')
       
       if (token) {
         // Sem `exp` no payload, ainda tentamos a API (antes só buscava se exp existia).
@@ -457,10 +457,13 @@ export function PWALayoutAppShell({ children }: PWALayoutAppShellProps) {
           if (tokenParts.length === 3) {
             const { decodeJwtPayload } = await import('@/lib/jwt-payload-browser')
             const payload = decodeJwtPayload<{ exp?: number }>(token)
-            if (payload?.exp == null) {
+            if (payload?.exp == null || payload.exp * 1000 >= Date.now()) {
               tentarApi = true
             } else {
-              tentarApi = payload.exp * 1000 >= Date.now()
+              const { garantirInicioSessaoPwa, renovarSessaoPwa, sessaoPwaVencida } = await import('@/lib/pwa-session-ttl')
+              garantirInicioSessaoPwa()
+              tentarApi = !sessaoPwaVencida() && (await renovarSessaoPwa()) === 'ok'
+              if (tentarApi) token = localStorage.getItem('access_token')
             }
           }
         } catch {

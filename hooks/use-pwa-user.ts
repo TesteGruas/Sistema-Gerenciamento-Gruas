@@ -103,7 +103,7 @@ export function usePWAUser(): PWAUserData {
         setLoading(true)
         setError(null)
 
-        const token = localStorage.getItem('access_token')
+        let token = localStorage.getItem('access_token')
         if (!token) {
           // Não lançar erro, apenas retornar sem token (situação normal na página de login)
           if (isMounted) {
@@ -121,11 +121,13 @@ export function usePWAUser(): PWAUserData {
             if (payload?.exp) {
               const isExpired = payload.exp * 1000 < Date.now()
               if (isExpired) {
-                // Token expirado, não fazer requisições
-                if (isMounted) {
-                  setLoading(false)
+                const { garantirInicioSessaoPwa, renovarSessaoPwa, sessaoPwaVencida } = await import('@/lib/pwa-session-ttl')
+                garantirInicioSessaoPwa()
+                if (sessaoPwaVencida() || (await renovarSessaoPwa()) !== 'ok') {
+                  if (isMounted) setLoading(false)
+                  return
                 }
-                return
+                token = localStorage.getItem('access_token')
               }
             }
           }

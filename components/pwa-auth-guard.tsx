@@ -4,6 +4,13 @@ import { useEffect, useState } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import { Smartphone, Lock } from "lucide-react"
 import { isPwaPublicAuthPath } from "@/lib/pwa-public-paths"
+import {
+  garantirInicioSessaoPwa,
+  limparInicioSessaoPwa,
+  renovarPrazoSessaoPwa,
+  renovarSessaoPwa,
+  sessaoPwaVencida,
+} from "@/lib/pwa-session-ttl"
 
 interface PWAAuthGuardProps {
   children: React.ReactNode
@@ -39,6 +46,7 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
     localStorage.removeItem('last_redirect_path')
     localStorage.removeItem('redirect_timestamp')
     localStorage.removeItem('loop_detected')
+    limparInicioSessaoPwa()
     
     // Limpar também sessionStorage
     sessionStorage.clear()
@@ -156,95 +164,48 @@ export function PWAAuthGuard({ children }: PWAAuthGuardProps) {
       localStorage.removeItem('redirect_timestamp')
       localStorage.removeItem('loop_detected')
 
-      // Verificar se o token está expirado
-      try {
-        const tokenParts = token.split('.')
-        if (tokenParts.length === 3) {
-          try {
-              const { decodeJwtPayload } = await import("@/lib/jwt-payload-browser")
-            const payload = decodeJwtPayload<{ exp?: number }>(token)
-            if (payload?.exp) {
-              const isExpired = payload.exp * 1000 < Date.now()
+      garantirInicioSessaoPwa()
 
-              if (isExpired) {
-                console.warn('[PWAAuthGuard] Token expirado, deslogando')
-                setIsLoading(false)
-                setIsAuthenticated(false)
-
-                if (pathname === '/pwa/login') {
-                  return
-                }
-
-                const redirectCount = parseInt(localStorage.getItem('redirect_count') || '0', 10) + 1
-                localStorage.setItem('redirect_count', redirectCount.toString())
-                localStorage.setItem('redirect_timestamp', Date.now().toString())
-
-                if (!isRedirecting) {
-                  isRedirecting = true
-                  limparDadosAutenticacao()
-
-                  if (redirectTimeout) {
-                    clearTimeout(redirectTimeout)
-                  }
-
-                  redirectTimeout = setTimeout(() => {
-                    window.location.replace('/pwa/login')
-                    isRedirecting = false
-                  }, 500)
-                }
-                return
-              }
-            }
-          } catch (decodeError) {
-            console.warn('[PWAAuthGuard] Erro ao decodificar token, deslogando por segurança')
-            setIsLoading(false)
-            setIsAuthenticated(false)
-
-            if (pathname === '/pwa/login') {
-              return
-            }
-
-            if (!isRedirecting) {
-              isRedirecting = true
-              limparDadosAutenticacao()
-
-              if (redirectTimeout) {
-                clearTimeout(redirectTimeout)
-              }
-
-              redirectTimeout = setTimeout(() => {
-                window.location.replace('/pwa/login')
-                isRedirecting = false
-              }, 500)
-            }
-            return
-          }
-        }
-      } catch (error) {
-        // Em caso de erro, deslogar por segurança
-        console.warn('[PWAAuthGuard] Erro ao verificar token, deslogando por segurança')
+      const deslogar = (motivo: string) => {
+        console.warn(`[PWAAuthGuard] ${motivo}`)
         setIsLoading(false)
         setIsAuthenticated(false)
-        
-        if (pathname === '/pwa/login') {
-          return
-        }
-        
-        if (!isRedirecting) {
-          isRedirecting = true
-          limparDadosAutenticacao()
-          
-          if (redirectTimeout) {
-            clearTimeout(redirectTimeout)
-          }
-          
-          redirectTimeout = setTimeout(() => {
-            window.location.replace('/pwa/login')
-            isRedirecting = false
-          }, 500)
-        }
+        if (pathname === '/pwa/login' || isRedirecting) return
+        isRedirecting = true
+        limparDadosAutenticacao()
+        if (redirectTimeout) clearTimeout(redirectTimeout)
+        redirectTimeout = setTimeout(() => {
+          window.location.replace('/pwa/login')
+          isRedirecting = false
+        }, 500)
+      }
+
+      if (sessaoPwaVencida()) {
+        deslogar('Mais de 7 dias sem entrar')
         return
       }
+
+      // O access token do Supabase dura cerca de 1 hora. Dentro dos 7 dias ele é renovado;
+      // só desloga se o backend recusar a renovação.
+      let precisaRenovar = false
+      try {
+        const { decodeJwtPayload } = await import("@/lib/jwt-payload-browser")
+        const payload = decodeJwtPayload<{ exp?: number }>(token)
+        const expMs = payload?.exp ? payload.exp * 1000 : 0
+        precisaRenovar = !expMs || expMs - Date.now() < 2 * 60 * 1000
+      } catch {
+        precisaRenovar = true
+      }
+
+      if (precisaRenovar) {
+        const renovacao = await renovarSessaoPwa()
+        if (renovacao === 'recusada') {
+          deslogar('Backend recusou a sessão')
+          return
+        }
+      }
+
+      renovarPrazoSessaoPwa()
 
       // Token existe e é válido, permitir acesso
       // Resetar contador de redirecionamentos quando autenticado com sucesso
