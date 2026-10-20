@@ -257,7 +257,7 @@ function mensagemWhatsAppResponsavel({ funcionarioNome, obraNome, data, entrada,
 🕐 Entrada: ${entrada || '-'} | Saída: ${saida || '-'}
 ⏱️ Horas: ${formatarHoras(horasTrabalhadas)}h | Extras: ${formatarHoras(horasExtras)}h
 
-Acesse o sistema para assinar: ${link}`;
+Aprove ou recuse neste link: ${link}`;
 }
 
 function mensagemWhatsAppFuncionario({ responsavelNome, data, link }) {
@@ -1552,6 +1552,136 @@ export async function notificarFuncionarioPontoRejeitado(registro, funcionario, 
   } catch (e) {
     console.error('[notificacoes-ponto] Erro ao notificar funcionário (rejeição):', e);
     return resumoCanais;
+  }
+}
+
+/**
+ * Avisa o funcionário quando as duas assinaturas fecham o dia (status Aprovado).
+ * Envia: email + WhatsApp + notificação in-app + push.
+ */
+export async function notificarFuncionarioDiaAssinado(registro, funcionario) {
+  const baseUrl = FRONTEND_URL();
+  const linkEspelho = `${baseUrl}/pwa/espelho-ponto`;
+
+  try {
+    const fid = funcionario?.id || funcionario?.funcionario_id || registro?.funcionario_id;
+    if (!fid) {
+      console.warn('[notificacoes-ponto] notificarFuncionarioDiaAssinado: sem funcionario_id — ignorado');
+      return;
+    }
+
+    const { data: funcData, error: errFunc } = await supabaseAdmin
+      .from('funcionarios')
+      .select('id, nome, email, telefone_whatsapp, telefone')
+      .eq('id', fid)
+      .maybeSingle();
+
+    if (errFunc) {
+      console.error('[notificacoes-ponto] Erro ao buscar funcionário (dia assinado):', errFunc.message);
+    }
+
+    let obraNome = null;
+    const obraId = registro?.obra_id || null;
+    if (obraId) {
+      const { data: obra } = await supabaseAdmin.from('obras').select('nome').eq('id', obraId).maybeSingle();
+      obraNome = obra?.nome || null;
+    }
+
+    const emailFunc = funcData?.email || null;
+    const telefoneFunc = normalizarTelefoneWhatsapp(funcData?.telefone_whatsapp || funcData?.telefone);
+    let usuarioIdFunc = await resolverUsuarioIdPorFuncionario(fid);
+    if (!usuarioIdFunc && emailFunc) {
+      usuarioIdFunc = await buscarUsuarioIdPorEmail(emailFunc);
+    }
+
+    const dataFormatada = formatarData(registro.data);
+    const horas = formatarHoras(registro.horas_trabalhadas);
+    const textoOk = `✅ *Dia de trabalho assinado*\n\n📅 Data: ${dataFormatada}\n🏗️ Obra: ${obraNome || 'N/A'}\n⏱️ Horas: ${horas}h\n\nO dia foi validado.`;
+
+    if (emailFunc) {
+      await sendPontoEmail(emailFunc, 'notificacao_ponto_dia_assinado', {
+        assuntoDefault: `Dia de trabalho assinado — ${dataFormatada}`,
+        vars: {
+          data_formatada: dataFormatada,
+          obra_nome: obraNome || 'N/A',
+          horas_trabalhadas: horas,
+          link_espelho: linkEspelho,
+          empresa: getEmpresaNomeEmail(),
+          ano: getAnoAtualEmail()
+        },
+        buildHtml: () =>
+          `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;">
+            <h1 style="color:#166534;font-size:20px;">Dia de trabalho assinado</h1>
+            <p>Seu registro de <strong>${dataFormatada}</strong> na obra <strong>${obraNome || 'N/A'}</strong> foi assinado.</p>
+            <p>Horas: <strong>${horas}h</strong>. O dia está validado.</p>
+          </div>`
+      }).catch((e) => console.error('[notificacoes-ponto] Erro email dia assinado:', e.message));
+    }
+
+    if (telefoneFunc) {
+      const textoWa = await renderWhatsAppMessage({
+        tipo: 'ponto_dia_assinado',
+        fallbackText: textoOk,
+        vars: {
+          data_formatada: dataFormatada,
+          obra_nome: obraNome || 'N/A',
+          horas_trabalhadas: horas,
+          link_espelho: linkEspelho
+        }
+      });
+      await enviarMensagemWebhook(telefoneFunc, textoWa, linkEspelho, {
+        tipo: 'ponto_dia_assinado',
+        destinatario_nome: funcData?.nome || 'Funcionário'
+      }).catch((e) => console.error('[notificacoes-ponto] Erro WhatsApp dia assinado:', e.message));
+    }
+
+    if (usuarioIdFunc) {
+      const agora = new Date().toISOString();
+      const { data: notif, error: errNotif } = await supabaseAdmin
+        .from('notificacoes')
+        .insert({
+          usuario_id: usuarioIdFunc,
+          tipo: 'success',
+          titulo: 'Dia de trabalho assinado',
+          mensagem: `Seu registro de ${dataFormatada} foi assinado. O dia está validado.`,
+          link: '/pwa/espelho-ponto',
+          lida: false,
+          created_at: agora
+        })
+        .select()
+        .single();
+
+      if (errNotif) {
+        console.error('[notificacoes-ponto] Erro ao inserir notificação (dia assinado):', errNotif.message);
+      }
+
+      if (notif) {
+        try {
+          emitirNotificacao(usuarioIdFunc, notif);
+        } catch (e) {
+          /* websocket offline */
+        }
+      }
+
+      try {
+        await withTimeout(
+          enviarPushParaUsuario(usuarioIdFunc, {
+            title: 'Dia de trabalho assinado',
+            body: `Seu registro de ${dataFormatada} foi assinado. O dia está validado.`,
+            ...pushPwaRelativo({ path: '/pwa/espelho-ponto' }),
+            tag: `ponto-dia-assinado-${registro.id}`
+          }),
+          MS_TIMEOUT_PUSH,
+          'push_funcionario_dia_assinado'
+        );
+      } catch (e) {
+        console.warn('[notificacoes-ponto] Push dia assinado falhou ou timeout:', e.message);
+      }
+    }
+
+    console.log(`[notificacoes-ponto] Funcionário ${funcData?.nome || fid} avisado: dia de trabalho assinado`);
+  } catch (e) {
+    console.error('[notificacoes-ponto] Erro ao notificar dia assinado:', e);
   }
 }
 

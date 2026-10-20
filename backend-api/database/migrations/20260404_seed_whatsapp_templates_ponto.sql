@@ -6,7 +6,7 @@ INSERT INTO whatsapp_templates (tipo, nome, texto_template, variaveis, ativo)
 SELECT
   'ponto_responsavel',
   'WhatsApp — Registro de ponto (responsável)',
-  $t$📋 *Registro de ponto concluído*||👷 Funcionário: {{funcionario_nome}}|🏗️ Obra: {{obra_nome}}|📅 Data: {{data_formatada}}|🕐 Entrada: {{entrada}} | Saída: {{saida}}|⏱️ Horas: {{horas_trabalhadas}}h | Extras: {{horas_extras}}h||Acesse o sistema para assinar: {{link_assinar}}$t$,
+  $t$📋 *Registro de ponto concluído*||👷 Funcionário: {{funcionario_nome}}|🏗️ Obra: {{obra_nome}}|📅 Data: {{data_formatada}}|🕐 Entrada: {{entrada}} | Saída: {{saida}}|⏱️ Horas: {{horas_trabalhadas}}h | Extras: {{horas_extras}}h||Aprove ou recuse neste link: {{link_assinar}}$t$,
   '["funcionario_nome","obra_nome","data_formatada","entrada","saida","horas_trabalhadas","horas_extras","link_assinar"]'::jsonb,
   true
 WHERE NOT EXISTS (SELECT 1 FROM whatsapp_templates WHERE tipo = 'ponto_responsavel');
@@ -46,3 +46,12 @@ SELECT
   '["obra_nome","link_aprovacoes"]'::jsonb,
   true
 WHERE NOT EXISTS (SELECT 1 FROM whatsapp_templates WHERE tipo = 'ponto_pendente_generico');
+
+INSERT INTO whatsapp_templates (tipo, nome, texto_template, variaveis, ativo)
+SELECT
+  'ponto_dia_assinado',
+  'WhatsApp — Dia de trabalho assinado (funcionário)',
+  $t$✅ *Dia de trabalho assinado*||📅 Data: {{data_formatada}}|🏗️ Obra: {{obra_nome}}|⏱️ Horas: {{horas_trabalhadas}}h||O dia foi validado.$t$,
+  '["data_formatada","obra_nome","horas_trabalhadas","link_espelho"]'::jsonb,
+  true
+WHERE NOT EXISTS (SELECT 1 FROM whatsapp_templates WHERE tipo = 'ponto_dia_assinado');

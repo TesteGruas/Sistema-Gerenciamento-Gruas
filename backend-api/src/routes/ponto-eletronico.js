@@ -28,6 +28,7 @@ import {
   enviarLinkAssinaturaTeste,
   notificarFuncionarioPontoAssinado,
   notificarFuncionarioPontoRejeitado,
+  notificarFuncionarioDiaAssinado,
   notificarResponsaveisObraPontosPendentes,
   obraTemDestinatariosNotificacaoPonto,
   resolverObraIdParaNotificacao
@@ -5237,6 +5238,15 @@ router.post('/registros/:id/assinar-funcionario', authenticateToken, async (req,
     }
 
     console.log(`✅ [Assinatura-Funcionario] Registro ${id} assinado pelo funcionário — status: Aprovado`);
+
+    try {
+      await notificarFuncionarioDiaAssinado(
+        registroAtualizado,
+        registroAtualizado.funcionario || { id: registro.funcionario_id }
+      );
+    } catch (e) {
+      console.error('[Assinatura-Funcionario] Erro ao avisar dia assinado:', e?.message || e);
+    }
 
     res.json({
       success: true,

@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../config/supabase.js';
 import { lerTokenAssinaturaResponsavel } from '../utils/token-assinatura-ponto.js';
 import {
   notificarFuncionarioPontoAssinado,
+  notificarFuncionarioPontoRejeitado,
   resolverObraIdParaNotificacao,
 } from '../utils/notificacoes-ponto.js';
 
@@ -20,6 +21,14 @@ function formatarDataBr(data) {
   if (partes.length !== 3) return texto || '—';
   const [ano, mes, dia] = partes;
   return `${dia}/${mes}/${ano}`;
+}
+
+function statusRecusado(status) {
+  return String(status || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim() === 'pendente correcao';
 }
 
 function formatarHoras(valor) {
@@ -113,6 +122,7 @@ async function carregarContextoToken(token) {
       horas_extras: formatarHoras(registro.horas_extras),
       responsavel_nome: responsavel.nome || 'Responsável',
       ja_assinado: Boolean(registro.assinatura_responsavel_path),
+      ja_recusado: statusRecusado(registro.status),
       status: registro.status || null,
     },
   };
@@ -206,6 +216,76 @@ router.post('/assinatura-responsavel', async (req, res) => {
     res.status(error.status || 500).json({
       success: false,
       message: error.status ? error.message : 'Não foi possível assinar o ponto.',
+    });
+  }
+});
+
+router.post('/assinatura-responsavel/rejeitar', async (req, res) => {
+  try {
+    const { token, comentario } = req.body || {};
+    const motivo = typeof comentario === 'string' ? comentario.trim() : '';
+    if (!motivo) {
+      return res.status(400).json({ success: false, message: 'Informe o motivo da recusa.' });
+    }
+
+    const ctx = await carregarContextoToken(token);
+    if (ctx.registro.assinatura_responsavel_path || ctx.publico.ja_assinado) {
+      return res.status(409).json({
+        success: false,
+        message: 'Este ponto já foi assinado pelo responsável.',
+      });
+    }
+    if (ctx.publico.ja_recusado) {
+      return res.status(409).json({
+        success: false,
+        message: 'Este ponto já foi recusado.',
+      });
+    }
+
+    const responsavelNome = ctx.responsavel.nome || 'Responsável';
+    const { data: registroAtualizado, error: errorUpdate } = await supabaseAdmin
+      .from('registros_ponto')
+      .update({
+        status: 'Pendente Correção',
+        observacoes: `[Não concordo — ${responsavelNome}]: ${motivo}`,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', ctx.registro.id)
+      .is('assinatura_responsavel_path', null)
+      .select('*, funcionario:funcionarios!fk_registros_ponto_funcionario(id, nome, cargo, turno, email, telefone_whatsapp, telefone)')
+      .maybeSingle();
+
+    if (errorUpdate) {
+      console.error('[assinatura-responsavel-token] Erro ao recusar:', errorUpdate);
+      return res.status(500).json({ success: false, message: 'Erro ao recusar o ponto.' });
+    }
+    if (!registroAtualizado) {
+      return res.status(409).json({
+        success: false,
+        message: 'Este ponto já foi assinado ou recusado.',
+      });
+    }
+
+    try {
+      await notificarFuncionarioPontoRejeitado(
+        registroAtualizado,
+        registroAtualizado.funcionario || { id: ctx.registro.funcionario_id },
+        { nome: responsavelNome },
+        motivo
+      );
+    } catch (e) {
+      console.error('[assinatura-responsavel-token] Erro ao avisar recusa:', e?.message || e);
+    }
+
+    res.json({
+      success: true,
+      message: 'Ponto recusado. O funcionário será avisado para corrigir os horários.',
+      data: { ...ctx.publico, ja_assinado: false, ja_recusado: true, status: 'Pendente Correção' },
+    });
+  } catch (error) {
+    res.status(error.status || 500).json({
+      success: false,
+      message: error.status ? error.message : 'Não foi possível recusar o ponto.',
     });
   }
 });

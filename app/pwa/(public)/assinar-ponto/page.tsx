@@ -21,6 +21,7 @@ type PontoPublico = {
   horas_extras: string
   responsavel_nome: string
   ja_assinado: boolean
+  ja_recusado?: boolean
   status: string | null
 }
 
@@ -34,6 +35,10 @@ function AssinarPontoPublicoPage() {
   const [observacoes, setObservacoes] = useState('')
   const [enviando, setEnviando] = useState(false)
   const [assinado, setAssinado] = useState(false)
+  const [recusado, setRecusado] = useState(false)
+  const [mostrarRecusa, setMostrarRecusa] = useState(false)
+  const [motivoRecusa, setMotivoRecusa] = useState('')
+  const [enviandoRecusa, setEnviandoRecusa] = useState(false)
 
   useEffect(() => {
     if (!token) {
@@ -56,6 +61,7 @@ function AssinarPontoPublicoPage() {
         }
         setPonto(corpo.data)
         setAssinado(Boolean(corpo.data?.ja_assinado))
+        setRecusado(Boolean(corpo.data?.ja_recusado))
       } catch {
         if (!cancelado) setErro('Não foi possível abrir este ponto.')
       } finally {
@@ -68,6 +74,36 @@ function AssinarPontoPublicoPage() {
       cancelado = true
     }
   }, [token])
+
+  const recusar = async () => {
+    if (!motivoRecusa.trim()) {
+      setErro('Informe o motivo da recusa.')
+      return
+    }
+    setEnviandoRecusa(true)
+    setErro('')
+    try {
+      const resposta = await fetch(`${getApiBasePath()}/ponto-eletronico/assinatura-responsavel/rejeitar`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token, comentario: motivoRecusa.trim() }),
+      })
+      const corpo = await resposta.json().catch(() => ({}))
+      if (!resposta.ok || !corpo?.success) {
+        setErro(corpo?.message || 'Não foi possível recusar o ponto.')
+        if (resposta.status === 409 && corpo?.message?.includes('assinado')) setAssinado(true)
+        if (resposta.status === 409 && corpo?.message?.includes('recusado')) setRecusado(true)
+        return
+      }
+      setRecusado(true)
+      setMostrarRecusa(false)
+      if (corpo.data) setPonto(corpo.data)
+    } catch {
+      setErro('Não foi possível recusar o ponto.')
+    } finally {
+      setEnviandoRecusa(false)
+    }
+  }
 
   const assinar = async () => {
     if (!assinatura.trim()) {
@@ -151,6 +187,14 @@ function AssinarPontoPublicoPage() {
                 <dt className="text-slate-500">Saída</dt>
                 <dd>{ponto.saida}</dd>
               </div>
+              <div>
+                <dt className="text-slate-500">Saída almoço</dt>
+                <dd>{ponto.saida_almoco}</dd>
+              </div>
+              <div>
+                <dt className="text-slate-500">Volta almoço</dt>
+                <dd>{ponto.volta_almoco}</dd>
+              </div>
             </dl>
           </section>
         ) : null}
@@ -162,7 +206,13 @@ function AssinarPontoPublicoPage() {
           </div>
         ) : null}
 
-        {ponto && !assinado ? (
+        {ponto && recusado && !assinado ? (
+          <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-3 text-sm text-amber-900">
+            Ponto recusado. O funcionário será avisado para ajustar os horários e o registro volta para a sua assinatura.
+          </div>
+        ) : null}
+
+        {ponto && !assinado && !recusado ? (
           <section className="flex flex-col gap-3 rounded-lg border bg-white p-4 shadow-sm">
             <div>
               <label className="text-sm font-medium" htmlFor="observacoes-ponto">
@@ -187,9 +237,43 @@ function AssinarPontoPublicoPage() {
               onSave={setAssinatura}
               onCancel={() => setAssinatura('')}
             />
-            <Button type="button" onClick={assinar} disabled={enviando || !assinatura}>
+            <Button type="button" onClick={assinar} disabled={enviando || enviandoRecusa || !assinatura}>
               {enviando ? 'Assinando…' : 'Assinar e validar o ponto'}
             </Button>
+            {!mostrarRecusa ? (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setErro('')
+                  setMostrarRecusa(true)
+                }}
+                disabled={enviando || enviandoRecusa}
+              >
+                Não concordo com este ponto
+              </Button>
+            ) : (
+              <div className="flex flex-col gap-2 border-t pt-3">
+                <label className="text-sm font-medium" htmlFor="motivo-recusa">
+                  Motivo da recusa
+                </label>
+                <Textarea
+                  id="motivo-recusa"
+                  value={motivoRecusa}
+                  onChange={(evento) => setMotivoRecusa(evento.target.value)}
+                  placeholder="Explique o que o funcionário deve ajustar"
+                  rows={3}
+                />
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={recusar}
+                  disabled={enviandoRecusa || enviando || !motivoRecusa.trim()}
+                >
+                  {enviandoRecusa ? 'Recusando…' : 'Recusar e pedir ajuste'}
+                </Button>
+              </div>
+            )}
           </section>
         ) : null}
       </div>
