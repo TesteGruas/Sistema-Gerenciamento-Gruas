@@ -153,6 +153,7 @@ export default function PontoPage() {
   const [justificativaModal, setJustificativaModal] = useState('')
 
   const [registroParaExcluir, setRegistroParaExcluir] = useState<RegistroPonto | null>(null)
+  const [listaPontoVersao, setListaPontoVersao] = useState(0)
   const [excluindoRegistro, setExcluindoRegistro] = useState(false)
   const [enviandoNotificacaoResponsaveis, setEnviandoNotificacaoResponsaveis] = useState(false)
   const [modalLinkTesteAberto, setModalLinkTesteAberto] = useState(false)
@@ -579,6 +580,7 @@ export default function PontoPage() {
         description: res?.message || "O ponto foi removido do sistema.",
       })
       setRegistroParaExcluir(null)
+      setListaPontoVersao((versao) => versao + 1)
       await carregarDadosComFiltros()
     } catch (err: unknown) {
       const ax = err as { response?: { data?: { message?: string } }; message?: string }
@@ -1971,6 +1973,8 @@ export default function PontoPage() {
           consulta={consultaPonto}
           podeRegistrar={hasPermission("ponto_eletronico:registrar") || hasPermission("ponto_eletronico:gerenciar") || isAdmin()}
           onEditar={abrirEdicao}
+          onExcluir={podeExcluirRegistroPonto ? setRegistroParaExcluir : undefined}
+          recarregar={listaPontoVersao}
           onAbrirConsulta={abrirConsulta}
           onDiaChange={sincronizarDia}
           onSlotConteudo={setSlotConteudo}

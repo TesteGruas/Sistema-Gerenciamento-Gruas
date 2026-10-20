@@ -49,6 +49,7 @@ import {
 } from "@/components/ui/table"
 import { funcionariosApi, type FuncionarioBackend } from "@/lib/api-funcionarios"
 import { apiRegistrosPonto, type RegistroPonto } from "@/lib/api-ponto-eletronico"
+import { getApiBasePath } from "@/lib/runtime-config"
 import { formatDateYYYYMMDDLocal, parseYYYYMMDDLocal } from "@/lib/date-local"
 import { cn } from "@/lib/utils"
 
@@ -272,18 +273,22 @@ export function PontosDoDia({
   modo = "dia",
   podeRegistrar,
   onEditar,
+  onExcluir,
   onAbrirConsulta,
   consulta = "dia",
   onDiaChange,
   onSlotConteudo,
+  recarregar = 0,
 }: {
   modo?: "dia" | "pendencias"
   podeRegistrar: boolean
   onEditar: (registro: RegistroPonto) => void
+  onExcluir?: (registro: RegistroPonto) => void
   onAbrirConsulta: (consulta: Consulta) => void
   consulta?: Consulta
   onDiaChange?: (dia: string) => void
   onSlotConteudo?: (elemento: HTMLDivElement | null) => void
+  recarregar?: number
 }) {
   const hoje = formatDateYYYYMMDDLocal()
   const [dia, setDia] = useState(hoje)
@@ -347,7 +352,7 @@ export function PontosDoDia({
     return () => {
       cancelado = true
     }
-  }, [dia])
+  }, [dia, recarregar])
 
   const linhas = useMemo<LinhaDia[]>(() => {
     const porFuncionario = new Map<string, RegistroPonto>()
@@ -800,6 +805,14 @@ export function PontosDoDia({
                               <DropdownMenuItem onClick={() => onEditar(linha.registro as RegistroPonto)}>Editar registro</DropdownMenuItem>
                             ) : null}
                             <DropdownMenuItem onClick={() => onAbrirConsulta("historico")}>Histórico de pontos</DropdownMenuItem>
+                            {linha.registro && onExcluir ? (
+                              <DropdownMenuItem
+                                variant="destructive"
+                                onSelect={() => onExcluir(linha.registro as RegistroPonto)}
+                              >
+                                Excluir registro
+                              </DropdownMenuItem>
+                            ) : null}
                           </DropdownMenuContent>
                         </DropdownMenu>
                       </div>
@@ -955,6 +968,97 @@ function CabecalhoOrdenavel({ label, ativo, onClick }: { label: string; ativo: b
   )
 }
 
+function useUrlAssinatura(caminho?: string | null) {
+  const [url, setUrl] = useState<string | null>(null)
+  const [falhou, setFalhou] = useState(false)
+
+  useEffect(() => {
+    if (!caminho) {
+      setUrl(null)
+      setFalhou(false)
+      return
+    }
+
+    let cancelado = false
+    const token = localStorage.getItem("access_token")
+    fetch(
+      `${getApiBasePath()}/arquivos/url-assinada?caminho=${encodeURIComponent(caminho)}&bucket=assinaturas-digitais`,
+      { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+    )
+      .then(async (resposta) => {
+        if (!resposta.ok) return null
+        const corpo = await resposta.json().catch(() => ({}))
+        return corpo?.data?.url || corpo?.url || null
+      })
+      .then((endereco: string | null) => {
+        if (cancelado) return
+        setUrl(endereco)
+        setFalhou(!endereco)
+      })
+      .catch(() => {
+        if (!cancelado) {
+          setUrl(null)
+          setFalhou(true)
+        }
+      })
+
+    return () => {
+      cancelado = true
+    }
+  }, [caminho])
+
+  return { url, falhou }
+}
+
+function formatarDataHora(valor?: string | null) {
+  if (!valor) return null
+  const data = new Date(valor)
+  if (Number.isNaN(data.getTime())) return null
+  return data.toLocaleString("pt-BR")
+}
+
+function AssinaturaBloco({
+  titulo,
+  nome,
+  quando,
+  caminho,
+}: {
+  titulo: string
+  nome?: string | null
+  quando?: string | null
+  caminho?: string | null
+}) {
+  const { url, falhou } = useUrlAssinatura(caminho)
+  const momento = formatarDataHora(quando)
+
+  return (
+    <div className="rounded-lg border p-3">
+      <p className="text-sm font-medium text-slate-900">{titulo}</p>
+      {caminho ? (
+        <>
+          <p className="mt-1 text-sm text-slate-600">
+            Assinou{nome ? `: ${nome}` : ""}
+            {momento ? ` · ${momento}` : ""}
+          </p>
+          {url ? (
+            <img
+              src={url}
+              alt={`Assinatura — ${titulo}`}
+              className="mt-2 max-h-28 w-full rounded border bg-white object-contain"
+            />
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              {falhou ? "Não foi possível carregar a imagem da assinatura." : "Carregando assinatura…"}
+            </p>
+          )}
+        </>
+      ) : (
+        <p className="mt-1 text-sm text-slate-500">Ainda não assinou</p>
+      )}
+    </div>
+  )
+}
+
 function DetalhePonto({
   linha,
   dia,
@@ -964,6 +1068,23 @@ function DetalhePonto({
   dia: string
   onEditar: (registro: RegistroPonto) => void
 }) {
+  const [registro, setRegistro] = useState<RegistroPonto | null | undefined>(linha.registro)
+
+  useEffect(() => {
+    setRegistro(linha.registro)
+    const id = linha.registro?.id
+    if (!id) return
+    let cancelado = false
+    apiRegistrosPonto.obter(id)
+      .then((completo) => {
+        if (!cancelado && completo) setRegistro((atual) => ({ ...(atual || linha.registro), ...completo }))
+      })
+      .catch(() => {})
+    return () => {
+      cancelado = true
+    }
+  }, [linha.registro])
+
   const eventos = [
     linha.registro?.entrada ? { hora: hhmm(linha.registro.entrada), tipo: "Entrada" } : null,
     linha.registro?.saida_almoco ? { hora: hhmm(linha.registro.saida_almoco), tipo: "Saída para intervalo" } : null,
@@ -1022,6 +1143,29 @@ function DetalhePonto({
             </p>
           </div>
         </div>
+        {registro ? (
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">Assinaturas</h3>
+            <div className="mt-3 space-y-3">
+              <AssinaturaBloco
+                titulo="Responsável da obra"
+                nome={registro.responsavel_assinatura?.nome}
+                quando={
+                  registro.assinatura_responsavel_path
+                    ? registro.data_assinatura_responsavel
+                    : registro.data_aprovacao
+                }
+                caminho={registro.assinatura_responsavel_path || registro.assinatura_digital_path}
+              />
+              <AssinaturaBloco
+                titulo="Colaborador"
+                nome={linha.funcionario.nome}
+                quando={registro.data_assinatura_funcionario}
+                caminho={registro.assinatura_funcionario_path}
+              />
+            </div>
+          </div>
+        ) : null}
         {linha.registro?.observacoes ? (
           <div>
             <p className="text-sm text-slate-500">Observações</p>

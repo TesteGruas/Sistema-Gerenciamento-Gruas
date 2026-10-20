@@ -43,6 +43,7 @@ interface RegistroPonto {
   horas_trabalhadas?: number
   horas_extras?: number
   status: string
+  observacoes?: string | null
   aprovado_por?: number | null
   data_aprovacao?: string | null
   assinatura_digital_path?: string | null
@@ -62,6 +63,62 @@ export default function PWAEspelhoPontoPage() {
   const [registroDetalhes, setRegistroDetalhes] = useState<RegistroPonto | null>(null)
   const [showDetalhesModal, setShowDetalhesModal] = useState(false)
   const [notificandoId, setNotificandoId] = useState<string | number | null>(null)
+  const [registroCorrecao, setRegistroCorrecao] = useState<RegistroPonto | null>(null)
+  const [horasCorrecao, setHorasCorrecao] = useState({
+    entrada: "",
+    saida_almoco: "",
+    volta_almoco: "",
+    saida: "",
+  })
+  const [salvandoCorrecao, setSalvandoCorrecao] = useState(false)
+
+  const horaParaCampo = (valor?: string) => (valor && valor.length >= 5 ? valor.slice(0, 5) : "")
+
+  const abrirCorrecao = (registro: RegistroPonto) => {
+    setRegistroCorrecao(registro)
+    setHorasCorrecao({
+      entrada: horaParaCampo(registro.entrada),
+      saida_almoco: horaParaCampo(registro.saida_almoco),
+      volta_almoco: horaParaCampo(registro.volta_almoco),
+      saida: horaParaCampo(registro.saida),
+    })
+    setShowDetalhesModal(false)
+  }
+
+  const salvarCorrecao = async () => {
+    if (!registroCorrecao?.id) return
+    if (!horasCorrecao.entrada || !horasCorrecao.saida) {
+      toast({
+        title: "Horários obrigatórios",
+        description: "Informe a entrada e a saída.",
+        variant: "destructive",
+      })
+      return
+    }
+    setSalvandoCorrecao(true)
+    try {
+      const resultado = await pontoApi.apiRegistrosPonto.corrigirHoras(registroCorrecao.id, {
+        entrada: horasCorrecao.entrada,
+        saida_almoco: horasCorrecao.saida_almoco,
+        volta_almoco: horasCorrecao.volta_almoco,
+        saida: horasCorrecao.saida,
+      })
+      toast({
+        title: "Horas reenviadas",
+        description: resultado.message || "O responsável será avisado para assinar de novo.",
+      })
+      setRegistroCorrecao(null)
+      await carregarRegistros()
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível reenviar",
+        description: error?.response?.data?.message || error?.message || "Tente de novo.",
+        variant: "destructive",
+      })
+    } finally {
+      setSalvandoCorrecao(false)
+    }
+  }
 
   // Carregar dados do usuário
   useEffect(() => {
@@ -633,7 +690,13 @@ export default function PWAEspelhoPontoPage() {
                           ? 'bg-blue-600 hover:bg-blue-700'
                           : 'bg-red-600 hover:bg-red-700'
                       }`}
-                      onClick={() => router.push(`/pwa/aprovacao-assinatura?id=${registro.id}`)}
+                      onClick={() => {
+                        if (registro.status === 'Pendente Correção' || registro.status === 'Pendente Correcao') {
+                          abrirCorrecao(registro)
+                          return
+                        }
+                        router.push(`/pwa/aprovacao-assinatura?id=${registro.id}`)
+                      }}
                     >
                       <FileSignature className="w-4 h-4 mr-2" />
                       {registro.status === 'Pendente Assinatura Funcionário' || registro.status === 'Pendente Assinatura Funcionario'
@@ -783,6 +846,10 @@ export default function PWAEspelhoPontoPage() {
                       : 'bg-red-600 hover:bg-red-700'
                   }`}
                   onClick={() => {
+                    if (registroDetalhes.status === 'Pendente Correção' || registroDetalhes.status === 'Pendente Correcao') {
+                      abrirCorrecao(registroDetalhes)
+                      return
+                    }
                     setShowDetalhesModal(false)
                     router.push(`/pwa/aprovacao-assinatura?id=${registroDetalhes.id}`)
                   }}
@@ -795,6 +862,45 @@ export default function PWAEspelhoPontoPage() {
               )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={registroCorrecao != null} onOpenChange={(aberto) => { if (!aberto && !salvandoCorrecao) setRegistroCorrecao(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Corrigir horas</DialogTitle>
+            <DialogDescription>
+              Ajuste os horários deste dia e reenvie para o responsável da obra.
+            </DialogDescription>
+          </DialogHeader>
+          {registroCorrecao?.observacoes ? (
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+              <p className="text-xs font-medium text-red-700">Motivo da recusa</p>
+              <p className="mt-1 text-sm text-red-900">{registroCorrecao.observacoes}</p>
+            </div>
+          ) : null}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="correcao-entrada">Entrada</Label>
+              <Input id="correcao-entrada" type="time" value={horasCorrecao.entrada} onChange={(evento) => setHorasCorrecao((atual) => ({ ...atual, entrada: evento.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correcao-saida">Saída</Label>
+              <Input id="correcao-saida" type="time" value={horasCorrecao.saida} onChange={(evento) => setHorasCorrecao((atual) => ({ ...atual, saida: evento.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correcao-saida-almoco">Saída almoço</Label>
+              <Input id="correcao-saida-almoco" type="time" value={horasCorrecao.saida_almoco} onChange={(evento) => setHorasCorrecao((atual) => ({ ...atual, saida_almoco: evento.target.value }))} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="correcao-volta-almoco">Volta almoço</Label>
+              <Input id="correcao-volta-almoco" type="time" value={horasCorrecao.volta_almoco} onChange={(evento) => setHorasCorrecao((atual) => ({ ...atual, volta_almoco: evento.target.value }))} />
+            </div>
+          </div>
+          <Button type="button" className="w-full bg-red-600 text-white hover:bg-red-700" disabled={salvandoCorrecao} onClick={() => void salvarCorrecao()}>
+            {salvandoCorrecao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+            Reenviar para assinatura
+          </Button>
         </DialogContent>
       </Dialog>
     </div>

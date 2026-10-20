@@ -46,6 +46,7 @@ export interface RegistroPonto {
   data_assinatura_responsavel?: string;
   assinatura_funcionario_path?: string;
   data_assinatura_funcionario?: string;
+  responsavel_assinatura?: { nome?: string };
   updated_at?: string;
   created_at?: string;
   // Novos campos de tipo de dia e feriado

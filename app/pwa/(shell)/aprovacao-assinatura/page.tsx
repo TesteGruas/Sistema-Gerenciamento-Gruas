@@ -92,12 +92,13 @@ function PWAAprovacaoAssinaturaPageContent() {
   const aguardandoAssinaturaResponsavel = !isResponsavelObra && !responsavelJaAssinou && !registroFinalizado;
   const canResponsavelAssinar = isResponsavelObra && !responsavelJaAssinou && !registroFinalizado;
   const canAssinar = canResponsavelAssinar || isFuncionarioDoRegistro;
+  const destinoVolta = isResponsavelObra ? '/pwa/aprovacoes' : '/pwa/espelho-ponto';
 
   useEffect(() => {
     const carregarAprovacao = async () => {
       if (!registroId) {
         toast.error('ID do registro não encontrado');
-        router.push('/pwa/aprovacoes');
+        router.push(destinoVolta);
         return;
       }
 
@@ -107,13 +108,13 @@ function PWAAprovacaoAssinaturaPageContent() {
         
         if (!registro) {
           toast.error('Registro não encontrado');
-          router.push('/pwa/aprovacoes');
+          router.push(destinoVolta);
           return;
         }
 
         if (registro.status === 'Aprovado' && registro.assinatura_responsavel_path && registro.assinatura_funcionario_path) {
           toast.error('Este registro já foi completamente assinado');
-          router.push('/pwa/aprovacoes');
+          router.push(destinoVolta);
           return;
         }
 
@@ -170,7 +171,7 @@ function PWAAprovacaoAssinaturaPageContent() {
       }
 
       toast.success(result.message || 'Registro assinado com sucesso!');
-      setTimeout(() => router.push('/pwa/aprovacoes'), 1500);
+      setTimeout(() => router.push(destinoVolta), 1500);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || error.message || 'Erro ao assinar registro.';
       toast.error(errorMessage);
@@ -194,7 +195,7 @@ function PWAAprovacaoAssinaturaPageContent() {
       );
       toast.success(result.message || 'Registro rejeitado. O funcionário será notificado.');
       setShowRejeicao(false);
-      setTimeout(() => router.push('/pwa/aprovacoes'), 1500);
+      setTimeout(() => router.push(destinoVolta), 1500);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Erro ao rejeitar registro.';
       toast.error(errorMessage);
@@ -224,7 +225,7 @@ function PWAAprovacaoAssinaturaPageContent() {
       );
       toast.success(result.message || 'Horas corrigidas! O responsável será notificado.');
       setShowEditarHoras(false);
-      setTimeout(() => router.push('/pwa/aprovacoes'), 1500);
+      setTimeout(() => router.push(destinoVolta), 1500);
     } catch (error: any) {
       const errorMessage = error.response?.data?.message || 'Erro ao corrigir horas.';
       toast.error(errorMessage);
@@ -270,7 +271,9 @@ function PWAAprovacaoAssinaturaPageContent() {
               <AlertTriangle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
               <h3 className="text-lg font-semibold text-gray-900 mb-2">Registro não encontrado</h3>
               <p className="text-gray-600 mb-4">Não foi possível encontrar o registro solicitado.</p>
-              <Button onClick={() => router.push('/pwa/aprovacoes')}>Voltar para Aprovações</Button>
+              <Button onClick={() => router.push(destinoVolta)}>
+                {isResponsavelObra ? 'Voltar para Aprovações' : 'Voltar ao espelho'}
+              </Button>
             </CardContent>
           </Card>
         </div>

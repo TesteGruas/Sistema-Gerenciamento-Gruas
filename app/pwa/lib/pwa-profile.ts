@@ -68,7 +68,7 @@ export const PWA_PROFILE_PERMISSIONS: Record<PWAProfile, Permission[]> = {
 export const PWA_PROFILE_ROUTE_ACCESS: Record<string, PWAProfile[]> = {
   '/pwa/aprovacoes': ['supervisor'],
   '/pwa/aprovacao-detalhes': ['supervisor'],
-  '/pwa/aprovacao-assinatura': ['supervisor'],
+  '/pwa/aprovacao-assinatura': ['supervisor', 'tecnico'],
   '/pwa/aprovacao-massa': ['supervisor'],
   '/pwa/cliente/medicoes': ['cliente'],
   '/pwa/cliente/gruas': ['cliente'],
