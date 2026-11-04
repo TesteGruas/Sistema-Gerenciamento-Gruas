@@ -131,6 +131,7 @@ export default function GruasPage() {
   const [gruaFormData, setGruaFormData] = useState<{
     name: string
     model: string
+    numero_serie: string
     fabricante: string
     capacity: string
     status: 'disponivel' | 'em_obra' | 'manutencao' | 'inativa'
@@ -162,6 +163,7 @@ export default function GruasPage() {
   }>({
     name: '',
     model: '',
+    numero_serie: '',
     fabricante: '',
     capacity: '',
     status: 'disponivel',
@@ -956,6 +958,7 @@ export default function GruasPage() {
         setGruaFormData({
           name: gruaCompleta.name || grua.name || '',
           model: gruaCompleta.model || gruaCompleta.modelo || grua.model || grua.modelo || '',
+          numero_serie: gruaCompleta.numero_serie || '',
           fabricante: gruaCompleta.fabricante || grua.fabricante || '',
           capacity: gruaCompleta.capacity || gruaCompleta.capacidade || grua.capacity || grua.capacidade || '',
           status: normalizarStatus(gruaCompleta.status || grua.status),
@@ -1003,6 +1006,7 @@ export default function GruasPage() {
         setGruaFormData({
           name: grua.name || '',
           model: grua.model || grua.modelo || '',
+          numero_serie: (grua as any).numero_serie || '',
           fabricante: grua.fabricante || '',
           capacity: grua.capacity || grua.capacidade || '',
           status: normalizarStatus(grua.status),
@@ -1052,6 +1056,7 @@ export default function GruasPage() {
       setGruaFormData({
         name: grua.name || '',
         model: grua.model || grua.modelo || '',
+        numero_serie: (grua as any).numero_serie || '',
         fabricante: grua.fabricante || '',
         capacity: grua.capacity || grua.capacidade || '',
         status: normalizarStatus(grua.status),
@@ -1136,6 +1141,7 @@ export default function GruasPage() {
     setGruaFormData({
       name: 'Grua Torre GT-500',
       model: 'GT-500',
+      numero_serie: 'LE85863',
       fabricante: 'Liebherr',
       capacity: '5000',
       status: 'disponivel',
@@ -1172,6 +1178,7 @@ export default function GruasPage() {
       setGruaFormData({
         name: 'validação 1',
         model: 'GT-500',
+        numero_serie: 'LE85863',
         fabricante: 'Liebherr',
         capacity: '5000',
         status: 'disponivel',
@@ -1253,6 +1260,7 @@ export default function GruasPage() {
         setGruaFormData({
           name: '',
           model: '',
+          numero_serie: '',
           fabricante: '',
           capacity: '',
           status: 'disponivel',
@@ -1327,6 +1335,7 @@ export default function GruasPage() {
       const gruaData = {
         name: gruaFormData.name,
         model: gruaFormData.model,
+        numero_serie: gruaFormData.numero_serie.trim() || null,
         capacity: gruaFormData.capacity,
         status: gruaFormData.status,
         fabricante: gruaFormData.fabricante,
@@ -1366,6 +1375,7 @@ export default function GruasPage() {
         setGruaFormData({
           name: '',
           model: '',
+          numero_serie: '',
           fabricante: '',
           capacity: '',
           status: 'disponivel',
@@ -1447,6 +1457,7 @@ export default function GruasPage() {
       const gruaData = {
         name: gruaFormData.name,
         model: gruaFormData.model,
+        numero_serie: gruaFormData.numero_serie.trim() || null,
         capacity: gruaFormData.capacity,
         status: gruaFormData.status,
         fabricante: gruaFormData.fabricante,
@@ -1486,6 +1497,7 @@ export default function GruasPage() {
         setGruaFormData({
           name: '',
           model: '',
+          numero_serie: '',
           fabricante: '',
           capacity: '',
           status: 'disponivel',
@@ -2008,6 +2020,17 @@ export default function GruasPage() {
               </div>
             </div>
 
+            <div>
+              <Label htmlFor="numero_serie">Número de Série</Label>
+              <Input
+                id="numero_serie"
+                value={gruaFormData.numero_serie}
+                onChange={(e) => setGruaFormData(prev => ({ ...prev, numero_serie: e.target.value }))}
+                placeholder="Ex: LE85863"
+                maxLength={100}
+              />
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <Label htmlFor="fabricante">Fabricante *</Label>
@@ -2385,6 +2408,17 @@ export default function GruasPage() {
                   required
                 />
               </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-numero_serie">Número de Série</Label>
+              <Input
+                id="edit-numero_serie"
+                value={gruaFormData.numero_serie}
+                onChange={(e) => setGruaFormData(prev => ({ ...prev, numero_serie: e.target.value }))}
+                placeholder="Ex: LE85863"
+                maxLength={100}
+              />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2938,6 +2972,7 @@ export default function GruasPage() {
                     <PreviewSection title="Cadastro e operação" icon={Building2}>
                       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                         <PreviewField label="Modelo">{formatValue(gruaToView.model || grua.modelo)}</PreviewField>
+                        <PreviewField label="Número de Série">{formatValue(grua.numero_serie)}</PreviewField>
                         <PreviewField label="Fabricante">{formatValue(gruaToView.fabricante)}</PreviewField>
                         <PreviewField label="Capacidade na ponta">{formatValue(grua.capacidade_ponta || grua.capacidadePonta)}</PreviewField>
                         {gruaToView.currentObraName ? (

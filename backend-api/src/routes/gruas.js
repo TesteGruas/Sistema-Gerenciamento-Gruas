@@ -326,6 +326,7 @@ const gruaSchema = Joi.object({
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
   observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
+  numero_serie: Joi.string().max(100).allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
   localizacao: Joi.string().allow(null, '').optional(),
@@ -468,6 +469,7 @@ const gruaInputSchema = Joi.object({
   // Campos opcionais (baseados no frontend)
   obraId: Joi.string().allow(null, '').optional(), // ID da obra (opcional)
   observacoes: Joi.string().allow(null, '').optional(), // Observações (opcional)
+  numero_serie: Joi.string().max(100).allow(null, '').optional(),
   capacidade_ponta: Joi.string().allow(null, '').optional(),
   altura_trabalho: Joi.string().allow(null, '').optional(),
   localizacao: Joi.string().allow(null, '').optional(),
@@ -1688,6 +1690,7 @@ router.post('/', async (req, res) => {
       ultima_manutencao_corretiva: value.ultima_manutencao_corretiva ?? null,
       proxima_manutencao: value.proxima_manutencao ?? null,
       observacoes: value.observacoes ?? null,
+      numero_serie: value.numero_serie || null,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }

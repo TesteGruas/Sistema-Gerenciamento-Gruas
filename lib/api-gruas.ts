@@ -9,6 +9,7 @@ export interface Grua {
   id: string | number;
   name: string;
   modelo: string;
+  numero_serie?: string;
   fabricante?: string;
   tipo?: string;
   capacidade: string;
@@ -28,6 +29,7 @@ export interface GruaBackend {
   name: string;
   modelo: string;
   model?: string;
+  numero_serie?: string;
   fabricante?: string;
   tipo?: string;
   capacidade: string;
@@ -117,6 +119,7 @@ export function converterGruaBackendParaFrontend(grua: GruaBackend): Grua {
     id: grua.id,
     name: grua.name,
     modelo: grua.model || grua.modelo,
+    numero_serie: grua.numero_serie,
     fabricante: grua.fabricante,
     tipo: grua.tipo,
     capacidade: grua.capacity || grua.capacidade,
